@@ -253,6 +253,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 
 ```text
 .
+├── LICENSE               licence MIT (code du dépôt)
 ├── setup.py              installation : moteur, modèle, correctif, raccourci
 ├── requirements.txt      Pillow, NumPy, pywin32
 ├── start.cmd             lancement alternatif (postes sans restriction de scripts)
@@ -285,5 +286,5 @@ venv\Scripts\python.exe tests\run_tests.py --steps 8
   encodeur et VAE issus de [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1).
 - **Moteur** : [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (licence MIT).
 
-Ce dépôt ne contient que le code de l'interface, du lanceur et des scripts ; les poids du modèle restent soumis à leur
+Le code de ce dépôt (interface, lanceur, scripts) est sous **licence MIT**, voir [LICENSE](LICENSE). Les poids du modèle restent soumis à leur
 propre licence et sont téléchargés directement depuis leurs dépôts d'origine.
