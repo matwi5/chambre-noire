@@ -83,6 +83,13 @@ Ce script, à lancer une seule fois :
 - prépare l'encodeur de texte pour stable-diffusion.cpp (voir [Le modèle](#le-modèle)) ;
 - crée le raccourci **`Qwen-Image.lnk`** dans le dossier.
 
+**Carte NVIDIA ?** Ajoutez `--cuda` : le moteur CUDA (≈ 900 Mo de plus) est installé et devient le moteur par défaut.
+Tout le calcul passe alors sur la carte, encodeur compris, ce qui est bien plus rapide qu'avec Vulkan.
+
+```bat
+venv\Scripts\python.exe setup.py --cuda
+```
+
 Les téléchargements reprennent là où ils s'étaient arrêtés si la connexion coupe : il suffit de relancer la commande.
 Pour vérifier une installation sans rien télécharger : `venv\Scripts\python.exe setup.py --check`.
 
@@ -99,7 +106,8 @@ Une fenêtre noire s'ouvre : c'est le moteur, **laissez-la ouverte**. Le navigat
 venv\Scripts\python.exe tools\launch.py
 ```
 
-Options : `--port 7860` (changer de port), `--backend cpu` (sans GPU, beaucoup plus lent), `--no-browser`.
+Options : `--port 7860` (changer de port), `--backend vulkan|cuda|cpu` (forcer un moteur ; par défaut CUDA s'il est
+installé, sinon Vulkan), `--no-browser`. L'état en haut à droite indique le moteur utilisé.
 
 L'interface n'écoute que sur `127.0.0.1` : elle n'est pas accessible depuis le réseau.
 
@@ -195,7 +203,14 @@ Un GPU intégré est lent pour un modèle de cette taille. Mesures de référenc
 Ordres de grandeur sur cette machine : ≈ 16 à 20 s par étape en 512×512, ≈ 1,5 min par étape estimée en 1024×1024 ;
 l'édition coûte environ le double du texte → image (l'image de référence double la séquence à traiter).
 Le preset Max (2K, 40 étapes) prend plusieurs heures : l'interface demande confirmation au-delà d'une heure.
-Les estimations affichées dans l'interface sont calibrées sur cette machine ; un GPU plus récent ira nettement plus vite.
+Sur une carte NVIDIA avec le moteur CUDA, comptez de l'ordre de 1 à 2 s par étape en 1024×1024 (estimation non mesurée,
+RTX 4060/4070) : une image High de 20 étapes en moins d'une minute.
+
+**Estimations de temps adaptatives.** Les temps affichés à côté de chaque preset partent de valeurs par défaut propres
+au moteur (Vulkan, CUDA ou CPU), puis sont recalculés à partir des durées réellement mesurées sur votre machine après
+chaque génération (encodage, temps par étape, décodage). Tant qu'aucune génération n'a eu lieu, l'état indique
+« estimations non calibrées ». Les mesures sont stockées dans `tools/calibration.json` ; supprimez ce fichier pour
+repartir de zéro.
 
 Pour gagner du temps sans perte de qualité : branchez le portable sur secteur et choisissez le mode d'alimentation
 « Performances optimales » dans les paramètres Windows.
@@ -240,8 +255,13 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 
 - Chaque génération lance `sd-cli.exe` avec `--mmap` : après la première fois, le modèle se recharge en moins d'une
   seconde grâce au cache disque de Windows.
-- Répartition : `--backend diffusion=vulkan0,vae=vulkan0,te=cpu --offload-to-cpu`. L'encodeur int8 n'a pas de noyau
-  Vulkan dans stable-diffusion.cpp, il tourne donc sur le processeur.
+- Répartition selon le moteur :
+  - Vulkan : `--backend diffusion=vulkan0,vae=vulkan0,te=cpu --offload-to-cpu`. L'encodeur int8 n'a pas de noyau
+    Vulkan dans stable-diffusion.cpp, il tourne donc sur le processeur ;
+  - CUDA : `--backend cuda0 --offload-to-cpu --diffusion-fa`. Tout est sur la carte ; l'encodeur int8 profite du
+    chemin CUDA natif (RTX 20xx et plus récentes) ; les poids restent en RAM et sont copiés à la demande, ce qui
+    s'adapte aux cartes à 8 Go ;
+  - CPU : `--backend cpu`, secours sans GPU.
 - API locale : `POST /api/generate`, `GET /api/job/<id>`, `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel`,
   `GET /api/status`.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés
@@ -254,7 +274,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 ```text
 .
 ├── LICENSE               licence MIT (code du dépôt)
-├── setup.py              installation : moteur, modèle, correctif, raccourci
+├── setup.py              installation : moteur (Vulkan, CPU, CUDA en option), modèle, correctif, raccourci
 ├── requirements.txt      Pillow, NumPy, pywin32
 ├── start.cmd             lancement alternatif (postes sans restriction de scripts)
 ├── start-ui-sdcpp.cmd    variante : interface web intégrée de sd-server, sans outil de dessin
@@ -265,7 +285,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── make_shortcut.py  crée Qwen-Image.lnk
 │   ├── make_mask.py      génère un masque ou une annotation par script
 │   ├── make_test_image.py
-│   └── config.json       backend et port par défaut
+│   ├── config.json       moteur et port par défaut (écrit par setup.py)
+│   └── calibration.json  vitesses mesurées sur la machine (créé à l'usage, non versionné)
 ├── tests/run_tests.py    tests de bout en bout des trois usages (interface lancée)
 └── workflows/            paramètres de référence des trois usages (JSON)
 ```

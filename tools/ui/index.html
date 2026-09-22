@@ -177,7 +177,23 @@ const RATIO_LABELS = { '1:1':'Carré 1:1', '4:3':'Paysage 4:3', '3:4':'Portrait 
 const RES   = [ {k:'low',label:'Low',scale:0.25}, {k:'medium',label:'Medium',scale:0.375}, {k:'high',label:'High',scale:0.5}, {k:'xhigh',label:'XHigh',scale:0.75}, {k:'max',label:'Max',scale:1.0} ];
 const STEPS = [ {k:'low',label:'Low',steps:8}, {k:'medium',label:'Medium',steps:12}, {k:'high',label:'High',steps:20}, {k:'xhigh',label:'XHigh',steps:30}, {k:'max',label:'Max',steps:40} ];
 const CFG = 1, MAX_PIXELS = 2048*2048, MAX_INPUT_SIDE = 2048, PREVIEW_EVERY = 5;
-const T = { stepT2i:16, stepEdit:44, encT2i:58, encEdit:95, encExtraRef:50, vae512:22, exp:1.2 };   // mesures sur cette machine
+// valeurs de départ par backend (à 512×512, CFG 1) ; remplacées dès la première génération par les mesures réelles
+const DEFAULT_T = {
+  vulkan: { step_t2i:16,   step_edit:44,  enc_t2i:58, enc_edit:95, vae512:22,  overhead:5 },   // Radeon intégré mesuré
+  cuda:   { step_t2i:0.35, step_edit:0.8, enc_t2i:4,  enc_edit:8,  vae512:1.5, overhead:8 },   // estimation RTX 40xx
+  cpu:    { step_t2i:130,  step_edit:350, enc_t2i:45, enc_edit:200,vae512:90,  overhead:5 },
+};
+let T = Object.assign({}, DEFAULT_T.vulkan), calibrated = false, curBackend = 'vulkan';
+function applyCalibration(backend, cal){
+  const base = DEFAULT_T[backend] || DEFAULT_T.vulkan; cal = cal || {};
+  T = Object.assign({}, base);
+  // si un seul type (t2i ou édition) a été mesuré, l'autre est déduit avec le rapport des valeurs de départ
+  if(cal.step_t2i && !cal.step_edit) cal.step_edit = cal.step_t2i * base.step_edit / base.step_t2i;
+  if(cal.step_edit && !cal.step_t2i) cal.step_t2i = cal.step_edit * base.step_t2i / base.step_edit;
+  for(const k of Object.keys(base)) if(cal[k]) T[k] = cal[k];
+  const was = calibrated + curBackend; calibrated = !!cal.samples; curBackend = backend;
+  if(was !== calibrated + curBackend) refreshChoices();
+}
 
 const $ = id => document.getElementById(id);
 let mode='t2i', editImages=[], maskImage=null, paintMode='paint', currentJob=null, lastResult=null, estSeconds=0, stepSeconds=16, vaeSeconds=22, minSpi=Infinity, forceImageRatio=false;
@@ -195,8 +211,8 @@ const resSel = () => RES.find(p=>p.k===$('res').value) || RES[1];
 const stepsSel = () => STEPS.find(p=>p.k===$('steps').value) || STEPS[1];
 function currentDims(){ return dimsFor($('ratio').value, resSel().scale); }
 function parts(w, h, steps, m, nrefs, preview){
-  const f=Math.pow((w*h/256)/1024, T.exp); const step=(m==='t2i'?T.stepT2i:T.stepEdit)*f;
-  const enc=m==='t2i'?T.encT2i:T.encEdit+Math.max(0,nrefs-1)*T.encExtraRef; const vae=T.vae512*(w*h)/(512*512);
+  const f=Math.pow((w*h/256)/1024, 1.2); const step=(m==='t2i'?T.step_t2i:T.step_edit)*f;
+  const enc=(m==='t2i'?T.enc_t2i:T.enc_edit*(1+0.5*Math.max(0,nrefs-1)))+T.overhead; const vae=T.vae512*(w*h)/(512*512);
   const previews = preview ? Math.floor(steps/PREVIEW_EVERY) : 0;
   return { step, enc, vae, previews, total: enc + steps*step + vae + previews*vae }; }
 function fmt(s){ if(s<90) return Math.round(s)+' s'; if(s<3600) return Math.round(s/60)+' min'; return (s/3600).toFixed(1).replace('.',',')+' h'; }
@@ -232,7 +248,7 @@ document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active')); mode=b.dataset.pane; $('pane-'+mode).classList.add('active'); suggestRatio(); }));
 async function refreshStatus(){
   try{ const s=await (await fetch('/api/status')).json(); const el=$('status');
-    if(s.sd_ready){ el.textContent=(s.busy?'génération en cours':'prêt')+' · '+s.backend; el.className='ok'; } else { el.textContent=s.detail||'non prêt'; el.className='err'; } }
+    if(s.sd_ready){ applyCalibration(s.backend, s.calibration); el.textContent=(s.busy?'génération en cours':'prêt')+' · '+s.backend+(calibrated?'':' · estimations non calibrées'); el.className='ok'; } else { el.textContent=s.detail||'non prêt'; el.className='err'; } }
   catch(e){ $('status').textContent='serveur injoignable'; $('status').className='err'; }
   setTimeout(refreshStatus, 5000);
 }

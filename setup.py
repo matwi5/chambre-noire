@@ -1,6 +1,7 @@
 r"""Installation de Qwen-Image-2.1 local : moteur, modèle, correctif et raccourci.
 
     venv\Scripts\python.exe setup.py            # installation complète (≈ 15 Go à télécharger)
+    venv\Scripts\python.exe setup.py --cuda     # + moteur CUDA pour carte NVIDIA (≈ 900 Mo de plus)
     venv\Scripts\python.exe setup.py --no-cpu   # sans le moteur de secours CPU
     venv\Scripts\python.exe setup.py --check    # vérifie seulement ce qui est installé
 
@@ -14,9 +15,11 @@ P = lambda *a: os.path.join(ROOT, *a)
 
 # --- moteur stable-diffusion.cpp (version testée, épinglée) -------------------------------------
 SDCPP_TAG = "master-890-74988b2"
-SDCPP = {
-    "vulkan": ("sd-master-74988b2-bin-win-vulkan-x64.zip", "744c8f817c66ecfd02fbb9dc8b122e1f29f7240db1f6086dfde2669403c5d896"),
-    "cpu":    ("sd-master-74988b2-bin-win-cpu-x64.zip",    "24fcac70fadc41eb3524837893f1cb7ea54895fe4d807f88ef7afdeee8bd484b"),
+SDCPP = {   # backend -> archives à extraire dans sdcpp/<backend>/ (empreintes : API GitHub de la release)
+    "vulkan": [("sd-master-74988b2-bin-win-vulkan-x64.zip", "744c8f817c66ecfd02fbb9dc8b122e1f29f7240db1f6086dfde2669403c5d896")],
+    "cpu":    [("sd-master-74988b2-bin-win-cpu-x64.zip",    "24fcac70fadc41eb3524837893f1cb7ea54895fe4d807f88ef7afdeee8bd484b")],
+    "cuda":   [("sd-master-74988b2-bin-win-cuda12-x64.zip", "e9b86c2166aaf3a89f3e13326312d34b79ec1a2b61101d0ccff2805e7ee7b269"),
+               ("cudart-sd-bin-win-cu12-x64.zip",           "fe20366827d357c00797eebb58244dddab7fd9a348d70090c3871004c320f38d")],
 }
 SDCPP_URL = "https://github.com/leejet/stable-diffusion.cpp/releases/download/{tag}/{name}"
 
@@ -94,26 +97,44 @@ def download(url, dest, expected_size=None):
 def step_engine(backends, check_only):
     ok = True
     for be in backends:
-        name, digest = SDCPP[be]
         target = P("sdcpp", be)
-        if os.path.exists(os.path.join(target, "sd-cli.exe")):
+        done_marker = os.path.join(target, ".installed")
+        if os.path.exists(done_marker) or (be != "cuda" and os.path.exists(os.path.join(target, "sd-cli.exe"))):
             print(f"[moteur] {be} : déjà installé ({target})")
             continue
         if check_only:
             print(f"[moteur] {be} : ABSENT")
             ok = False
             continue
-        print(f"[moteur] {be} : téléchargement de {name}")
-        zpath = P("sdcpp", name)
-        download(SDCPP_URL.format(tag=SDCPP_TAG, name=name), zpath)
-        got = sha256(zpath)
-        if got != digest:
-            sys.exit(f"[moteur] empreinte inattendue pour {name} : {got}")
-        with zipfile.ZipFile(zpath) as z:
-            z.extractall(target)
-        os.remove(zpath)
+        for name, digest in SDCPP[be]:
+            print(f"[moteur] {be} : téléchargement de {name}")
+            zpath = P("sdcpp", name)
+            download(SDCPP_URL.format(tag=SDCPP_TAG, name=name), zpath)
+            got = sha256(zpath)
+            if got != digest:
+                os.remove(zpath)
+                sys.exit(f"[moteur] empreinte inattendue pour {name} : {got}")
+            with zipfile.ZipFile(zpath) as z:
+                z.extractall(target)
+            os.remove(zpath)
+        open(done_marker, "w").write(SDCPP_TAG)
         print(f"[moteur] {be} : installé et vérifié")
     return ok
+
+
+def step_config(backends, check_only):
+    """Choisit le backend par défaut du lanceur : cuda s'il est installé, sinon vulkan."""
+    cfg_path = P("tools", "config.json")
+    import json
+    cfg = json.load(open(cfg_path, encoding="utf-8")) if os.path.exists(cfg_path) else {}
+    best = "cuda" if os.path.exists(P("sdcpp", "cuda", ".installed")) else "vulkan"
+    if check_only:
+        print(f"[config] backend par défaut : {cfg.get('backend', 'vulkan')}")
+        return
+    if cfg.get("backend") != best:
+        cfg["backend"] = best
+        json.dump(cfg, open(cfg_path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    print(f"[config] backend par défaut : {best}")
 
 
 def step_models(check_only):
@@ -172,6 +193,7 @@ def step_shortcut(check_only):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--cuda", action="store_true", help="installer aussi le moteur CUDA (cartes NVIDIA, ≈ 900 Mo)")
     ap.add_argument("--no-cpu", action="store_true", help="ne pas installer le moteur de secours CPU")
     ap.add_argument("--check", action="store_true", help="vérifier sans rien télécharger")
     a = ap.parse_args()
@@ -179,10 +201,13 @@ def main():
         sys.exit("Ce projet cible Windows (binaires stable-diffusion.cpp Windows). Voir le README pour les autres systèmes.")
     for d in ("models/diffusion_models", "models/text_encoders", "models/vae", "outputs", "logs", "jobs"):
         os.makedirs(P(*d.split("/")), exist_ok=True)
-    backends = ["vulkan"] + ([] if a.no_cpu else ["cpu"])
+    backends = ["vulkan"] + ([] if a.no_cpu else ["cpu"]) + (["cuda"] if a.cuda else [])
+    if a.check and os.path.exists(P("sdcpp", "cuda")) and "cuda" not in backends:
+        backends.append("cuda")
     ok = step_engine(backends, a.check)
     ok = step_models(a.check) and ok
     ok = step_fix(a.check) and ok
+    step_config(backends, a.check)
     step_shortcut(a.check)
     if a.check:
         print("\nÉtat : " + ("complet" if ok else "incomplet, lancez : venv\\Scripts\\python.exe setup.py"))

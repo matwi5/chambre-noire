@@ -24,3 +24,6 @@ tools/sdcpp_release.json
 # modèles de workflow tiers (Comfy-Org) : voir les liens dans le README
 workflows/comfyui/
 tools/adapt_comfy_workflows.py
+
+# mesures de vitesse propres à chaque machine
+tools/calibration.json

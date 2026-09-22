@@ -22,6 +22,54 @@ MODELS = {
     "llm": P("models", "text_encoders", "qwen3vl_8b_int8_convrot_embfix.safetensors"),
 }
 PROGRESS_RE = re.compile(r"(\d+)/(\d+)\s*-\s*([\d.]+)s/it")
+TAKING_RE = re.compile(r"taking ([\d.]+)\s*s")
+CALIB = P("tools", "calibration.json")
+# Répartition par backend. CUDA : tout sur la carte (l'encodeur int8 convrot a un chemin CUDA natif, RTX 20xx+) ;
+# --offload-to-cpu garde les poids en RAM et les copie à la demande, ce qui s'adapte à toute taille de VRAM.
+BACKENDS = {
+    "vulkan": ["--backend", "diffusion=vulkan0,vae=vulkan0,te=cpu", "--offload-to-cpu"],
+    "cuda":   ["--backend", "cuda0", "--offload-to-cpu", "--diffusion-fa"],
+    "cpu":    ["--backend", "cpu"],
+}
+
+
+def token_factor(w, h):
+    """Coût relatif d'une étape par rapport au 512×512 (l'attention croît plus vite que la surface)."""
+    return ((w * h / 256) / 1024) ** 1.2
+
+
+def load_calib():
+    try:
+        return json.load(open(CALIB, encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def update_calib(job):
+    """Enregistre les durées réelles de la génération, normalisées à 512×512, par backend et par type."""
+    r = job["req"]
+    w, h, steps = int(r["width"]), int(r["height"]), int(r["steps"])
+    samp, enc, vae = job.get("sampling_seconds"), job.get("encode_seconds_net"), job.get("vae_seconds")
+    if not (samp and enc and vae and steps):
+        return
+    nrefs = len(r.get("ref_images") or [])
+    kind = "edit" if nrefs else "t2i"
+    previews = (steps // job["preview_interval"]) if job.get("preview_interval") else 0
+    vae512 = vae / (w * h / (512 * 512))
+    step512 = max(0.01, (samp - previews * vae) / steps) / token_factor(w, h)
+    enc_norm = enc / (1 + 0.5 * max(0, nrefs - 1))
+    overhead = max(0.0, job["seconds"] - enc - samp - vae)
+    cal = load_calib()
+    c = cal.setdefault(S.backend, {})
+    def mix(key, val):
+        c[key] = round(val if key not in c else 0.5 * c[key] + 0.5 * val, 3)
+    mix(f"step_{kind}", step512)
+    mix(f"enc_{kind}", enc_norm)
+    mix("vae512", vae512)
+    mix("overhead", overhead)
+    c["samples"] = c.get("samples", 0) + 1
+    json.dump(cal, open(CALIB, "w", encoding="utf-8"), indent=2)
+    print(f"[calibration] {S.backend}/{kind} : {step512:.2f} s/étape@512, encodage {enc_norm:.0f} s, VAE {vae512:.1f} s@512", flush=True)
 
 
 def load_config():
@@ -53,10 +101,9 @@ def write_data_url(data_url, path):
 def build_cmd(job):
     d = job["dir"]
     r = job["req"]
-    be = {"vulkan": "diffusion=vulkan0,vae=vulkan0,te=cpu", "cpu": "cpu"}[S.backend]
     cmd = [P("sdcpp", S.backend, "sd-cli.exe"),
-           "--diffusion-model", MODELS["diffusion"], "--vae", MODELS["vae"], "--llm", MODELS["llm"],
-           "--backend", be, "--offload-to-cpu", "--mmap",
+           "--diffusion-model", MODELS["diffusion"], "--vae", MODELS["vae"], "--llm", MODELS["llm"]] + BACKENDS[S.backend] + [
+           "--mmap",
            "-p", r["prompt"], "-W", str(r["width"]), "-H", str(r["height"]),
            "--steps", str(r["steps"]), "--cfg-scale", str(r.get("cfg", S.cfg.get("cfg_scale", 1.0))),
            "--sampling-method", "euler", "-s", str(r.get("seed", -1)), "-o", job["out"]]
@@ -141,8 +188,18 @@ def run_job(job):
             elif "get_learned_condition completed" in text:
                 job["phase"] = "génération"
                 job["encode_seconds"] = round(time.time() - job["started"], 1)
+                t = TAKING_RE.search(text)
+                if t:
+                    job["encode_seconds_net"] = float(t.group(1))
             elif "sampling completed" in text:
                 job["phase"] = "décodage VAE"
+                t = TAKING_RE.search(text)
+                if t:
+                    job["sampling_seconds"] = float(t.group(1))
+            elif "decode_first_stage completed" in text:
+                t = TAKING_RE.search(text)
+                if t:
+                    job["vae_seconds"] = float(t.group(1))
             elif "[ERROR" in text or "GGML_ASSERT" in text:
                 job["error_lines"] = (job.get("error_lines") or []) + [text]
     rc = proc.wait()
@@ -167,6 +224,10 @@ def run_job(job):
         with open(P("outputs", "journal.jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps(meta, ensure_ascii=False) + "\n")
         print(f"[job] PNG enregistré : {job['out']} ({job['size']} octets, {job['seconds']} s)", flush=True)
+        try:
+            update_calib(job)
+        except Exception as e:
+            print(f"[calibration] ignorée : {e}", flush=True)
     else:
         job["status"] = "failed"
         job["error"] = "sd-cli code " + str(rc) + " — " + " | ".join((job.get("error_lines") or tail)[-4:])
@@ -225,7 +286,8 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {"sd_ready": not missing, "backend": S.backend, "busy": S.current is not None,
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
                                     "model": "qwen-image-2.1-Q4_K_M.gguf", "queued": S.q.qsize(),
-                                    "current_job": S.current, "last_job": public(last) if last else None})
+                                    "current_job": S.current, "last_job": public(last) if last else None,
+                                    "calibration": load_calib().get(S.backend, {})})
         m = re.match(r"^/api/job/([\w-]+)(/preview)?$", path)
         if m:
             job = S.jobs.get(m.group(1))
@@ -285,7 +347,7 @@ def main():
     cfg = load_config()
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=cfg["ui_port"])
-    ap.add_argument("--backend", choices=["vulkan", "cpu"], default=cfg["backend"])
+    ap.add_argument("--backend", choices=list(BACKENDS), default=cfg["backend"])
     ap.add_argument("--no-browser", action="store_true")
     a = ap.parse_args()
     S.cfg = cfg
@@ -295,9 +357,12 @@ def main():
         os.makedirs(P(d), exist_ok=True)
     for old in sorted(glob.glob(P("jobs", "*")))[:-20]:   # ne garde que les 20 derniers dossiers de travail
         shutil.rmtree(old, ignore_errors=True)
+    if not os.path.exists(P("sdcpp", a.backend, "sd-cli.exe")) and a.backend != "vulkan":
+        print(f"[launch] moteur {a.backend} absent (setup.py --{a.backend} pour l'installer), repli sur vulkan", flush=True)
+        S.backend = a.backend = "vulkan"
     exe = P("sdcpp", a.backend, "sd-cli.exe")
     if not os.path.exists(exe):
-        sys.exit(f"binaire introuvable : {exe}")
+        sys.exit(f"binaire introuvable : {exe} (lancez : venv\\Scripts\\python.exe setup.py)")
     threading.Thread(target=worker, daemon=True).start()
     httpd = ThreadingHTTPServer(("127.0.0.1", a.port), H)
     httpd.daemon_threads = True
