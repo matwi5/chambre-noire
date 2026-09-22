@@ -1,0 +1,11 @@
+{
+  "name": "02 Édition : image(s) + texte",
+  "engine": "stable-diffusion.cpp sd-server (sdcpp API) — Qwen-Image-2.1 Q4_K_M",
+  "mode": "edit",
+  "notes": "Ajoutez une ou plusieurs images de référence (image 1, image 2, …) puis décrivez la modification. Plusieurs références sont acceptées (ref_images[]).",
+  "params": {
+    "prompt": "Replace the sky with a dramatic orange sunset, keep everything else unchanged",
+    "negative_prompt": "",
+    "width": 512, "height": 512, "steps": 20, "cfg": 1, "seed": 42, "sampler": "euler"
+  }
+}

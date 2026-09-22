@@ -1,0 +1,12 @@
+{
+  "name": "03 Édition guidée par masque (dessin)",
+  "engine": "stable-diffusion.cpp sd-server (sdcpp API) — Qwen-Image-2.1 Q4_K_M",
+  "mode": "mask",
+  "notes": "Chargez l'image, peignez en rouge la zone à modifier (ou chargez un masque PNG blanc=modifier) et donnez une INSTRUCTION (« Replace … with … »), pas une simple description. Mode Masque : le reste est conservé pixel pour pixel ; mode Annotation : le cercle rouge est envoyé au modèle (méthode officielle circle-guided).",
+  "params": {
+    "prompt": "Replace the object in the painted area with a small stone castle tower, keep everything else unchanged",
+    "negative_prompt": "",
+    "width": 512, "height": 512, "steps": 20, "cfg": 1, "seed": 42, "sampler": "euler",
+    "strength": 1.0, "invert_mask": false
+  }
+}

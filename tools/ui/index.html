@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qwen-Image 2.1 local</title>
+<style>
+  :root {
+    --bg:#f3f4f8; --bg2:#e9ebf3; --card:#ffffff; --ink:#151827; --muted:#6a7085; --line:#e3e6ef;
+    --accent:#5b5bd6; --accent2:#8b5cf6; --ok:#16a34a; --warn:#d97706; --err:#dc2626;
+    --shadow:0 10px 30px rgba(20,24,40,.08), 0 1px 2px rgba(20,24,40,.06); --radius:16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1117; --bg2:#151826; --card:#1a1d2b; --ink:#eef0f7; --muted:#9aa1b8; --line:#2a2f42;
+      --shadow:0 10px 30px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.3); }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; }
+  body { font:15px/1.5 "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; color:var(--ink);
+    background: radial-gradient(1200px 600px at 10% -10%, rgba(91,91,214,.18), transparent 60%),
+                radial-gradient(900px 500px at 100% 0%, rgba(139,92,246,.14), transparent 55%), var(--bg); min-height:100vh; }
+  header { display:flex; align-items:center; gap:14px; padding:18px 28px; }
+  .logo { width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg, var(--accent), var(--accent2)); display:grid; place-items:center; color:#fff; font-weight:800; box-shadow:var(--shadow); }
+  header h1 { font-size:19px; margin:0; letter-spacing:-.01em; }
+  #status { margin-left:auto; font-size:13px; padding:6px 12px; border-radius:999px; background:var(--card); border:1px solid var(--line); display:flex; align-items:center; gap:8px; }
+  #status::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--warn); }
+  #status.ok::before { background:var(--ok); } #status.err::before { background:var(--err); }
+  main { display:grid; grid-template-columns: minmax(340px, 540px) 1fr; gap:22px; padding:0 28px 32px; }
+  @media (max-width: 980px) { main { grid-template-columns:1fr; } header { padding:16px; } main { padding:0 16px 24px; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); }
+  nav { display:flex; gap:6px; padding:6px; background:var(--bg2); border-radius:14px; margin-bottom:16px; }
+  nav button { flex:1; border:0; background:transparent; color:var(--muted); padding:10px 12px; border-radius:10px; cursor:pointer; font:inherit; font-weight:600; font-size:13.5px; }
+  nav button.active { background:var(--card); color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,.12); }
+  .pane { display:none; } .pane.active { display:block; }
+  label { display:block; font-size:12.5px; color:var(--muted); font-weight:600; margin:14px 0 6px; }
+  textarea, select { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; background:var(--bg2); color:var(--ink); }
+  textarea { min-height:96px; resize:vertical; }
+  select { appearance:none; background-image:linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 18px) 55%, calc(100% - 13px) 55%; background-size:5px 5px, 5px 5px; background-repeat:no-repeat; padding-right:34px; cursor:pointer; }
+  textarea:focus, select:focus { outline:2px solid rgba(91,91,214,.35); border-color:var(--accent); }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+  .check { display:flex; align-items:center; gap:10px; margin-top:14px; font-size:13px; color:var(--muted); }
+  .check input { width:18px; height:18px; accent-color:var(--accent); }
+  .btn { padding:11px 18px; border:0; border-radius:12px; background:linear-gradient(135deg, var(--accent), var(--accent2)); color:#fff; font:inherit; font-weight:700; cursor:pointer; box-shadow:0 6px 18px rgba(91,91,214,.35); }
+  .btn.secondary { background:var(--bg2); color:var(--ink); box-shadow:none; font-weight:600; }
+  .btn.small { padding:7px 12px; font-size:13px; border-radius:10px; }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .actions { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; align-items:center; }
+  .estimate { margin-top:14px; padding:12px 14px; border-radius:12px; background:var(--bg2); font-size:13px; display:flex; justify-content:space-between; gap:12px; align-items:center; }
+  .estimate b { font-size:15px; white-space:nowrap; }
+  .estimate.warn { outline:1px solid rgba(217,119,6,.5); }
+  .drop { border:1.5px dashed var(--line); border-radius:12px; padding:14px; text-align:center; color:var(--muted); font-size:13px; cursor:pointer; background:var(--bg2); }
+  .drop:hover, .drop.over { border-color:var(--accent); color:var(--ink); }
+  .drop input { display:none; }
+  .thumbs { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+  .thumb { position:relative; width:96px; height:96px; border-radius:10px; overflow:hidden; background:var(--bg2); border:1px solid var(--line); }
+  .thumb img { width:100%; height:100%; object-fit:cover; }
+  .thumb span { position:absolute; left:6px; top:6px; background:rgba(0,0,0,.65); color:#fff; font-size:11px; padding:2px 6px; border-radius:6px; }
+  .thumb button { position:absolute; right:4px; top:4px; border:0; width:22px; height:22px; background:rgba(0,0,0,.65); color:#fff; border-radius:6px; cursor:pointer; }
+  #paintWrap { position:relative; display:inline-block; max-width:100%; border-radius:12px; overflow:hidden; background:var(--bg2); margin-top:10px; touch-action:none; border:1px solid var(--line); }
+  #paintWrap img { display:block; max-width:100%; }
+  #paintCanvas { position:absolute; left:0; top:0; width:100%; height:100%; cursor:crosshair; }
+  .tools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; font-size:13px; }
+  .tools input[type=range] { width:110px; accent-color:var(--accent); }
+  .seg { display:flex; background:var(--bg2); border-radius:10px; padding:4px; gap:4px; }
+  .seg button { border:0; background:transparent; color:var(--muted); padding:7px 12px; border-radius:8px; cursor:pointer; font:inherit; font-size:13px; font-weight:600; }
+  .seg button.on { background:var(--card); color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,.12); }
+  #result { display:flex; flex-direction:column; min-height:460px; }
+  #resultEmpty { margin:auto; text-align:center; color:var(--muted); }
+  #resultEmpty .big { font-size:42px; margin-bottom:8px; }
+  .stage { position:relative; width:100%; aspect-ratio:1/1; max-height:70vh; border-radius:14px; overflow:hidden; background:var(--bg2); display:none; }
+  .stage img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; transition:opacity .6s, filter .8s; }
+  .stage img.preview { filter:none; opacity:1; }
+  .stage.has-preview .loader { background:rgba(0,0,0,.22); color:#fff; text-shadow:0 1px 6px rgba(0,0,0,.6); }
+  .stage.has-preview .loader .phase { color:#e6e6f0; }
+  .stage.has-preview .loader .eta { background:rgba(0,0,0,.45); border-color:rgba(255,255,255,.25); color:#fff; text-shadow:none; }
+  .stage img.final { filter:none; opacity:1; }
+  .shimmer { position:absolute; inset:0; background:linear-gradient(120deg, rgba(91,91,214,.10), rgba(139,92,246,.22), rgba(91,91,214,.10)); background-size:200% 100%; animation:shimmer 2.2s linear infinite; }
+  @keyframes shimmer { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
+  .orb { position:absolute; width:46%; aspect-ratio:1; border-radius:50%; filter:blur(40px); opacity:.55; animation:float 7s ease-in-out infinite; }
+  .orb.a { background:#6d6df0; left:8%; top:10%; } .orb.b { background:#b48cff; right:6%; bottom:8%; animation-delay:-3.5s; }
+  @keyframes float { 0%,100% { transform:translate(0,0) scale(1); } 50% { transform:translate(6%, -6%) scale(1.15); } }
+  .loader { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; text-align:center; padding:20px; }
+  .ring { width:64px; height:64px; border-radius:50%; border:5px solid rgba(91,91,214,.18); border-top-color:var(--accent); animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .loader .stepbig { font-size:30px; font-weight:800; }
+  .loader .phase { font-size:14px; color:var(--muted); }
+  .loader .eta { font-size:13px; padding:5px 12px; border-radius:999px; background:var(--card); border:1px solid var(--line); }
+  .bar { height:8px; background:var(--bg2); border-radius:999px; overflow:hidden; margin-top:14px; display:none; }
+  .bar i { display:block; height:100%; width:0; background:linear-gradient(90deg, var(--accent), var(--accent2)); transition:width .9s linear; }
+  #resultMeta { font-size:13px; color:var(--muted); margin-top:12px; white-space:pre-wrap; line-height:1.6; }
+  details { margin-top:16px; } summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  .log { font:12px/1.5 ui-monospace, Consolas, monospace; background:var(--bg2); border-radius:10px; padding:10px; max-height:160px; overflow:auto; white-space:pre-wrap; margin-top:8px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Q</div>
+  <h1>Qwen-Image 2.1</h1>
+  <span id="status">connexion…</span>
+</header>
+
+<main>
+<section class="card">
+  <nav>
+    <button data-pane="t2i" class="active">Texte → image</button>
+    <button data-pane="edit">Édition</button>
+    <button data-pane="mask">Dessin guidé</button>
+  </nav>
+
+  <div class="pane active" id="pane-t2i">
+    <label>Description</label>
+    <textarea id="t2i_prompt">A cozy wooden cabin in a snowy forest at dusk, warm light in the windows, photorealistic</textarea>
+  </div>
+
+  <div class="pane" id="pane-edit">
+    <label>Images de référence (1 à 10)</label>
+    <div class="drop" id="edit_drop">Cliquer ou déposer des images<input type="file" id="edit_files" accept="image/*" multiple></div>
+    <div class="thumbs" id="edit_thumbs"></div>
+    <label>Instruction</label>
+    <textarea id="edit_prompt">Replace the sky with a dramatic orange sunset, keep everything else unchanged</textarea>
+  </div>
+
+  <div class="pane" id="pane-mask">
+    <label>Image</label>
+    <div class="drop" id="mask_drop">Cliquer ou déposer une image<input type="file" id="mask_file" accept="image/*"></div>
+    <div id="paintWrap" style="display:none"><img id="paintImg" alt=""><canvas id="paintCanvas"></canvas></div>
+    <div class="tools">
+      <div class="seg"><button id="modePaint" class="on">Peindre</button><button id="modeErase">Gommer</button></div>
+      <input type="range" id="brush" min="4" max="160" value="40" title="taille du pinceau"><span id="brushVal">40 px</span>
+      <button class="btn secondary small" onclick="clearMask()">Effacer</button>
+    </div>
+    <label>Mode</label>
+    <select id="mask_mode">
+      <option value="mask">Masque — seule la zone peinte change</option>
+      <option value="annotation">Annotation — le trait rouge guide le modèle</option>
+    </select>
+    <label>Instruction</label>
+    <textarea id="mask_prompt">Replace the object in the painted area with a large red hot air balloon, keep everything else unchanged</textarea>
+  </div>
+
+  <div class="grid3">
+    <div><label>Format</label><select id="ratio"></select></div>
+    <div><label>Résolution</label><select id="res"></select></div>
+    <div><label>Étapes</label><select id="steps"></select></div>
+  </div>
+  <label class="check"><input type="checkbox" id="previewChk"> Aperçu toutes les 5 étapes <span id="previewCost"></span></label>
+  <div class="estimate" id="estimate"><span id="estText"></span><b id="estTime"></b></div>
+
+  <div class="actions">
+    <button class="btn" id="go">Générer</button>
+    <button class="btn secondary" id="cancel" disabled>Annuler</button>
+  </div>
+  <details><summary>Journal</summary><div class="log" id="log"></div></details>
+</section>
+
+<section class="card" id="result">
+  <div id="resultEmpty"><div class="big">🖼️</div>Le résultat s'affichera ici</div>
+  <div class="stage" id="stage">
+    <div class="shimmer" id="shimmer"><div class="orb a"></div><div class="orb b"></div></div>
+    <img id="stageImg" alt="">
+    <div class="loader" id="loader"><div class="ring"></div><div class="stepbig" id="stepBig">Préparation</div><div class="phase" id="phaseTxt"></div><div class="eta" id="etaTxt"></div><button class="btn secondary small" id="cancelLoader" style="margin-top:6px">Annuler</button></div>
+  </div>
+  <div class="bar" id="bar"><i></i></div>
+  <div id="resultMeta"></div>
+  <div class="actions" id="resultActions" style="display:none">
+    <a class="btn secondary small" id="dl" download>Télécharger</a>
+    <button class="btn secondary small" onclick="useAsEditInput()">→ Édition</button>
+    <button class="btn secondary small" onclick="useAsMaskInput()">→ Dessin guidé</button>
+  </div>
+</section>
+</main>
+
+<script>
+// ------------------------------------------------------------ valeurs fixes
+const RATIOS = { '1:1':[2048,2048], '4:3':[2400,1792], '3:4':[1792,2400], '3:2':[2528,1696], '2:3':[1696,2528], '16:9':[2752,1536], '9:16':[1536,2752] };
+const RATIO_LABELS = { '1:1':'Carré 1:1', '4:3':'Paysage 4:3', '3:4':'Portrait 3:4', '3:2':'Paysage 3:2', '2:3':'Portrait 2:3', '16:9':'Large 16:9', '9:16':'Vertical 9:16' };
+const RES   = [ {k:'low',label:'Low',scale:0.25}, {k:'medium',label:'Medium',scale:0.375}, {k:'high',label:'High',scale:0.5}, {k:'xhigh',label:'XHigh',scale:0.75}, {k:'max',label:'Max',scale:1.0} ];
+const STEPS = [ {k:'low',label:'Low',steps:8}, {k:'medium',label:'Medium',steps:12}, {k:'high',label:'High',steps:20}, {k:'xhigh',label:'XHigh',steps:30}, {k:'max',label:'Max',steps:40} ];
+const CFG = 1, MAX_PIXELS = 2048*2048, MAX_INPUT_SIDE = 2048, PREVIEW_EVERY = 5;
+const T = { stepT2i:16, stepEdit:44, encT2i:58, encEdit:95, encExtraRef:50, vae512:22, exp:1.2 };   // mesures sur cette machine
+
+const $ = id => document.getElementById(id);
+let mode='t2i', editImages=[], maskImage=null, paintMode='paint', currentJob=null, lastResult=null, estSeconds=0, stepSeconds=16, vaeSeconds=22, minSpi=Infinity, forceImageRatio=false;
+
+function log(m){ const l=$('log'); l.textContent += new Date().toLocaleTimeString()+'  '+m+'\n'; l.scrollTop=l.scrollHeight; }
+const round32 = v => Math.max(256, Math.round(v/32)*32);
+function singleImage(){ if(mode==='edit' && editImages.length===1) return editImages[0]; if(mode==='mask' && maskImage) return maskImage; return null; }
+function closestRatio(w, h){ const t=Math.log(w/h); let best='1:1', bd=Infinity; for(const r in RATIOS){ const d=Math.abs(Math.log(RATIOS[r][0]/RATIOS[r][1])-t); if(d<bd){ bd=d; best=r; } } return best; }
+function dimsExact(iw, ih, scale){ const px=MAX_PIXELS*scale*scale, r=iw/ih, h0=Math.sqrt(px/r); let best=null;
+  for(const dh of [-32,0,32]){ const h=round32(h0+dh), w=round32(h*r); const err=Math.abs(Math.log((w/h)/r)), area=Math.abs(w*h-px)/px;
+    if(!best || err<best.err-1e-9 || (Math.abs(err-best.err)<1e-9 && area<best.area)) best={w,h,err,area}; }
+  return [best.w, best.h]; }
+function dimsFor(key, scale){ const im=singleImage(); if(key==='image' && im) return dimsExact(im.w, im.h, scale); const [w,h]=RATIOS[key in RATIOS ? key : '1:1']; return [round32(w*scale), round32(h*scale)]; }
+const resSel = () => RES.find(p=>p.k===$('res').value) || RES[1];
+const stepsSel = () => STEPS.find(p=>p.k===$('steps').value) || STEPS[1];
+function currentDims(){ return dimsFor($('ratio').value, resSel().scale); }
+function parts(w, h, steps, m, nrefs, preview){
+  const f=Math.pow((w*h/256)/1024, T.exp); const step=(m==='t2i'?T.stepT2i:T.stepEdit)*f;
+  const enc=m==='t2i'?T.encT2i:T.encEdit+Math.max(0,nrefs-1)*T.encExtraRef; const vae=T.vae512*(w*h)/(512*512);
+  const previews = preview ? Math.floor(steps/PREVIEW_EVERY) : 0;
+  return { step, enc, vae, previews, total: enc + steps*step + vae + previews*vae }; }
+function fmt(s){ if(s<90) return Math.round(s)+' s'; if(s<3600) return Math.round(s/60)+' min'; return (s/3600).toFixed(1).replace('.',',')+' h'; }
+
+function refreshChoices(){
+  const im=singleImage(); const nrefs = mode==='edit' ? editImages.length : (mode==='mask'?1:0); const pv=$('previewChk').checked;
+  const rs=$('ratio'); let curR=rs.value||'1:1'; if(curR==='image' && !im) curR='1:1'; if(forceImageRatio && im){ curR='image'; forceImageRatio=false; } rs.innerHTML='';
+  if(im){ const o=document.createElement('option'); o.value='image'; o.textContent=`★ Ratio de l'image (${im.w}×${im.h})`; rs.appendChild(o); }
+  const near = im ? closestRatio(im.w, im.h) : null;
+  Object.keys(RATIOS).forEach(r=>{ const o=document.createElement('option'); o.value=r; o.textContent=RATIO_LABELS[r]+(r===near?' ≈ image':''); rs.appendChild(o); });
+  rs.value=curR;
+  const steps=stepsSel().steps; const [w,h]=currentDims();
+  const sr=$('res'); const curRes=sr.value||'medium'; sr.innerHTML='';
+  RES.forEach(p=>{ const [pw,ph]=dimsFor(rs.value, p.scale); const o=document.createElement('option'); o.value=p.k; o.textContent=`${p.label} · ${pw}×${ph}`; sr.appendChild(o); }); sr.value=curRes;
+  const ss=$('steps'); const curS=ss.value||'medium'; ss.innerHTML='';
+  STEPS.forEach(p=>{ const o=document.createElement('option'); o.value=p.k; o.textContent=`${p.label} · ${p.steps} étapes · ≈ ${fmt(parts(w,h,p.steps,mode,nrefs,pv).total)}`; ss.appendChild(o); }); ss.value=curS;
+  const pr=parts(w,h,steps,mode,nrefs,pv); estSeconds=pr.total; stepSeconds=pr.step; vaeSeconds=pr.vae;
+  $('previewCost').textContent = `(+ ${fmt(parts(w,h,steps,mode,nrefs,true).previews*pr.vae)})`;
+  $('estText').textContent=`${w}×${h} · ${steps} étapes${nrefs>1?' · '+nrefs+' références':''}`;
+  $('estTime').textContent='≈ '+fmt(estSeconds); $('estimate').classList.toggle('warn', estSeconds>3600);
+}
+(function init(){
+  Object.keys(RATIOS).forEach(r=>{ const o=document.createElement('option'); o.value=r; $('ratio').appendChild(o); }); $('ratio').value='1:1';
+  RES.forEach(p=>{ const o=document.createElement('option'); o.value=p.k; $('res').appendChild(o); }); $('res').value='medium';
+  STEPS.forEach(p=>{ const o=document.createElement('option'); o.value=p.k; $('steps').appendChild(o); }); $('steps').value='medium';
+  ['ratio','res','steps','previewChk'].forEach(id=>$(id).addEventListener('change', refreshChoices)); refreshChoices();
+})();
+function suggestRatio(){ forceImageRatio=!!singleImage(); refreshChoices(); }
+
+// ------------------------------------------------------------ onglets & statut
+document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active')); mode=b.dataset.pane; $('pane-'+mode).classList.add('active'); suggestRatio(); }));
+async function refreshStatus(){
+  try{ const s=await (await fetch('/api/status')).json(); const el=$('status');
+    if(s.sd_ready){ el.textContent=(s.busy?'génération en cours':'prêt')+' · '+s.backend; el.className='ok'; } else { el.textContent=s.detail||'non prêt'; el.className='err'; } }
+  catch(e){ $('status').textContent='serveur injoignable'; $('status').className='err'; }
+  setTimeout(refreshStatus, 5000);
+}
+refreshStatus();
+
+// ------------------------------------------------------------ images
+function readFile(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
+function loadImg(dataUrl){ return new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=dataUrl; }); }
+function resizeDataUrl(img, w, h){ const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h); return c.toDataURL('image/png'); }
+async function toEntry(name, dataUrl){ let im=await loadImg(dataUrl); let w=im.naturalWidth, h=im.naturalHeight;
+  if(Math.max(w,h)>MAX_INPUT_SIDE){ const s=MAX_INPUT_SIDE/Math.max(w,h); const nw=Math.round(w*s), nh=Math.round(h*s);
+    dataUrl=resizeDataUrl(im, nw, nh); im=await loadImg(dataUrl); log(`${name} : ${w}×${h} réduite à ${nw}×${nh}`); w=nw; h=nh; }
+  return {name, dataUrl, w, h, img:im}; }
+function wireDrop(dropId, inputId, handler){ const d=$(dropId), inp=$(inputId); d.addEventListener('click',()=>inp.click());
+  d.addEventListener('dragover',e=>{e.preventDefault(); d.classList.add('over');}); d.addEventListener('dragleave',()=>d.classList.remove('over'));
+  d.addEventListener('drop',e=>{e.preventDefault(); d.classList.remove('over'); handler(e.dataTransfer.files);}); inp.addEventListener('change',e=>{ handler(e.target.files); e.target.value=''; }); }
+wireDrop('edit_drop','edit_files', async files=>{ for(const f of files){ if(editImages.length>=10) break; editImages.push(await toEntry(f.name, await readFile(f))); } renderEditThumbs(); suggestRatio(); });
+wireDrop('mask_drop','mask_file', async files=>{ const f=files[0]; if(f) await setMaskImage(f.name, await readFile(f)); });
+function renderEditThumbs(){ const t=$('edit_thumbs'); t.innerHTML='';
+  editImages.forEach((im,i)=>{ const d=document.createElement('div'); d.className='thumb'; d.innerHTML=`<img src="${im.dataUrl}"><span>${i+1}</span><button title="retirer">×</button>`;
+    d.querySelector('button').onclick=()=>{ editImages.splice(i,1); renderEditThumbs(); suggestRatio(); }; t.appendChild(d); }); }
+
+// ------------------------------------------------------------ dessin
+const canvas=$('paintCanvas'); const ctx=canvas.getContext('2d');
+$('brush').addEventListener('input',e=>$('brushVal').textContent=e.target.value+' px');
+$('modePaint').onclick=()=>{paintMode='paint'; $('modePaint').classList.add('on'); $('modeErase').classList.remove('on');};
+$('modeErase').onclick=()=>{paintMode='erase'; $('modeErase').classList.add('on'); $('modePaint').classList.remove('on');};
+async function setMaskImage(name, dataUrl){ maskImage=await toEntry(name, dataUrl); $('paintImg').src=maskImage.dataUrl; $('paintWrap').style.display='inline-block';
+  canvas.width=maskImage.w; canvas.height=maskImage.h; ctx.clearRect(0,0,canvas.width,canvas.height); suggestRatio(); }
+function clearMask(){ ctx.clearRect(0,0,canvas.width,canvas.height); }
+let drawing=false, last=null;
+function pos(ev){ const r=canvas.getBoundingClientRect(); return [(ev.clientX-r.left)*canvas.width/r.width, (ev.clientY-r.top)*canvas.height/r.height]; }
+function dab(p){ const size=Number($('brush').value)*canvas.width/canvas.getBoundingClientRect().width;
+  ctx.globalCompositeOperation = paintMode==='erase' ? 'destination-out' : 'source-over'; ctx.strokeStyle='rgba(255,0,0,0.5)'; ctx.fillStyle='rgba(255,0,0,0.5)'; ctx.lineWidth=size; ctx.lineCap='round'; ctx.lineJoin='round';
+  if(last){ ctx.beginPath(); ctx.moveTo(last[0],last[1]); ctx.lineTo(p[0],p[1]); ctx.stroke(); } else { ctx.beginPath(); ctx.arc(p[0],p[1],size/2,0,Math.PI*2); ctx.fill(); } last=p; }
+canvas.addEventListener('pointerdown',ev=>{ if(!maskImage) return; drawing=true; last=null; canvas.setPointerCapture(ev.pointerId); dab(pos(ev)); });
+canvas.addEventListener('pointermove',ev=>{ if(drawing) dab(pos(ev)); });
+['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,()=>{ drawing=false; last=null; }));
+function paintedPixels(){ const d=ctx.getImageData(0,0,canvas.width,canvas.height); let n=0; for(let i=3;i<d.data.length;i+=4) if(d.data[i]>0) n++; return n; }
+function exportMask(w,h){ const d=ctx.getImageData(0,0,canvas.width,canvas.height); const m=document.createElement('canvas'); m.width=canvas.width; m.height=canvas.height; const mc=m.getContext('2d'); const out=mc.createImageData(m.width,m.height);
+  for(let i=0;i<d.data.length;i+=4){ const v=d.data[i+3]>0?255:0; out.data[i]=v; out.data[i+1]=v; out.data[i+2]=v; out.data[i+3]=255; }
+  mc.putImageData(out,0,0); const f=document.createElement('canvas'); f.width=w; f.height=h; const fc=f.getContext('2d'); fc.imageSmoothingEnabled=false; fc.drawImage(m,0,0,w,h); return f.toDataURL('image/png'); }
+function paintedReference(w,h,opaque){ const a=document.createElement('canvas'); a.width=canvas.width; a.height=canvas.height; const ac=a.getContext('2d'); ac.drawImage(maskImage.img,0,0,a.width,a.height);
+  const d=ctx.getImageData(0,0,canvas.width,canvas.height); const im=ac.getImageData(0,0,a.width,a.height);
+  for(let i=0;i<d.data.length;i+=4){ if(d.data[i+3]>0){ if(opaque){ im.data[i]=255; im.data[i+1]=0; im.data[i+2]=0; } else { im.data[i]=Math.round(im.data[i]*0.5+127); im.data[i+1]=Math.round(im.data[i+1]*0.5); im.data[i+2]=Math.round(im.data[i+2]*0.5); } } }
+  ac.putImageData(im,0,0); const f=document.createElement('canvas'); f.width=w; f.height=h; f.getContext('2d').drawImage(a,0,0,w,h); return f.toDataURL('image/png'); }
+
+// ------------------------------------------------------------ requête & loader
+function buildRequest(){
+  const [w,h]=currentDims(); const steps=stepsSel().steps;
+  const body={ mode, prompt:'', width:w, height:h, steps, cfg:CFG, seed:-1, preview:$("previewChk").checked, preview_interval:PREVIEW_EVERY, ref_images:[], init_image:null, mask_image:null, strength:1.0 };
+  if(mode==='t2i'){ body.prompt=$('t2i_prompt').value.trim(); }
+  else if(mode==='edit'){ if(!editImages.length) throw new Error('Ajoutez au moins une image de référence.'); body.prompt=$('edit_prompt').value.trim(); body.ref_images=editImages.map(x=>x.dataUrl); }
+  else { if(!maskImage) throw new Error('Chargez une image.'); if(!paintedPixels()) throw new Error('Peignez une zone.'); body.prompt=$('mask_prompt').value.trim();
+    if($('mask_mode').value==='annotation'){ body.mode='annot'; body.ref_images=[paintedReference(w,h,true)]; }
+    else { body.init_image=resizeDataUrl(maskImage.img,w,h); body.mask_image=exportMask(w,h); body.ref_images=[paintedReference(w,h,false)]; } }
+  if(!body.prompt) throw new Error('Le texte est vide.');
+  return body;
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function showLoader(on){ $('stage').style.display='block'; $('resultEmpty').style.display='none'; $('loader').style.display=on?'flex':'none'; $('shimmer').style.display=on?'block':'none'; $('bar').style.display=on?'block':'none'; }
+function updateLoader(j, elapsed){
+  let remaining, frac;
+  if(j.step){ if(j.sec_per_it) minSpi=Math.min(minSpi, j.sec_per_it); const spi=minSpi<Infinity?minSpi:stepSeconds;
+    const previewsLeft = j.preview_interval ? Math.floor((j.total-j.step)/j.preview_interval) : 0;
+    remaining=(j.total-j.step)*spi + vaeSeconds*(1+previewsLeft); frac=j.step/j.total; $('stepBig').textContent=`Étape ${j.step} / ${j.total}`; $('phaseTxt').textContent=`${spi.toFixed(1)} s par étape`; }
+  else { remaining=Math.max(0, estSeconds-elapsed); frac=Math.min(0.12, elapsed/Math.max(estSeconds,1)); $('stepBig').textContent=j.status==='queued'?'En attente':'Préparation'; $('phaseTxt').textContent=(j.phase||'chargement')+'…'; }
+  if(j.phase==='décodage VAE'){ frac=0.97; remaining=vaeSeconds; $('stepBig').textContent='Décodage'; $('phaseTxt').textContent=''; }
+  $('etaTxt').textContent=`${fmt(elapsed)} · reste ≈ ${fmt(remaining)}`; $('bar').firstElementChild.style.width=(Math.max(frac,0.02)*100).toFixed(1)+'%';
+}
+async function followJob(j, startedAt){          // suit un job (nouveau ou repris après rechargement de la page)
+  $('go').disabled=true; $('cancel').disabled=false; showLoader(true); $('resultActions').style.display='none'; $('resultMeta').textContent='';
+  const img=$('stageImg'); img.className=''; img.src=''; img.style.display='none'; let pv=0; minSpi=Infinity; currentJob=j.id; $('stage').classList.remove('has-preview');
+  try{
+    while(['queued','running'].includes(j.status)){ await sleep(1000); j=await (await fetch('/api/job/'+j.id)).json(); const el=(Date.now()-startedAt)/1000; updateLoader(j, el);
+      if(j.preview_version && j.preview_version!==pv){ pv=j.preview_version; img.src='/api/job/'+j.id+'/preview?v='+pv; img.className='preview'; img.style.display='block'; $('stage').classList.add('has-preview'); $('shimmer').style.display='none'; } }
+    if(j.status==='cancelled'){ log('génération annulée'); showLoader(false); $('stage').classList.remove('has-preview'); if(!lastResult){ $('stage').style.display='none'; $('resultEmpty').style.display='block'; } return; }
+    if(j.status!=='done') throw new Error(j.error||('statut '+j.status));
+    $('stage').classList.remove('has-preview');
+    const secs=j.seconds||(Date.now()-startedAt)/1000; const url='/api/result?name='+encodeURIComponent(j.name);
+    if(j.dims) $('stage').style.aspectRatio=j.dims[0]+'/'+j.dims[1];
+    img.src=url; img.className='final'; img.style.display='block'; showLoader(false); $('stage').style.display='block';
+    $('dl').href=url; $('dl').download=j.name; $('resultActions').style.display='flex';
+    $('resultMeta').textContent=`${fmt(secs)} (${Math.round(secs)} s) · ${j.dims?j.dims.join('×'):''} · ${j.total||'?'} étapes${j.sec_per_it?' · '+j.sec_per_it.toFixed(1)+' s/étape':''}\n${j.path}\n${(j.size||0).toLocaleString('fr-FR')} octets`;
+    lastResult={url, name:j.name}; log('terminé en '+Math.round(secs)+' s → '+j.path);
+  }catch(e){ log('ERREUR '+e.message); showLoader(false); if(!lastResult){ $('stage').style.display='none'; $('resultEmpty').style.display='block'; } alert('Erreur : '+e.message); }
+  finally{ $('go').disabled=false; $('cancel').disabled=true; currentJob=null; }
+}
+$('go').onclick=async()=>{
+  let body; try{ body=buildRequest(); }catch(e){ alert(e.message); return; }
+  if(estSeconds>3600 && !confirm('Temps estimé : '+fmt(estSeconds)+'. Lancer quand même ?')) return;
+  $('stage').style.aspectRatio=body.width+'/'+body.height;
+  log(`${body.mode} ${body.width}x${body.height} ${body.steps} étapes refs=${body.ref_images.length} mask=${body.mask_image?'oui':'non'} aperçus=${body.preview?'oui':'non'} estimation=${fmt(estSeconds)}`);
+  const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const j=await r.json(); if(!r.ok){ alert('Erreur : '+(j.error||('HTTP '+r.status))); return; }
+  await followJob(j, Date.now());
+};
+(async function resumeIfRunning(){          // après un rechargement : se rattache à la génération en cours ou affiche la dernière
+  try{ const s=await (await fetch('/api/status')).json(); const j=s.last_job; if(!j) return;
+    if(['queued','running'].includes(j.status)){ log('reprise du job en cours '+j.id); await followJob(j, j.started ? j.started*1000 : Date.now()); }
+    else if(j.status==='done'){ const url='/api/result?name='+encodeURIComponent(j.name); const img=$('stageImg'); if(j.dims) $('stage').style.aspectRatio=j.dims[0]+'/'+j.dims[1];
+      showLoader(false); img.src=url; img.className='final'; img.style.display='block'; $('dl').href=url; $('dl').download=j.name; $('resultActions').style.display='flex';
+      $('resultMeta').textContent=`dernière génération · ${fmt(j.seconds||0)} · ${j.dims?j.dims.join('×'):''}\n${j.path}`; lastResult={url, name:j.name}; }
+  }catch(e){} })();
+async function cancelCurrent(){ if(currentJob){ log('annulation demandée'); await fetch('/api/job/'+currentJob+'/cancel',{method:'POST'}); } }
+$('cancel').onclick=cancelCurrent; $('cancelLoader').onclick=cancelCurrent;
+async function fetchLastDataUrl(){ const b=await (await fetch(lastResult.url)).blob(); return await readFile(b); }
+async function useAsEditInput(){ if(!lastResult) return; editImages.push(await toEntry(lastResult.name, await fetchLastDataUrl())); renderEditThumbs(); document.querySelector('nav button[data-pane=edit]').click(); }
+async function useAsMaskInput(){ if(!lastResult) return; await setMaskImage(lastResult.name, await fetchLastDataUrl()); document.querySelector('nav button[data-pane=mask]').click(); }
+</script>
+</body>
+</html>

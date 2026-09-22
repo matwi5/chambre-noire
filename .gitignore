@@ -1,0 +1,26 @@
+# environnement et données lourdes (téléchargées par setup.py)
+venv/
+models/
+sdcpp/
+*.part
+*.sha256ok
+*.corrompu
+
+# productions et journaux personnels
+outputs/
+jobs/
+logs/
+tests/bench_*.png
+
+# fichiers générés localement
+Qwen-Image.lnk
+__pycache__/
+*.pyc
+tools/download*.log
+tools/hf_*.json
+tools/hf_README.md
+tools/sdcpp_release.json
+
+# modèles de workflow tiers (Comfy-Org) : voir les liens dans le README
+workflows/comfyui/
+tools/adapt_comfy_workflows.py
