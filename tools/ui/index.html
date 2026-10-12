@@ -182,6 +182,7 @@ const DEFAULT_T = {
   vulkan: { step_t2i:16,   step_edit:44,  enc_t2i:58, enc_edit:95, vae512:22,  overhead:5 },   // Radeon intégré mesuré
   cuda:   { step_t2i:0.35, step_edit:0.8, enc_t2i:4,  enc_edit:8,  vae512:1.5, overhead:8 },   // estimation RTX 40xx
   cpu:    { step_t2i:130,  step_edit:350, enc_t2i:45, enc_edit:200,vae512:90,  overhead:5 },
+  metal:  { step_t2i:3.3,  step_edit:7.6, enc_t2i:7,  enc_edit:134,vae512:34,  overhead:8 },   // Apple M6 mesuré
 };
 let T = Object.assign({}, DEFAULT_T.vulkan), calibrated = false, curBackend = 'vulkan';
 function applyCalibration(backend, cal){
@@ -248,7 +249,7 @@ document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active')); mode=b.dataset.pane; $('pane-'+mode).classList.add('active'); suggestRatio(); }));
 async function refreshStatus(){
   try{ const s=await (await fetch('/api/status')).json(); const el=$('status');
-    if(s.sd_ready){ applyCalibration(s.backend, s.calibration); el.textContent=(s.busy?'génération en cours':'prêt')+' · '+s.backend+(calibrated?'':' · estimations non calibrées'); el.className='ok'; } else { el.textContent=s.detail||'non prêt'; el.className='err'; } }
+    if(s.sd_ready){ applyCalibration(s.backend, s.calibration); el.textContent=(s.busy?'génération en cours':'prêt')+' · '+s.backend+(s.model_version?' · '+s.model_version.toUpperCase():'')+(calibrated?'':' · estimations non calibrées'); el.className='ok'; } else { el.textContent=s.detail||'non prêt'; el.className='err'; } }
   catch(e){ $('status').textContent='serveur injoignable'; $('status').className='err'; }
   setTimeout(refreshStatus, 5000);
 }

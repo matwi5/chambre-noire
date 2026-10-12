@@ -1,9 +1,10 @@
 r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli lancé à chaque génération).
 
-  venv\Scripts\python.exe tools\launch.py [--port 7860] [--backend vulkan|cpu] [--no-browser]
+  Windows : venv\Scripts\python.exe tools\launch.py [--port 7860] [--backend vulkan|cuda|cpu] [--model q4|q8] [--no-browser]
+  macOS   : venv/bin/python tools/launch.py [--port 7860] [--model q4|q8] [--no-browser]
 
 - L'interface écoute sur 127.0.0.1:<port> et sert tools/ui/index.html.
-- Chaque génération lance sd-cli.exe (rechargement quasi instantané grâce à --mmap et au cache disque de Windows),
+- Chaque génération lance sd-cli (sous Windows, rechargement quasi instantané grâce à --mmap et au cache disque),
   lit sa progression (étape k/N, secondes par étape), expose des aperçus intermédiaires optionnels et enregistre
   le PNG final dans outputs/.
 - API : POST /api/generate, GET /api/job/<id>, GET /api/job/<id>/preview, POST /api/job/<id>/cancel,
@@ -16,20 +17,35 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 P = lambda *a: os.path.join(ROOT, *a)
 CONFIG = P("tools", "config.json")
+DIFFUSION = {   # versions du modèle de diffusion installables par setup.py (q8 : option --q8)
+    "q4": P("models", "diffusion_models", "qwen-image-2.1-UC-Q4_K_M.gguf"),
+    "q8": P("models", "diffusion_models", "qwen-image-2.1-UC-Q8_0.gguf"),
+}
 MODELS = {
-    "diffusion": P("models", "diffusion_models", "qwen-image-2.1-Q4_K_M.gguf"),
+    "diffusion": DIFFUSION["q4"],   # remplacé au démarrage selon --model
     "vae": P("models", "vae", "qwen_image_2.1_vae_bf16.safetensors"),
     "llm": P("models", "text_encoders", "qwen3vl_8b_int8_convrot_embfix.safetensors"),
 }
-PROGRESS_RE = re.compile(r"(\d+)/(\d+)\s*-\s*([\d.]+)s/it")
+EXE = "sd-cli.exe" if os.name == "nt" else "sd-cli"
+# moteurs de la plateforme, par ordre de repli quand celui demandé n'est pas installé
+PLATFORM_BACKENDS = ["metal"] if sys.platform == "darwin" else ["vulkan", "cuda", "cpu"]
+# vitesse du dernier pas : « 3/8 - 12.30s/it », ou « 3/8 - 1.52it/s » quand un pas dure moins d'une seconde
+PROGRESS_RE = re.compile(r"(\d+)/(\d+)\s*-\s*([\d.]+)(s/it|it/s)")
 TAKING_RE = re.compile(r"taking ([\d.]+)\s*s")
 CALIB = P("tools", "calibration.json")
 # Répartition par backend. CUDA : tout sur la carte (l'encodeur int8 convrot a un chemin CUDA natif, RTX 20xx+) ;
 # --offload-to-cpu garde les poids en RAM et les copie à la demande, ce qui s'adapte à toute taille de VRAM.
+# --mmap : rechargement quasi instantané du modèle d'une génération à l'autre grâce au cache disque.
 BACKENDS = {
-    "vulkan": ["--backend", "diffusion=vulkan0,vae=vulkan0,te=cpu", "--offload-to-cpu"],
-    "cuda":   ["--backend", "cuda0", "--offload-to-cpu", "--diffusion-fa"],
-    "cpu":    ["--backend", "cpu"],
+    "vulkan": ["--backend", "diffusion=vulkan0,vae=vulkan0,te=cpu", "--offload-to-cpu", "--mmap"],
+    "cuda":   ["--backend", "cuda0", "--offload-to-cpu", "--diffusion-fa", "--mmap"],
+    "cpu":    ["--backend", "cpu", "--mmap"],
+    # Metal (Mac Apple Silicon, mesuré sur M6 avec sd.cpp 74988b2) :
+    # - diffusion sur le GPU ; --diffusion-fa y gagne quelques pour cent ;
+    # - encodeur sur le CPU : Metal n'a pas de noyau int8 (kernel_mul_mm_i8_i8 absent, sd-cli plante) ;
+    # - VAE sur le CPU : environ 20 % plus rapide que sur Metal à 512 comme à 1024 px ;
+    # - pas de --mmap : les poids projetés en mémoire n'atteignent pas le GPU (« buffer is nil ») et l'image sort en bruit.
+    "metal":  ["--backend", "diffusion=MTL0,vae=cpu,te=cpu", "--diffusion-fa"],
 }
 
 
@@ -81,6 +97,7 @@ def load_config():
 
 class State:
     backend = "vulkan"
+    model = "q4"
     cfg = {}
     ui_port = 7860
     jobs = {}
@@ -101,9 +118,8 @@ def write_data_url(data_url, path):
 def build_cmd(job):
     d = job["dir"]
     r = job["req"]
-    cmd = [P("sdcpp", S.backend, "sd-cli.exe"),
+    cmd = [P("sdcpp", S.backend, EXE),
            "--diffusion-model", MODELS["diffusion"], "--vae", MODELS["vae"], "--llm", MODELS["llm"]] + BACKENDS[S.backend] + [
-           "--mmap",
            "-p", r["prompt"], "-W", str(r["width"]), "-H", str(r["height"]),
            "--steps", str(r["steps"]), "--cfg-scale", str(r.get("cfg", S.cfg.get("cfg_scale", 1.0))),
            "--sampling-method", "euler", "-s", str(r.get("seed", -1)), "-o", job["out"]]
@@ -177,7 +193,9 @@ def run_job(job):
             tail[:] = tail[-8:]
             pm = PROGRESS_RE.search(text)
             if pm:
-                job["step"], job["total"], job["sec_per_it"] = int(pm.group(1)), int(pm.group(2)), float(pm.group(3))
+                speed = float(pm.group(3))
+                job["step"], job["total"] = int(pm.group(1)), int(pm.group(2))
+                job["sec_per_it"] = speed if pm.group(4) == "s/it" else round(1 / max(speed, 1e-6), 3)
                 job["phase"] = "génération"
                 if job.get("preview_interval"):
                     latest_preview(job)
@@ -220,7 +238,7 @@ def run_job(job):
         job["size"] = os.path.getsize(job["out"])
         meta = {"mode": job["req"].get("mode"), "prompt": job["req"]["prompt"], "width": job["req"]["width"], "height": job["req"]["height"],
                 "steps": job["req"]["steps"], "seed": job["req"].get("seed"), "seconds": job["seconds"], "encode_seconds": job.get("encode_seconds"),
-                "sec_per_it": job.get("sec_per_it"), "file": job["out"], "size": job["size"], "backend": S.backend}
+                "sec_per_it": job.get("sec_per_it"), "file": job["out"], "size": job["size"], "backend": S.backend, "model": S.model}
         with open(P("outputs", "journal.jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps(meta, ensure_ascii=False) + "\n")
         print(f"[job] PNG enregistré : {job['out']} ({job['size']} octets, {job['seconds']} s)", flush=True)
@@ -285,7 +303,7 @@ class H(BaseHTTPRequestHandler):
             last = max(S.jobs.values(), key=lambda j: j["created"], default=None)
             return self._send(200, {"sd_ready": not missing, "backend": S.backend, "busy": S.current is not None,
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
-                                    "model": "qwen-image-2.1-Q4_K_M.gguf", "queued": S.q.qsize(),
+                                    "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model, "queued": S.q.qsize(),
                                     "current_job": S.current, "last_job": public(last) if last else None,
                                     "calibration": load_calib().get(S.backend, {})})
         m = re.match(r"^/api/job/([\w-]+)(/preview)?$", path)
@@ -347,27 +365,37 @@ def main():
     cfg = load_config()
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=cfg["ui_port"])
-    ap.add_argument("--backend", choices=list(BACKENDS), default=cfg["backend"])
+    # un backend de config.json absent de la plateforme (vulkan sur Mac) cède la place au moteur de la plateforme
+    default_backend = cfg["backend"] if cfg["backend"] in PLATFORM_BACKENDS else PLATFORM_BACKENDS[0]
+    ap.add_argument("--backend", choices=PLATFORM_BACKENDS, default=default_backend)
+    ap.add_argument("--model", choices=list(DIFFUSION), default=cfg.get("model", "q4"),
+                    help="q4 (Q4_K_M, par défaut) ou q8 (Q8_0, plus fidèle, installé par setup.py --q8)")
     ap.add_argument("--no-browser", action="store_true")
     a = ap.parse_args()
     S.cfg = cfg
-    S.backend = a.backend
     S.ui_port = a.port
+    if not os.path.exists(DIFFUSION[a.model]) and a.model != "q4":
+        print(f"[launch] modèle {a.model} absent (setup.py --{a.model} pour l'installer), repli sur q4", flush=True)
+        a.model = "q4"
+    S.model = a.model
+    MODELS["diffusion"] = DIFFUSION[a.model]
     for d in ("outputs", "logs", "jobs"):
         os.makedirs(P(d), exist_ok=True)
     for old in sorted(glob.glob(P("jobs", "*")))[:-20]:   # ne garde que les 20 derniers dossiers de travail
         shutil.rmtree(old, ignore_errors=True)
-    if not os.path.exists(P("sdcpp", a.backend, "sd-cli.exe")) and a.backend != "vulkan":
-        print(f"[launch] moteur {a.backend} absent (setup.py --{a.backend} pour l'installer), repli sur vulkan", flush=True)
-        S.backend = a.backend = "vulkan"
-    exe = P("sdcpp", a.backend, "sd-cli.exe")
+    if not os.path.exists(P("sdcpp", a.backend, EXE)) and a.backend != PLATFORM_BACKENDS[0]:
+        print(f"[launch] moteur {a.backend} absent (setup.py --{a.backend} pour l'installer), repli sur {PLATFORM_BACKENDS[0]}", flush=True)
+        a.backend = PLATFORM_BACKENDS[0]
+    S.backend = a.backend
+    exe = P("sdcpp", a.backend, EXE)
     if not os.path.exists(exe):
-        sys.exit(f"binaire introuvable : {exe} (lancez : venv\\Scripts\\python.exe setup.py)")
+        py = "venv\\Scripts\\python.exe" if os.name == "nt" else "venv/bin/python"
+        sys.exit(f"binaire introuvable : {exe} (lancez : {py} setup.py)")
     threading.Thread(target=worker, daemon=True).start()
     httpd = ThreadingHTTPServer(("127.0.0.1", a.port), H)
     httpd.daemon_threads = True
     url = f"http://127.0.0.1:{a.port}/"
-    print(f"[launch] backend {a.backend} — interface : {url}  (Ctrl+C pour arrêter)", flush=True)
+    print(f"[launch] backend {a.backend}, modèle {a.model} — interface : {url}  (Ctrl+C pour arrêter)", flush=True)
     if not a.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     try:

@@ -1,12 +1,30 @@
-"""Crée le raccourci Windows « Qwen-Image.lnk » à la racine (contourne le blocage AppLocker des .cmd)."""
-import os, win32com.client
+"""Crée le raccourci de lancement à la racine.
+
+- Windows : « Qwen-Image.lnk » (contourne le blocage AppLocker des .cmd).
+- macOS : « Qwen-Image.command », qui s'ouvre dans le Terminal par double-clic dans le Finder.
+"""
+import os, sys
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sh = win32com.client.Dispatch("WScript.Shell")
-lnk = sh.CreateShortCut(os.path.join(root, "Qwen-Image.lnk"))
-lnk.TargetPath = os.path.join(root, "venv", "Scripts", "python.exe")
-lnk.Arguments = '"' + os.path.join(root, "tools", "launch.py") + '"'
-lnk.WorkingDirectory = root
-lnk.Description = "Qwen-Image 2.1 local : interface sur http://127.0.0.1:7860/"
-lnk.IconLocation = os.path.join(root, "venv", "Scripts", "python.exe") + ",0"
-lnk.Save()
-print("raccourci écrit :", os.path.join(root, "Qwen-Image.lnk"))
+
+if os.name == "nt":
+    import win32com.client
+    sh = win32com.client.Dispatch("WScript.Shell")
+    lnk = sh.CreateShortCut(os.path.join(root, "Qwen-Image.lnk"))
+    lnk.TargetPath = os.path.join(root, "venv", "Scripts", "python.exe")
+    lnk.Arguments = '"' + os.path.join(root, "tools", "launch.py") + '"'
+    lnk.WorkingDirectory = root
+    lnk.Description = "Qwen-Image 2.1 local : interface sur http://127.0.0.1:7860/"
+    lnk.IconLocation = os.path.join(root, "venv", "Scripts", "python.exe") + ",0"
+    lnk.Save()
+    print("raccourci écrit :", os.path.join(root, "Qwen-Image.lnk"))
+elif sys.platform == "darwin":
+    path = os.path.join(root, "Qwen-Image.command")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("#!/bin/zsh\n"
+                "# Qwen-Image 2.1 local : interface sur http://127.0.0.1:7860/ (fermer la fenêtre pour arrêter)\n"
+                'cd "$(dirname "$0")"\n'
+                'exec venv/bin/python tools/launch.py "$@"\n')
+    os.chmod(path, 0o755)
+    print("raccourci écrit :", path)
+else:
+    sys.exit("raccourci non géré sur ce système : lancez venv/bin/python tools/launch.py")

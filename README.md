@@ -1,8 +1,8 @@
-# Qwen-Image 2.1 en local sur un PC Windows sans carte graphique
+# Qwen-Image 2.1 en local, sur PC Windows ou Mac Apple Silicon
 
 Une interface web locale pour générer et modifier des images avec **[Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1)**,
-pensée pour les PC portables ordinaires : processeur graphique intégré (AMD, Intel), pas de carte NVIDIA,
-pas de droits administrateur. Tout tourne sur la machine, rien n'est envoyé sur Internet.
+pensée pour les PC portables ordinaires (processeur graphique intégré AMD ou Intel, pas de carte NVIDIA,
+pas de droits administrateur) et pour les Mac à puce Apple. Tout tourne sur la machine, rien n'est envoyé sur Internet.
 
 Trois usages, une sortie PNG :
 
@@ -11,8 +11,9 @@ Trois usages, une sortie PNG :
   « mets le chapeau de l'image 2 sur la personne de l'image 1 »).
 - **Dessin guidé** : peindre au pinceau la zone à modifier directement sur l'image, puis décrire ce qu'on veut à la place.
 
-Le moteur est [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) avec son backend **Vulkan**,
-qui fonctionne sur quasiment tous les GPU intégrés récents avec le pilote graphique déjà installé.
+Le moteur est [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) : sous Windows avec son backend
+**Vulkan**, qui fonctionne sur quasiment tous les GPU intégrés récents avec le pilote graphique déjà installé ;
+sur Mac avec son backend **Metal**, la technologie graphique d'Apple.
 
 ---
 
@@ -34,21 +35,26 @@ qui fonctionne sur quasiment tous les GPU intégrés récents avec le pilote gra
 
 | | Minimum | Recommandé |
 | --- | --- | --- |
-| Système | Windows 10 ou 11, 64 bits | Windows 11 |
+| Système | Windows 10 ou 11, 64 bits, ou macOS 26 ou plus récent sur Mac à puce Apple (M1 et suivants) | Windows 11 ; macOS récent |
 | Mémoire vive | 24 Go | 32 Go |
-| Disque libre | 35 Go | 50 Go |
-| GPU | Tout GPU compatible Vulkan 1.3 (Radeon intégré, Intel Iris Xe/Arc, NVIDIA, AMD) | GPU dédié |
+| Disque libre | 35 Go | 50 Go (60 Go avec le modèle Q8_0) |
+| GPU | Windows : tout GPU compatible Vulkan 1.3 (Radeon intégré, Intel Iris Xe/Arc, NVIDIA, AMD) ; Mac : la puce Apple | GPU dédié (Windows) |
 | Python | 3.10 ou plus récent | 3.12 à 3.14 |
-| Connexion | ≈ 15 Go à télécharger une seule fois | |
+| Connexion | ≈ 15 Go à télécharger une seule fois (≈ 22 Go avec Q8_0) | |
 
 Aucun droit administrateur n'est nécessaire : tout s'installe dans le dossier du projet.
 
-Python : l'installer depuis [python.org](https://www.python.org/downloads/windows/) (cocher « Add python.exe to PATH »)
-ou depuis le Microsoft Store. Vérifier dans un terminal :
+Python sous Windows : l'installer depuis [python.org](https://www.python.org/downloads/windows/) (cocher « Add python.exe to PATH »)
+ou depuis le Microsoft Store. Sur Mac, le Python livré avec les outils Xcode est trop ancien (3.9) : installer un
+Python récent avec [Homebrew](https://brew.sh) (`brew install python@3.13`) ou depuis [python.org](https://www.python.org/downloads/macos/).
+Vérifier dans un terminal :
 
 ```bat
 python --version
 ```
+
+Sur Mac : `python3.13 --version`. Le moteur Mac publié par stable-diffusion.cpp exige macOS 26 ou plus récent ;
+il a été testé sur une puce M6 sous macOS 27.
 
 ## Installation
 
@@ -62,11 +68,18 @@ cd qwen-image-local
 Sans git : bouton **Code → Download ZIP** sur GitHub, puis décompresser le dossier où vous voulez
 (évitez les dossiers synchronisés OneDrive, le modèle est volumineux).
 
-**2. Créer l'environnement Python isolé et installer les trois dépendances**
+**2. Créer l'environnement Python isolé et installer les dépendances**
 
 ```bat
 python -m venv venv
 venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Sur Mac :
+
+```bash
+python3.13 -m venv venv
+venv/bin/python -m pip install -r requirements.txt
 ```
 
 **3. Télécharger le moteur et le modèle**
@@ -75,13 +88,22 @@ venv\Scripts\python.exe -m pip install -r requirements.txt
 venv\Scripts\python.exe setup.py
 ```
 
-Ce script, à lancer une seule fois :
+Sur Mac : `venv/bin/python setup.py`. Ce script, à lancer une seule fois :
 
-- télécharge stable-diffusion.cpp (versions Vulkan et CPU, version épinglée et vérifiée par SHA256) dans `sdcpp\` ;
+- télécharge stable-diffusion.cpp (version épinglée et vérifiée par SHA256) dans `sdcpp\` : versions Vulkan et CPU
+  sous Windows, version Metal sur Mac ;
 - télécharge les trois fichiers du modèle depuis Hugging Face dans `models\` (≈ 14,6 Go) et vérifie chacun contre
-  les empreintes SHA256 publiées par le dépôt ;
-- prépare l'encodeur de texte pour stable-diffusion.cpp (voir [Le modèle](#le-modèle)) ;
-- crée le raccourci **`Qwen-Image.lnk`** dans le dossier.
+  son empreinte SHA256 (voir [Le modèle](#le-modèle)) ;
+- prépare l'encodeur de texte pour stable-diffusion.cpp ;
+- crée le raccourci **`Qwen-Image.lnk`** (Windows) ou **`Qwen-Image.command`** (Mac) dans le dossier.
+
+**Plus de fidélité ?** Ajoutez `--q8` : le modèle Q8_0 (≈ 7,6 Go de plus) est installé à côté du modèle Q4_K_M.
+Il rend mieux les détails fins et le texte écrit dans l'image ; il demande ≈ 3 Go de mémoire de plus.
+On choisit ensuite le modèle au lancement (voir [Lancement](#lancement)).
+
+```bat
+venv\Scripts\python.exe setup.py --q8
+```
 
 **Carte NVIDIA ?** Ajoutez `--cuda` : le moteur CUDA (≈ 900 Mo de plus) est installé et devient le moteur par défaut.
 Tout le calcul passe alors sur la carte, encodeur compris, ce qui est bien plus rapide qu'avec Vulkan.
@@ -90,15 +112,17 @@ Tout le calcul passe alors sur la carte, encodeur compris, ce qui est bien plus 
 venv\Scripts\python.exe setup.py --cuda
 ```
 
-Les téléchargements reprennent là où ils s'étaient arrêtés si la connexion coupe : il suffit de relancer la commande.
-Pour vérifier une installation sans rien télécharger : `venv\Scripts\python.exe setup.py --check`.
+Les téléchargements reprennent seuls si la connexion coupe (cinq tentatives), et là où ils s'étaient arrêtés si l'on
+relance la commande. Pour vérifier une installation sans rien télécharger : `venv\Scripts\python.exe setup.py --check`
+(sur Mac : `venv/bin/python setup.py --check`).
 
 ## Lancement
 
-Double-cliquer sur **`Qwen-Image.lnk`** (on peut l'épingler à la barre des tâches ou au menu Démarrer).
+Double-cliquer sur **`Qwen-Image.lnk`** sous Windows (on peut l'épingler à la barre des tâches ou au menu Démarrer),
+ou sur **`Qwen-Image.command`** sur Mac (on peut le glisser dans le Dock).
 
-Une fenêtre noire s'ouvre : c'est le moteur, **laissez-la ouverte**. Le navigateur s'ouvre ensuite sur
-**http://127.0.0.1:7860/**. Pour arrêter, fermez la fenêtre noire.
+Une fenêtre noire (Windows) ou de Terminal (Mac) s'ouvre : c'est le moteur, **laissez-la ouverte**. Le navigateur
+s'ouvre ensuite sur **http://127.0.0.1:7860/**. Pour arrêter, fermez cette fenêtre.
 
 Équivalent en ligne de commande, depuis le dossier du projet :
 
@@ -106,8 +130,12 @@ Une fenêtre noire s'ouvre : c'est le moteur, **laissez-la ouverte**. Le navigat
 venv\Scripts\python.exe tools\launch.py
 ```
 
-Options : `--port 7860` (changer de port), `--backend vulkan|cuda|cpu` (forcer un moteur ; par défaut CUDA s'il est
-installé, sinon Vulkan), `--no-browser`. L'état en haut à droite indique le moteur utilisé.
+Sur Mac : `venv/bin/python tools/launch.py`.
+
+Options : `--port 7860` (changer de port), `--model q4|q8` (modèle Q4_K_M par défaut, Q8_0 s'il a été installé par
+`setup.py --q8`), `--backend vulkan|cuda|cpu` (Windows : forcer un moteur ; par défaut CUDA s'il est installé, sinon
+Vulkan ; sur Mac, le moteur est toujours Metal), `--no-browser`. Pour lancer Q8_0 par le raccourci, ajoutez
+`"model": "q8"` dans `tools/config.json`. L'état en haut à droite indique le moteur et le modèle utilisés.
 
 L'interface n'écoute que sur `127.0.0.1` : elle n'est pas accessible depuis le réseau.
 
@@ -166,17 +194,29 @@ Le modèle n'est pas inclus dans ce dépôt : GitHub refuse les fichiers de plus
 
 | Fichier | Rôle | Taille | Source |
 | --- | --- | --- | --- |
-| `qwen-image-2.1-Q4_K_M.gguf` | Modèle de diffusion, 7 milliards de paramètres, quantifié 4 bits | 4,6 Go | [abenzerps/Qwen-Image-2.1-GGUF](https://huggingface.co/abenzerps/Qwen-Image-2.1-GGUF) |
-| `qwen3vl_8b_int8_convrot.safetensors` | Encodeur texte et image Qwen3-VL-8B, int8 | 9,35 Go | idem, dossier `text_encoders` |
+| `qwen-image-2.1-UC-Q4_K_M.gguf` | Modèle de diffusion, 7 milliards de paramètres, quantifié 4 bits | 4,6 Go | [abenzerps/Qwen-Image-2.1-Uncensored-Quantized](https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized) |
+| `qwen-image-2.1-UC-Q8_0.gguf` (option `--q8`) | Même modèle quantifié 8 bits, plus fidèle | 7,6 Go | idem |
+| `qwen3vl_8b_int8_convrot.safetensors` | Encodeur texte et image Qwen3-VL-8B, int8 | 9,35 Go | [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1), dossier `text_encoders` |
 | `qwen_image_2.1_vae_bf16.safetensors` | Décodeur d'image (VAE) | 676 Mo | idem, dossier `vae` |
 
-Empreintes SHA256 vérifiées par `setup.py` (issues du fichier `SHA256SUMS` du dépôt) :
+**Variante « UC » (Uncensored).** Le modèle de diffusion est la variante non censurée publiée par abenzerps :
+elle n'a ni filtre de contenu ni refus de prompt, et produit ce que décrit le prompt, contenus adultes compris.
+Ce dépôt Hugging Face s'appelait `abenzerps/Qwen-Image-2.1-GGUF` ; il a été renommé (constaté le 12 octobre 2026) et
+garde les quantifications du modèle officiel sur sa branche `base`. Les téléchargements sont épinglés sur un commit précis de chaque dépôt :
+un renommage ou une mise à jour ultérieure ne change pas les fichiers installés.
+
+Empreintes SHA256 vérifiées par `setup.py` (identiques à celles des fichiers `SHA256SUMS` et des métadonnées des dépôts) :
 
 ```text
-833439e91bc1152d28f37aa198c7f6f4218b7de95754c2f7a318a2422ab4b2f8  qwen-image-2.1-Q4_K_M.gguf
+e79c8a009f2ecbdb6c70fd663d9aea9ee304a0d91f347e4169a756b8ad141b41  qwen-image-2.1-UC-Q4_K_M.gguf
+cde456c72ea3ecebfc1be783300e972711d875e0c5f1bed33d42b66b156affa8  qwen-image-2.1-UC-Q8_0.gguf
 8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f  text_encoders/qwen3vl_8b_int8_convrot.safetensors
 bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9  vae/qwen_image_2.1_vae_bf16.safetensors
 ```
+
+**Q4_K_M ou Q8_0 ?** Q8_0 est quasiment indiscernable de la pleine précision ; Q4_K_M perd un peu sur les détails fins
+et le texte écrit dans l'image (constat général sur les modèles de diffusion quantifiés, non mesuré sur celui-ci).
+En mémoire, comptez ≈ 14,6 Go de fichiers chargés avec Q4_K_M et ≈ 17,6 Go avec Q8_0, plus la mémoire de calcul.
 
 **Correctif de l'encodeur.** Dans ce fichier int8 (format ComfyUI), la table d'embeddings est elle aussi quantifiée,
 ce que stable-diffusion.cpp (version `master-890-74988b2`) interprète mal : il plante au chargement.
@@ -215,6 +255,20 @@ repartir de zéro.
 Pour gagner du temps sans perte de qualité : branchez le portable sur secteur et choisissez le mode d'alimentation
 « Performances optimales » dans les paramètres Windows.
 
+**Mac à puce Apple.** Mesures sur une puce **Apple M6, 32 Go de mémoire unifiée**, moteur Metal, modèle Q4_K_M :
+
+| Génération | Durée mesurée |
+| --- | --- |
+| Texte → image 512×512, 8 étapes | ≈ 1 min 15 |
+| Édition 512×512 (1 référence), 8 étapes | ≈ 4 min 10 |
+| Dessin guidé 512×512 (masque ou annotation), 8 étapes | ≈ 4 min 10 |
+
+Ordres de grandeur : ≈ 3,3 s par étape en 512×512, 8,2 s en 768×768, 16,3 s en 1024×1024 (15,7 s avec Q8_0, qui
+n'est pas plus lent sur Metal) ; décodage de l'image ≈ 34 s en 512×512, 75 s en 768×768, 138 s en 1024×1024 ;
+encodage du texte 5 à 10 s. Chaque image de référence ajoute ≈ 2 min 20 d'encodage en 512×512 (encodeur Qwen3-VL sur
+le processeur) et double la longueur de la séquence, donc la durée des étapes ; le dessin guidé envoie lui aussi
+l'image au modèle comme référence.
+
 ## Dépannage
 
 **Double-cliquer sur un fichier `.cmd` ne fait rien.** Certaines entreprises bloquent les scripts dans les dossiers
@@ -222,17 +276,17 @@ utilisateur (stratégie AppLocker). Utilisez le raccourci `Qwen-Image.lnk`, qui 
 S'il manque : `venv\Scripts\python.exe tools\make_shortcut.py`.
 
 **L'état en haut à droite indique « fichiers manquants ».** L'installation est incomplète :
-`venv\Scripts\python.exe setup.py --check` puis `venv\Scripts\python.exe setup.py`.
+`venv\Scripts\python.exe setup.py --check` puis `venv\Scripts\python.exe setup.py` (sur Mac : `venv/bin/python`).
 
-**La génération échoue immédiatement.** Le détail est dans `jobs\<identifiant>\sd-cli.log`. Vérifiez que Vulkan
-fonctionne :
+**La génération échoue immédiatement.** Le détail est dans `jobs\<identifiant>\sd-cli.log`. Sous Windows, vérifiez que
+Vulkan fonctionne :
 
 ```bat
 sdcpp\vulkan\sd-cli.exe --list-devices
 ```
 
 La liste doit contenir une ligne `Vulkan0`. Sinon, mettez à jour le pilote graphique, ou lancez l'interface avec
-`--backend cpu`.
+`--backend cpu`. Sur Mac, `sdcpp/metal/sd-cli --list-devices` doit afficher une ligne `MTL0`.
 
 **Le PC rame ou la génération s'arrête pendant les grandes résolutions.** Le modèle occupe environ 14 Go de mémoire
 pendant la génération. Fermez les applications gourmandes, ou restez en Medium/High.
@@ -240,28 +294,47 @@ pendant la génération. Fermez les applications gourmandes, ou restez en Medium
 **L'antivirus bloque `sd-cli.exe`.** Ce sont les binaires officiels de stable-diffusion.cpp, vérifiés par SHA256 à
 l'installation ; demandez une exception à votre service informatique si nécessaire.
 
-**Autres systèmes (Linux, macOS).** L'interface et le lanceur sont en Python pur, mais `setup.py` télécharge des binaires
-Windows. Il faut récupérer la version Linux ou macOS de stable-diffusion.cpp dans ses
-[releases](https://github.com/leejet/stable-diffusion.cpp/releases), la placer dans `sdcpp/vulkan/` en renommant
-`sd-cli` si besoin, et adapter le nom de l'exécutable dans `tools/launch.py`.
+**Mac : macOS refuse d'ouvrir `sd-cli` (« développeur non identifié »).** Cela n'arrive que si l'archive du moteur a
+été téléchargée avec un navigateur ; `setup.py` ne pose pas cette marque. Pour la retirer :
+
+```bash
+xattr -dr com.apple.quarantine sdcpp/metal
+```
+
+**Mac : l'image sort en bruit (taches colorées sans rapport avec le prompt).** C'est le symptôme de l'option `--mmap`
+sur Metal : les poids projetés en mémoire n'atteignent pas le GPU (`buffer is nil` dans `jobs/<identifiant>/sd-cli.log`).
+Le lanceur ne la passe pas sur Mac ; vérifiez qu'elle n'a pas été ajoutée dans `extra_args` de `tools/config.json`.
+
+**Mac : l'édition est longue avant la première étape.** L'encodeur Qwen3-VL tourne sur le processeur (Metal n'a pas de
+calcul int8 dans cette version de stable-diffusion.cpp) et lit chaque image de référence : comptez ≈ 2 min par
+référence en 512×512, davantage en grande résolution. Le texte → image n'est pas concerné.
+
+**Linux.** L'interface et le lanceur sont en Python pur, mais `setup.py` ne télécharge que les binaires Windows et
+macOS. Il faut récupérer la version Linux de stable-diffusion.cpp dans ses
+[releases](https://github.com/leejet/stable-diffusion.cpp/releases), la placer dans `sdcpp/vulkan/` et ajouter Linux
+aux plateformes connues de `setup.py` et `tools/launch.py`.
 
 ## Fonctionnement technique
 
 ```text
-navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance──▶ sdcpp/vulkan/sd-cli.exe ──▶ outputs/*.png
-   tools/ui/index.html        file d'attente, suivi des étapes,         Vulkan : diffusion + VAE
-                              aperçus, annulation                       CPU    : encodeur texte
+navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance──▶ sdcpp/<moteur>/sd-cli ──▶ outputs/*.png
+   tools/ui/index.html        file d'attente, suivi des étapes,         Vulkan : diffusion + VAE   (Windows)
+                              aperçus, annulation                       Metal  : diffusion         (Mac)
+                                                                        CPU    : encodeur texte (+ VAE sur Mac)
 ```
 
-- Chaque génération lance `sd-cli.exe` avec `--mmap` : après la première fois, le modèle se recharge en moins d'une
-  seconde grâce au cache disque de Windows.
+- Chaque génération lance `sd-cli` (`sd-cli.exe` sous Windows). Sous Windows, avec `--mmap` : après la première fois,
+  le modèle se recharge en moins d'une seconde grâce au cache disque.
 - Répartition selon le moteur :
   - Vulkan : `--backend diffusion=vulkan0,vae=vulkan0,te=cpu --offload-to-cpu`. L'encodeur int8 n'a pas de noyau
     Vulkan dans stable-diffusion.cpp, il tourne donc sur le processeur ;
   - CUDA : `--backend cuda0 --offload-to-cpu --diffusion-fa`. Tout est sur la carte ; l'encodeur int8 profite du
     chemin CUDA natif (RTX 20xx et plus récentes) ; les poids restent en RAM et sont copiés à la demande, ce qui
     s'adapte aux cartes à 8 Go ;
-  - CPU : `--backend cpu`, secours sans GPU.
+  - CPU : `--backend cpu`, secours sans GPU ;
+  - Metal (Mac) : `--backend diffusion=MTL0,vae=cpu,te=cpu --diffusion-fa`, sans `--mmap`. Choix mesurés sur une puce
+    M6 : l'encodeur int8 n'a pas de noyau Metal (sd-cli plante s'il est placé sur le GPU) ; le VAE est ≈ 20 % plus
+    rapide sur le processeur que sur Metal ; `--mmap` laisse les poids hors de portée du GPU (image en bruit).
 - API locale : `POST /api/generate`, `GET /api/job/<id>`, `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel`,
   `GET /api/status`.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés
@@ -274,7 +347,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 ```text
 .
 ├── LICENSE               licence MIT (code du dépôt)
-├── setup.py              installation : moteur (Vulkan, CPU, CUDA en option), modèle, correctif, raccourci
+├── setup.py              installation : moteur (Vulkan, CPU, CUDA en option ; Metal sur Mac), modèle, correctif, raccourci
 ├── requirements.txt      Pillow, NumPy, pywin32
 ├── start.cmd             lancement alternatif (postes sans restriction de scripts)
 ├── start-ui-sdcpp.cmd    variante : interface web intégrée de sd-server, sans outil de dessin
@@ -282,16 +355,17 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── launch.py         serveur local + pilotage de sd-cli
 │   ├── ui/index.html     l'interface
 │   ├── fix_int8_te.py    correctif de l'encodeur texte
-│   ├── make_shortcut.py  crée Qwen-Image.lnk
+│   ├── make_shortcut.py  crée Qwen-Image.lnk (Windows) ou Qwen-Image.command (Mac)
 │   ├── make_mask.py      génère un masque ou une annotation par script
 │   ├── make_test_image.py
-│   ├── config.json       moteur et port par défaut (écrit par setup.py)
+│   ├── config.json       moteur, modèle et port par défaut (moteur écrit par setup.py sous Windows)
 │   └── calibration.json  vitesses mesurées sur la machine (créé à l'usage, non versionné)
 ├── tests/run_tests.py    tests de bout en bout des trois usages (interface lancée)
 └── workflows/            paramètres de référence des trois usages (JSON)
 ```
 
-Créés par l'installation et l'usage, ignorés par git : `venv/`, `sdcpp/`, `models/`, `outputs/`, `jobs/`, `logs/`.
+Créés par l'installation et l'usage, ignorés par git : `venv/`, `sdcpp/`, `models/`, `outputs/`, `jobs/`, `logs/`,
+`Qwen-Image.lnk`, `Qwen-Image.command`.
 
 Tests de bout en bout, interface lancée :
 
@@ -299,12 +373,15 @@ Tests de bout en bout, interface lancée :
 venv\Scripts\python.exe tests\run_tests.py --steps 8
 ```
 
+Sur Mac : `venv/bin/python tests/run_tests.py --steps 8`.
+
 ## Crédits et licences
 
 - **Qwen-Image-2.1** : Alibaba Qwen, [Qwen/Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1),
   sous **Qwen Research License**. Lisez-la avant tout usage : elle encadre notamment l'usage commercial.
-- **Quantisation GGUF** : [abenzerps/Qwen-Image-2.1-GGUF](https://huggingface.co/abenzerps/Qwen-Image-2.1-GGUF) ;
-  encodeur et VAE issus de [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1).
+- **Variante non censurée et quantisation GGUF** : [abenzerps/Qwen-Image-2.1-Uncensored-Quantized](https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized)
+  (ex-Qwen-Image-2.1-GGUF), sous la même Qwen Research License ; encodeur et VAE issus de
+  [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1).
 - **Moteur** : [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (licence MIT).
 
 Le code de ce dépôt (interface, lanceur, scripts) est sous **licence MIT**, voir [LICENSE](LICENSE). Les poids du modèle restent soumis à leur

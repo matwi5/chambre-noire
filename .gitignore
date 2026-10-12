@@ -27,3 +27,6 @@ tools/adapt_comfy_workflows.py
 
 # mesures de vitesse propres à chaque machine
 tools/calibration.json
+
+# raccourci macOS généré par setup.py
+Qwen-Image.command
