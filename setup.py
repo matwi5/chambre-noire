@@ -6,6 +6,7 @@ Windows : venv\Scripts\python.exe setup.py [options]   ·   macOS (Apple Silicon
     setup.py --q8         # + modèle Q8_0, plus fidèle que Q4_K_M (≈ 7,6 Go de plus)
     setup.py --cuda       # Windows : + moteur CUDA pour carte NVIDIA (≈ 900 Mo de plus)
     setup.py --no-cpu     # Windows : sans le moteur de secours CPU
+    setup.py --no-calibrate  # sans les générations de calibration de fin d'installation
     setup.py --check      # vérifie seulement ce qui est installé
 
 Chaque étape est idempotente : relancer le script reprend les téléchargements interrompus
@@ -233,11 +234,24 @@ def step_shortcut(check_only):
 
 
 
+def step_calibrate(versions, check_only, skip):
+    """Trois courtes générations par modèle installé : les estimations de durée sont justes dès la première image."""
+    if check_only or skip:
+        return
+    for v in versions:
+        print(f"[calibration] modèle {v} : trois courtes générations pour mesurer la vitesse de cette machine "
+              "(quelques minutes, davantage sur un GPU intégré ; --no-calibrate pour passer cette étape)", flush=True)
+        r = subprocess.run([sys.executable, P("tools", "calibrate.py"), "--model", v, "--if-needed"])
+        if r.returncode:
+            print("[calibration] échec : les estimations partent des valeurs par défaut et se calibreront à l'usage")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--q8", action="store_true", help="installer aussi le modèle Q8_0, plus fidèle (≈ 7,6 Go)")
     ap.add_argument("--cuda", action="store_true", help="Windows : installer aussi le moteur CUDA (cartes NVIDIA, ≈ 900 Mo)")
     ap.add_argument("--no-cpu", action="store_true", help="Windows : ne pas installer le moteur de secours CPU")
+    ap.add_argument("--no-calibrate", action="store_true", help="ne pas lancer les générations de calibration")
     ap.add_argument("--check", action="store_true", help="vérifier sans rien télécharger")
     a = ap.parse_args()
     if not (WINDOWS or MACOS):
@@ -257,6 +271,8 @@ def main():
     ok = step_fix(a.check) and ok
     step_config(backends, a.check)
     step_shortcut(a.check)
+    if ok:
+        step_calibrate(versions, a.check, a.no_calibrate)
     launch = f"{PY} {os.path.join('tools', 'launch.py')}"
     if a.check:
         print("\nÉtat : " + ("complet" if ok else f"incomplet, lancez : {PY} setup.py"))

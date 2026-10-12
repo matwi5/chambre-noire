@@ -95,7 +95,9 @@ Sur Mac : `venv/bin/python setup.py`. Ce script, à lancer une seule fois :
 - télécharge les trois fichiers du modèle depuis Hugging Face dans `models\` (≈ 14,6 Go) et vérifie chacun contre
   son empreinte SHA256 (voir [Le modèle](#le-modèle)) ;
 - prépare l'encodeur de texte pour stable-diffusion.cpp ;
-- crée le raccourci **`Qwen-Image.lnk`** (Windows) ou **`Qwen-Image.command`** (Mac) dans le dossier.
+- crée le raccourci **`Qwen-Image.lnk`** (Windows) ou **`Qwen-Image.command`** (Mac) dans le dossier ;
+- lance trois courtes générations pour calibrer les estimations de durée sur votre machine
+  (voir [Performances](#performances) ; `--no-calibrate` pour s'en passer).
 
 **Plus de fidélité ?** Ajoutez `--q8` : le modèle Q8_0 (≈ 7,6 Go de plus) est installé à côté du modèle Q4_K_M.
 Il rend mieux les détails fins et le texte écrit dans l'image ; il demande ≈ 3 Go de mémoire de plus.
@@ -240,17 +242,33 @@ Un GPU intégré est lent pour un modèle de cette taille. Mesures de référenc
 | Dessin guidé 512×512, 12 étapes | ≈ 10 à 11 min |
 | Même machine, moteur CPU seul | plus de 8× plus lent (non recommandé) |
 
-Ordres de grandeur sur cette machine : ≈ 16 à 20 s par étape en 512×512, ≈ 1,5 min par étape estimée en 1024×1024 ;
-l'édition coûte environ le double du texte → image (l'image de référence double la séquence à traiter).
+Ordres de grandeur sur cette machine : ≈ 16 à 20 s par étape en 512×512, ≈ 2 min par étape estimée en 1024×1024
+(non mesurée : extrapolée du rapport mesuré entre texte → image et édition) ; une étape d'édition coûte plus du double
+d'une étape de texte → image (l'image de référence double la séquence à traiter).
 Le preset Max (2K, 40 étapes) prend plusieurs heures : l'interface demande confirmation au-delà d'une heure.
 Sur une carte NVIDIA avec le moteur CUDA, comptez de l'ordre de 1 à 2 s par étape en 1024×1024 (estimation non mesurée,
 RTX 4060/4070) : une image High de 20 étapes en moins d'une minute.
 
-**Estimations de temps adaptatives.** Les temps affichés à côté de chaque preset partent de valeurs par défaut propres
-au moteur (Vulkan, CUDA ou CPU), puis sont recalculés à partir des durées réellement mesurées sur votre machine après
-chaque génération (encodage, temps par étape, décodage). Tant qu'aucune génération n'a eu lieu, l'état indique
-« estimations non calibrées ». Les mesures sont stockées dans `tools/calibration.json` ; supprimez ce fichier pour
-repartir de zéro.
+**Estimations de temps calibrées.** Les temps affichés à côté de chaque preset viennent d'un modèle de coût
+(`tools/estimate.py`) :
+
+- une étape coûte a·n + b·n², où n est la longueur de la séquence traitée : l'image produite plus chaque image de
+  référence, que le moteur ramène à la même surface. a couvre les couches ordinaires, b l'attention, qui croît au
+  carré de la séquence ;
+- l'encodage coûte un temps fixe pour le texte, plus un temps par mégapixel de référence (lue aussi par l'encodeur
+  Qwen3-VL) ;
+- le décodage de l'image, et de chaque aperçu, est proportionnel au nombre de pixels ;
+- s'y ajoute une part fixe : chargement du modèle, premier pas plus lent.
+
+Les coefficients partent de valeurs propres au moteur (Vulkan, CUDA, CPU, Metal), puis sont ajustés sur les mesures de
+votre machine : les 40 dernières générations par moteur et par modèle, résumées par des médianes, si bien qu'une
+génération anormale (machine occupée, premier chargement du modèle) ne fausse pas l'estimation. Dès que deux tailles
+d'image assez différentes ont été mesurées, a et b sont ajustés séparément, ce qui fiabilise les estimations en haute
+résolution. Pour que ce soit le cas dès la première image, `setup.py` finit par trois courtes générations de
+calibration (texte → image en 512 et 768 px, édition en 512 px) ; `--no-calibrate` les saute et
+`tools/calibrate.py` les relance. Tant qu'aucune mesure n'existe, l'état indique « estimations non calibrées ».
+Pendant une génération, le temps restant se fonde sur la moyenne des derniers pas. Les mesures sont stockées dans
+`tools/calibration.json` ; supprimez ce fichier pour repartir de zéro (l'ancien format est ignoré).
 
 Pour gagner du temps sans perte de qualité : branchez le portable sur secteur et choisissez le mode d'alimentation
 « Performances optimales » dans les paramètres Windows.
@@ -353,13 +371,15 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 ├── start-ui-sdcpp.cmd    variante : interface web intégrée de sd-server, sans outil de dessin
 ├── tools/
 │   ├── launch.py         serveur local + pilotage de sd-cli
+│   ├── estimate.py       modèle de coût et calibration des estimations de durée
+│   ├── calibrate.py      générations de calibration (lancées par setup.py)
 │   ├── ui/index.html     l'interface
 │   ├── fix_int8_te.py    correctif de l'encodeur texte
 │   ├── make_shortcut.py  crée Qwen-Image.lnk (Windows) ou Qwen-Image.command (Mac)
 │   ├── make_mask.py      génère un masque ou une annotation par script
 │   ├── make_test_image.py
 │   ├── config.json       moteur, modèle et port par défaut (moteur écrit par setup.py sous Windows)
-│   └── calibration.json  vitesses mesurées sur la machine (créé à l'usage, non versionné)
+│   └── calibration.json  mesures de durée de la machine (créé à l'usage, non versionné)
 ├── tests/run_tests.py    tests de bout en bout des trois usages (interface lancée)
 └── workflows/            paramètres de référence des trois usages (JSON)
 ```

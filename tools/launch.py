@@ -14,6 +14,9 @@ Aucun droit administrateur, aucune modification système : tout reste dans ce do
 import argparse, base64, datetime, glob, json, os, queue, re, shutil, subprocess, sys, threading, time, uuid, webbrowser
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import estimate
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 P = lambda *a: os.path.join(ROOT, *a)
 CONFIG = P("tools", "config.json")
@@ -49,43 +52,16 @@ BACKENDS = {
 }
 
 
-def token_factor(w, h):
-    """Coût relatif d'une étape par rapport au 512×512 (l'attention croît plus vite que la surface)."""
-    return ((w * h / 256) / 1024) ** 1.2
-
-
-def load_calib():
-    try:
-        return json.load(open(CALIB, encoding="utf-8"))
-    except Exception:
-        return {}
-
-
-def update_calib(job):
-    """Enregistre les durées réelles de la génération, normalisées à 512×512, par backend et par type."""
-    r = job["req"]
-    w, h, steps = int(r["width"]), int(r["height"]), int(r["steps"])
-    samp, enc, vae = job.get("sampling_seconds"), job.get("encode_seconds_net"), job.get("vae_seconds")
-    if not (samp and enc and vae and steps):
+def record_calib(job):
+    """Ajoute la mesure de la génération aux données de calibration (voir tools/estimate.py)."""
+    sample = estimate.make_sample(job)
+    if not sample:
         return
-    nrefs = len(r.get("ref_images") or [])
-    kind = "edit" if nrefs else "t2i"
-    previews = (steps // job["preview_interval"]) if job.get("preview_interval") else 0
-    vae512 = vae / (w * h / (512 * 512))
-    step512 = max(0.01, (samp - previews * vae) / steps) / token_factor(w, h)
-    enc_norm = enc / (1 + 0.5 * max(0, nrefs - 1))
-    overhead = max(0.0, job["seconds"] - enc - samp - vae)
-    cal = load_calib()
-    c = cal.setdefault(S.backend, {})
-    def mix(key, val):
-        c[key] = round(val if key not in c else 0.5 * c[key] + 0.5 * val, 3)
-    mix(f"step_{kind}", step512)
-    mix(f"enc_{kind}", enc_norm)
-    mix("vae512", vae512)
-    mix("overhead", overhead)
-    c["samples"] = c.get("samples", 0) + 1
-    json.dump(cal, open(CALIB, "w", encoding="utf-8"), indent=2)
-    print(f"[calibration] {S.backend}/{kind} : {step512:.2f} s/étape@512, encodage {enc_norm:.0f} s, VAE {vae512:.1f} s@512", flush=True)
+    S.store.add(S.backend, S.model, sample)
+    c = S.store.coefficients(S.backend, S.model)
+    print(f"[calibration] {S.backend}/{S.model} : étape {sample['step']:.2f} s ({sample['w']}×{sample['h']}"
+          f"{', ' + str(len(job.get('ref_px') or [])) + ' réf.' if job.get('ref_px') else ''}), "
+          f"encodage {sample['enc']:.0f} s, décodage {sample['vae']:.0f} s — {c['samples']} mesure{'s' if c['samples'] > 1 else ''}", flush=True)
 
 
 def load_config():
@@ -95,9 +71,15 @@ def load_config():
     return cfg
 
 
+def default_backend(cfg):
+    """Moteur de config.json, ou celui de la plateforme si config.json en nomme un d'une autre (vulkan sur Mac)."""
+    return cfg["backend"] if cfg["backend"] in PLATFORM_BACKENDS else PLATFORM_BACKENDS[0]
+
+
 class State:
     backend = "vulkan"
     model = "q4"
+    store = None
     cfg = {}
     ui_port = 7860
     jobs = {}
@@ -115,9 +97,16 @@ def write_data_url(data_url, path):
     return path
 
 
+def image_size(path):
+    from PIL import Image
+    with Image.open(path) as im:
+        return im.size
+
+
 def build_cmd(job):
     d = job["dir"]
     r = job["req"]
+    w, h = int(r["width"]), int(r["height"])
     cmd = [P("sdcpp", S.backend, EXE),
            "--diffusion-model", MODELS["diffusion"], "--vae", MODELS["vae"], "--llm", MODELS["llm"]] + BACKENDS[S.backend] + [
            "-p", r["prompt"], "-W", str(r["width"]), "-H", str(r["height"]),
@@ -125,10 +114,13 @@ def build_cmd(job):
            "--sampling-method", "euler", "-s", str(r.get("seed", -1)), "-o", job["out"]]
     if r.get("negative_prompt"):
         cmd += ["-n", r["negative_prompt"]]
-    for i, ref in enumerate(r.get("ref_images") or []):
-        cmd += ["-r", write_data_url(ref, os.path.join(d, f"ref_{i+1}.png"))]
+    refs = [write_data_url(ref, os.path.join(d, f"ref_{i+1}.png")) for i, ref in enumerate(r.get("ref_images") or [])]
+    for f in refs:
+        cmd += ["-r", f]
+    job["ref_px"] = [estimate.ref_px(*image_size(f), w, h) for f in refs]   # telles que sd.cpp les redimensionne
     if r.get("init_image"):
         cmd += ["-i", write_data_url(r["init_image"], os.path.join(d, "init.png")), "--strength", str(r.get("strength", 1.0))]
+        job["init_px"] = w * h
     if r.get("mask_image"):
         cmd += ["--mask", write_data_url(r["mask_image"], os.path.join(d, "mask.png"))]
     if r.get("preview"):
@@ -196,6 +188,11 @@ def run_job(job):
                 speed = float(pm.group(3))
                 job["step"], job["total"] = int(pm.group(1)), int(pm.group(2))
                 job["sec_per_it"] = speed if pm.group(4) == "s/it" else round(1 / max(speed, 1e-6), 3)
+                times = job.setdefault("step_times", {})
+                times[job["step"]] = job["sec_per_it"]
+                # temps restant : moyenne des 3 derniers pas, sans le premier (il charge les poids) s'il y en a d'autres
+                recent = [t for k, t in sorted(times.items()) if k > 1][-3:] or list(times.values())
+                job["sec_per_it_recent"] = round(sum(recent) / len(recent), 3)
                 job["phase"] = "génération"
                 if job.get("preview_interval"):
                     latest_preview(job)
@@ -203,6 +200,10 @@ def run_job(job):
                 job["phase"] = "chargement du modèle"
             elif "computing condition graph" in text or "Version:" in text:
                 job["phase"] = "encodage du prompt" + (" et des images" if job["req"].get("ref_images") else "")
+            elif "encode_first_stage completed" in text:
+                t = TAKING_RE.search(text)
+                if t:
+                    job["venc_seconds"] = float(t.group(1))
             elif "get_learned_condition completed" in text:
                 job["phase"] = "génération"
                 job["encode_seconds"] = round(time.time() - job["started"], 1)
@@ -236,14 +237,15 @@ def run_job(job):
         except Exception:
             job["dims"] = [job["req"]["width"], job["req"]["height"]]
         job["size"] = os.path.getsize(job["out"])
-        meta = {"mode": job["req"].get("mode"), "prompt": job["req"]["prompt"], "width": job["req"]["width"], "height": job["req"]["height"],
-                "steps": job["req"]["steps"], "seed": job["req"].get("seed"), "seconds": job["seconds"], "encode_seconds": job.get("encode_seconds"),
-                "sec_per_it": job.get("sec_per_it"), "file": job["out"], "size": job["size"], "backend": S.backend, "model": S.model}
-        with open(P("outputs", "journal.jsonl"), "a", encoding="utf-8") as f:
-            f.write(json.dumps(meta, ensure_ascii=False) + "\n")
-        print(f"[job] PNG enregistré : {job['out']} ({job['size']} octets, {job['seconds']} s)", flush=True)
+        if not job.get("calibration"):            # les générations de tools/calibrate.py restent hors du journal
+            meta = {"mode": job["req"].get("mode"), "prompt": job["req"]["prompt"], "width": job["req"]["width"], "height": job["req"]["height"],
+                    "steps": job["req"]["steps"], "seed": job["req"].get("seed"), "seconds": job["seconds"], "encode_seconds": job.get("encode_seconds"),
+                    "sec_per_it": job.get("sec_per_it"), "file": job["out"], "size": job["size"], "backend": S.backend, "model": S.model}
+            with open(P("outputs", "journal.jsonl"), "a", encoding="utf-8") as f:
+                f.write(json.dumps(meta, ensure_ascii=False) + "\n")
+            print(f"[job] PNG enregistré : {job['out']} ({job['size']} octets, {job['seconds']} s)", flush=True)
         try:
-            update_calib(job)
+            record_calib(job)
         except Exception as e:
             print(f"[calibration] ignorée : {e}", flush=True)
     else:
@@ -266,7 +268,7 @@ def worker():
 
 
 def public(job):
-    keys = ("id", "status", "phase", "step", "total", "sec_per_it", "started", "finished", "seconds", "encode_seconds",
+    keys = ("id", "status", "phase", "step", "total", "sec_per_it", "sec_per_it_recent", "started", "finished", "seconds", "encode_seconds",
             "preview_version", "preview_interval", "size", "dims", "error", "queue_position")
     d = {k: job.get(k) for k in keys}
     d["elapsed"] = round(time.time() - job["started"], 1) if job.get("started") and not job.get("finished") else job.get("seconds")
@@ -305,7 +307,7 @@ class H(BaseHTTPRequestHandler):
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model, "queued": S.q.qsize(),
                                     "current_job": S.current, "last_job": public(last) if last else None,
-                                    "calibration": load_calib().get(S.backend, {})})
+                                    "estimates": S.store.coefficients(S.backend, S.model)})
         m = re.match(r"^/api/job/([\w-]+)(/preview)?$", path)
         if m:
             job = S.jobs.get(m.group(1))
@@ -361,41 +363,44 @@ class H(BaseHTTPRequestHandler):
         self._send(404, {"error": "not found"})
 
 
+def setup_state(cfg, backend, model):
+    """Fixe le moteur et le modèle (repli si l'un n'est pas installé) et charge la calibration ; sort si sd-cli manque."""
+    S.cfg = cfg
+    if not os.path.exists(DIFFUSION[model]) and model != "q4":
+        print(f"[launch] modèle {model} absent (setup.py --{model} pour l'installer), repli sur q4", flush=True)
+        model = "q4"
+    if not os.path.exists(P("sdcpp", backend, EXE)) and backend != PLATFORM_BACKENDS[0]:
+        print(f"[launch] moteur {backend} absent (setup.py --{backend} pour l'installer), repli sur {PLATFORM_BACKENDS[0]}", flush=True)
+        backend = PLATFORM_BACKENDS[0]
+    exe = P("sdcpp", backend, EXE)
+    if not os.path.exists(exe):
+        py = "venv\\Scripts\\python.exe" if os.name == "nt" else "venv/bin/python"
+        sys.exit(f"binaire introuvable : {exe} (lancez : {py} setup.py)")
+    S.backend, S.model = backend, model
+    MODELS["diffusion"] = DIFFUSION[model]
+    S.store = estimate.Store(CALIB)
+
+
 def main():
     cfg = load_config()
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=cfg["ui_port"])
-    # un backend de config.json absent de la plateforme (vulkan sur Mac) cède la place au moteur de la plateforme
-    default_backend = cfg["backend"] if cfg["backend"] in PLATFORM_BACKENDS else PLATFORM_BACKENDS[0]
-    ap.add_argument("--backend", choices=PLATFORM_BACKENDS, default=default_backend)
+    ap.add_argument("--backend", choices=PLATFORM_BACKENDS, default=default_backend(cfg))
     ap.add_argument("--model", choices=list(DIFFUSION), default=cfg.get("model", "q4"),
                     help="q4 (Q4_K_M, par défaut) ou q8 (Q8_0, plus fidèle, installé par setup.py --q8)")
     ap.add_argument("--no-browser", action="store_true")
     a = ap.parse_args()
-    S.cfg = cfg
     S.ui_port = a.port
-    if not os.path.exists(DIFFUSION[a.model]) and a.model != "q4":
-        print(f"[launch] modèle {a.model} absent (setup.py --{a.model} pour l'installer), repli sur q4", flush=True)
-        a.model = "q4"
-    S.model = a.model
-    MODELS["diffusion"] = DIFFUSION[a.model]
+    setup_state(cfg, a.backend, a.model)
     for d in ("outputs", "logs", "jobs"):
         os.makedirs(P(d), exist_ok=True)
     for old in sorted(glob.glob(P("jobs", "*")))[:-20]:   # ne garde que les 20 derniers dossiers de travail
         shutil.rmtree(old, ignore_errors=True)
-    if not os.path.exists(P("sdcpp", a.backend, EXE)) and a.backend != PLATFORM_BACKENDS[0]:
-        print(f"[launch] moteur {a.backend} absent (setup.py --{a.backend} pour l'installer), repli sur {PLATFORM_BACKENDS[0]}", flush=True)
-        a.backend = PLATFORM_BACKENDS[0]
-    S.backend = a.backend
-    exe = P("sdcpp", a.backend, EXE)
-    if not os.path.exists(exe):
-        py = "venv\\Scripts\\python.exe" if os.name == "nt" else "venv/bin/python"
-        sys.exit(f"binaire introuvable : {exe} (lancez : {py} setup.py)")
     threading.Thread(target=worker, daemon=True).start()
     httpd = ThreadingHTTPServer(("127.0.0.1", a.port), H)
     httpd.daemon_threads = True
     url = f"http://127.0.0.1:{a.port}/"
-    print(f"[launch] backend {a.backend}, modèle {a.model} — interface : {url}  (Ctrl+C pour arrêter)", flush=True)
+    print(f"[launch] backend {S.backend}, modèle {S.model} — interface : {url}  (Ctrl+C pour arrêter)", flush=True)
     if not a.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     try:
