@@ -157,6 +157,9 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   bouton **Téléphone** (nom `.local` et adresse IP de l'ordinateur au démarrage) ; tout autre nom est refusé, même
   sans `--lan`. Si l'adresse IP de l'ordinateur change, l'ancienne est refusée jusqu'au redémarrage de l'interface :
   préférez l'adresse en `.local` sur le téléphone. Depuis l'ordinateur, ouvrir l'adresse du Wi-Fi demande aussi le code.
+  Si [Tailscale](https://tailscale.com) est connecté sur l'ordinateur au démarrage, ses noms et son adresse `100.x`
+  s'ajoutent à la liste : l'interface est alors joignable hors du Wi-Fi depuis un appareil du même compte Tailscale,
+  avec le même code.
   Les envois venant d'une page d'un autre site (formulaire ou script) sont refusés : seule l'interface elle-même peut
   lancer une génération, annuler ou supprimer une image.
 - **Veille** : sur Mac, l'ordinateur ne se met pas en veille tant que l'interface tourne avec `--lan` (l'écran peut

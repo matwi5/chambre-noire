@@ -232,6 +232,26 @@ def lan_address():
     return name or ip, ip
 
 
+def tailscale_hosts():
+    """Noms et adresse IPv4 du Mac sur Tailscale (court, MagicDNS complet, 100.x), pour un accès hors du Wi-Fi.
+    Liste vide si Tailscale n'est pas installé ou pas connecté."""
+    exe = shutil.which("tailscale") or next((p for p in ("/opt/homebrew/bin/tailscale", "/usr/local/bin/tailscale",
+                                                          "/Applications/Tailscale.app/Contents/MacOS/Tailscale")
+                                             if os.path.exists(p)), None)
+    if not exe:
+        return []
+    try:
+        st = json.loads(subprocess.run([exe, "status", "--json"], capture_output=True, text=True, timeout=5).stdout)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return []
+    if st.get("BackendState") != "Running":
+        return []
+    me = st.get("Self") or {}
+    dns = (me.get("DNSName") or "").rstrip(".").lower()
+    ipv4 = [x for x in me.get("TailscaleIPs") or [] if "." in x]   # IPv6 écartée : il faudrait des crochets dans l'URL
+    return [h for h in (dns.split(".")[0], dns, *ipv4) if h]
+
+
 class State:
     backend = "vulkan"
     engine = estimate.LEGACY_ENGINE   # release de sd.cpp du moteur choisi
@@ -656,7 +676,7 @@ def main():
         S.access_code = load_access_code()
         S.access_token = hashlib.sha256(("qwen-image-local:" + normalize_code(S.access_code)).encode()).hexdigest()
         name, ip = lan_address()
-        S.lan_urls = [f"http://{h}:{a.port}/" for h in dict.fromkeys(x for x in (name, ip) if x)]
+        S.lan_urls = [f"http://{h}:{a.port}/" for h in dict.fromkeys(x for x in (name, ip, *tailscale_hosts()) if x)]
         if sys.platform == "darwin":
             # empêche la veille du Mac tant que ce processus tourne (l'écran peut s'éteindre)
             subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
