@@ -789,7 +789,7 @@ $('go').onclick=async()=>{
     if(['queued','running'].includes(j.status)){ log('reprise du job en cours '+j.id); if(j.dims) setStageRatio(...j.dims); await followJob(j, j.started ? j.started*1000 : Date.now()); }
     else if(j.status==='done'){ showResult(j.name, ...(j.dims||[])); setMeta('', ['Dernière génération', fmt(j.seconds||0), j.dims?j.dims.join('×'):''], j.name); }
   }catch(e){} })();
-async function cancelCurrent(){ if(currentJob){ log('annulation demandée'); await fetch('/api/job/'+currentJob+'/cancel',{method:'POST'}); } }
+async function cancelCurrent(){ if(currentJob){ log('annulation demandée'); await fetch('/api/job/'+currentJob+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'}}); } }
 $('cancel').onclick=cancelCurrent; $('cancelLoader').onclick=cancelCurrent;
 // ------------------------------------------------------------ galerie et visionneuse
 let histItems=[], vIndex=-1;

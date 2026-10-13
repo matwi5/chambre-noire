@@ -153,6 +153,12 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   l'ordinateur, le bouton **Téléphone** en haut de l'interface l'affiche avec l'adresse à taper sur le téléphone
   (par exemple `http://Nom-du-Mac.local:7860`). Le téléphone le demande une fois, puis le retient un an. Tout appareil
   autre que l'ordinateur lui-même doit le saisir. Pour en changer, supprimez le fichier et relancez.
+- **Adresses acceptées** : l'interface ne répond qu'aux adresses `127.0.0.1`, `localhost` et à celles affichées par le
+  bouton **Téléphone** (nom `.local` et adresse IP de l'ordinateur au démarrage) ; tout autre nom est refusé, même
+  sans `--lan`. Si l'adresse IP de l'ordinateur change, l'ancienne est refusée jusqu'au redémarrage de l'interface :
+  préférez l'adresse en `.local` sur le téléphone. Depuis l'ordinateur, ouvrir l'adresse du Wi-Fi demande aussi le code.
+  Les envois venant d'une page d'un autre site (formulaire ou script) sont refusés : seule l'interface elle-même peut
+  lancer une génération, annuler ou supprimer une image.
 - **Veille** : sur Mac, l'ordinateur ne se met pas en veille tant que l'interface tourne avec `--lan` (l'écran peut
   s'éteindre).
 - **Toujours disponible (Mac)** : pour que l'interface démarre seule à l'ouverture de session, sans fenêtre,

@@ -112,6 +112,29 @@ non devinable).
 
 ## Suivi
 
-- Fait : —
-- En cours : —
-- À faire : étapes 1 à 7.
+Travail fait le 13/10/2026 dans le worktree `.claude/worktrees/securite-serveur`, branche `fix/server-host-origin`
+(partie de `main` à `c5a546a`).
+
+- Fait :
+  - Étape 1 : failles confirmées sur le service en marche : rebinding → 200, CSRF → 400 « prompt vide » (corps lu).
+  - Étape 2 : liste blanche de `Host` (`H._host_ok`, `H._local` exige aussi un `Host` local) ; commit `663d410`.
+  - Étape 3 : `H._post_refused` (`Sec-Fetch-Site: cross-site` → 403, `Origin` différent de `http://<Host>` → 403,
+    `Content-Type` autre que `application/json` → 415) sur tous les POST, repli `parse_qs` de la connexion retiré,
+    en-tête ajouté à l'annulation dans `tools/ui/index.html` ; commit suivant sur la même branche.
+  - Étape 4 : vérifié sur un banc de test (le `H` du worktree importé et servi sur 127.0.0.1:7861, faux code, faux hôtes
+    du Wi-Fi, sans worker donc sans génération possible) : 31 contrôles sur 31, dont les deux attaques → 403, la
+    connexion du téléphone → 200 avec le même jeton de cookie, et dans Chrome les appels de l'interface (historique 200,
+    suppression d'un nom inexistant 404, annulation 404, prompt vide 400). `tests/run_tests.py` relu : JSON, sans
+    `Origin`, `Host` 127.0.0.1:7860 → compatible.
+  - Étape 6 : README, section « Depuis un téléphone », puce « Adresses acceptées ».
+  - Étape 7 : deux commits, pas de push.
+- Décisions prises en route :
+  - `Origin` est comparé à `http://` + le `Host` de la requête (même origine), plus strict que « un hôte autorisé ».
+  - Mauvais `Content-Type` → 415 plutôt que 403 ; les requêtes d'attaque reçoivent 403 car `Origin` est contrôlé avant.
+  - Les noms du Wi-Fi restent ceux calculés au démarrage : si l'IP du Mac change, l'ancienne IP est refusée jusqu'au
+    redémarrage du service (le nom `.local` reste valable). Écrit dans le README. Accepter toute IP littérale serait sûr
+    face au rebinding mais sort de la liste du plan : non fait, à décider par l'utilisateur.
+- À faire (utilisateur) — étape 5 : le service exécute le `launch.py` de `main`, pas du worktree. Amener `main` sur la
+  branche (`git merge --ff-only fix/server-host-origin` depuis le dépôt principal), relancer le service si `busy: false`
+  (`launchctl kickstart -k gui/$(id -u)/com.matwi5.qwen-image-local`), rejouer les deux requêtes de l'étape 1 (→ 403),
+  puis rafraîchir le téléphone (le cookie reste valable). Ensuite `/project:push`.

@@ -474,6 +474,19 @@ class H(BaseHTTPRequestHandler):
         """Le Mac lui-même : adresse source locale et nom d'hôte local (un nom du Wi-Fi demande le code, même depuis le Mac)."""
         return self.client_address[0] in LOCAL_CLIENTS and self._host() in self._local_hosts()
 
+    def _post_refused(self):
+        """Refus d'un POST venu d'un autre site (CSRF) : (code, motif), ou None s'il vient de l'interface. Un formulaire
+        d'un autre site peut poster du JSON en text/plain sans contrôle préalable du navigateur ; exiger
+        application/json oblige ce site à une requête que le navigateur ne lui laisse pas faire."""
+        if self.headers.get("Sec-Fetch-Site", "").lower() == "cross-site":
+            return 403, "requête venant d'un autre site"
+        origin = self.headers.get("Origin")
+        if origin is not None and origin.strip().lower() != "http://" + self._host():
+            return 403, "requête venant d'un autre site"
+        if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
+            return 415, "Content-Type application/json attendu"
+        return None
+
     def _allowed(self):
         """Le Mac lui-même passe toujours ; un autre appareil doit avoir saisi le code d'accès (cookie)."""
         if not S.access_code or self._local():
@@ -536,6 +549,9 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._host_ok():
             return self._send(403, {"error": "nom d'hôte refusé"})
+        refused = self._post_refused()
+        if refused:
+            return self._send(refused[0], {"error": refused[1]})
         path = self.path.split("?", 1)[0]
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b"{}"
@@ -543,7 +559,7 @@ class H(BaseHTTPRequestHandler):
             try:
                 code = json.loads(raw).get("code", "")
             except Exception:
-                code = (parse_qs(raw.decode("utf-8", "replace")).get("code") or [""])[0]
+                code = ""
             if not hmac.compare_digest(normalize_code(code), normalize_code(S.access_code)):
                 time.sleep(1)                      # freine les essais en série
                 return self._send(403, {"error": "code incorrect"})
