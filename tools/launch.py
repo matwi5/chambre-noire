@@ -9,7 +9,12 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
 - Chaque génération lance sd-cli (rechargement quasi instantané grâce à --mmap et au cache disque),
   lit sa progression (étape k/N, secondes par étape), expose des aperçus intermédiaires optionnels et enregistre
   le PNG final dans outputs/.
+- Mode incognito ({"incognito": true} dans /api/generate) : rien n'est gardé sur le disque. Les fichiers de travail
+  (références, aperçus, PNG final) vivent dans jobs/incognito_<id>/, supprimé dès la fin du job ; l'image reste en
+  mémoire jusqu'à ce que l'interface la récupère (GET /api/job/<id>/result), puis l'interface fait oublier le job
+  (POST /api/job/<id>/forget). Ni journal, ni galerie, ni calibration, ni ligne dans logs/.
 - API : POST /api/generate, GET /api/job/<id>, GET /api/job/<id>/preview, POST /api/job/<id>/cancel,
+        GET /api/job/<id>/result et POST /api/job/<id>/forget (incognito),
         GET /api/result?name=<png>[&download=1], GET /api/status,
         historique : GET /api/history, GET /api/thumb?name=<png>, POST /api/delete {"name": <png>}.
 Aucun droit administrateur, aucune modification système : tout reste dans ce dossier.
@@ -357,7 +362,7 @@ def run_job(job):
     job["phase"] = "chargement du modèle"
     cmd = build_cmd(job)
     job["cmd"] = " ".join(cmd)
-    logf = open(os.path.join(job["dir"], "sd-cli.log"), "wb")
+    logf = open(os.devnull if job.get("incognito") else os.path.join(job["dir"], "sd-cli.log"), "wb")
     try:
         proc = subprocess.Popen(cmd, cwd=P("sdcpp", S.backend), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     except Exception as e:
@@ -433,8 +438,6 @@ def run_job(job):
     if job.get("status") == "cancelled":
         return
     if rc == 0 and os.path.exists(job["out"]):
-        job["status"] = "done"
-        job["phase"] = "terminé"
         try:
             from PIL import Image
             with Image.open(job["out"]) as im:
@@ -442,6 +445,14 @@ def run_job(job):
         except Exception:
             job["dims"] = [job["req"]["width"], job["req"]["height"]]
         job["size"] = os.path.getsize(job["out"])
+        if job.get("incognito"):                 # image gardée en mémoire seulement ; dossier supprimé par worker()
+            with open(job["out"], "rb") as f:
+                job["png"] = f.read()
+            job["status"] = "done"
+            job["phase"] = "terminé"
+            return
+        job["status"] = "done"
+        job["phase"] = "terminé"
         if not job.get("calibration"):            # les générations de tools/calibrate.py restent hors du journal
             meta = {"mode": job["req"].get("mode"), "prompt": job["req"]["prompt"], "width": job["req"]["width"], "height": job["req"]["height"],
                     "steps": job["req"]["steps"], "seed": job["req"].get("seed"), "seconds": job["seconds"], "encode_seconds": job.get("encode_seconds"),
@@ -456,20 +467,31 @@ def run_job(job):
     else:
         job["status"] = "failed"
         job["error"] = "sd-cli code " + str(rc) + " — " + " | ".join((job.get("error_lines") or tail)[-4:])
-        print("[job] échec : " + job["error"], flush=True)
+        # en incognito, le détail (qui peut citer le prompt) reste en mémoire pour l'interface, hors de logs/
+        print("[job] échec : " + (f"génération incognito, sd-cli code {rc}" if job.get("incognito") else job["error"]), flush=True)
+
+
+def forget_files(job):
+    """Fin d'un job incognito : supprime son dossier de travail et retire de la mémoire le prompt, les images d'entrée et
+    la ligne de commande ; seule l'image finale (job["png"]) reste, jusqu'à sa récupération par l'interface."""
+    shutil.rmtree(job["dir"], ignore_errors=True)
+    for k in ("req", "cmd", "error_lines", "preview", "step_times"):
+        job.pop(k, None)
 
 
 def worker():
     while True:
         job = S.q.get()
-        if job.get("status") == "cancelled":
-            continue
-        S.current = job["id"]
         try:
+            if job.get("status") == "cancelled":
+                continue
+            S.current = job["id"]
             run_job(job)
         finally:
             S.current = None
             job.pop("proc", None)
+            if job.get("incognito"):
+                forget_files(job)
 
 
 def public(job):
@@ -477,7 +499,8 @@ def public(job):
             "preview_version", "preview_interval", "size", "dims", "error", "queue_position")
     d = {k: job.get(k) for k in keys}
     d["elapsed"] = round(time.time() - job["started"], 1) if job.get("started") and not job.get("finished") else job.get("seconds")
-    d["path"] = job["out"] if job.get("status") == "done" else None
+    d["incognito"] = bool(job.get("incognito"))
+    d["path"] = job["out"] if job.get("status") == "done" and not job.get("incognito") else None
     d["name"] = os.path.basename(job["out"])
     return d
 
@@ -561,7 +584,8 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, open(P("tools", "ui", "index.html"), "rb").read(), "text/html; charset=utf-8")
         if path == "/api/status":
             missing = [k for k, v in MODELS.items() if not os.path.exists(v)]
-            last = max(S.jobs.values(), key=lambda j: j["created"], default=None)
+            # un job incognito n'est jamais repris après un rechargement de la page : il est perdu avec elle
+            last = max((j for j in S.jobs.values() if not j.get("incognito")), key=lambda j: j["created"], default=None)
             return self._send(200, {"sd_ready": not missing, "backend": S.backend, "busy": S.current is not None,
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model, "queued": S.q.qsize(),
@@ -569,11 +593,16 @@ class H(BaseHTTPRequestHandler):
                                     "estimates": S.store.coefficients(S.backend, S.model, S.engine),
                                     # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
                                     "phone": {"urls": S.lan_urls, "code": S.access_code} if S.access_code and self._local() else None})
-        m = re.match(r"^/api/job/([\w-]+)(/preview)?$", path)
+        m = re.match(r"^/api/job/([\w-]+)(/preview|/result)?$", path)
         if m:
             job = S.jobs.get(m.group(1))
             if not job:
                 return self._send(404, {"error": "job inconnu"})
+            if m.group(2) == "/result":           # image d'un job incognito, gardée en mémoire seulement
+                png = job.get("png")
+                if not png:
+                    return self._send(404, {"error": "image incognito indisponible"})
+                return self._send(200, png, "image/png")
             if m.group(2):
                 if not job.get("preview"):
                     return self._send(404, {"error": "pas d'aperçu"})
@@ -652,25 +681,38 @@ class H(BaseHTTPRequestHandler):
                 return self._send(400, {"error": f"JSON invalide : {e}"})
             if not str(req.get("prompt", "")).strip():
                 return self._send(400, {"error": "prompt vide"})
+            # une nouvelle génération fait perdre les images incognito terminées, récupérées ou non
+            for k in [k for k, j in S.jobs.items() if j.get("incognito") and j.get("status") not in ("queued", "running")]:
+                S.jobs.pop(k, None)
             jid = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
             mode = re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
-            d = P("jobs", jid)
+            incognito = req.get("incognito") is True
+            d = P("jobs", ("incognito_" if incognito else "") + jid)
             os.makedirs(d, exist_ok=True)
-            job = {"id": jid, "req": req, "dir": d, "out": P("outputs", f"{jid}_{mode}.png"), "status": "queued", "created": time.time(),
+            # en incognito, le PNG reste dans le dossier de travail (supprimé en fin de job) ; son nom sert au téléchargement
+            out = os.path.join(d, f"{jid}_{mode}.png") if incognito else P("outputs", f"{jid}_{mode}.png")
+            job = {"id": jid, "req": req, "dir": d, "out": out, "status": "queued", "created": time.time(), "incognito": incognito,
                    "queue_position": S.q.qsize() + (1 if S.current else 0)}
             S.jobs[jid] = job
             S.q.put(job)
             return self._send(202, public(job))
-        m = re.match(r"^/api/job/([\w-]+)/cancel$", path)
+        m = re.match(r"^/api/job/([\w-]+)/(cancel|forget)$", path)
         if m:
             job = S.jobs.get(m.group(1))
             if not job:
                 return self._send(404, {"error": "job inconnu"})
-            job["status"] = "cancelled"
-            job["phase"] = "annulé"
-            proc = job.get("proc")
-            if proc and proc.poll() is None:
-                proc.kill()
+            if m.group(2) == "forget" and not job.get("incognito"):
+                return self._send(400, {"error": "seul un job incognito peut être oublié"})
+            if m.group(2) == "cancel" or job.get("status") in ("queued", "running"):
+                job["status"] = "cancelled"
+                job["phase"] = "annulé"
+                proc = job.get("proc")
+                if proc and proc.poll() is None:
+                    proc.kill()
+            if m.group(2) == "forget":            # image récupérée par l'interface, ou page quittée : plus rien en mémoire
+                S.jobs.pop(job["id"], None)
+                job.pop("png", None)
+                return self._send(200, {"ok": True})
             return self._send(200, public(job))
         self._send(404, {"error": "not found"})
 
@@ -708,6 +750,8 @@ def main():
     setup_state(cfg, a.backend, a.model)
     for d in ("outputs", "logs", "jobs"):
         os.makedirs(P(d), exist_ok=True)
+    for old in glob.glob(P("jobs", "incognito_*")):      # restes d'un job incognito interrompu par un arrêt brutal
+        shutil.rmtree(old, ignore_errors=True)
     for old in sorted(glob.glob(P("jobs", "*")))[:-20]:   # ne garde que les 20 derniers dossiers de travail
         shutil.rmtree(old, ignore_errors=True)
     threading.Thread(target=worker, daemon=True).start()

@@ -206,16 +206,17 @@ Sous le texte, trois pastilles résument le format, la résolution et les étape
 | **Résolution** | Low ≈512 px · Medium ≈768 px · High ≈1024 px · XHigh ≈1536 px · Max 2K natif | Nombre de pixels ; chaque option affiche les dimensions exactes |
 | **Étapes** | Low 8 · Medium 12 · High 20 · XHigh 30 · Max 40 | Finesse des détails ; chaque option affiche le **temps estimé** |
 | **Aperçu toutes les 5 étapes** | interrupteur | Montre l'image en cours de formation ; coût affiché à côté |
+| **Incognito** | interrupteur | Image gardée nulle part sur le Mac (voir [Mode incognito](#mode-incognito)) ; une pastille **Incognito** reste affichée tant qu'il est actif |
 
 Le bouton **Générer** affiche le temps estimé. Le navigateur retient les réglages choisis et le texte en cours de
-chaque onglet.
+chaque onglet (sauf en incognito).
 
 Conseil : **Medium + 12 étapes** pour chercher la bonne formulation, puis montez la résolution et les étapes pour la version finale.
 Les descriptions en **anglais, longues et précises** donnent les meilleurs résultats.
 
 Pendant la génération, l'image en cours affiche l'étape, le temps restant et un bouton d'annulation ; le bouton
 **Générer** se remplit au fil des étapes. La pastille d'état en haut suit aussi la progression, depuis n'importe quel
-onglet : un appui ramène à l'image. On peut recharger la page sans rien perdre : elle se rattache à la génération en cours.
+onglet : un appui ramène à l'image. On peut recharger la page sans rien perdre : elle se rattache à la génération en cours (sauf en incognito).
 Chaque image est enregistrée en PNG dans **`outputs\`** ; les boutons **Éditer** et **Dessiner** sous le résultat
 le réutilisent comme point de départ.
 
@@ -253,6 +254,24 @@ l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèl
 à l'image voisine (flèches du clavier sur ordinateur), glisser vers le bas ferme, un appui sur l'image masque les
 commandes. Actions : **Télécharger**, **Éditer**, **Dessiner**, **Reprendre** (remet le texte de l'image dans l'onglet
 correspondant) et **Supprimer** (définitif, après confirmation).
+
+### Mode incognito
+
+Avec l'interrupteur **Incognito** des réglages, l'image produite peut être téléchargée mais n'est gardée nulle part sur
+le Mac : ni dans `outputs\`, ni dans la galerie, ni dans le journal des générations, ni dans `logs\`. Elle est perdue
+pour de bon dès la génération suivante, quand on la supprime, ou quand la page est rechargée ou fermée (y compris pendant
+la génération, qui est alors arrêtée) : pensez à la **télécharger** avant. Le texte tapé n'est pas retenu par le
+navigateur, et la génération n'entre pas dans les mesures de calibration. Les boutons **Éditer** et **Dessiner** la
+réutilisent comme d'habitude.
+
+Ce que cela garantit, et ses limites :
+
+- sd-cli ne travaille que sur des fichiers : les images d'entrée, les aperçus et le PNG final passent par
+  `jobs/incognito_<identifiant>/`, supprimé dès la fin de la génération (et au lancement suivant après un arrêt
+  brutal). L'image finale n'existe ensuite que dans la mémoire du serveur, jusqu'à ce que la page la récupère, puis
+  dans celle de la page ;
+- un fichier supprimé n'est pas effacé physiquement du disque ; sur un SSD, il devient en pratique illisible peu après ;
+- le fichier **téléchargé** est enregistré par le navigateur dans ses Téléchargements, comme tout téléchargement.
 
 ## Le modèle
 
@@ -452,7 +471,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     préfixe en très grande résolution ; `--mmap` fonctionne depuis `master-959` (les versions antérieures sortaient une
     image en bruit).
 - API locale : `POST /api/generate`, `GET /api/job/<id>`, `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel`,
-  `GET /api/status` ; historique : `GET /api/history`, `GET /api/thumb?name=…` (miniatures gardées dans
+  `GET /api/status` ; incognito (`"incognito": true` dans `/api/generate`) : `GET /api/job/<id>/result` (image gardée en
+  mémoire), `POST /api/job/<id>/forget` (l'oublier, ou arrêter la génération) ; historique : `GET /api/history`, `GET /api/thumb?name=…` (miniatures gardées dans
   `outputs/.thumbs/`), `GET /api/result?name=…&download=1`, `POST /api/delete` ; avec `--lan`, `POST /api/login`.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés
   sous Windows (ROCm Windows ne couvre que les cartes RDNA3/RDNA4, DirectML est limité à d'anciennes versions) :

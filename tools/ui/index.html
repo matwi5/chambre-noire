@@ -154,6 +154,8 @@
     border:1px solid var(--rim); background:var(--field); color:var(--ink); font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; }
   .pill:active { transform:scale(.96); }
   .pill.dim { color:var(--ink2); font-weight:500; }
+  .pill.incog { border-color:color-mix(in srgb, var(--iris) 75%, transparent); background:color-mix(in srgb, var(--iris) 26%, var(--field)); }
+  .pill.incog svg { width:16px; height:16px; }
   .shape { display:inline-block; flex:none; border:1.6px solid currentColor; border-radius:3px; }
   .pill .shape { opacity:.85; }
   .go-row { display:flex; gap:8px; align-items:stretch; }
@@ -525,6 +527,7 @@
   <h3>Résolution</h3><div class="chips5" id="resOpts"></div>
   <h3>Étapes</h3><div class="chips5" id="stepOpts"></div>
   <label class="switch"><input type="checkbox" id="previewChk"><span class="track"></span><span>Aperçu toutes les 5 étapes <small id="previewCost"></small></span></label>
+  <label class="switch"><input type="checkbox" id="incogChk"><span class="track"></span><span>Incognito <small>image ni gardée sur le Mac ni dans la galerie ; perdue à la génération suivante ou au rechargement de la page</small></span></label>
   <div class="estimate" id="estimate"><span id="estText"></span><b id="estTime"></b></div>
 </section>
 <section class="sheet glass" id="engineSheet" role="dialog" aria-modal="true" aria-labelledby="engineTitle">
@@ -556,7 +559,7 @@ function applyEstimates(est){
 }
 
 const $ = id => document.getElementById(id);
-let mode='t2i', editImages=[], maskImage=null, paintMode='paint', currentJob=null, lastResult=null, estSeconds=0, stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
+let mode='t2i', editImages=[], maskImage=null, paintMode='paint', currentJob=null, currentIncog=false, lastResult=null, estSeconds=0, stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
 
 function log(m){ const l=$('log'); l.textContent += new Date().toLocaleTimeString()+'  '+m+'\n'; l.scrollTop=l.scrollHeight; }
 const round32 = v => Math.max(256, Math.round(v/32)*32);
@@ -570,7 +573,7 @@ function dimsFor(key, scale){ const im=singleImage(); if(key==='image' && im) re
 // réglages choisis, retenus par ce navigateur d'une visite à l'autre
 const opt = { ratio:'1:1', res:'medium', steps:'medium' };
 try{ Object.assign(opt, JSON.parse(localStorage.getItem('qwen-opt')||'{}')); }catch(e){}
-function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt, preview:$('previewChk').checked})); }catch(e){} }
+function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt, preview:$('previewChk').checked, incognito:$('incogChk').checked})); }catch(e){} }
 const resSel = () => RES.find(p=>p.k===opt.res) || RES[1];
 const stepsSel = () => STEPS.find(p=>p.k===opt.steps) || STEPS[1];
 function currentDims(){ return dimsFor(opt.ratio, resSel().scale); }
@@ -608,7 +611,8 @@ function refreshChoices(){
   $('stepOpts').innerHTML = STEPS.map(p=>{ const on=p.k===opt.steps;
     return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}" title="${p.label}"><b>${p.steps}</b><small>${approx(E && parts(w,h,p.steps,inp,pv).total)}</small></button>`; }).join('');
   const [rw,rh] = ratioDims(opt.ratio);
-  $('pills').innerHTML = `<button class="pill" data-open>${shape(rw,rh,16)}${opt.ratio==='image'?'Image':opt.ratio}</button>`
+  $('pills').innerHTML = ($('incogChk').checked ? `<button class="pill incog" data-open><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18"/><path d="M6 12l1.6-6.2a1.5 1.5 0 0 1 2-1l2.4 1 2.4-1a1.5 1.5 0 0 1 2 1L18 12"/><circle cx="7.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/><path d="M10 16.5h4"/></svg>Incognito</button>` : '')
+    + `<button class="pill" data-open>${shape(rw,rh,16)}${opt.ratio==='image'?'Image':opt.ratio}</button>`
     + `<button class="pill" data-open>${w}×${h}</button><button class="pill" data-open>${steps} étapes</button>`
     + (pv ? `<button class="pill" data-open>Aperçus</button>` : '');
   $('estText').textContent=`${w}×${h} · ${steps} étapes${nrefs>1?' · '+nrefs+' références':''}`;
@@ -619,15 +623,15 @@ function refreshChoices(){
   $('estimate').classList.toggle('warn', estSeconds>3600); $('goEta').classList.toggle('warn', estSeconds>3600);
 }
 (function init(){
-  try{ $('previewChk').checked = !!JSON.parse(localStorage.getItem('qwen-opt')||'{}').preview; }catch(e){}
+  try{ const o=JSON.parse(localStorage.getItem('qwen-opt')||'{}'); $('previewChk').checked=!!o.preview; $('incogChk').checked=!!o.incognito; }catch(e){}
   [['ratioOpts','ratio'],['resOpts','res'],['stepOpts','steps']].forEach(([id,key])=>$(id).addEventListener('click', e=>{
     const b=e.target.closest('[data-k]'); if(!b) return; opt[key]=b.dataset.k; saveOpt(); refreshChoices(); }));
   $('pills').addEventListener('click', e=>{ if(e.target.closest('[data-open]')) openSheet('setSheet'); });
-  ['previewChk','mask_mode'].forEach(id=>$(id).addEventListener('change', ()=>{ saveOpt(); refreshChoices(); })); refreshChoices();
-  // brouillons des trois textes, retenus par ce navigateur
+  ['previewChk','incogChk','mask_mode'].forEach(id=>$(id).addEventListener('change', ()=>{ saveOpt(); refreshChoices(); })); refreshChoices();
+  // brouillons des trois textes, retenus par ce navigateur, sauf en incognito (le brouillon modifié est alors effacé)
   ['t2i_prompt','edit_prompt','mask_prompt'].forEach(id=>{ const t=$(id);
     try{ t.value = localStorage.getItem('qwen-'+id) || ''; }catch(e){}
-    t.addEventListener('input', ()=>{ try{ localStorage.setItem('qwen-'+id, t.value); }catch(e){} }); });
+    t.addEventListener('input', ()=>{ try{ if($('incogChk').checked) localStorage.removeItem('qwen-'+id); else localStorage.setItem('qwen-'+id, t.value); }catch(e){} }); });
 })();
 function suggestRatio(){ forceImageRatio=!!singleImage(); refreshChoices(); }
 
@@ -725,7 +729,7 @@ function paintedReference(w,h,opaque){ const a=document.createElement('canvas');
 // ------------------------------------------------------------ requête & loader
 function buildRequest(){
   const [w,h]=currentDims(); const steps=stepsSel().steps;
-  const body={ mode, prompt:'', width:w, height:h, steps, cfg:CFG, seed:-1, preview:$("previewChk").checked, preview_interval:PREVIEW_EVERY, ref_images:[], init_image:null, mask_image:null, strength:1.0 };
+  const body={ mode, prompt:'', width:w, height:h, steps, cfg:CFG, seed:-1, preview:$("previewChk").checked, preview_interval:PREVIEW_EVERY, ref_images:[], init_image:null, mask_image:null, strength:1.0, incognito:$('incogChk').checked };
   if(mode==='t2i'){ body.prompt=$('t2i_prompt').value.trim(); }
   else if(mode==='edit'){ if(!editImages.length) throw new Error('Ajoutez au moins une image de référence.'); body.prompt=$('edit_prompt').value.trim(); body.ref_images=editImages.map(x=>x.dataUrl); }
   else { if(!maskImage) throw new Error('Chargez une image.'); if(!paintedPixels()) throw new Error('Peignez une zone.'); body.prompt=$('mask_prompt').value.trim();
@@ -752,14 +756,19 @@ function setMeta(prompt, chips, file){
     + (chips.filter(Boolean).length ? `<div class="m-chips">${chips.filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('')}</div>` : '')
     + (file ? `<p class="m-file">${esc(file)}</p>` : ''); }
 function showLoader(on){ $('stage').style.display='block'; $('resultEmpty').style.display='none'; $('loader').style.display=on?'flex':'none'; $('shimmer').style.display=on?'block':'none'; $('bar').style.display=on?'block':'none'; }
-function showResult(name, w, h, reveal){          // affiche une image de outputs/ avec ses actions
-  const url='/api/result?name='+encodeURIComponent(name), img=$('stageImg');
+let incogUrl=null;                                // adresse en mémoire (blob:) de l'image incognito affichée
+function showResult(name, w, h, reveal, blob){    // affiche une image de outputs/, ou l'image incognito reçue (blob), avec ses actions
+  if(blob){ if(incogUrl) URL.revokeObjectURL(incogUrl); incogUrl=URL.createObjectURL(blob); }
+  const url=blob ? incogUrl : '/api/result?name='+encodeURIComponent(name), img=$('stageImg');
   if(w && h) setStageRatio(w, h);
   showLoader(false); $('stage').classList.remove('has-preview');
   img.className = reveal ? 'final reveal' : 'final'; img.src=url; img.style.display='block';
-  $('dl').href=url+'&download=1'; $('dl').download=name; $('resultActions').style.display='';
-  lastResult={url, name}; setAmbient(name); }
-function hideResult(){ $('stageImg').src=''; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
+  $('dl').href=blob ? url : url+'&download=1'; $('dl').download=name; $('resultActions').style.display='';
+  lastResult={url, name, blob}; if(!blob) setAmbient(name); }   // pas de fond ambiant en incognito : il passerait par une miniature sur le disque
+function hideResult(){ $('stageImg').src=''; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display='';
+  if(incogUrl){ URL.revokeObjectURL(incogUrl); incogUrl=null; } }
+function dropIncognito(){ if(lastResult && lastResult.blob){ lastResult=null; hideResult(); } }   // l'image incognito est perdue
+const forgetJob = (id, keepalive) => fetch('/api/job/'+id+'/forget', {method:'POST', headers:{'Content-Type':'application/json'}, keepalive}).catch(()=>{});
 function setRunning(on){
   $('go').disabled=on; $('go').classList.toggle('busy', on); $('cancel').disabled=!on; $('island').classList.toggle('run', on);
   if(!on){ $('goLabel').textContent='Générer'; $('go').style.removeProperty('--p'); refreshChoices(); } }
@@ -782,7 +791,7 @@ function updateLoader(j, elapsed){
 }
 async function followJob(j, startedAt){          // suit un job (nouveau ou repris après rechargement de la page)
   setRunning(true); showLoader(true); $('resultActions').style.display='none'; setMeta('', [], '');
-  const img=$('stageImg'); img.className=''; img.src=''; img.style.display='none'; let pv=0; currentJob=j.id; $('stage').classList.remove('has-preview');
+  const img=$('stageImg'); img.className=''; img.src=''; img.style.display='none'; let pv=0; currentJob=j.id; currentIncog=!!j.incognito; $('stage').classList.remove('has-preview');
   updateLoader(j, (Date.now()-startedAt)/1000);
   try{
     while(['queued','running'].includes(j.status)){ await sleep(1000); j=await (await fetch('/api/job/'+j.id)).json(); const el=(Date.now()-startedAt)/1000; updateLoader(j, el);
@@ -790,16 +799,22 @@ async function followJob(j, startedAt){          // suit un job (nouveau ou repr
     if(j.status==='cancelled'){ log('génération annulée'); toast('Génération annulée'); if(lastResult) showResult(lastResult.name); else hideResult(); $('resultMeta').innerHTML=''; return; }
     if(j.status!=='done') throw new Error(j.error||('statut '+j.status));
     const secs=j.seconds||(Date.now()-startedAt)/1000;
-    showResult(j.name, ...(j.dims||[]), true);
-    setMeta(jobPrompt, [fmt(secs), j.dims?j.dims.join('×'):'', (j.total||'?')+' étapes', j.sec_per_it?j.sec_per_it.toFixed(1)+' s/étape':''], j.name);
+    let blob=null;
+    if(j.incognito){                              // image gardée en mémoire par le serveur : récupérée une fois, puis oubliée (finally)
+      const r=await fetch('/api/job/'+j.id+'/result'); if(!r.ok) throw new Error('image incognito indisponible'); blob=await r.blob(); }
+    const [w,h]=j.dims||[];
+    showResult(j.name, w, h, true, blob);
+    setMeta(jobPrompt, [fmt(secs), j.dims?j.dims.join('×'):'', (j.total||'?')+' étapes', j.sec_per_it?j.sec_per_it.toFixed(1)+' s/étape':''], j.incognito ? 'Incognito · non enregistrée : téléchargez-la pour la garder' : j.name);
     if(mode==='hist') loadHistory();
-    log('terminé en '+Math.round(secs)+' s → '+j.path); toast('Image prête en '+fmt(secs));
+    log('terminé en '+Math.round(secs)+' s → '+(j.incognito ? 'image incognito, non enregistrée' : j.path)); toast('Image prête en '+fmt(secs));
   }catch(e){ log('ERREUR '+e.message); if(lastResult) showResult(lastResult.name); else hideResult(); toast('Échec : '+e.message, 'err'); }
-  finally{ currentJob=null; setRunning(false); }
+  finally{ if(currentIncog) forgetJob(currentJob); currentJob=null; currentIncog=false; setRunning(false); }
 }
 $('go').onclick=async()=>{
   let body; try{ body=buildRequest(); }catch(e){ toast(e.message, 'err'); return; }
   if(estSeconds>3600 && !await ask('Génération longue', 'Temps estimé : '+fmt(estSeconds)+'. La lancer quand même ?', 'Lancer')) return;
+  dropIncognito();                                // une nouvelle génération fait perdre l'image incognito affichée
+  if(body.incognito) try{ localStorage.removeItem('qwen-'+mode+'_prompt'); }catch(e){}
   setStageRatio(body.width, body.height); jobPrompt=body.prompt; jobMode=mode;
   log(`${body.mode} ${body.width}x${body.height} ${body.steps} étapes refs=${body.ref_images.length} mask=${body.mask_image?'oui':'non'} aperçus=${body.preview?'oui':'non'} estimation=${fmt(estSeconds)}`);
   let r, j; try{ r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=await r.json(); }
@@ -816,6 +831,8 @@ $('go').onclick=async()=>{
   }catch(e){} })();
 async function cancelCurrent(){ if(currentJob){ log('annulation demandée'); await fetch('/api/job/'+currentJob+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'}}); } }
 $('cancel').onclick=cancelCurrent; $('cancelLoader').onclick=cancelCurrent;
+// page rechargée ou quittée pendant une génération incognito : le serveur l'arrête et l'oublie
+addEventListener('pagehide', ()=>{ if(currentJob && currentIncog) forgetJob(currentJob, true); });
 // ------------------------------------------------------------ galerie et visionneuse
 let histItems=[], vIndex=-1;
 const MODE_LABELS={ t2i:'Texte → image', edit:'Édition', mask:'Masque', annot:'Annotation' };
@@ -864,7 +881,8 @@ addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevente
     else if(Math.abs(dx)<6 && Math.abs(dy)<6) $('viewer').classList.toggle('immersive'); };
   st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
 })();
-async function dataUrlOf(name){ const b=await (await fetch(resultUrl(name))).blob(); return await readFile(b); }
+async function dataUrlOf(name){ if(lastResult && lastResult.blob && lastResult.name===name) return await readFile(lastResult.blob);
+  const b=await (await fetch(resultUrl(name))).blob(); return await readFile(b); }
 async function useAsEditInput(name=lastResult && lastResult.name){
   if(!name) return; if(editImages.length>=10){ toast('10 images de référence au maximum', 'err'); return; }
   editImages.push(await toEntry(name, await dataUrlOf(name))); renderEditThumbs(); goTab('edit'); suggestRatio(); toast('Ajoutée aux images de référence'); }
@@ -886,6 +904,9 @@ async function viewerAction(kind){
 }
 async function deleteCurrent(){
   if(!lastResult || currentJob) return;
+  if(lastResult.blob){
+    if(!await ask('Effacer cette image ?', 'Elle n\'est enregistrée nulle part : sans téléchargement, elle sera perdue.', 'Effacer', true)) return;
+    lastResult=null; hideResult(); toast('Image effacée'); return; }
   if(!await ask('Supprimer cette image ?', lastResult.name+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return;
   const r=await fetch('/api/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:lastResult.name})});
   if(!r.ok){ toast('Suppression impossible : '+((await r.json()).error||r.status), 'err'); return; }
