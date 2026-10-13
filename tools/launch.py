@@ -29,6 +29,9 @@ MODELS = {
     "vae": P("models", "vae", "qwen_image_2.1_vae_bf16.safetensors"),
     "llm": P("models", "text_encoders", "qwen3vl_8b_int8_convrot_embfix.safetensors"),
 }
+if sys.platform == "darwin":   # Metal n'a pas de calcul int8 : encodeur GGUF officiel et sa tour vision, sur le GPU
+    MODELS["llm"] = P("models", "text_encoders", "Qwen3VL-8B-Instruct-Q8_0.gguf")
+    MODELS["llm_vision"] = P("models", "text_encoders", "mmproj-Qwen3VL-8B-Instruct-F16.gguf")
 EXE = "sd-cli.exe" if os.name == "nt" else "sd-cli"
 # moteurs de la plateforme, par ordre de repli quand celui demandé n'est pas installé
 PLATFORM_BACKENDS = ["metal"] if sys.platform == "darwin" else ["vulkan", "cuda", "cpu"]
@@ -43,12 +46,16 @@ BACKENDS = {
     "vulkan": ["--backend", "diffusion=vulkan0,vae=vulkan0,te=cpu", "--offload-to-cpu", "--mmap"],
     "cuda":   ["--backend", "cuda0", "--offload-to-cpu", "--diffusion-fa", "--mmap"],
     "cpu":    ["--backend", "cpu", "--mmap"],
-    # Metal (Mac Apple Silicon, mesuré sur M6 avec sd.cpp d637cfb, release master-959) :
-    # - diffusion sur le GPU ; --diffusion-fa y gagne quelques pour cent ;
-    # - VAE sur le GPU : décodage 11 fois plus rapide que sur le CPU (3 s contre 37 s en 512×512) ;
-    # - encodeur sur le CPU : Metal n'a pas de noyau int8 (kernel_mul_mm_i8_i8 absent, sd-cli plante) ;
+    # Metal (Mac Apple Silicon, mesuré sur M6 avec sd.cpp d637cfb, release master-959) : tout sur le GPU.
+    # - encodeur GGUF Q8_0 : 3 s pour une édition 512×512, contre 150 s pour l'encodeur int8 sur le CPU
+    #   (Metal n'a pas de noyau int8 : kernel_mul_mm_i8_i8 absent, sd-cli plante si on l'y place) ;
+    # - VAE : décodage 11 fois plus rapide que sur le CPU (3 s contre 37 s en 512×512) ;
+    # - --fa (flash attention partout) : sans elle, la tour vision provoque une faute mémoire du GPU sur une
+    #   référence en 2048×2048 ;
+    # - --params-backend te=disk : poids de l'encodeur libérés après l'encodage ; en 2048×2048 avec une référence,
+    #   la place libérée garde le cache de préfixe (sinon abandonné faute de mémoire) ; coût négligeable sinon ;
     # - --mmap : les poids projetés en mémoire passent par des tampons Metal ; rechargement quasi instantané.
-    "metal":  ["--backend", "diffusion=MTL0,vae=MTL0,te=cpu", "--diffusion-fa", "--mmap"],
+    "metal":  ["--backend", "MTL0", "--fa", "--mmap", "--params-backend", "te=disk"],
 }
 
 
@@ -108,7 +115,8 @@ def build_cmd(job):
     r = job["req"]
     w, h = int(r["width"]), int(r["height"])
     cmd = [P("sdcpp", S.backend, EXE),
-           "--diffusion-model", MODELS["diffusion"], "--vae", MODELS["vae"], "--llm", MODELS["llm"]] + BACKENDS[S.backend] + [
+           "--diffusion-model", MODELS["diffusion"], "--vae", MODELS["vae"], "--llm", MODELS["llm"]] + (
+           ["--llm_vision", MODELS["llm_vision"]] if "llm_vision" in MODELS else []) + BACKENDS[S.backend] + [
            "-p", r["prompt"], "-W", str(r["width"]), "-H", str(r["height"]),
            "--steps", str(r["steps"]), "--cfg-scale", str(r.get("cfg", S.cfg.get("cfg_scale", 1.0))),
            "--sampling-method", "euler", "-s", str(r.get("seed", -1)), "-o", job["out"]]

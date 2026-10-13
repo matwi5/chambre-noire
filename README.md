@@ -93,9 +93,9 @@ Sur Mac : `venv/bin/python setup.py`. Ce script, à lancer une seule fois :
 - télécharge stable-diffusion.cpp (version épinglée et vérifiée par SHA256) dans `sdcpp\` : versions Vulkan et CPU
   sous Windows (release `master-890`), version Metal sur Mac (release `master-959`) ; relancé après une mise à jour de
   ce dépôt, il remplace un moteur dont la version épinglée a changé ;
-- télécharge les trois fichiers du modèle depuis Hugging Face dans `models\` (≈ 14,6 Go) et vérifie chacun contre
-  son empreinte SHA256 (voir [Le modèle](#le-modèle)) ;
-- prépare l'encodeur de texte pour stable-diffusion.cpp ;
+- télécharge les fichiers du modèle depuis Hugging Face dans `models\` (≈ 14,6 Go sous Windows, ≈ 15,1 Go sur Mac)
+  et vérifie chacun contre son empreinte SHA256 (voir [Le modèle](#le-modèle)) ;
+- sous Windows, prépare l'encodeur de texte pour stable-diffusion.cpp ;
 - crée le raccourci **`Qwen-Image.lnk`** (Windows) ou **`Qwen-Image.command`** (Mac) dans le dossier ;
 - lance trois courtes générations pour calibrer les estimations de durée sur votre machine
   (voir [Performances](#performances) ; `--no-calibrate` pour s'en passer).
@@ -199,8 +199,16 @@ Le modèle n'est pas inclus dans ce dépôt : GitHub refuse les fichiers de plus
 | --- | --- | --- | --- |
 | `qwen-image-2.1-UC-Q4_K_M.gguf` | Modèle de diffusion, 7 milliards de paramètres, quantifié 4 bits | 4,6 Go | [abenzerps/Qwen-Image-2.1-Uncensored-Quantized](https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized) |
 | `qwen-image-2.1-UC-Q8_0.gguf` (option `--q8`) | Même modèle quantifié 8 bits, plus fidèle | 7,6 Go | idem |
-| `qwen3vl_8b_int8_convrot.safetensors` | Encodeur texte et image Qwen3-VL-8B, int8 | 9,35 Go | [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1), dossier `text_encoders` |
+| `qwen3vl_8b_int8_convrot.safetensors` (Windows) | Encodeur texte et image Qwen3-VL-8B, int8 | 9,35 Go | [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1), dossier `text_encoders` |
 | `qwen_image_2.1_vae_bf16.safetensors` | Décodeur d'image (VAE) | 676 Mo | idem, dossier `vae` |
+| `Qwen3VL-8B-Instruct-Q8_0.gguf` (Mac) | Même encodeur Qwen3-VL-8B, GGUF quantifié 8 bits | 8,7 Go | [Qwen/Qwen3-VL-8B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF) |
+| `mmproj-Qwen3VL-8B-Instruct-F16.gguf` (Mac) | Sa tour vision, qui lit les images de référence | 1,16 Go | idem |
+
+**Encodeur sur Mac.** Le GPU d'un Mac (Metal) n'a pas de calcul int8 dans stable-diffusion.cpp : l'encodeur int8 de
+Comfy-Org y tournerait sur le processeur, à ≈ 2 min 30 par image de référence en 512×512. Le Mac prend donc la
+version GGUF officielle de Qwen, qui tourne sur le GPU : ≈ 3 s pour la même référence, pour une image quasi
+identique. Sur une installation Mac antérieure, `setup.py` télécharge ces deux fichiers et signale que les fichiers
+`qwen3vl_8b_int8_convrot*.safetensors` (≈ 18,7 Go) ne servent plus et peuvent être supprimés.
 
 **Variante « UC » (Uncensored).** Le modèle de diffusion est la variante non censurée publiée par abenzerps :
 elle n'a ni filtre de contenu ni refus de prompt, et produit ce que décrit le prompt, contenus adultes compris.
@@ -215,17 +223,21 @@ e79c8a009f2ecbdb6c70fd663d9aea9ee304a0d91f347e4169a756b8ad141b41  qwen-image-2.1
 cde456c72ea3ecebfc1be783300e972711d875e0c5f1bed33d42b66b156affa8  qwen-image-2.1-UC-Q8_0.gguf
 8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f  text_encoders/qwen3vl_8b_int8_convrot.safetensors
 bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9  vae/qwen_image_2.1_vae_bf16.safetensors
+0d264b3941185d00a74f75c4245521dae088ff1efc90ab8d1754e83f5844adb0  text_encoders/Qwen3VL-8B-Instruct-Q8_0.gguf
+ca524100ebf825c9a870db1c580d03879e0da0ab2541697e2458e64891cf9d38  text_encoders/mmproj-Qwen3VL-8B-Instruct-F16.gguf
 ```
 
 **Q4_K_M ou Q8_0 ?** Q8_0 est quasiment indiscernable de la pleine précision ; Q4_K_M perd un peu sur les détails fins
 et le texte écrit dans l'image (constat général sur les modèles de diffusion quantifiés, non mesuré sur celui-ci).
-En mémoire, comptez ≈ 14,6 Go de fichiers chargés avec Q4_K_M et ≈ 17,6 Go avec Q8_0, plus la mémoire de calcul.
+En mémoire, comptez ≈ 14,6 Go de fichiers chargés avec Q4_K_M et ≈ 17,6 Go avec Q8_0 (sur Mac, 0,5 Go de plus),
+plus la mémoire de calcul.
 
-**Correctif de l'encodeur.** Dans ce fichier int8 (format ComfyUI), la table d'embeddings est elle aussi quantifiée,
-ce que stable-diffusion.cpp (version `master-890-74988b2`) interprète mal : il plante au chargement.
+**Correctif de l'encodeur (Windows).** Dans ce fichier int8 (format ComfyUI), la table d'embeddings est elle aussi
+quantifiée, ce que stable-diffusion.cpp (version `master-890-74988b2`) interprète mal : il plante au chargement.
 `tools/fix_int8_te.py` en crée une copie `qwen3vl_8b_int8_convrot_embfix.safetensors` où seule cette table repasse
 en bf16 (dé-rotation Hadamard comprise) ; toutes les autres couches restent en int8. Même taille, même qualité.
-Une version future de stable-diffusion.cpp rendra probablement ce correctif inutile.
+La release `master-959` charge le fichier d'origine sans ce correctif (vérifié sur Mac) ; il deviendra inutile sous
+Windows quand le moteur Windows passera à cette version.
 
 **Réglages officiels du modèle** (fiche Qwen) : 40 étapes, guidance 1, sampler Euler, pas de prompt négatif,
 résolution native 2048×2048 (4:3 2400×1792, 3:2 2528×1696, 16:9 2752×1536 et inverses), jusqu'à 10 images de référence.
@@ -274,19 +286,26 @@ Pendant une génération, le temps restant se fonde sur la moyenne des derniers 
 Pour gagner du temps sans perte de qualité : branchez le portable sur secteur et choisissez le mode d'alimentation
 « Performances optimales » dans les paramètres Windows.
 
-**Mac à puce Apple.** Mesures sur une puce **Apple M6, 32 Go de mémoire unifiée**, moteur Metal, modèle Q4_K_M :
+**Mac à puce Apple.** Mesures sur une puce **Apple M6, 32 Go de mémoire unifiée**, moteur Metal (release
+`master-959`), encodeur GGUF, modèle Q4_K_M :
 
 | Génération | Durée mesurée |
 | --- | --- |
-| Texte → image 512×512, 8 étapes | ≈ 1 min 15 |
-| Édition 512×512 (1 référence), 8 étapes | ≈ 4 min 10 |
-| Dessin guidé 512×512 (masque ou annotation), 8 étapes | ≈ 4 min 10 |
+| Texte → image 512×512, 8 étapes | ≈ 30 s |
+| Édition 512×512 (1 référence), 8 étapes | ≈ 40 s |
+| Dessin guidé 512×512 (masque ou annotation), 8 étapes | ≈ 40 s |
+| Édition 1024×1024 (1 référence), 3 étapes | ≈ 1 min 40 |
 
-Ordres de grandeur : ≈ 3,3 s par étape en 512×512, 8,2 s en 768×768, 16,3 s en 1024×1024 (15,7 s avec Q8_0, qui
-n'est pas plus lent sur Metal) ; décodage de l'image ≈ 34 s en 512×512, 75 s en 768×768, 138 s en 1024×1024 ;
-encodage du texte 5 à 10 s. Chaque image de référence ajoute ≈ 2 min 20 d'encodage en 512×512 (encodeur Qwen3-VL sur
-le processeur) et double la longueur de la séquence, donc la durée des étapes ; le dessin guidé envoie lui aussi
-l'image au modèle comme référence.
+Ordres de grandeur : ≈ 3 s par étape en 512×512, 7,6 s en 768×768, 16,3 s en 1024×1024 (avec la version précédente
+du moteur, Q8_0 n'était pas plus lent que Q4_K_M sur Metal ; non remesuré) ; décodage de l'image ≈ 3 s en 512×512,
+6 s en 768×768, 12 s en 1024×1024 ; encodage du texte 1 à 2 s. Chaque image de référence ajoute 1 à 3 s d'encodage
+en 512×512, ≈ 5 s en 1024×1024, et le dessin guidé envoie lui aussi l'image au modèle comme référence. Grâce au cache
+de préfixe, une étape d'édition coûte presque autant qu'une étape de texte → image (3,3 s contre 2,9 s en 512×512,
+19 s contre 16 s en 1024×1024) ; seule la première étape lit en plus la référence (≈ 7 s de plus en 512×512, 22 s en
+1024×1024). Avant ces réglages (release `master-890`, encodeur int8 et VAE sur le processeur), une édition 512×512 de
+8 étapes prenait ≈ 4 min 10, dont ≈ 2 min 20 d'encodage de la référence et ≈ 33 s de décodage.
+En 2048×2048 avec une référence et le modèle Q8_0, la première étape a pris 6 min (mesurée) ; les suivantes
+devraient prendre ≈ 3 min chacune selon le modèle de coût (non mesurées).
 
 ## Dépannage
 
@@ -324,9 +343,13 @@ xattr -dr com.apple.quarantine sdcpp/metal
 à `master-959` lancé avec `--mmap` (`buffer is nil` dans `jobs/<identifiant>/sd-cli.log`) : relancez
 `venv/bin/python setup.py`, qui installe la version épinglée.
 
-**Mac : l'édition est longue avant la première étape.** L'encodeur Qwen3-VL tourne sur le processeur (Metal n'a pas de
-calcul int8 dans cette version de stable-diffusion.cpp) et lit chaque image de référence : comptez ≈ 2 min par
-référence en 512×512, davantage en grande résolution. Le texte → image n'est pas concerné.
+**Mac : l'édition est longue avant la première étape.** L'installation date d'avant l'encodeur GGUF : l'encodeur int8
+tourne alors sur le processeur, à ≈ 2 min par référence. Relancez `venv/bin/python setup.py`, qui installe le moteur
+`master-959` et l'encodeur GGUF.
+
+**Mac : en résolution Max avec des références, la mémoire est juste.** Sur 32 Go, une édition 2048×2048 fonctionne :
+le moteur libère l'encodeur après usage et décode l'image par tuiles (avertissements « retrying with spatial tiling »
+dans `jobs/<identifiant>/sd-cli.log`, sans effet sur le résultat).
 
 **Linux.** L'interface et le lanceur sont en Python pur, mais `setup.py` ne télécharge que les binaires Windows et
 macOS. Il faut récupérer la version Linux de stable-diffusion.cpp dans ses
@@ -338,8 +361,8 @@ aux plateformes connues de `setup.py` et `tools/launch.py`.
 ```text
 navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance──▶ sdcpp/<moteur>/sd-cli ──▶ outputs/*.png
    tools/ui/index.html        file d'attente, suivi des étapes,         Vulkan : diffusion + VAE   (Windows)
-                              aperçus, annulation                       Metal  : diffusion + VAE   (Mac)
-                                                                        CPU    : encodeur texte
+                              aperçus, annulation                       CPU    : encodeur texte    (Windows)
+                                                                        Metal  : tout              (Mac)
 ```
 
 - Chaque génération lance `sd-cli` (`sd-cli.exe` sous Windows). Avec `--mmap` : après la première fois, le modèle se
@@ -351,10 +374,14 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     chemin CUDA natif (RTX 20xx et plus récentes) ; les poids restent en RAM et sont copiés à la demande, ce qui
     s'adapte aux cartes à 8 Go ;
   - CPU : `--backend cpu`, secours sans GPU ;
-  - Metal (Mac) : `--backend diffusion=MTL0,vae=MTL0,te=cpu --diffusion-fa --mmap`, avec stable-diffusion.cpp
-    `master-959`. Choix mesurés sur une puce M6 : l'encodeur int8 n'a pas de noyau Metal (sd-cli plante s'il est placé
-    sur le GPU) ; le VAE décode 11 fois plus vite sur Metal que sur le processeur (3 s contre 37 s en 512×512) ;
-    `--mmap` fonctionne depuis `master-959` (les versions antérieures sortaient une image en bruit).
+  - Metal (Mac) : `--backend MTL0 --fa --mmap --params-backend te=disk --llm_vision <mmproj>`, avec
+    stable-diffusion.cpp `master-959` et l'encodeur GGUF. Choix mesurés sur une puce M6 : l'encodeur int8 n'a pas de
+    noyau Metal (sd-cli plante s'il est placé sur le GPU), l'encodeur GGUF y lit une référence 512×512 en ≈ 3 s ; le VAE
+    décode 11 fois plus vite sur Metal que sur le processeur (3 s contre 37 s en 512×512) ; `--fa` (flash attention
+    partout, tour vision comprise) évite une faute mémoire du GPU sur une référence en 2048×2048 ;
+    `--params-backend te=disk` libère les poids de l'encodeur après l'encodage, ce qui laisse la place au cache de
+    préfixe en très grande résolution ; `--mmap` fonctionne depuis `master-959` (les versions antérieures sortaient une
+    image en bruit).
 - API locale : `POST /api/generate`, `GET /api/job/<id>`, `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel`,
   `GET /api/status`.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés
@@ -376,7 +403,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── estimate.py       modèle de coût et calibration des estimations de durée
 │   ├── calibrate.py      générations de calibration (lancées par setup.py)
 │   ├── ui/index.html     l'interface
-│   ├── fix_int8_te.py    correctif de l'encodeur texte
+│   ├── fix_int8_te.py    correctif de l'encodeur texte int8 (Windows)
 │   ├── make_shortcut.py  crée Qwen-Image.lnk (Windows) ou Qwen-Image.command (Mac)
 │   ├── make_mask.py      génère un masque ou une annotation par script
 │   ├── make_test_image.py
@@ -402,8 +429,10 @@ Sur Mac : `venv/bin/python tests/run_tests.py --steps 8`.
 - **Qwen-Image-2.1** : Alibaba Qwen, [Qwen/Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1),
   sous **Qwen Research License**. Lisez-la avant tout usage : elle encadre notamment l'usage commercial.
 - **Variante non censurée et quantisation GGUF** : [abenzerps/Qwen-Image-2.1-Uncensored-Quantized](https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized)
-  (ex-Qwen-Image-2.1-GGUF), sous la même Qwen Research License ; encodeur et VAE issus de
+  (ex-Qwen-Image-2.1-GGUF), sous la même Qwen Research License ; encodeur int8 (Windows) et VAE issus de
   [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1).
+- **Encodeur GGUF (Mac)** : Alibaba Qwen, [Qwen/Qwen3-VL-8B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF),
+  sous licence Apache 2.0.
 - **Moteur** : [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (licence MIT).
 
 Le code de ce dépôt (interface, lanceur, scripts) est sous **licence MIT**, voir [LICENSE](LICENSE). Les poids du modèle restent soumis à leur

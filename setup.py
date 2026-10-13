@@ -52,6 +52,14 @@ TE = (COMFY + "text_encoders/qwen3vl_8b_int8_convrot.safetensors", "models/text_
 VAE = (COMFY + "vae/qwen_image_2.1_vae_bf16.safetensors", "models/vae/qwen_image_2.1_vae_bf16.safetensors",
        675509688, "bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9")
 TE_FIXED = "models/text_encoders/qwen3vl_8b_int8_convrot_embfix.safetensors"
+# macOS : Metal n'a pas de calcul int8, l'encodeur int8 ci-dessus y tournerait sur le processeur (≈ 2 min 30 par
+# référence en 512×512). L'encodeur GGUF officiel de Qwen (Q8_0) et sa tour vision (mmproj, F16) tournent sur le GPU.
+QWEN_VL = "https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/f982a07559d4a2f6c8744d840bf6fccab30eea96/"
+TE_GGUF = (QWEN_VL + "Qwen3VL-8B-Instruct-Q8_0.gguf", "models/text_encoders/Qwen3VL-8B-Instruct-Q8_0.gguf",
+           8709519456, "0d264b3941185d00a74f75c4245521dae088ff1efc90ab8d1754e83f5844adb0")
+TE_VISION = (QWEN_VL + "mmproj-Qwen3VL-8B-Instruct-F16.gguf", "models/text_encoders/mmproj-Qwen3VL-8B-Instruct-F16.gguf",
+             1159029824, "ca524100ebf825c9a870db1c580d03879e0da0ab2541697e2458e64891cf9d38")
+ENCODER = [TE_GGUF, TE_VISION] if MACOS else [TE]
 
 
 def human(n):
@@ -202,7 +210,7 @@ def step_config(backends, check_only):
 
 def step_models(versions, check_only):
     ok = True
-    for url, local, size, digest in [DIFFUSION[v] for v in versions] + [TE, VAE]:
+    for url, local, size, digest in [DIFFUSION[v] for v in versions] + ENCODER + [VAE]:
         dest = P(*local.split("/"))
         label = os.path.basename(local)
         if os.path.exists(dest) and os.path.getsize(dest) == size:
@@ -229,6 +237,13 @@ def step_models(versions, check_only):
 
 
 def step_fix(check_only):
+    """Windows : copie corrigée de l'encodeur int8 (voir tools/fix_int8_te.py). Le Mac prend l'encodeur GGUF."""
+    if MACOS:
+        old = [p for p in (P(*TE[1].split("/")), P(*TE_FIXED.split("/"))) if os.path.exists(p)]
+        if old:
+            print(f"[encodeur] l'encodeur int8 ne sert plus sur Mac ; ces fichiers peuvent être supprimés "
+                  f"({human(sum(os.path.getsize(p) for p in old))}) : " + ", ".join(os.path.relpath(p, ROOT) for p in old))
+        return True
     fixed = P(*TE_FIXED.split("/"))
     if os.path.exists(fixed):
         print("[correctif] encodeur texte corrigé : présent")
