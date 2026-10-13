@@ -957,7 +957,7 @@ function refreshNotif(){
   $('notifChk').checked=notifyOn && !denied; $('notifChk').disabled=denied;
   $('notifNote').textContent=denied ? '(bloquées : à autoriser dans les réglages du navigateur)' : ''; }
 function askNotifications(){
-  if(!canPush || !notifyOn || Notification.permission!=='default') return;
+  if(!canPush || !notifyOn || $('notifRow').hidden || Notification.permission!=='default') return;
   Notification.requestPermission().then(p=>{ if(p==='granted') pushSubscribe(); refreshNotif(); }); }
 $('notifChk').addEventListener('change', async ()=>{
   notifyOn=$('notifChk').checked; saveOpt();
@@ -965,6 +965,7 @@ $('notifChk').addEventListener('change', async ()=>{
   const p = Notification.permission==='default' ? await Notification.requestPermission() : Notification.permission;
   if(p==='granted') pushSubscribe(); refreshNotif(); });
 refreshNotif();
+if(canPush) fetch('/api/push/key').then(r=>{ if(!r.ok) $('notifRow').hidden=true; }).catch(()=>{});   // serveur sans pywebpush : pas d'interrupteur
 if(canPush && notifyOn && Notification.permission==='granted') pushSubscribe();
 // page rechargée ou quittée pendant une génération incognito : le serveur l'arrête et l'oublie
 addEventListener('pagehide', ()=>{ if(currentJob && currentIncog) forgetJob(currentJob, true); });

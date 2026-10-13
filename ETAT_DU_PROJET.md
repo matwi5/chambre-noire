@@ -21,6 +21,10 @@ Mis à jour le 13/10/2026.
     l'accès par IP (décision au porteur) ;
   - `start-ui-sdcpp.cmd` et `workflows/*.json` sont périmés (à mettre à jour ou à retirer) ; `sd_port` de
     `tools/config.json` n'est lu nulle part ;
+  - incognito et notification : si Android a fermé l'application en arrière-plan, toucher « Image incognito prête »
+    rouvre une page qui ne se rattache pas au job incognito ; l'image reste en mémoire jusqu'à la génération suivante
+    sans pouvoir être affichée. Piste : laisser la page reprendre une fois un job incognito terminé et jamais récupéré
+    (option écartée par le porteur le 13/10/2026, à lui reproposer avec cette raison) ;
   - `tests/run_tests.py --only edit` cherche `outputs/test_t2i_512.png`, que plus rien ne produit, et retombe sur
     `tests/test_scene.png` ;
 - **Ménage local** (sur le poste, hors dépôt) : la branche `fix/server-host-origin` et les worktrees de
@@ -35,6 +39,8 @@ Mis à jour le 13/10/2026.
   Mac). Vérifié : banc serveur (17 contrôles : message déchiffré, signature VAPID, aucun prompt, incognito, échec,
   appareil désabonné retiré), puis vraie notification envoyée par Google à un Chrome de test en arrière-plan et affichée
   par le service worker. Service relancé. À vérifier sur le téléphone (autorisation à la première génération).
+  Remise des notifications gardée 24 h si le téléphone est hors ligne ; interrupteur masqué si le serveur n'a pas
+  `pywebpush`.
 - Visionneuse sur le téléphone (dimensions du porteur, 367×760 à 2,5) : l'image dépassait sous le panneau des boutons
   (une grille CSS ne bornait pas `max-height:100%`, conteneur passé en flex) ; prompt retiré (Reprendre gardé) ; zoom
   au pincement temporaire, au-dessus de tout ; fenêtre des images d'entrée opaque ; couleur de la barre d'état calculée

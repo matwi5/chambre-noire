@@ -239,7 +239,7 @@ def notify_job(job):
         for sub in subs:
             try:
                 webpush(sub, json.dumps(payload, ensure_ascii=False), vapid_private_key=vapid,
-                        vapid_claims={"sub": "mailto:qwen-image-local@example.com"}, ttl=3600, timeout=15)
+                        vapid_claims={"sub": "mailto:qwen-image-local@example.com"}, ttl=86400, timeout=15)   # téléphone hors ligne : remise jusqu'à 24 h après
                 sent += 1
             except WebPushException as e:
                 if e.response is not None and e.response.status_code in (404, 410):   # appareil désabonné
