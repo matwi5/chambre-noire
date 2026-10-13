@@ -129,10 +129,57 @@
     background-position:calc(100% - 18px) 55%, calc(100% - 13px) 55%; background-size:5px 5px, 5px 5px; background-repeat:no-repeat; }
   select option { background:#1b1830; color:#f6f4ff; }
   textarea:focus, select:focus { outline:2px solid color-mix(in srgb, var(--iris) 55%, transparent); outline-offset:1px; }
-  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
-  @media (max-width: 560px) { .grid3 { grid-template-columns:1fr; gap:0; } }
-  .check { display:flex; align-items:center; gap:10px; margin-top:14px; font-size:14px; color:var(--ink2); }
-  .check input { width:20px; height:20px; accent-color:var(--iris); }
+  .col { display:flex; flex-direction:column; gap:14px; min-width:0; }
+  body.m-t2i #panes { display:none; }
+
+  /* ------------------------------------------------------------ compositeur : texte, pastilles de réglages, bouton */
+  .composer { padding:6px 6px 6px; }
+  .prompt { display:none; width:100%; min-height:118px; max-height:44dvh; border:0; background:transparent; resize:none; padding:12px 14px 10px;
+    font-size:17px; line-height:1.45; letter-spacing:-.005em; field-sizing:content; }
+  .prompt:focus { outline:none; }
+  .prompt::placeholder { color:var(--ink3); }
+  body.m-t2i .for-t2i, body.m-edit .for-edit, body.m-mask .for-mask { display:block; }
+  .composer:focus-within { border-color:color-mix(in srgb, var(--iris) 55%, var(--rim)); }
+  .opts { display:flex; gap:6px; padding:4px 8px 10px; overflow-x:auto; scrollbar-width:none; }
+  .opts::-webkit-scrollbar { display:none; }
+  .pill { flex:none; display:inline-flex; align-items:center; gap:7px; height:34px; padding:0 12px; border-radius:999px; cursor:pointer;
+    border:1px solid var(--rim); background:var(--field); color:var(--ink); font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .pill:active { transform:scale(.96); }
+  .pill.dim { color:var(--ink2); font-weight:500; }
+  .shape { display:inline-block; flex:none; border:1.6px solid currentColor; border-radius:3px; }
+  .pill .shape { opacity:.85; }
+  .go-row { display:flex; gap:8px; align-items:stretch; }
+  #go { flex:1; height:54px; font-size:17px; justify-content:center; }
+  #go small { font-weight:600; font-size:14px; opacity:.78; margin-left:2px; font-variant-numeric:tabular-nums; }
+  #go small.warn { color:#ffe2a8; opacity:1; }
+  #go svg { width:20px; height:20px; }
+  .btn-icon { flex:none; width:54px; height:54px; display:grid; place-items:center; border-radius:999px; cursor:pointer; color:var(--ink); }
+  .btn-icon svg { width:22px; height:22px; }
+  #cancel:disabled { display:none; }
+
+  /* ------------------------------------------------------------ panneau Réglages */
+  .ratios { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
+  .chips5 { display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; }
+  .opt { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; min-width:0; padding:10px 2px 9px;
+    border-radius:16px; border:1px solid var(--rim); background:var(--field); color:var(--ink2); cursor:pointer; transition:background .2s, color .2s, border-color .2s; }
+  .opt b { font-size:14px; color:var(--ink); font-weight:650; }
+  .opt small { font-size:10.5px; letter-spacing:-.01em; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .opt.ratio { padding-top:12px; } .opt.ratio .shape { margin-bottom:5px; }
+  .opt.near::after { content:""; position:absolute; top:7px; right:7px; width:6px; height:6px; border-radius:50%; background:var(--iris2); }
+  .opt.on { color:var(--ink); border-color:color-mix(in srgb, var(--iris) 75%, transparent);
+    background:linear-gradient(180deg, color-mix(in srgb, var(--iris) 34%, transparent), color-mix(in srgb, var(--iris) 16%, transparent));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.25); }
+  .chips5 .opt b { font-size:13px; }
+  #stepOpts .opt b { font-size:17px; }
+  .switch { display:flex; align-items:center; gap:12px; margin:18px 2px 0; font-size:15px; color:var(--ink); cursor:pointer; }
+  .switch input { position:absolute; opacity:0; pointer-events:none; }
+  .switch .track { flex:none; position:relative; width:50px; height:30px; border-radius:999px; background:var(--field); border:1px solid var(--rim); transition:background .25s; }
+  .switch .track::after { content:""; position:absolute; top:2px; left:2px; width:24px; height:24px; border-radius:50%; background:#fff;
+    box-shadow:0 2px 6px rgba(0,0,0,.3); transition:transform .35s var(--spring); }
+  .switch input:checked + .track { background:var(--iris); }
+  .switch input:checked + .track::after { transform:translateX(20px); }
+  .switch input:focus-visible + .track { outline:2px solid var(--iris); outline-offset:2px; }
+  .switch small { color:var(--ink2); }
   .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:13px 22px; border:0; border-radius:999px; cursor:pointer; text-decoration:none;
     font-weight:700; color:var(--on-iris); background:linear-gradient(180deg, color-mix(in srgb, var(--iris2) 70%, var(--iris)), var(--iris));
     box-shadow:inset 0 1px 0 rgba(255,255,255,.45), inset 0 -2px 6px rgba(40,10,120,.35), 0 10px 26px -8px color-mix(in srgb, var(--iris) 80%, transparent);
@@ -142,8 +189,7 @@
   .btn.small { padding:8px 14px; font-size:14px; }
   .btn:disabled { opacity:.45; cursor:default; }
   .actions { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; align-items:center; }
-  #go { flex:1; }
-  .estimate { margin-top:14px; padding:12px 16px; border-radius:var(--r-m); background:var(--field); font-size:14px; display:flex; justify-content:space-between; gap:12px; align-items:center; color:var(--ink2); }
+  .estimate { margin-top:18px; padding:12px 16px; border-radius:var(--r-m); background:var(--field); font-size:14px; display:flex; justify-content:space-between; gap:12px; align-items:center; color:var(--ink2); }
   .estimate b { font-size:16px; white-space:nowrap; color:var(--ink); }
   .estimate.warn { outline:1px solid color-mix(in srgb, var(--warn) 60%, transparent); }
   .drop { border:1.5px dashed var(--rim); border-radius:var(--r-m); padding:18px; text-align:center; color:var(--ink2); font-size:14px; cursor:pointer; background:var(--field); }
@@ -209,19 +255,14 @@
 </header>
 
 <main>
-<section class="card">
-
-  <div class="pane active" id="pane-t2i">
-    <label>Description</label>
-    <textarea id="t2i_prompt">A cozy wooden cabin in a snowy forest at dusk, warm light in the windows, photorealistic</textarea>
-  </div>
+<div class="col">
+<section class="card" id="panes">
+  <div class="pane active" id="pane-t2i"></div>
 
   <div class="pane" id="pane-edit">
     <label>Images de référence (1 à 10)</label>
     <div class="drop" id="edit_drop">Cliquer ou déposer des images<input type="file" id="edit_files" accept="image/*" multiple></div>
     <div class="thumbs" id="edit_thumbs"></div>
-    <label>Instruction</label>
-    <textarea id="edit_prompt">Replace the sky with a dramatic orange sunset, keep everything else unchanged</textarea>
   </div>
 
   <div class="pane" id="pane-mask">
@@ -238,28 +279,25 @@
       <option value="mask">Masque — seule la zone peinte change</option>
       <option value="annotation">Annotation — le trait rouge guide le modèle</option>
     </select>
-    <label>Instruction</label>
-    <textarea id="mask_prompt">Replace the object in the painted area with a large red hot air balloon, keep everything else unchanged</textarea>
   </div>
 
   <div class="pane" id="pane-hist">
     <div class="hist-head"><span id="histCount">…</span><button class="btn secondary small" onclick="loadHistory()">Actualiser</button></div>
     <div class="hgrid" id="histGrid"></div>
   </div>
+</section>
 
-  <div class="grid3 gen">
-    <div><label>Format</label><select id="ratio"></select></div>
-    <div><label>Résolution</label><select id="res"></select></div>
-    <div><label>Étapes</label><select id="steps"></select></div>
-  </div>
-  <label class="check gen"><input type="checkbox" id="previewChk"> Aperçu toutes les 5 étapes <span id="previewCost"></span></label>
-  <div class="estimate gen" id="estimate"><span id="estText"></span><b id="estTime"></b></div>
-
-  <div class="actions gen">
-    <button class="btn" id="go">Générer</button>
-    <button class="btn secondary" id="cancel" disabled>Annuler</button>
+<section class="card composer gen" id="composer">
+  <textarea id="t2i_prompt" class="prompt for-t2i" rows="4" aria-label="Description" placeholder="Décrivez l'image, de préférence en anglais : sujet, lieu, lumière, style…"></textarea>
+  <textarea id="edit_prompt" class="prompt for-edit" rows="4" aria-label="Instruction" placeholder="Que faut-il changer ? Ex. : Replace the sky with a dramatic orange sunset, keep everything else unchanged"></textarea>
+  <textarea id="mask_prompt" class="prompt for-mask" rows="4" aria-label="Instruction" placeholder="Que mettre dans la zone peinte ? Ex. : Replace the object in the painted area with a stone fountain"></textarea>
+  <div class="opts" id="pills"></div>
+  <div class="go-row">
+    <button class="btn" id="go"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 3.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7Z"/><path d="M18.5 15c.35 1.8 1.2 2.65 3 3-1.8.35-2.65 1.2-3 3-.35-1.8-1.2-2.65-3-3 1.8-.35 2.65-1.2 3-3Z"/></svg><span>Générer</span><small id="goEta"></small></button>
+    <button class="btn-icon glass" id="cancel" disabled aria-label="Annuler la génération"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   </div>
 </section>
+</div>
 
 <section class="card" id="result">
   <div id="resultEmpty"><div class="big">🖼️</div>Le résultat s'affichera ici</div>
@@ -288,6 +326,15 @@
 </nav>
 
 <div class="scrim" id="scrim" onclick="closeSheet()"></div>
+<section class="sheet glass" id="setSheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+  <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
+  <div class="sheet-head"><h2 id="setTitle">Réglages</h2><button class="btn small" onclick="closeSheet()">OK</button></div>
+  <h3>Format</h3><div class="ratios" id="ratioOpts"></div>
+  <h3>Résolution</h3><div class="chips5" id="resOpts"></div>
+  <h3>Étapes</h3><div class="chips5" id="stepOpts"></div>
+  <label class="switch"><input type="checkbox" id="previewChk"><span class="track"></span><span>Aperçu toutes les 5 étapes <small id="previewCost"></small></span></label>
+  <div class="estimate" id="estimate"><span id="estText"></span><b id="estTime"></b></div>
+</section>
 <section class="sheet glass" id="engineSheet" role="dialog" aria-modal="true" aria-labelledby="engineTitle">
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
   <div class="sheet-head"><h2 id="engineTitle">Moteur</h2><button class="btn secondary small" onclick="closeSheet()">Fermer</button></div>
@@ -328,9 +375,13 @@ function dimsExact(iw, ih, scale){ const px=MAX_PIXELS*scale*scale, r=iw/ih, h0=
     if(!best || err<best.err-1e-9 || (Math.abs(err-best.err)<1e-9 && area<best.area)) best={w,h,err,area}; }
   return [best.w, best.h]; }
 function dimsFor(key, scale){ const im=singleImage(); if(key==='image' && im) return dimsExact(im.w, im.h, scale); const [w,h]=RATIOS[key in RATIOS ? key : '1:1']; return [round32(w*scale), round32(h*scale)]; }
-const resSel = () => RES.find(p=>p.k===$('res').value) || RES[1];
-const stepsSel = () => STEPS.find(p=>p.k===$('steps').value) || STEPS[1];
-function currentDims(){ return dimsFor($('ratio').value, resSel().scale); }
+// réglages choisis, retenus par ce navigateur d'une visite à l'autre
+const opt = { ratio:'1:1', res:'medium', steps:'medium' };
+try{ Object.assign(opt, JSON.parse(localStorage.getItem('qwen-opt')||'{}')); }catch(e){}
+function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt, preview:$('previewChk').checked})); }catch(e){} }
+const resSel = () => RES.find(p=>p.k===opt.res) || RES[1];
+const stepsSel = () => STEPS.find(p=>p.k===opt.steps) || STEPS[1];
+function currentDims(){ return dimsFor(opt.ratio, resSel().scale); }
 // pixels d'une référence telle que sd.cpp la donne au modèle : ramenée à la surface de la sortie, côtés multiples de 32
 function refPx(rw, rh, w, h){ const vw=Math.sqrt(w*h*rw/rh), vh=vw*rh/rw, snap=x=>Math.max(32, Math.floor(x/32+0.5)*32); return snap(vw)*snap(vh); }
 // références et image de départ envoyées au moteur pour le mode courant (voir buildBody)
@@ -348,30 +399,43 @@ function parts(w, h, steps, inp, preview){
   return { step, enc, vae, previews, total: enc + steps*step + vae + previews*vae }; }
 function fmt(s){ if(s<90) return Math.round(s)+' s'; if(s<3600) return Math.round(s/60)+' min'; return (s/3600).toFixed(1).replace('.',',')+' h'; }
 
+const RATIO_NAMES = { '1:1':'Carré', '4:3':'Paysage', '3:4':'Portrait', '3:2':'Paysage', '2:3':'Portrait', '16:9':'Large', '9:16':'Vertical' };
+const shape = (w, h, size) => { const k=size/Math.max(w,h); return `<i class="shape" style="width:${Math.max(6,Math.round(w*k))}px;height:${Math.max(6,Math.round(h*k))}px"></i>`; };
 function refreshChoices(){
   const im=singleImage(); const nrefs = mode==='edit' ? editImages.length : 0; const pv=$('previewChk').checked;
-  const rs=$('ratio'); let curR=rs.value||'1:1'; if(curR==='image' && !im) curR='1:1'; if(forceImageRatio && im){ curR='image'; forceImageRatio=false; } rs.innerHTML='';
-  if(im){ const o=document.createElement('option'); o.value='image'; o.textContent=`★ Ratio de l'image (${im.w}×${im.h})`; rs.appendChild(o); }
+  if(opt.ratio==='image' && !im) opt.ratio='1:1'; if(!(opt.ratio in RATIOS) && opt.ratio!=='image') opt.ratio='1:1';
+  if(forceImageRatio && im) opt.ratio='image'; forceImageRatio=false;
   const near = im ? closestRatio(im.w, im.h) : null;
-  Object.keys(RATIOS).forEach(r=>{ const o=document.createElement('option'); o.value=r; o.textContent=RATIO_LABELS[r]+(r===near?' ≈ image':''); rs.appendChild(o); });
-  rs.value=curR;
+  const ratioDims = r => r==='image' ? [im.w, im.h] : RATIOS[r];
+  $('ratioOpts').innerHTML = (im ? ['image'] : []).concat(Object.keys(RATIOS)).map(r=>{ const [rw,rh]=ratioDims(r), on=r===opt.ratio;
+    return `<button class="opt ratio${on?' on':''}${r===near?' near':''}" data-k="${r}" aria-pressed="${on}"${r===near?' title="Proche des proportions de l\'image"':''}>${shape(rw,rh,26)}<b>${r==='image'?'Image':r}</b><small>${r==='image'?im.w+'×'+im.h:RATIO_NAMES[r]}</small></button>`; }).join('');
   const steps=stepsSel().steps; const [w,h]=currentDims(); const inp=inputsFor(w, h);
-  const sr=$('res'); const curRes=sr.value||'medium'; sr.innerHTML='';
-  RES.forEach(p=>{ const [pw,ph]=dimsFor(rs.value, p.scale); const o=document.createElement('option'); o.value=p.k; o.textContent=`${p.label} · ${pw}×${ph}`; sr.appendChild(o); }); sr.value=curRes;
-  const ss=$('steps'); const curS=ss.value||'medium'; ss.innerHTML='';
+  $('resOpts').innerHTML = RES.map(p=>{ const [pw,ph]=dimsFor(opt.ratio, p.scale), on=p.k===opt.res;
+    return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}"><b>${p.label}</b><small>${pw}×${ph}</small></button>`; }).join('');
   const approx = s => E ? '≈ '+fmt(s) : '…';     // avant le premier /api/status, pas de coefficients
-  STEPS.forEach(p=>{ const o=document.createElement('option'); o.value=p.k; o.textContent=`${p.label} · ${p.steps} étapes · ${approx(E && parts(w,h,p.steps,inp,pv).total)}`; ss.appendChild(o); }); ss.value=curS;
+  $('stepOpts').innerHTML = STEPS.map(p=>{ const on=p.k===opt.steps;
+    return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}" title="${p.label}"><b>${p.steps}</b><small>${approx(E && parts(w,h,p.steps,inp,pv).total)}</small></button>`; }).join('');
+  const [rw,rh] = ratioDims(opt.ratio);
+  $('pills').innerHTML = `<button class="pill" data-open>${shape(rw,rh,16)}${opt.ratio==='image'?'Image':opt.ratio}</button>`
+    + `<button class="pill" data-open>${w}×${h}</button><button class="pill" data-open>${steps} étapes</button>`
+    + (pv ? `<button class="pill" data-open>Aperçus</button>` : '') + (nrefs>1 ? `<button class="pill dim" data-open>${nrefs} références</button>` : '');
   $('estText').textContent=`${w}×${h} · ${steps} étapes${nrefs>1?' · '+nrefs+' références':''}`;
-  if(!E){ estSeconds=0; $('previewCost').textContent=''; $('estTime').textContent='…'; return; }
+  if(!E){ estSeconds=0; $('previewCost').textContent=''; $('estTime').textContent=$('goEta').textContent='…'; return; }
   const pr=parts(w,h,steps,inp,pv); estSeconds=pr.total; stepSeconds=pr.step; vaeSeconds=pr.vae;
   $('previewCost').textContent = `(+ ${fmt(parts(w,h,steps,inp,true).previews*pr.vae)})`;
-  $('estTime').textContent='≈ '+fmt(estSeconds); $('estimate').classList.toggle('warn', estSeconds>3600);
+  $('estTime').textContent=$('goEta').textContent='≈ '+fmt(estSeconds);
+  $('estimate').classList.toggle('warn', estSeconds>3600); $('goEta').classList.toggle('warn', estSeconds>3600);
 }
 (function init(){
-  Object.keys(RATIOS).forEach(r=>{ const o=document.createElement('option'); o.value=r; $('ratio').appendChild(o); }); $('ratio').value='1:1';
-  RES.forEach(p=>{ const o=document.createElement('option'); o.value=p.k; $('res').appendChild(o); }); $('res').value='medium';
-  STEPS.forEach(p=>{ const o=document.createElement('option'); o.value=p.k; $('steps').appendChild(o); }); $('steps').value='medium';
-  ['ratio','res','steps','previewChk','mask_mode'].forEach(id=>$(id).addEventListener('change', refreshChoices)); refreshChoices();
+  try{ $('previewChk').checked = !!JSON.parse(localStorage.getItem('qwen-opt')||'{}').preview; }catch(e){}
+  [['ratioOpts','ratio'],['resOpts','res'],['stepOpts','steps']].forEach(([id,key])=>$(id).addEventListener('click', e=>{
+    const b=e.target.closest('[data-k]'); if(!b) return; opt[key]=b.dataset.k; saveOpt(); refreshChoices(); }));
+  $('pills').addEventListener('click', e=>{ if(e.target.closest('[data-open]')) openSheet('setSheet'); });
+  ['previewChk','mask_mode'].forEach(id=>$(id).addEventListener('change', ()=>{ saveOpt(); refreshChoices(); })); refreshChoices();
+  // brouillons des trois textes, retenus par ce navigateur
+  ['t2i_prompt','edit_prompt','mask_prompt'].forEach(id=>{ const t=$(id);
+    try{ t.value = localStorage.getItem('qwen-'+id) || ''; }catch(e){}
+    t.addEventListener('input', ()=>{ try{ localStorage.setItem('qwen-'+id, t.value); }catch(e){} }); });
 })();
 function suggestRatio(){ forceImageRatio=!!singleImage(); refreshChoices(); }
 
