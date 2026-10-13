@@ -203,7 +203,7 @@ Sous le texte, trois pastilles résument le format, la résolution et les étape
 | Réglage | Choix | Effet |
 | --- | --- | --- |
 | **Format** | 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16, et « Image » (les proportions de l'image) quand une seule image est chargée | Proportions de l'image produite |
-| **Résolution** | Low ≈512 px · Medium ≈768 px · **High ≈1024 px** (par défaut) · XHigh ≈1536 px · Max 2K natif | Nombre de pixels ; chaque option affiche les dimensions exactes |
+| **Résolution** | 360p (512×512) · 540p (768×768) · **720p** (1024×1024, par défaut) · 1080p (1536×1536) · 1440p (2048×2048, 2K natif du modèle) | Nombre de pixels, nommé d'après le format vidéo qui en compte autant (720p : ≈ 0,9 à 1 million de pixels) ; les dimensions dépendent du format, chaque option les affiche |
 | **Étapes** | Low 8 · Medium 12 · High 20 · XHigh 30 · **Max 40** (par défaut, réglage officiel du modèle) | Finesse des détails ; chaque option affiche le **temps estimé** |
 | **Aperçu toutes les 5 étapes** | interrupteur, activé par défaut | Montre l'image en cours de formation ; coût affiché à côté |
 
@@ -212,7 +212,7 @@ active le [mode incognito](#mode-incognito) : l'interface passe alors en thème 
 en fond, comme la navigation privée des navigateurs. Le navigateur retient les réglages choisis,
 le mode incognito et le texte en cours de chaque onglet (sauf en incognito).
 
-Conseil : **Medium + 12 étapes** pour chercher la bonne formulation, puis montez la résolution et les étapes pour la version finale.
+Conseil : **540p + 12 étapes** pour chercher la bonne formulation, puis montez la résolution et les étapes pour la version finale.
 Les descriptions en **anglais, longues et précises** donnent les meilleurs résultats.
 
 Pendant la génération, l'image en cours affiche l'étape, le temps restant et un bouton d'annulation ; le bouton
@@ -325,7 +325,7 @@ Windows quand le moteur Windows passera à cette version.
 
 **Réglages officiels du modèle** (fiche Qwen) : 40 étapes, guidance 1, sampler Euler, pas de prompt négatif,
 résolution native 2048×2048 (4:3 2400×1792, 3:2 2528×1696, 16:9 2752×1536 et inverses), jusqu'à 10 images de référence.
-L'interface applique ces réglages ; les presets Max correspondent exactement aux tailles officielles.
+L'interface applique ces réglages ; la résolution 1440p correspond exactement aux tailles officielles.
 
 ## Performances
 
@@ -342,11 +342,11 @@ Un GPU intégré est lent pour un modèle de cette taille. Mesures de référenc
 Ordres de grandeur sur cette machine : ≈ 16 à 20 s par étape en 512×512, ≈ 2 min par étape estimée en 1024×1024
 (non mesurée : extrapolée du rapport mesuré entre texte → image et édition) ; une étape d'édition coûte plus du double
 d'une étape de texte → image (l'image de référence double la séquence à traiter).
-Le preset Max (2K, 40 étapes) prend plusieurs heures : l'interface demande confirmation au-delà d'une heure.
+La résolution 1440p (2K natif) avec 40 étapes prend plusieurs heures : l'interface demande confirmation au-delà d'une heure.
 Sur une carte NVIDIA avec le moteur CUDA, comptez de l'ordre de 1 à 2 s par étape en 1024×1024 (estimation non mesurée,
-RTX 4060/4070) : une image High de 20 étapes en moins d'une minute.
+RTX 4060/4070) : une image 720p de 20 étapes en moins d'une minute.
 
-**Estimations de temps calibrées.** Les temps affichés à côté de chaque preset viennent d'un modèle de coût
+**Estimations de temps calibrées.** Les temps affichés à côté de chaque réglage viennent d'un modèle de coût
 (`tools/estimate.py`) :
 
 - une étape coûte a·n + b·n², où n est la longueur de la séquence traitée : l'image produite plus chaque image de
@@ -416,7 +416,7 @@ La liste doit contenir une ligne `Vulkan0`. Sinon, mettez à jour le pilote grap
 `--backend cpu`. Sur Mac, `sdcpp/metal/sd-cli --list-devices` doit afficher une ligne `MTL0`.
 
 **Le PC rame ou la génération s'arrête pendant les grandes résolutions.** Le modèle occupe environ 14 Go de mémoire
-pendant la génération. Fermez les applications gourmandes, ou restez en Medium/High.
+pendant la génération. Fermez les applications gourmandes, ou restez en 540p ou 720p.
 
 **L'antivirus bloque `sd-cli.exe`.** Ce sont les binaires officiels de stable-diffusion.cpp, vérifiés par SHA256 à
 l'installation ; demandez une exception à votre service informatique si nécessaire.
@@ -436,7 +436,7 @@ xattr -dr com.apple.quarantine sdcpp/metal
 tourne alors sur le processeur, à ≈ 2 min par référence. Relancez `venv/bin/python setup.py`, qui installe le moteur
 `master-959` et l'encodeur GGUF.
 
-**Mac : en résolution Max avec des références, la mémoire est juste.** Sur 32 Go, une édition 2048×2048 fonctionne :
+**Mac : en résolution 1440p avec des références, la mémoire est juste.** Sur 32 Go, une édition 2048×2048 fonctionne :
 le moteur libère l'encodeur après usage et décode l'image par tuiles (avertissements « retrying with spatial tiling »
 dans `jobs/<identifiant>/sd-cli.log`, sans effet sur le résultat).
 

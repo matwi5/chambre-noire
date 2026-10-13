@@ -559,7 +559,8 @@
 // ------------------------------------------------------------ valeurs fixes
 const RATIOS = { '1:1':[2048,2048], '4:3':[2400,1792], '3:4':[1792,2400], '3:2':[2528,1696], '2:3':[1696,2528], '16:9':[2752,1536], '9:16':[1536,2752] };
 const RATIO_LABELS = { '1:1':'Carré 1:1', '4:3':'Paysage 4:3', '3:4':'Portrait 3:4', '3:2':'Paysage 3:2', '2:3':'Portrait 2:3', '16:9':'Large 16:9', '9:16':'Vertical 9:16' };
-const RES   = [ {k:'low',label:'Low',scale:0.25}, {k:'medium',label:'Medium',scale:0.375}, {k:'high',label:'High',scale:0.5}, {k:'xhigh',label:'XHigh',scale:0.75}, {k:'max',label:'Max',scale:1.0} ];
+// libellés : format vidéo au nombre de pixels le plus proche (640×360, 960×540, 1280×720, 1920×1080, 2560×1440)
+const RES   = [ {k:'low',label:'360p',scale:0.25}, {k:'medium',label:'540p',scale:0.375}, {k:'high',label:'720p',scale:0.5}, {k:'xhigh',label:'1080p',scale:0.75}, {k:'max',label:'1440p',scale:1.0} ];
 const STEPS = [ {k:'low',label:'Low',steps:8}, {k:'medium',label:'Medium',steps:12}, {k:'high',label:'High',steps:20}, {k:'xhigh',label:'XHigh',steps:30}, {k:'max',label:'Max',steps:40} ];
 const CFG = 1, MAX_PIXELS = 2048*2048, MAX_INPUT_SIDE = 2048, PREVIEW_EVERY = 5;
 // coefficients d'estimation envoyés par /api/status (tools/estimate.py) : valeurs de départ du moteur, puis ajustées
@@ -628,7 +629,7 @@ function refreshChoices(){
     return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}" title="${p.label}"><b>${p.steps}</b><small>${approx(E && parts(w,h,p.steps,inp,pv).total)}</small></button>`; }).join('');
   const [rw,rh] = ratioDims(opt.ratio);
   $('pills').innerHTML = `<button class="pill" data-open>${shape(rw,rh,16)}${opt.ratio==='image'?'Image':opt.ratio}</button>`
-    + `<button class="pill" data-open>${w}×${h}</button><button class="pill" data-open>${steps} étapes</button>`
+    + `<button class="pill" data-open title="${w}×${h}">${resSel().label}</button><button class="pill" data-open>${steps} étapes</button>`
     + (pv ? `<button class="pill" data-open>Aperçus</button>` : '');
   $('estText').textContent=`${w}×${h} · ${steps} étapes${nrefs>1?' · '+nrefs+' références':''}`;
   if(!E){ estSeconds=0; $('previewCost').textContent=''; $('estTime').textContent=$('goEta').textContent='…'; return; }

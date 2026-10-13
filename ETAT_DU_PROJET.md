@@ -31,7 +31,9 @@ Mis à jour le 13/10/2026.
 
 ### 2026-10-13
 
-- Interface : réglages par défaut High (≈1024 px), 40 étapes et aperçus toutes les 5 étapes ; l'incognito passe du
+- Interface : niveaux de résolution renommés d'après le format vidéo au nombre de pixels le plus proche (360p, 540p,
+  720p, 1080p, 1440p) ; la pastille sous le texte affiche ce libellé, dimensions exactes au survol et dans les Réglages.
+- Interface : réglages par défaut 720p (≈1024 px), 40 étapes et aperçus toutes les 5 étapes ; l'incognito passe du
   panneau Réglages à un bouton à droite de Générer. Les réglages retenus avant ce changement sont remis une fois à ces
   défauts (format et incognito gardés). Vérifié par 11 contrôles dans Chrome sans écran.
 - Incognito : l'interface passe en thème graphite sombre (couleur de la barre du navigateur comprise) tant que le mode
