@@ -546,6 +546,7 @@ def run_job(job):
     job["finished"] = time.time()
     job["seconds"] = round(job["finished"] - job["started"], 1)
     if job.get("status") == "cancelled":
+        discard_cancelled(job)
         return
     if rc == 0 and os.path.exists(job["out"]):
         try:
@@ -585,6 +586,16 @@ def run_job(job):
         print("[job] échec : " + (f"génération incognito, sd-cli code {rc}" if job.get("incognito") else job["error"]), flush=True)
 
 
+def discard_cancelled(job):
+    """Génération annulée : rien n'en reste sur le disque, ni le dossier de travail (images d'entrée, aperçus, journal du
+    moteur), ni une image finale que sd-cli aurait commencé à écrire avant d'être arrêté."""
+    shutil.rmtree(job["dir"], ignore_errors=True)
+    try:
+        os.remove(job["out"])
+    except OSError:
+        pass
+
+
 def forget_files(job):
     """Fin d'un job incognito : supprime son dossier de travail et retire de la mémoire le prompt, les images d'entrée et
     la ligne de commande ; seule l'image finale (job["png"]) reste, jusqu'à sa récupération par l'interface."""
@@ -597,7 +608,8 @@ def worker():
     while True:
         job = S.q.get()
         try:
-            if job.get("status") == "cancelled":
+            if job.get("status") == "cancelled":       # annulée avant de démarrer
+                discard_cancelled(job)
                 continue
             S.current = job["id"]
             run_job(job)

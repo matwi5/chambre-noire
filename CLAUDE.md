@@ -71,6 +71,9 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
   (`/api/history`) est la liste des PNG de `outputs/` croisée avec le journal ; miniatures dans `outputs/.thumbs/`.
   Les images d'entrée (`init.png`, `ref_N.png`) sont copiées du dossier de travail vers `outputs/.inputs/<image>/` en
   fin de job (`save_inputs`, et au démarrage pour les dossiers encore présents) ; `/api/delete` les supprime avec l'image.
+  Une génération annulée (en cours ou en file) ne laisse rien : `discard_cancelled` supprime son dossier de travail et
+  une image finale déjà écrite. Le statut `cancelled` est posé avant que le moteur soit arrêté : un test doit attendre
+  que `S.current` ait changé avant de regarder le disque.
 - **Notifications** (Web Push, `pywebpush`) : `notify_job` envoie depuis `worker()`, dans un thread, à la fin d'un job
   terminé ou en échec, à chaque abonnement de `tools/push_subscriptions.json` ; clé VAPID `tools/push_vapid.pem` créée au
   premier usage. Le service worker (`tools/ui/sw.js`) affiche la notification seulement si aucune fenêtre de

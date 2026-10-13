@@ -229,7 +229,8 @@ le mode incognito et le texte en cours de chaque onglet (sauf en incognito).
 Conseil : **540p + 12 étapes** pour chercher la bonne formulation, puis montez la résolution et les étapes pour la version finale.
 Les descriptions en **anglais, longues et précises** donnent les meilleurs résultats.
 
-Pendant la génération, l'image en cours affiche l'étape, le temps restant et un bouton d'annulation ; le bouton
+Pendant la génération, l'image en cours affiche l'étape, le temps restant et un bouton d'annulation (une génération
+annulée ne laisse aucun fichier : ni image, ni images d'entrée, ni aperçus, ni journal du moteur) ; le bouton
 **Générer** se remplit au fil des étapes. La pastille d'état en haut suit aussi la progression, depuis n'importe quel
 onglet : un appui ramène à l'image. On peut recharger la page sans rien perdre : elle se rattache à la génération en cours (sauf en incognito).
 Le mode incognito ne peut pas être changé pendant une génération. Chaque image est enregistrée en PNG dans

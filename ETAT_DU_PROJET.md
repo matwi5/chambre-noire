@@ -39,6 +39,9 @@ Mis à jour le 13/10/2026.
 
 ### 2026-10-13
 
+- Annulation : le dossier de travail (images d'entrée, aperçus, journal du moteur) et une image finale déjà écrite sont
+  supprimés, que la génération soit en cours ou en file d'attente. Banc avec un faux moteur : 9 contrôles, 4 passages
+  (dont annulation juste après l'écriture de l'image, et génération menée au bout qui garde tout). Service relancé.
 - Notification de fin de génération (Web Push, `pywebpush` ajouté à `requirements.txt` et installé dans le `venv` du
   Mac). Vérifié : banc serveur (17 contrôles : message déchiffré, signature VAPID, aucun prompt, incognito, échec,
   appareil désabonné retiré), puis vraie notification envoyée par Google à un Chrome de test en arrière-plan et affichée
