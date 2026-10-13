@@ -154,8 +154,6 @@
     border:1px solid var(--rim); background:var(--field); color:var(--ink); font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; }
   .pill:active { transform:scale(.96); }
   .pill.dim { color:var(--ink2); font-weight:500; }
-  .pill.incog { border-color:color-mix(in srgb, var(--iris) 75%, transparent); background:color-mix(in srgb, var(--iris) 26%, var(--field)); }
-  .pill.incog svg { width:16px; height:16px; }
   .shape { display:inline-block; flex:none; border:1.6px solid currentColor; border-radius:3px; }
   .pill .shape { opacity:.85; }
   .go-row { display:flex; gap:8px; align-items:stretch; }
@@ -166,6 +164,9 @@
   .btn-icon { flex:none; width:54px; height:54px; display:grid; place-items:center; border-radius:999px; cursor:pointer; color:var(--ink); }
   .btn-icon svg { width:22px; height:22px; }
   #cancel:disabled { display:none; }
+  #incog { color:var(--ink2); }
+  #incog.on { color:var(--ink); border-color:color-mix(in srgb, var(--iris) 75%, transparent);
+    background:linear-gradient(180deg, color-mix(in srgb, var(--iris) 42%, transparent), color-mix(in srgb, var(--iris) 22%, transparent)); }
 
   /* ------------------------------------------------------------ panneau Réglages */
   .ratios { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
@@ -452,6 +453,7 @@
   <div class="opts" id="pills"></div>
   <div class="go-row">
     <button class="btn" id="go"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 3.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7Z"/><path d="M18.5 15c.35 1.8 1.2 2.65 3 3-1.8.35-2.65 1.2-3 3-.35-1.8-1.2-2.65-3-3 1.8-.35 2.65-1.2 3-3Z"/></svg><span id="goLabel">Générer</span><small id="goEta"></small></button>
+    <button class="btn-icon glass" id="incog" aria-pressed="false" aria-label="Incognito : image gardée nulle part sur le Mac" title="Incognito"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18"/><path d="M6 12l1.6-6.2a1.5 1.5 0 0 1 2-1l2.4 1 2.4-1a1.5 1.5 0 0 1 2 1L18 12"/><circle cx="7.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/><path d="M10 16.5h4"/></svg></button>
     <button class="btn-icon glass" id="cancel" disabled aria-label="Annuler la génération"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   </div>
 </section>
@@ -527,7 +529,6 @@
   <h3>Résolution</h3><div class="chips5" id="resOpts"></div>
   <h3>Étapes</h3><div class="chips5" id="stepOpts"></div>
   <label class="switch"><input type="checkbox" id="previewChk"><span class="track"></span><span>Aperçu toutes les 5 étapes <small id="previewCost"></small></span></label>
-  <label class="switch"><input type="checkbox" id="incogChk"><span class="track"></span><span>Incognito <small>image ni gardée sur le Mac ni dans la galerie ; perdue à la génération suivante ou au rechargement de la page</small></span></label>
   <div class="estimate" id="estimate"><span id="estText"></span><b id="estTime"></b></div>
 </section>
 <section class="sheet glass" id="engineSheet" role="dialog" aria-modal="true" aria-labelledby="engineTitle">
@@ -571,9 +572,13 @@ function dimsExact(iw, ih, scale){ const px=MAX_PIXELS*scale*scale, r=iw/ih, h0=
   return [best.w, best.h]; }
 function dimsFor(key, scale){ const im=singleImage(); if(key==='image' && im) return dimsExact(im.w, im.h, scale); const [w,h]=RATIOS[key in RATIOS ? key : '1:1']; return [round32(w*scale), round32(h*scale)]; }
 // réglages choisis, retenus par ce navigateur d'une visite à l'autre
-const opt = { ratio:'1:1', res:'medium', steps:'medium' };
-try{ Object.assign(opt, JSON.parse(localStorage.getItem('qwen-opt')||'{}')); }catch(e){}
-function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt, preview:$('previewChk').checked, incognito:$('incogChk').checked})); }catch(e){} }
+const opt = { ratio:'1:1', res:'high', steps:'max' };
+const savedOpt = (()=>{ try{ const o=JSON.parse(localStorage.getItem('qwen-opt')||'{}');
+  if(o.v!==2){ delete o.res; delete o.steps; delete o.preview; }   // retenus avant les défauts High, 40 étapes et aperçus : remis une fois à ces défauts
+  return o; }catch(e){ return {}; } })();
+['ratio','res','steps'].forEach(k=>{ if(savedOpt[k]) opt[k]=savedOpt[k]; });
+let incogOn = !!savedOpt.incognito;
+function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt, v:2, preview:$('previewChk').checked, incognito:incogOn})); }catch(e){} }
 const resSel = () => RES.find(p=>p.k===opt.res) || RES[1];
 const stepsSel = () => STEPS.find(p=>p.k===opt.steps) || STEPS[1];
 function currentDims(){ return dimsFor(opt.ratio, resSel().scale); }
@@ -611,8 +616,7 @@ function refreshChoices(){
   $('stepOpts').innerHTML = STEPS.map(p=>{ const on=p.k===opt.steps;
     return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}" title="${p.label}"><b>${p.steps}</b><small>${approx(E && parts(w,h,p.steps,inp,pv).total)}</small></button>`; }).join('');
   const [rw,rh] = ratioDims(opt.ratio);
-  $('pills').innerHTML = ($('incogChk').checked ? `<button class="pill incog" data-open><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18"/><path d="M6 12l1.6-6.2a1.5 1.5 0 0 1 2-1l2.4 1 2.4-1a1.5 1.5 0 0 1 2 1L18 12"/><circle cx="7.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/><path d="M10 16.5h4"/></svg>Incognito</button>` : '')
-    + `<button class="pill" data-open>${shape(rw,rh,16)}${opt.ratio==='image'?'Image':opt.ratio}</button>`
+  $('pills').innerHTML = `<button class="pill" data-open>${shape(rw,rh,16)}${opt.ratio==='image'?'Image':opt.ratio}</button>`
     + `<button class="pill" data-open>${w}×${h}</button><button class="pill" data-open>${steps} étapes</button>`
     + (pv ? `<button class="pill" data-open>Aperçus</button>` : '');
   $('estText').textContent=`${w}×${h} · ${steps} étapes${nrefs>1?' · '+nrefs+' références':''}`;
@@ -623,16 +627,18 @@ function refreshChoices(){
   $('estimate').classList.toggle('warn', estSeconds>3600); $('goEta').classList.toggle('warn', estSeconds>3600);
 }
 (function init(){
-  try{ const o=JSON.parse(localStorage.getItem('qwen-opt')||'{}'); $('previewChk').checked=!!o.preview; $('incogChk').checked=!!o.incognito; }catch(e){}
+  $('previewChk').checked = savedOpt.preview!==false; setIncog(incogOn);
+  $('incog').onclick=()=>{ setIncog(!incogOn); saveOpt(); toast(incogOn ? 'Incognito : la prochaine image ne sera gardée nulle part' : 'Incognito désactivé'); };
   [['ratioOpts','ratio'],['resOpts','res'],['stepOpts','steps']].forEach(([id,key])=>$(id).addEventListener('click', e=>{
     const b=e.target.closest('[data-k]'); if(!b) return; opt[key]=b.dataset.k; saveOpt(); refreshChoices(); }));
   $('pills').addEventListener('click', e=>{ if(e.target.closest('[data-open]')) openSheet('setSheet'); });
-  ['previewChk','incogChk','mask_mode'].forEach(id=>$(id).addEventListener('change', ()=>{ saveOpt(); refreshChoices(); })); refreshChoices();
+  ['previewChk','mask_mode'].forEach(id=>$(id).addEventListener('change', ()=>{ saveOpt(); refreshChoices(); })); refreshChoices();
   // brouillons des trois textes, retenus par ce navigateur, sauf en incognito (le brouillon modifié est alors effacé)
   ['t2i_prompt','edit_prompt','mask_prompt'].forEach(id=>{ const t=$(id);
     try{ t.value = localStorage.getItem('qwen-'+id) || ''; }catch(e){}
-    t.addEventListener('input', ()=>{ try{ if($('incogChk').checked) localStorage.removeItem('qwen-'+id); else localStorage.setItem('qwen-'+id, t.value); }catch(e){} }); });
+    t.addEventListener('input', ()=>{ try{ if(incogOn) localStorage.removeItem('qwen-'+id); else localStorage.setItem('qwen-'+id, t.value); }catch(e){} }); });
 })();
+function setIncog(on){ incogOn=on; $('incog').classList.toggle('on', on); $('incog').setAttribute('aria-pressed', on); }
 function suggestRatio(){ forceImageRatio=!!singleImage(); refreshChoices(); }
 
 // ------------------------------------------------------------ fond ambiant : miniature de l'image affichée, floutée en CSS
@@ -729,7 +735,7 @@ function paintedReference(w,h,opaque){ const a=document.createElement('canvas');
 // ------------------------------------------------------------ requête & loader
 function buildRequest(){
   const [w,h]=currentDims(); const steps=stepsSel().steps;
-  const body={ mode, prompt:'', width:w, height:h, steps, cfg:CFG, seed:-1, preview:$("previewChk").checked, preview_interval:PREVIEW_EVERY, ref_images:[], init_image:null, mask_image:null, strength:1.0, incognito:$('incogChk').checked };
+  const body={ mode, prompt:'', width:w, height:h, steps, cfg:CFG, seed:-1, preview:$("previewChk").checked, preview_interval:PREVIEW_EVERY, ref_images:[], init_image:null, mask_image:null, strength:1.0, incognito:incogOn };
   if(mode==='t2i'){ body.prompt=$('t2i_prompt').value.trim(); }
   else if(mode==='edit'){ if(!editImages.length) throw new Error('Ajoutez au moins une image de référence.'); body.prompt=$('edit_prompt').value.trim(); body.ref_images=editImages.map(x=>x.dataUrl); }
   else { if(!maskImage) throw new Error('Chargez une image.'); if(!paintedPixels()) throw new Error('Peignez une zone.'); body.prompt=$('mask_prompt').value.trim();

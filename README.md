@@ -203,13 +203,13 @@ Sous le texte, trois pastilles résument le format, la résolution et les étape
 | Réglage | Choix | Effet |
 | --- | --- | --- |
 | **Format** | 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16, et « Image » (les proportions de l'image) quand une seule image est chargée | Proportions de l'image produite |
-| **Résolution** | Low ≈512 px · Medium ≈768 px · High ≈1024 px · XHigh ≈1536 px · Max 2K natif | Nombre de pixels ; chaque option affiche les dimensions exactes |
-| **Étapes** | Low 8 · Medium 12 · High 20 · XHigh 30 · Max 40 | Finesse des détails ; chaque option affiche le **temps estimé** |
-| **Aperçu toutes les 5 étapes** | interrupteur | Montre l'image en cours de formation ; coût affiché à côté |
-| **Incognito** | interrupteur | Image gardée nulle part sur le Mac (voir [Mode incognito](#mode-incognito)) ; une pastille **Incognito** reste affichée tant qu'il est actif |
+| **Résolution** | Low ≈512 px · Medium ≈768 px · **High ≈1024 px** (par défaut) · XHigh ≈1536 px · Max 2K natif | Nombre de pixels ; chaque option affiche les dimensions exactes |
+| **Étapes** | Low 8 · Medium 12 · High 20 · XHigh 30 · **Max 40** (par défaut, réglage officiel du modèle) | Finesse des détails ; chaque option affiche le **temps estimé** |
+| **Aperçu toutes les 5 étapes** | interrupteur, activé par défaut | Montre l'image en cours de formation ; coût affiché à côté |
 
-Le bouton **Générer** affiche le temps estimé. Le navigateur retient les réglages choisis et le texte en cours de
-chaque onglet (sauf en incognito).
+Le bouton **Générer** affiche le temps estimé ; à sa droite, le bouton **Incognito** (icône de chapeau et lunettes,
+teinté quand il est actif) active le [mode incognito](#mode-incognito). Le navigateur retient les réglages choisis,
+le mode incognito et le texte en cours de chaque onglet (sauf en incognito).
 
 Conseil : **Medium + 12 étapes** pour chercher la bonne formulation, puis montez la résolution et les étapes pour la version finale.
 Les descriptions en **anglais, longues et précises** donnent les meilleurs résultats.
@@ -257,7 +257,7 @@ correspondant) et **Supprimer** (définitif, après confirmation).
 
 ### Mode incognito
 
-Avec l'interrupteur **Incognito** des réglages, l'image produite peut être téléchargée mais n'est gardée nulle part sur
+Avec le bouton **Incognito**, à droite de **Générer**, l'image produite peut être téléchargée mais n'est gardée nulle part sur
 le Mac : ni dans `outputs\`, ni dans la galerie, ni dans le journal des générations, ni dans `logs\`. Elle est perdue
 pour de bon dès la génération suivante, quand on la supprime, ou quand la page est rechargée ou fermée (y compris pendant
 la génération, qui est alors arrêtée) : pensez à la **télécharger** avant. Le texte tapé n'est pas retenu par le

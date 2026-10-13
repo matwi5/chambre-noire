@@ -23,8 +23,6 @@ Mis à jour le 13/10/2026.
     `tools/config.json` n'est lu nulle part ;
   - `tests/run_tests.py --only edit` cherche `outputs/test_t2i_512.png`, que plus rien ne produit, et retombe sur
     `tests/test_scene.png` ;
-  - l'interrupteur Incognito n'est visible qu'en ouvrant le panneau Réglages ; un bouton près de Générer a été proposé
-    au porteur (sans réponse).
 - **Ménage local** (sur le poste, hors dépôt) : la branche `fix/server-host-origin` et les worktrees de
   `.claude/worktrees/` sont des restes de sessions passées, déjà intégrés à `main`. La branche contient des informations
   propres au réseau du porteur : la supprimer plutôt que la pousser.
@@ -33,6 +31,9 @@ Mis à jour le 13/10/2026.
 
 ### 2026-10-13
 
+- Interface : réglages par défaut High (≈1024 px), 40 étapes et aperçus toutes les 5 étapes ; l'incognito passe du
+  panneau Réglages à un bouton à droite de Générer. Les réglages retenus avant ce changement sont remis une fois à ces
+  défauts (format et incognito gardés). Vérifié par 11 contrôles dans Chrome sans écran.
 - Mise en place de la documentation de session : `CLAUDE.md`, `BRIEF.md`, `DECISIONS.md` et ce fichier, reconstitués
   depuis le README, le code et l'historique git.
 - Mode incognito (`d5a745d`) : image gardée en mémoire et remise une fois, perdue à la génération suivante ou au
