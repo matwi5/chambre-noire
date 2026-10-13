@@ -4,6 +4,26 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-13 · Barre d'état du téléphone : couleur calculée plutôt que plein écran
+
+- **Contexte** : le porteur veut que l'application installée « continue » sous la barre d'état d'Android, sans bande
+  de couleur.
+- **Décision** : rester en `display: standalone` et donner à `<meta name="theme-color">`, à chaque changement de vue
+  ou d'image, la couleur du haut de l'écran calculée en JavaScript (`syncThemeColor` : moyenne du haut de la miniature
+  floutée en fond, avec les voiles du CSS). Chrome peint la barre d'état de cette couleur.
+- **Écarté** : dessiner sous la barre d'état (pas encore possible pour une application installée avec Chrome stable :
+  bug Chromium 407420295, correctif désactivé par défaut) ; `display: fullscreen` (cache l'heure et les notifications) ;
+  `theme-color` transparent (non documenté, ignoré).
+- **Conséquences** : la bande reste unie (pas de dégradé ni d'image dessous). Un bug Chromium signalé en septembre 2026
+  (559396686) dirait que les applications installées ne suivent plus un `theme-color` changé en cours de route : à
+  vérifier sur le téléphone.
+
+## 2026-10-13 · Zoom de la visionneuse temporaire, au pincement
+
+- **Décision** (porteur) : pincer zoome l'image, qui passe au-dessus de tous les éléments et peut couvrir tout
+  l'écran, puis revient à sa taille dès qu'on relâche les doigts. Plus de double appui pour zoomer ; sur ordinateur, la
+  molette zoome et un clic remet à la taille.
+
 ## 2026-10-13 · Images d'entrée conservées avec chaque image
 
 - **Contexte** : le porteur veut revoir depuis la galerie les images de départ d'une édition ou d'un dessin guidé, et

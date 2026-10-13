@@ -309,14 +309,14 @@
   .v-top .btn-icon { width:44px; height:44px; }
   .v-top a.btn-icon { color:var(--ink); }
   .v-top .chipbtn { cursor:default; font-variant-numeric:tabular-nums; }
-  .v-stage { position:relative; flex:1; min-height:0; display:grid; place-items:center; padding:10px 12px; touch-action:none; user-select:none; }
+  .v-stage { position:relative; flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:10px 12px; touch-action:none; user-select:none; }
   .v-stage img { max-width:100%; max-height:100%; border-radius:18px; box-shadow:0 30px 80px -20px rgba(0,0,0,.85); -webkit-user-drag:none;
     transform:scale(.96); opacity:.4; transition:transform .35s var(--ease), opacity .3s; }
   .viewer.on .v-stage img { transform:none; opacity:1; }
   .v-stage.drag img { transition:none; }
-  .v-top, .v-panel { position:relative; z-index:2; }      /* l'image zoomée passe sous la barre du haut et le panneau */
+  .v-top, .v-panel { position:relative; z-index:2; }
   .v-stage { z-index:1; }
-  .viewer.zoomed .v-stage { overflow:hidden; clip-path:inset(0); cursor:grab; }
+  .viewer.zoomed .v-stage { z-index:3; }                  /* image zoomée : au-dessus de tout, jusqu'à tout l'écran */
   .v-nav { display:none; position:absolute; top:50%; translate:0 -50%; width:46px; height:46px; }
   .v-nav.prev { left:16px; } .v-nav.next { right:16px; }
   @media (hover: hover) and (pointer: fine) { .v-nav { display:grid; } }
@@ -324,12 +324,9 @@
   @media (min-width: 700px) { .v-panel { width:min(600px, calc(100% - 24px)); margin-inline:auto; } }
   .viewer.immersive .v-top, .viewer.immersive .v-panel { opacity:0; pointer-events:none; }
   .viewer.immersive .v-panel { transform:translateY(24px); }
-  .v-prompt { margin:0 6px; font-size:15px; line-height:1.45; cursor:pointer; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  .v-prompt.open { -webkit-line-clamp:12; }
-  .v-prompt:empty { display:none; }
   .acts.v-acts { grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:16px; }
   .v-acts .act { background:var(--field); font-size:12.5px; padding:13px 4px 11px; border-radius:20px; gap:7px; }
-  .v-panel .m-chips { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; margin:12px 0 0; padding:0 18px 0 2px;
+  .v-panel .m-chips { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; margin:0; padding:0 18px 0 2px;
     -webkit-mask:linear-gradient(90deg, #000 85%, transparent); mask:linear-gradient(90deg, #000 85%, transparent); }
   .v-panel .m-chips::-webkit-scrollbar { display:none; }
   .v-panel .m-chips span { flex:none; }
@@ -342,6 +339,7 @@
   .v-in-thumbs img { width:38px; height:38px; object-fit:cover; border-radius:11px; box-shadow:0 0 0 2px var(--thick); background:var(--field); }
   .v-in-thumbs img + img { margin-left:-14px; }
   .viewer.iv { z-index:40; background:var(--void); }
+  .viewer.iv .v-panel { background:color-mix(in srgb, var(--void), #fff 7%); }
   .iv-label { margin:0 6px; font-size:15px; font-weight:650; text-align:center; }
   .acts.iv-acts { grid-template-columns:repeat(3, 1fr); }
   .viewer.iv.single .v-nav { display:none; }
@@ -545,7 +543,6 @@
     <button class="btn-icon glass v-nav next" onclick="stepViewer(1)" aria-label="Image suivante"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg></button>
   </div>
   <div class="v-panel glass">
-    <p class="v-prompt" id="vPrompt" onclick="this.classList.toggle('open')"></p>
     <div class="m-chips" id="vChips"></div>
     <button class="v-inputs" id="vInputs" onclick="openInputs(0)" hidden></button>
     <div class="acts v-acts">
@@ -699,8 +696,31 @@ function refreshChoices(){
     t.addEventListener('input', ()=>{ try{ if(incogOn) localStorage.removeItem('qwen-'+id); else localStorage.setItem('qwen-'+id, t.value); }catch(e){} }); });
 })();
 function setIncog(on){ incogOn=on; $('incog').classList.toggle('on', on); $('incog').setAttribute('aria-pressed', on);
-  document.documentElement.classList.toggle('incog', on);        // thème graphite sombre, barre du navigateur comprise
-  document.querySelectorAll('meta[name=theme-color]').forEach(m=>m.content = on ? '#111113' : m.dataset.normal); }
+  document.documentElement.classList.toggle('incog', on); setTimeout(syncThemeColor); }   // après le chargement du script (variables lues)   // thème graphite sombre, barre d'état comprise
+// barre d'état de l'application installée : Chrome la peint de la couleur theme-color (il ne laisse pas encore une
+// application installée dessiner dessous). Pour que l'application semble continuer jusqu'en haut, on lui donne la
+// couleur du haut de l'écran : moyenne du haut de l'image floutée en fond, avec les mêmes voiles que dans le CSS
+// (.topbar::before, .ambient::after, .v-bg img), recalculée à chaque changement de vue ou d'image.
+const tints={};
+function tintOf(src){ return tints[src] || (tints[src]=new Promise(res=>{ const im=new Image();
+  im.onload=()=>{ const c=document.createElement('canvas'); c.width=c.height=12; const x=c.getContext('2d'); x.drawImage(im, 0, 0, 12, 12);
+    const d=x.getImageData(0, 0, 12, 4).data, t=[0, 0, 0]; for(let i=0; i<d.length; i+=4){ t[0]+=d[i]; t[1]+=d[i+1]; t[2]+=d[i+2]; }
+    res(t.map(v=>v/(d.length/4))); };
+  im.onerror=()=>res(null); im.src=src; })); }
+const saturate=(c, k)=>{ const g=.2126*c[0]+.7152*c[1]+.0722*c[2]; return c.map(v=>Math.max(0, Math.min(255, g+(v-g)*k))); };
+const mixRgb=(a, b, t)=>a.map((v, i)=>v*(1-t)+b[i]*t);       // t : part de b
+let tintSeq=0;
+async function syncThemeColor(){
+  const seq=++tintSeq, m=getComputedStyle(document.documentElement).getPropertyValue('--void').trim().match(/^#(..)(..)(..)$/);
+  const voidRgb=m ? m.slice(1).map(h=>parseInt(h, 16)) : [11, 10, 22]; let c=voidRgb;
+  if(!incogOn && ivIndex<0){
+    if(vIndex>=0){ const it=histItems[vIndex], t=it && await tintOf(thumbUrl(it));          // visionneuse : image floutée assombrie (.v-bg img)
+      c=t ? saturate(t, 1.6).map(v=>v*.5) : [5, 4, 12]; }
+    else if(ambName){ const t=await tintOf('/api/thumb?name='+encodeURIComponent(ambName));   // page : dégradé de la barre du haut sur le fond
+      if(t) c=mixRgb(voidRgb, mixRgb(voidRgb, saturate(t, 1.7), .7), document.documentElement.classList.contains('lite') ? .08 : .3); } }
+  if(seq!==tintSeq) return;
+  const hex='#'+c.map(v=>Math.round(v).toString(16).padStart(2, '0')).join('');
+  document.querySelectorAll('meta[name=theme-color]').forEach(el=>el.content=hex); }
 function suggestRatio(){ forceImageRatio=!!singleImage(); refreshChoices(); }
 
 // ------------------------------------------------------------ fond ambiant : miniature de l'image affichée, floutée en CSS
@@ -708,7 +728,7 @@ let ambName=null, ambFlip=false;
 function setAmbient(name){
   if(!name || name===ambName) return; ambName=name;
   const next=$(ambFlip?'ambA':'ambB'), prev=$(ambFlip?'ambB':'ambA'); ambFlip=!ambFlip;
-  next.onload=()=>{ next.classList.add('on'); prev.classList.remove('on'); };
+  next.onload=()=>{ next.classList.add('on'); prev.classList.remove('on'); syncThemeColor(); };
   next.src='/api/thumb?name='+encodeURIComponent(name);
 }
 (async function initAmbient(){ try{ const h=await (await fetch('/api/history')).json(); if(h.length && !ambName) setAmbient(h[0].name); }catch(e){} })();
@@ -942,54 +962,52 @@ function openViewer(i){
   img.src=thumbUrl(it); $('vBg').src=thumbUrl(it);           // miniature tout de suite, image complète dès qu'elle est chargée
   const full=new Image(); full.onload=()=>{ if(vIndex===i) img.src=full.src; }; full.src=resultUrl(it.name);
   img.alt=it.prompt||it.name; $('vCount').textContent=`${i+1} / ${histItems.length}`;
-  $('vPrompt').textContent=it.prompt||''; $('vPrompt').classList.remove('open');
   const date=new Date(it.time*1000).toLocaleString('fr-FR', {dateStyle:'short', timeStyle:'short'});
   $('vChips').innerHTML=[date, MODE_LABELS[it.mode]||it.mode, it.width?it.width+'×'+it.height:'', it.steps?it.steps+' étapes':'', it.model?it.model.toUpperCase():'', it.seconds?fmt(it.seconds):'']
     .filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('');
   $('vDl').href=resultUrl(it.name)+'&download=1'; $('vDl').download=it.name; renderInputsButton(it);
   if(!v.classList.contains('on')){ v.classList.remove('immersive'); v.classList.add('on'); document.body.style.overflow='hidden'; }
+  syncThemeColor();
 }
-function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; }
+function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor(); }
 function stepViewer(d){ if(vIndex<0 || !histItems.length) return; openViewer((vIndex+d+histItems.length)%histItems.length); }
 addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevented) return;
   if(ivIndex>=0){ if(e.key==='Escape') closeInputs(); else if(e.key==='ArrowLeft') showInput(ivIndex-1); else if(e.key==='ArrowRight') showInput(ivIndex+1); return; }
   if(e.key==='Escape') closeViewer(); else if(e.key==='ArrowLeft') stepViewer(-1); else if(e.key==='ArrowRight') stepViewer(1); });
-// visionneuse : pincer, double appui ou molette pour zoomer, glisser pour déplacer l'image zoomée ; sans zoom,
-// glisser à gauche ou à droite : image voisine ; vers le bas : fermer ; un appui : masquer les commandes
+// visionneuse : pincer pour zoomer (l'image passe au-dessus de tout et revient à sa taille dès qu'on relâche les doigts) ;
+// sur ordinateur, molette pour zoomer et glisser pour déplacer, un clic pour revenir ; sans zoom, glisser à gauche ou
+// à droite : image voisine ; vers le bas : fermer ; un appui : masquer les commandes
 let resetZoom=()=>{};
 (function gestures(){
   const st=$('vStage'), img=$('vImg'), v=$('viewer'), pts=new Map(), MAX=6;
-  let z={s:1, x:0, y:0}, one=null, pinch=null, lastTap=0, tapTimer=null;
+  let z={s:1, x:0, y:0}, one=null, pinch=null, unzoom=null;
   const center=()=>{ const r=st.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2}; };
-  let unzoom=null;     // au retour à la taille normale, la découpe reste jusqu'à la fin de l'animation (0,35 s)
-  function apply(){ const mx=Math.max(0, (img.offsetWidth*z.s-st.clientWidth)/2), my=Math.max(0, (img.offsetHeight*z.s-st.clientHeight)/2);
-    z.x=Math.min(mx, Math.max(-mx, z.x)); z.y=Math.min(my, Math.max(-my, z.y));
-    img.style.transform = z.s>1 ? `translate(${z.x}px, ${z.y}px) scale(${z.s})` : ''; clearTimeout(unzoom);
-    if(z.s>1) v.classList.add('zoomed'); else unzoom=setTimeout(()=>{ if(z.s<=1) v.classList.remove('zoomed'); }, 400); }
-  function zoomAt(s2, px, py, from=z){ const c=center(), k=s2/from.s;   // le point (px, py) de l'écran reste sous le doigt
+  function apply(){ img.style.transform = z.s>1 ? `translate(${z.x}px, ${z.y}px) scale(${z.s})` : ''; clearTimeout(unzoom);
+    if(z.s>1) v.classList.add('zoomed'); else unzoom=setTimeout(()=>{ if(z.s<=1) v.classList.remove('zoomed'); }, 400); }   // reste au-dessus pendant le retour (0,35 s)
+  function zoomAt(s2, px, py, from=z){ const c=center(), k=s2/from.s;   // le point (px, py) de l'écran reste sous les doigts
     z={s:s2, x:(px-c.x)-((px-c.x)-from.x)*k, y:(py-c.y)-((py-c.y)-from.y)*k}; if(s2<=1.01) z={s:1, x:0, y:0}; apply(); }
-  resetZoom=()=>{ z={s:1, x:0, y:0}; apply(); };
+  resetZoom=()=>{ st.classList.remove('drag'); z={s:1, x:0, y:0}; apply(); };
   const mid=()=>{ const [a,b]=[...pts.values()]; return {x:(a.x+b.x)/2, y:(a.y+b.y)/2, d:Math.hypot(a.x-b.x, a.y-b.y)}; };
   st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return;
     pts.set(e.pointerId, {x:e.clientX, y:e.clientY}); st.setPointerCapture(e.pointerId); st.classList.add('drag');
-    if(pts.size===2){ one=null; img.style.transform=z.s>1?img.style.transform:''; v.style.opacity=''; const m=mid(); pinch={...m, from:{...z}}; }
+    if(pts.size===2){ one=null; v.style.opacity=''; if(z.s<=1) img.style.transform=''; pinch={...mid(), from:{...z}}; }
     else if(pts.size===1) one={x0:e.clientX, y0:e.clientY, from:{...z}, dx:0, dy:0}; });
   st.addEventListener('pointermove', e=>{ if(!pts.has(e.pointerId)) return; pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
     if(pinch && pts.size>=2){ const m=mid(); zoomAt(Math.min(MAX, Math.max(1, pinch.from.s*m.d/pinch.d)), pinch.x, pinch.y, pinch.from);
       z.x+=m.x-pinch.x; z.y+=m.y-pinch.y; apply(); return; }
     if(!one) return; one.dx=e.clientX-one.x0; one.dy=e.clientY-one.y0;
-    if(z.s>1){ z.x=one.from.x+one.dx; z.y=one.from.y+one.dy; apply(); return; }       // image zoomée : on la déplace
+    if(z.s>1){ z.x=one.from.x+one.dx; z.y=one.from.y+one.dy; apply(); return; }     // doigt restant après un pincement, ou souris
     const {dx, dy}=one;
     img.style.transform = Math.abs(dx)>Math.abs(dy) ? `translateX(${dx}px) rotate(${dx/40}deg)` : `translateY(${Math.max(0,dy)}px) scale(${1-Math.max(0,dy)/1600})`;
     v.style.opacity = dy>0 && Math.abs(dy)>Math.abs(dx) ? Math.max(.35, 1-dy/500) : ''; });
   const end=e=>{ if(!pts.delete(e.pointerId)) return;
-    if(pinch){ if(pts.size<2) pinch=null; if(!pts.size){ st.classList.remove('drag'); if(z.s<1.05) resetZoom(); } return; }
-    if(pts.size || !one) return;
-    st.classList.remove('drag'); const {dx, dy, x0, y0}=one; one=null; v.style.opacity='';
-    if(Math.abs(dx)<6 && Math.abs(dy)<6){                       // appui : double appui = zoom, appui simple = commandes
-      if(Date.now()-lastTap<300){ clearTimeout(tapTimer); lastTap=0; z.s>1 ? resetZoom() : zoomAt(2.5, x0, y0); }
-      else { lastTap=Date.now(); tapTimer=setTimeout(()=>v.classList.toggle('immersive'), 300); }
-      if(z.s<=1) img.style.transform=''; return; }
+    if(pinch && pts.size===1){ const [q]=[...pts.values()]; pinch=null; one={x0:q.x, y0:q.y, from:{...z}, dx:0, dy:0, pinched:true}; return; }
+    if(pts.size) return;
+    const was=one; pinch=null; one=null; v.style.opacity='';
+    if(e.pointerType!=='mouse' && (z.s>1 || (was && was.pinched))) return resetZoom();     // doigts relâchés : taille initiale
+    st.classList.remove('drag'); if(!was) return;
+    const {dx, dy}=was;
+    if(Math.abs(dx)<6 && Math.abs(dy)<6){ if(z.s>1) resetZoom(); else { img.style.transform=''; v.classList.toggle('immersive'); } return; }
     if(z.s>1) return;
     img.style.transform='';
     if(Math.abs(dx)>70 && Math.abs(dx)>Math.abs(dy)) stepViewer(dx<0 ? 1 : -1);
@@ -1027,13 +1045,13 @@ function renderInputsButton(it){
   const b=$('vInputs'), list=it.inputs||[]; b.hidden=!list.length; if(!list.length) return;
   b.innerHTML=`<span class="v-in-thumbs">${list.slice(0,3).map(f=>`<img src="${inputUrl(it.name, f, '&thumb=1&t='+it.time)}" alt="">`).join('')}</span>`
     + `<span>${list.length>1 ? list.length+" images d'entrée" : "Image d'entrée"}</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>`; }
-function openInputs(i){ const it=histItems[vIndex]; if(!it || !(it.inputs||[]).length) return; ivOwner=it; showInput(i); $('iv').classList.add('on'); }
+function openInputs(i){ const it=histItems[vIndex]; if(!it || !(it.inputs||[]).length) return; ivOwner=it; showInput(i); $('iv').classList.add('on'); syncThemeColor(); }
 function showInput(i){
   const it=ivOwner, n=it.inputs.length; ivIndex=(i+n)%n; const f=it.inputs[ivIndex];
   $('ivImg').src=inputUrl(it.name, f); $('ivImg').alt=inputLabel(it, f); $('ivLabel').textContent=inputLabel(it, f);
   $('ivCount').textContent=`${ivIndex+1} / ${n}`; $('iv').classList.toggle('single', n<2);
   $('ivDl').href=inputUrl(it.name, f, '&download=1'); $('ivDl').download=it.name.slice(0, -4)+'_'+f; }
-function closeInputs(){ $('iv').classList.remove('on'); ivIndex=-1; }
+function closeInputs(){ $('iv').classList.remove('on'); ivIndex=-1; syncThemeColor(); }
 async function inputAction(kind){             // repartir de cette image d'entrée : Éditer (référence) ou Dessiner
   const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it.name, f), name=it.name.slice(0, -4)+'_'+f;
   closeInputs(); closeViewer();

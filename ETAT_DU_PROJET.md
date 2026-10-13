@@ -31,6 +31,11 @@ Mis à jour le 13/10/2026.
 
 ### 2026-10-13
 
+- Visionneuse sur le téléphone (dimensions du porteur, 367×760 à 2,5) : l'image dépassait sous le panneau des boutons
+  (une grille CSS ne bornait pas `max-height:100%`, conteneur passé en flex) ; prompt retiré (Reprendre gardé) ; zoom
+  au pincement temporaire, au-dessus de tout ; fenêtre des images d'entrée opaque ; couleur de la barre d'état calculée
+  depuis le haut de l'écran. 21 contrôles ; à vérifier sur le téléphone : que Chrome suive bien `theme-color` changé en
+  cours de route.
 - Interface : glisser entre les onglets ; image zoomée tenue sous la barre du haut et le panneau ; Partager et Copier
   (visionneuse et résultat, masqués hors HTTPS) ; images d'entrée conservées dans `outputs/.inputs/` et visibles en
   grand depuis la visionneuse (glisser, Télécharger, Éditer, Dessiner) ; bouton incognito inactif pendant une

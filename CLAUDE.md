@@ -32,7 +32,9 @@ Vérifications : aucun lint, typage ni test unitaire n'est déclaré. Après un 
   imprime des lignes `k/N - x.xxs/it` et les lignes `… completed, taking x.xxs`, écrit les aperçus et le PNG `-o`), puis
   sert `launch.H` sur un port libre avec `launch.worker` en thread. Les aperçus de moins de 1000 octets sont ignorés
   par `latest_preview`. Pour l'interface : Chrome sans écran piloté par le protocole DevTools depuis Node (WebSocket
-  natif), sans installer Playwright ;
+  natif), sans installer Playwright. Tester dans les dimensions du téléphone du porteur (Android, application installée) :
+  `Emulation.setDeviceMetricsOverride` 367×760 à une densité de 2,5, `mobile: true`, tactile activé ; l'interface
+  y passe en mode allégé (`html.lite`). Une vue plus grande cache des débordements, et regarder les captures ;
 - `tests/run_tests.py --steps 8 [--only t2i|edit|mask|annot]` : bout en bout, serveur lancé sur 127.0.0.1:7860. Il
   lance de **vraies générations GPU** (plusieurs minutes), écrit dans `outputs/`, le journal et `tools/calibration.json` :
   ne le lancer que si l'utilisateur le demande.

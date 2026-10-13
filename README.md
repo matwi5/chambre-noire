@@ -176,6 +176,9 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   « Ordinateur injoignable » quand le Mac ne répond pas. `tailscale serve --https=443 off` retire cette publication.
   Les requêtes relayées par Tailscale demandent toujours le code, même si elles arrivent sur le Mac par `127.0.0.1` ;
   sans `--lan`, elles sont refusées. Sur iPhone, Safari → Partager → **Sur l'écran d'accueil** fonctionne aussi en HTTP.
+- **Barre d'état** : dans l'application installée, Chrome peint la barre d'état (heure, notifications) d'une couleur
+  unie ; il ne laisse pas encore une application installée dessiner dessous. L'interface lui donne en continu la couleur
+  du haut de l'écran (fond flouté de l'image affichée), pour que l'application semble continuer jusqu'en haut.
 - **Veille** : sur Mac, l'ordinateur ne se met pas en veille tant que l'interface tourne avec `--lan` (l'écran peut
   s'éteindre).
 - **Toujours disponible (Mac)** : pour que l'interface démarre seule à l'ouverture de session, sans fenêtre,
@@ -256,10 +259,11 @@ le modèle à redessiner l'original.
 ### Galerie
 
 L'onglet **Galerie** montre toutes les images de `outputs\`, la plus récente d'abord. Un appui sur une miniature
-l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèle, durée, prompt). Glisser sur le côté passe
+l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèle, durée). Glisser sur le côté passe
 à l'image voisine (flèches du clavier sur ordinateur), glisser vers le bas ferme, un appui sur l'image masque les
-commandes. Pour zoomer (jusqu'à ×6) : pincer, toucher deux fois l'image, ou la molette sur ordinateur ; une image
-zoomée se déplace au doigt, et un double appui la remet à sa taille. En haut à droite : **Partager**, **Copier** et
+commandes. Pour zoomer (jusqu'à ×6), pincer l'image : elle passe au-dessus de tout, peut couvrir tout l'écran, suit
+les doigts, et revient à sa taille dès qu'on les relâche. Sur ordinateur, la molette zoome, glisser déplace l'image
+et un clic la remet à sa taille. En haut à droite : **Partager**, **Copier** et
 **Télécharger** ; en bas : **Éditer**, **Dessiner**, **Reprendre** (remet le texte de l'image dans l'onglet
 correspondant) et **Supprimer** (définitif, après confirmation, images d'entrée comprises). La zone de génération est
 masquée dans la galerie.
