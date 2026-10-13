@@ -162,6 +162,20 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   avec le même code.
   Les envois venant d'une page d'un autre site (formulaire ou script) sont refusés : seule l'interface elle-même peut
   lancer une génération, annuler ou supprimer une image.
+- **Installer comme une application (Android, Chrome)** : Chrome n'installe une page qu'en HTTPS. Tailscale le fournit
+  avec un certificat valide : activez une fois **HTTPS Certificates** dans la console d'administration Tailscale (page
+  DNS, MagicDNS doit être actif), puis publiez l'interface sur le réseau Tailscale :
+
+  ```bash
+  tailscale serve --bg 7860
+  ```
+
+  Après le redémarrage de l'interface, le bouton **Téléphone** affiche en premier l'adresse
+  `https://<nom-du-mac>.<réseau>.ts.net/`. Ouverte sur le téléphone (Tailscale connecté), elle demande le code une fois,
+  puis le menu de Chrome propose **Installer l'application** : icône sur l'écran d'accueil, plein écran, et une page
+  « Ordinateur injoignable » quand le Mac ne répond pas. `tailscale serve --https=443 off` retire cette publication.
+  Les requêtes relayées par Tailscale demandent toujours le code, même si elles arrivent sur le Mac par `127.0.0.1` ;
+  sans `--lan`, elles sont refusées. Sur iPhone, Safari → Partager → **Sur l'écran d'accueil** fonctionne aussi en HTTP.
 - **Veille** : sur Mac, l'ordinateur ne se met pas en veille tant que l'interface tourne avec `--lan` (l'écran peut
   s'éteindre).
 - **Toujours disponible (Mac)** : pour que l'interface démarre seule à l'ouverture de session, sans fenêtre,
@@ -457,6 +471,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── estimate.py       modèle de coût et calibration des estimations de durée
 │   ├── calibrate.py      générations de calibration (lancées par setup.py)
 │   ├── ui/index.html     l'interface
+│   ├── ui/manifest.webmanifest, sw.js, icon-*.png   installation sur le téléphone (application)
 │   ├── fix_int8_te.py    correctif de l'encodeur texte int8 (Windows)
 │   ├── make_shortcut.py  crée Qwen-Image.lnk (Windows) ou Qwen-Image.command (Mac)
 │   ├── make_service.py   Mac : démarrage automatique de l'interface, accessible depuis le Wi-Fi

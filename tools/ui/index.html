@@ -6,6 +6,11 @@
 <meta name="theme-color" content="#0b0a16" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#eceef7" media="(prefers-color-scheme: light)">
 <title>Qwen-Image 2.1 local</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Qwen-Image">
 <style>
   /* ------------------------------------------------------------ jetons : sombre par défaut, clair selon le système */
   :root {
@@ -867,6 +872,8 @@ async function deleteCurrent(){
   log('supprimé : '+lastResult.name); lastResult=null; hideResult(); toast('Image supprimée');
   loadHistory();
 }
+// application installable sur le téléphone (le navigateur n'accepte le service worker qu'en HTTPS ou sur le Mac)
+if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 </script>
 </body>
 </html>

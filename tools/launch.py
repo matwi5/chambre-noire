@@ -100,8 +100,18 @@ def default_backend(cfg):
 ACCESS_FILE = P("tools", "access_code.txt")
 ACCESS_COOKIE = "qwen_access"
 LOCAL_CLIENTS = ("127.0.0.1", "::1")
+# fichiers de tools/ui servis sans code d'accès pour l'installation sur le téléphone (rien de personnel)
+PUBLIC_FILES = {
+    "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
+    "/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
+    "/icon-192.png": ("icon-192.png", "image/png"),
+    "/icon-512.png": ("icon-512.png", "image/png"),
+    "/icon-maskable-512.png": ("icon-maskable-512.png", "image/png"),
+    "/apple-touch-icon.png": ("apple-touch-icon.png", "image/png"),
+}
 LOGIN_PAGE = """<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Qwen-Image 2.1 local</title>
+<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="theme-color" content="#0b0a16" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#eceef7" media="(prefers-color-scheme: light)">
 <style>
@@ -232,24 +242,37 @@ def lan_address():
     return name or ip, ip
 
 
-def tailscale_hosts():
-    """Noms et adresse IPv4 du Mac sur Tailscale (court, MagicDNS complet, 100.x), pour un accès hors du Wi-Fi.
-    Liste vide si Tailscale n'est pas installé ou pas connecté."""
+def tailscale_json(*args):
+    """Sortie JSON d'une commande tailscale, ou None si Tailscale n'est pas installé ou ne répond pas."""
     exe = shutil.which("tailscale") or next((p for p in ("/opt/homebrew/bin/tailscale", "/usr/local/bin/tailscale",
                                                           "/Applications/Tailscale.app/Contents/MacOS/Tailscale")
                                              if os.path.exists(p)), None)
     if not exe:
-        return []
+        return None
     try:
-        st = json.loads(subprocess.run([exe, "status", "--json"], capture_output=True, text=True, timeout=5).stdout)
+        return json.loads(subprocess.run([exe, *args, "--json"], capture_output=True, text=True, timeout=5).stdout)
     except (OSError, ValueError, subprocess.TimeoutExpired):
-        return []
-    if st.get("BackendState") != "Running":
+        return None
+
+
+def tailscale_hosts():
+    """Noms et adresse IPv4 du Mac sur Tailscale (court, MagicDNS complet, 100.x), pour un accès hors du Wi-Fi.
+    Liste vide si Tailscale n'est pas installé ou pas connecté."""
+    st = tailscale_json("status")
+    if not st or st.get("BackendState") != "Running":
         return []
     me = st.get("Self") or {}
     dns = (me.get("DNSName") or "").rstrip(".").lower()
     ipv4 = [x for x in me.get("TailscaleIPs") or [] if "." in x]   # IPv6 écartée : il faudrait des crochets dans l'URL
     return [h for h in (dns.split(".")[0], dns, *ipv4) if h]
+
+
+def tailscale_serve_url(dns, port):
+    """Adresse HTTPS de l'interface si « tailscale serve » la publie (https://<nom MagicDNS>/ vers le port local),
+    sinon None. Le HTTPS rend l'interface installable comme une application sur le téléphone."""
+    web = (tailscale_json("serve", "status") or {}).get("Web") or {}
+    handler = ((web.get(f"{dns}:443") or {}).get("Handlers") or {}).get("/") or {}
+    return f"https://{dns}/" if re.fullmatch(rf"(https?://)?(127\.0\.0\.1|localhost):{port}/?", handler.get("Proxy", "")) else None
 
 
 class State:
@@ -259,7 +282,8 @@ class State:
     store = None
     access_code = None       # avec --lan : code demandé aux appareils autres que le Mac
     access_token = None      # valeur du cookie posé après saisie du code (empreinte du code, pas le code)
-    lan_urls = []
+    lan_urls = []            # adresses affichées pour le téléphone
+    lan_hosts = set()        # noms d'hôte admis en plus des noms locaux (ceux de lan_urls et le nom HTTPS de Tailscale)
     cfg = {}
     ui_port = 7860
     jobs = {}
@@ -487,12 +511,17 @@ class H(BaseHTTPRequestHandler):
 
     def _host_ok(self):
         """Refuse les noms d'hôte inconnus : une page dont le domaine pointe vers 127.0.0.1 (rebinding DNS) arrive avec
-        son propre nom dans Host. Sont admis les noms locaux et ceux du Wi-Fi affichés au démarrage (S.lan_urls)."""
-        return self._host() in self._local_hosts() | {urlsplit(u).netloc.lower() for u in S.lan_urls}
+        son propre nom dans Host. Sont admis les noms locaux et ceux du Wi-Fi et de Tailscale fixés au démarrage (S.lan_hosts)."""
+        return self._host() in self._local_hosts() | S.lan_hosts
+
+    def _proxied(self):
+        """Requête relayée par « tailscale serve » (HTTPS) : elle arrive de 127.0.0.1 mais vient d'un autre appareil."""
+        return any(self.headers.get(k) is not None for k in ("X-Forwarded-For", "X-Forwarded-Host", "Tailscale-User-Login"))
 
     def _local(self):
-        """Le Mac lui-même : adresse source locale et nom d'hôte local (un nom du Wi-Fi demande le code, même depuis le Mac)."""
-        return self.client_address[0] in LOCAL_CLIENTS and self._host() in self._local_hosts()
+        """Le Mac lui-même : adresse source locale et nom d'hôte local (un nom du Wi-Fi demande le code, même depuis le Mac),
+        jamais une requête relayée."""
+        return self.client_address[0] in LOCAL_CLIENTS and self._host() in self._local_hosts() and not self._proxied()
 
     def _post_refused(self):
         """Refus d'un POST venu d'un autre site (CSRF) : (code, motif), ou None s'il vient de l'interface. Un formulaire
@@ -501,16 +530,19 @@ class H(BaseHTTPRequestHandler):
         if self.headers.get("Sec-Fetch-Site", "").lower() == "cross-site":
             return 403, "requête venant d'un autre site"
         origin = self.headers.get("Origin")
-        if origin is not None and origin.strip().lower() != "http://" + self._host():
+        if origin is not None and origin.strip().lower() not in ("http://" + self._host(), "https://" + self._host()):
             return 403, "requête venant d'un autre site"
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
             return 415, "Content-Type application/json attendu"
         return None
 
     def _allowed(self):
-        """Le Mac lui-même passe toujours ; un autre appareil doit avoir saisi le code d'accès (cookie)."""
-        if not S.access_code or self._local():
+        """Le Mac lui-même passe toujours ; un autre appareil doit avoir saisi le code d'accès (cookie). Sans --lan, pas de
+        code : seul le Mac passe, une requête relayée par Tailscale est refusée."""
+        if self._local():
             return True
+        if not S.access_code:
+            return not self._proxied()
         morsel = SimpleCookie(self.headers.get("Cookie", "")).get(ACCESS_COOKIE)
         return bool(morsel) and hmac.compare_digest(morsel.value, S.access_token)
 
@@ -518,6 +550,9 @@ class H(BaseHTTPRequestHandler):
         if not self._host_ok():
             return self._send(403, {"error": "nom d'hôte refusé"})
         path, _, query = self.path.partition("?")
+        if path in PUBLIC_FILES:   # manifeste, icônes, service worker : demandés par le navigateur sans le cookie d'accès
+            name, ctype = PUBLIC_FILES[path]
+            return self._send(200, open(P("tools", "ui", name), "rb").read(), ctype)
         if not self._allowed():
             if path in ("/", "/index.html"):
                 return self._send(200, LOGIN_PAGE, "text/html; charset=utf-8")
@@ -676,7 +711,15 @@ def main():
         S.access_code = load_access_code()
         S.access_token = hashlib.sha256(("qwen-image-local:" + normalize_code(S.access_code)).encode()).hexdigest()
         name, ip = lan_address()
-        S.lan_urls = [f"http://{h}:{a.port}/" for h in dict.fromkeys(x for x in (name, ip, *tailscale_hosts()) if x)]
+        ts = tailscale_hosts()
+        S.lan_urls = [f"http://{h}:{a.port}/" for h in dict.fromkeys(x for x in (name, ip, *ts) if x)]
+        S.lan_hosts = {urlsplit(u).netloc.lower() for u in S.lan_urls}
+        dns = next((h for h in ts if h.endswith(".ts.net")), None)
+        if dns:
+            S.lan_hosts.add(dns)                    # nom HTTPS de « tailscale serve », admis même s'il est activé plus tard
+            https = tailscale_serve_url(dns, a.port)
+            if https:
+                S.lan_urls.insert(0, https)         # seule adresse où le téléphone peut installer l'application
         if sys.platform == "darwin":
             # empêche la veille du Mac tant que ce processus tourne (l'écran peut s'éteindre)
             subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
