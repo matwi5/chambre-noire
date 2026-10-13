@@ -611,7 +611,6 @@ function parts(w, h, steps, inp, preview){
   return { step, enc, vae, previews, total: enc + steps*step + vae + previews*vae }; }
 function fmt(s){ if(s<90) return Math.round(s)+' s'; if(s<3600) return Math.round(s/60)+' min'; return (s/3600).toFixed(1).replace('.',',')+' h'; }
 
-const RATIO_NAMES = { '1:1':'Carré', '4:3':'Paysage', '3:4':'Portrait', '3:2':'Paysage', '2:3':'Portrait', '16:9':'Large', '9:16':'Vertical' };
 const shape = (w, h, size) => { const k=size/Math.max(w,h); return `<i class="shape" style="width:${Math.max(6,Math.round(w*k))}px;height:${Math.max(6,Math.round(h*k))}px"></i>`; };
 function refreshChoices(){
   const im=singleImage(); const nrefs = mode==='edit' ? editImages.length : 0; const pv=$('previewChk').checked;
@@ -620,10 +619,10 @@ function refreshChoices(){
   const near = im ? closestRatio(im.w, im.h) : null;
   const ratioDims = r => r==='image' ? [im.w, im.h] : RATIOS[r];
   $('ratioOpts').innerHTML = (im ? ['image'] : []).concat(Object.keys(RATIOS)).map(r=>{ const [rw,rh]=ratioDims(r), on=r===opt.ratio;
-    return `<button class="opt ratio${on?' on':''}${r===near?' near':''}" data-k="${r}" aria-pressed="${on}"${r===near?' title="Proche des proportions de l\'image"':''}>${shape(rw,rh,26)}<b>${r==='image'?'Image':r}</b><small>${r==='image'?im.w+'×'+im.h:RATIO_NAMES[r]}</small></button>`; }).join('');
+    return `<button class="opt ratio${on?' on':''}${r===near?' near':''}" data-k="${r}" aria-pressed="${on}"${r===near?' title="Proche des proportions de l\'image"':''}>${shape(rw,rh,26)}<b>${r==='image'?'Image':r}</b></button>`; }).join('');
   const steps=stepsSel().steps; const [w,h]=currentDims(); const inp=inputsFor(w, h);
-  $('resOpts').innerHTML = RES.map(p=>{ const [pw,ph]=dimsFor(opt.ratio, p.scale), on=p.k===opt.res;
-    return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}"><b>${p.label}</b><small>${pw}×${ph}</small></button>`; }).join('');
+  $('resOpts').innerHTML = RES.map(p=>{ const on=p.k===opt.res;
+    return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}"><b>${p.label}</b></button>`; }).join('');
   const approx = s => E ? '≈ '+fmt(s) : '…';     // avant le premier /api/status, pas de coefficients
   $('stepOpts').innerHTML = STEPS.map(p=>{ const on=p.k===opt.steps;
     return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}" title="${p.label}"><b>${p.steps}</b><small>${approx(E && parts(w,h,p.steps,inp,pv).total)}</small></button>`; }).join('');

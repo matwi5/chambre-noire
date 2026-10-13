@@ -32,7 +32,9 @@ Mis à jour le 13/10/2026.
 ### 2026-10-13
 
 - Interface : niveaux de résolution renommés d'après le format vidéo au nombre de pixels le plus proche (360p, 540p,
-  720p, 1080p, 1440p) ; la pastille sous le texte affiche ce libellé, dimensions exactes au survol et dans les Réglages.
+  720p, 1080p, 1440p) ; la pastille sous le texte affiche ce libellé. Dans les Réglages, formats et résolutions
+  n'affichent plus que leur libellé (ni « Carré », « Paysage »…, ni dimensions) ; les dimensions exactes restent en bas
+  du panneau et au survol de la pastille.
 - Interface : réglages par défaut 720p (≈1024 px), 40 étapes et aperçus toutes les 5 étapes ; l'incognito passe du
   panneau Réglages à un bouton à droite de Générer. Les réglages retenus avant ce changement sont remis une fois à ces
   défauts (format et incognito gardés). Vérifié par 11 contrôles dans Chrome sans écran.
