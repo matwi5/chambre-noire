@@ -16,7 +16,8 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
 - API : POST /api/generate, GET /api/job/<id>, GET /api/job/<id>/preview, POST /api/job/<id>/cancel,
         GET /api/job/<id>/result et POST /api/job/<id>/forget (incognito),
         GET /api/result?name=<png>[&download=1], GET /api/status,
-        historique : GET /api/history, GET /api/thumb?name=<png>, POST /api/delete {"name": <png>}.
+        historique : GET /api/history, GET /api/thumb?name=<png>, POST /api/delete {"name": <png>},
+        images d'entrée d'une image : GET /api/input?name=<png>&file=<init.png|ref_N.png>[&thumb=1][&download=1].
 Aucun droit administrateur, aucune modification système : tout reste dans ce dossier.
 """
 import argparse, base64, datetime, glob, hashlib, hmac, json, os, queue, re, secrets, shutil, socket, subprocess, sys, threading, time, uuid, webbrowser
@@ -163,6 +164,24 @@ f.onsubmit=async e=>{e.preventDefault(); b.disabled=true; err.textContent='';
 
 
 THUMBS = P("outputs", ".thumbs")
+INPUTS = P("outputs", ".inputs")      # images d'entrée de chaque image de outputs/ : .inputs/<nom sans .png>/
+INPUT_RE = re.compile(r"(init|ref_\d+)\.png")
+
+
+def input_files(job_dir):
+    """Images d'entrée d'un dossier de travail : image d'origine (init.png) puis références (ref_1.png…), dans l'ordre."""
+    names = [n for n in os.listdir(job_dir) if INPUT_RE.fullmatch(n)] if os.path.isdir(job_dir) else []
+    return sorted(names, key=lambda n: (n != "init.png", int(re.sub(r"\D", "", n) or 0)))
+
+
+def save_inputs(job_dir, out_png):
+    """Copie les images d'entrée d'un job à côté de son image, pour les revoir depuis la galerie."""
+    names = input_files(job_dir)
+    if names:
+        dst = os.path.join(INPUTS, os.path.basename(out_png)[:-4])
+        os.makedirs(dst, exist_ok=True)
+        for n in names:
+            shutil.copy2(os.path.join(job_dir, n), os.path.join(dst, n))
 
 
 def output_path(name):
@@ -193,13 +212,14 @@ def history():
         m = meta.get(name, {})
         items.append({"name": name, "time": int(st.st_mtime), "size": st.st_size, "mode": m.get("mode"),
                       "prompt": m.get("prompt"), "width": m.get("width"), "height": m.get("height"),
-                      "steps": m.get("steps"), "seconds": m.get("seconds"), "model": m.get("model")})
+                      "steps": m.get("steps"), "seconds": m.get("seconds"), "model": m.get("model"),
+                      "inputs": input_files(os.path.join(INPUTS, name[:-4]))})
     return sorted(items, key=lambda x: x["time"], reverse=True)
 
 
-def thumbnail(fp):
+def thumbnail(fp, th=None):
     """Miniature JPEG de 320 px (côté le plus long), gardée dans outputs/.thumbs/ et refaite si l'image change."""
-    th = os.path.join(THUMBS, os.path.basename(fp)[:-4] + ".jpg")
+    th = th or os.path.join(THUMBS, os.path.basename(fp)[:-4] + ".jpg")
     if not os.path.exists(th) or os.path.getmtime(th) < os.path.getmtime(fp):
         from PIL import Image
         os.makedirs(THUMBS, exist_ok=True)
@@ -461,6 +481,10 @@ def run_job(job):
                     "sec_per_it": job.get("sec_per_it"), "file": job["out"], "size": job["size"], "backend": S.backend, "model": S.model}
             with open(P("outputs", "journal.jsonl"), "a", encoding="utf-8") as f:
                 f.write(json.dumps(meta, ensure_ascii=False) + "\n")
+            try:
+                save_inputs(job["dir"], job["out"])
+            except OSError as e:
+                print(f"[job] images d'entrée non conservées : {e}", flush=True)
             print(f"[job] PNG enregistré : {job['out']} ({job['size']} octets, {job['seconds']} s)", flush=True)
         try:
             record_calib(job)
@@ -629,6 +653,19 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, open(fp, "rb").read(), "image/png", extra)
         if path == "/api/history":
             return self._send(200, history())
+        if path == "/api/input":                  # image d'entrée d'une image de la galerie
+            out, f = output_path(q.get("name")), q.get("file", "")
+            fp = os.path.join(INPUTS, os.path.basename(out)[:-4], f) if out and INPUT_RE.fullmatch(f) else None
+            if not fp or not os.path.isfile(fp):
+                return self._send(404, {"error": "image d'entrée inconnue"})
+            if q.get("thumb"):
+                try:
+                    th = thumbnail(fp, os.path.join(THUMBS, f"{os.path.basename(out)[:-4]}__{f[:-4]}.jpg"))
+                    return self._send(200, open(th, "rb").read(), "image/jpeg")
+                except Exception as e:
+                    return self._send(500, {"error": f"miniature impossible : {e}"})
+            extra = {"Content-Disposition": f'attachment; filename="{os.path.basename(out)[:-4]}_{f}"'} if q.get("download") else None
+            return self._send(200, open(fp, "rb").read(), "image/png", extra)
         if path == "/api/thumb":
             fp = output_path(q.get("name"))
             if not fp:
@@ -678,9 +715,11 @@ class H(BaseHTTPRequestHandler):
             if not fp:
                 return self._send(404, {"error": "fichier inconnu"})
             os.remove(fp)
-            th = os.path.join(THUMBS, os.path.basename(fp)[:-4] + ".jpg")
-            if os.path.exists(th):
-                os.remove(th)
+            stem = os.path.basename(fp)[:-4]
+            for th in [os.path.join(THUMBS, stem + ".jpg"), *glob.glob(os.path.join(THUMBS, glob.escape(stem) + "__*.jpg"))]:
+                if os.path.exists(th):
+                    os.remove(th)
+            shutil.rmtree(os.path.join(INPUTS, stem), ignore_errors=True)
             print(f"[historique] supprimé : {os.path.basename(fp)}", flush=True)
             return self._send(200, {"ok": True})
         if path == "/api/generate":
@@ -761,6 +800,13 @@ def main():
         os.makedirs(P(d), exist_ok=True)
     for old in glob.glob(P("jobs", "incognito_*")):      # restes d'un job incognito interrompu par un arrêt brutal
         shutil.rmtree(old, ignore_errors=True)
+    for fp in glob.glob(P("outputs", "*.png")):        # images antérieures à la conservation des entrées : reprises
+        stem = os.path.basename(fp)[:-4]                # depuis leur dossier de travail tant qu'il existe
+        if not os.path.isdir(os.path.join(INPUTS, stem)):
+            try:
+                save_inputs(P("jobs", stem.rsplit("_", 1)[0]), fp)
+            except OSError:
+                pass
     for old in sorted(glob.glob(P("jobs", "*")))[:-20]:   # ne garde que les 20 derniers dossiers de travail
         shutil.rmtree(old, ignore_errors=True)
     threading.Thread(target=worker, daemon=True).start()

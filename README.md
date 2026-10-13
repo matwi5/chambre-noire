@@ -191,7 +191,8 @@ venv/bin/python tools/make_service.py
 ## Utilisation
 
 L'interface a quatre onglets, dans la barre du bas : **Créer** (texte → image), **Éditer**, **Dessiner** (dessin guidé)
-et **Galerie**. Elle s'adapte au téléphone comme à l'ordinateur, en thème sombre ou clair selon le système.
+et **Galerie**. Sur un écran tactile, glisser le doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le
+dessin et sur les rangées qui défilent). Elle s'adapte au téléphone comme à l'ordinateur, en thème sombre ou clair selon le système.
 Sur un écran tactile, elle allège ses effets de verre et d'animation pour rester fluide ; ajouter `?lite=1` ou
 `?lite=0` à l'adresse force l'un ou l'autre rendu.
 
@@ -218,8 +219,12 @@ Les descriptions en **anglais, longues et précises** donnent les meilleurs rés
 Pendant la génération, l'image en cours affiche l'étape, le temps restant et un bouton d'annulation ; le bouton
 **Générer** se remplit au fil des étapes. La pastille d'état en haut suit aussi la progression, depuis n'importe quel
 onglet : un appui ramène à l'image. On peut recharger la page sans rien perdre : elle se rattache à la génération en cours (sauf en incognito).
-Chaque image est enregistrée en PNG dans **`outputs\`** ; les boutons **Éditer** et **Dessiner** sous le résultat
-le réutilisent comme point de départ.
+Le mode incognito ne peut pas être changé pendant une génération. Chaque image est enregistrée en PNG dans
+**`outputs\`**, avec ses images d'entrée (références, image d'origine, zone peinte) dans `outputs\.inputs\`. Sous le
+résultat : **Télécharger**, **Partager** et **Copier** (dans le presse-papiers), puis **Éditer** et **Dessiner**, qui le
+réutilisent comme point de départ, et **Supprimer**. Partager et Copier ne sont proposés que là où le navigateur les
+permet : sur l'ordinateur lui-même, ou sur le téléphone par l'adresse HTTPS de Tailscale (pas par l'adresse `http://`
+du Wi-Fi).
 
 ### Créer (texte → image)
 
@@ -254,9 +259,16 @@ L'onglet **Galerie** montre toutes les images de `outputs\`, la plus récente d'
 l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèle, durée, prompt). Glisser sur le côté passe
 à l'image voisine (flèches du clavier sur ordinateur), glisser vers le bas ferme, un appui sur l'image masque les
 commandes. Pour zoomer (jusqu'à ×6) : pincer, toucher deux fois l'image, ou la molette sur ordinateur ; une image
-zoomée se déplace au doigt, et un double appui la remet à sa taille. **Télécharger** est en haut à droite ; en bas :
-**Éditer**, **Dessiner**, **Reprendre** (remet le texte de l'image dans l'onglet correspondant) et **Supprimer**
-(définitif, après confirmation). La zone de génération est masquée dans la galerie.
+zoomée se déplace au doigt, et un double appui la remet à sa taille. En haut à droite : **Partager**, **Copier** et
+**Télécharger** ; en bas : **Éditer**, **Dessiner**, **Reprendre** (remet le texte de l'image dans l'onglet
+correspondant) et **Supprimer** (définitif, après confirmation, images d'entrée comprises). La zone de génération est
+masquée dans la galerie.
+
+Pour une édition ou un dessin guidé, le bouton **Image d'entrée** (ou **N images d'entrée**) ouvre les images de
+départ en grand, une par une : glisser à gauche ou à droite passe de l'une à l'autre, vers le bas ferme. Chacune peut
+être téléchargée, ou reprise dans **Éditer** ou **Dessiner** pour repartir d'elle. Les images d'entrée sont conservées
+depuis le 13/10/2026 ; pour les images plus anciennes, elles ont été récupérées tant que leur dossier de travail
+existait encore (les 20 derniers).
 
 ### Mode incognito
 
@@ -476,7 +488,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 - API locale : `POST /api/generate`, `GET /api/job/<id>`, `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel`,
   `GET /api/status` ; incognito (`"incognito": true` dans `/api/generate`) : `GET /api/job/<id>/result` (image gardée en
   mémoire), `POST /api/job/<id>/forget` (l'oublier, ou arrêter la génération) ; historique : `GET /api/history`, `GET /api/thumb?name=…` (miniatures gardées dans
-  `outputs/.thumbs/`), `GET /api/result?name=…&download=1`, `POST /api/delete` ; avec `--lan`, `POST /api/login`.
+  `outputs/.thumbs/`), `GET /api/result?name=…&download=1`, `POST /api/delete` ; images d'entrée d'une image :
+  `GET /api/input?name=…&file=init.png|ref_N.png[&thumb=1][&download=1]` (gardées dans `outputs/.inputs/<image>/`) ;
+  avec `--lan`, `POST /api/login`.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés
   sous Windows (ROCm Windows ne couvre que les cartes RDNA3/RDNA4, DirectML est limité à d'anciennes versions) :
   il tournerait en CPU pur. Si vous avez une carte NVIDIA, les workflows officiels Comfy-Org

@@ -67,6 +67,8 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
 - **Fichiers** : dossier de travail `jobs/<id>/` (images d'entrée, aperçus, `sd-cli.log`, 20 derniers gardés au
   lancement), image finale `outputs/<id>_<mode>.png`, une ligne par image dans `outputs/journal.jsonl`. La galerie
   (`/api/history`) est la liste des PNG de `outputs/` croisée avec le journal ; miniatures dans `outputs/.thumbs/`.
+  Les images d'entrée (`init.png`, `ref_N.png`) sont copiées du dossier de travail vers `outputs/.inputs/<image>/` en
+  fin de job (`save_inputs`, et au démarrage pour les dossiers encore présents) ; `/api/delete` les supprime avec l'image.
 - **Interface** : un seul fichier `tools/ui/index.html` (HTML, CSS et JS sans dépendance ni build). Elle interroge
   `/api/job/<id>` chaque seconde, et se rattache après un rechargement au `last_job` de `/api/status`. Réglages et
   brouillons dans `localStorage` (`qwen-opt`, `qwen-<onglet>_prompt`). `manifest.webmanifest`, `sw.js` et les icônes

@@ -4,6 +4,31 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-13 · Images d'entrée conservées avec chaque image
+
+- **Contexte** : le porteur veut revoir depuis la galerie les images de départ d'une édition ou d'un dessin guidé, et
+  repartir de l'une d'elles. Elles n'existaient que dans `jobs/<id>/`, dont seuls les 20 derniers sont gardés.
+- **Décision** : en fin de job (hors incognito et calibration), copier `init.png` et `ref_N.png` dans
+  `outputs/.inputs/<nom de l'image>/`, servis par `/api/input` et supprimés avec l'image. `mask.png` (masque noir et
+  blanc) n'est pas gardé : la zone peinte (`ref_1.png`) montre la même chose de façon lisible. Au démarrage, les images
+  plus anciennes récupèrent leurs entrées si leur dossier de travail existe encore.
+- **Écarté** : lire les entrées dans `jobs/` (perdues après 20 générations).
+- **Conséquences** : plus de place sur le disque (une ou plusieurs images PNG par édition).
+
+## 2026-10-13 · Incognito : fermer l'application arrête la génération
+
+- **Contexte** : une génération incognito a été perdue après un redémarrage de l'application sur le téléphone. Sur
+  Android, le système peut aussi libérer une application restée en arrière-plan.
+- **Décision** (porteur) : garder le comportement initial. Fermer ou recharger l'application arrête la génération
+  incognito et la perd.
+- **Écarté** : se rattacher à la génération à la réouverture, en retenant seulement le numéro du job sur le téléphone.
+
+## 2026-10-13 · Partager et Copier seulement là où le navigateur les permet
+
+- **Décision** : les boutons utilisent l'API de partage (`navigator.share` avec un fichier) et le presse-papiers
+  (`navigator.clipboard.write`). Ils sont masqués quand le navigateur ne les offre pas, en pratique hors HTTPS
+  (adresse `http://` du Wi-Fi), au lieu d'afficher un bouton qui échoue.
+
 ## 2026-10-13 · Mode incognito : image gardée en mémoire, remise une seule fois
 
 - **Contexte** : le porteur veut une image téléchargeable mais gardée nulle part sur l'ordinateur, perdue à la
@@ -13,7 +38,7 @@ les messages de commit.
   (`/api/job/<id>/result`), puis la page lui fait oublier le job (`/forget`). La page l'affiche depuis une adresse
   `blob:`. Une nouvelle génération purge les jobs incognito terminés, et un rechargement pendant la génération l'arrête
   (`pagehide` avec `keepalive`). Pas de ligne dans le journal, pas de mesure de calibration (elle note la taille et
-  l'heure), aucun détail dans `logs/`. Le prompt n'est pas retenu comme brouillon. Le mode (bouton à droite de Générer), lui, reste actif d'une
+  l'heure), aucun détail dans `logs/`. Le prompt n'est pas retenu comme brouillon. Le mode (bouton à droite de Générer, inactif pendant une génération), lui, reste actif d'une
   visite à l'autre, pour ne pas repasser en mode normal sans s'en rendre compte. Éditer et Dessiner restent possibles
   sur l'image incognito.
 - **Écarté** : disque en mémoire vive (`hdiutil` sur Mac) : propre à macOS et plus complexe, pour un gain faible sur

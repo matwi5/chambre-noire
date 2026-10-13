@@ -31,6 +31,11 @@ Mis à jour le 13/10/2026.
 
 ### 2026-10-13
 
+- Interface : glisser entre les onglets ; image zoomée tenue sous la barre du haut et le panneau ; Partager et Copier
+  (visionneuse et résultat, masqués hors HTTPS) ; images d'entrée conservées dans `outputs/.inputs/` et visibles en
+  grand depuis la visionneuse (glisser, Télécharger, Éditer, Dessiner) ; bouton incognito inactif pendant une
+  génération. Génération incognito perdue à la fermeture : comportement confirmé par le porteur. 23 contrôles dans
+  Chrome en mode tactile et contrôle de la route `/api/input` (noms piégés refusés) ; service relancé.
 - Galerie : les miniatures manquaient parfois au premier affichage. Cause : la file d'attente des connexions du serveur
   (5 par défaut dans Python) débordait quand la galerie demandait toutes les miniatures pendant leur fabrication, d'où
   des connexions refusées (erreur relayée par Tailscale, absente de `logs/`). File portée à 128 (`Server`), miniatures
