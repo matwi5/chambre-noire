@@ -17,7 +17,7 @@ Aucun droit administrateur, aucune modification système : tout reste dans ce do
 import argparse, base64, datetime, glob, hashlib, hmac, json, os, queue, re, secrets, shutil, socket, subprocess, sys, threading, time, uuid, webbrowser
 from http.cookies import SimpleCookie
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import estimate
@@ -459,8 +459,20 @@ class H(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _host(self):
+        return self.headers.get("Host", "").strip().lower()
+
+    def _local_hosts(self):
+        return {f"{h}:{S.ui_port}" for h in ("127.0.0.1", "localhost", "[::1]")}
+
+    def _host_ok(self):
+        """Refuse les noms d'hôte inconnus : une page dont le domaine pointe vers 127.0.0.1 (rebinding DNS) arrive avec
+        son propre nom dans Host. Sont admis les noms locaux et ceux du Wi-Fi affichés au démarrage (S.lan_urls)."""
+        return self._host() in self._local_hosts() | {urlsplit(u).netloc.lower() for u in S.lan_urls}
+
     def _local(self):
-        return self.client_address[0] in LOCAL_CLIENTS
+        """Le Mac lui-même : adresse source locale et nom d'hôte local (un nom du Wi-Fi demande le code, même depuis le Mac)."""
+        return self.client_address[0] in LOCAL_CLIENTS and self._host() in self._local_hosts()
 
     def _allowed(self):
         """Le Mac lui-même passe toujours ; un autre appareil doit avoir saisi le code d'accès (cookie)."""
@@ -470,6 +482,8 @@ class H(BaseHTTPRequestHandler):
         return bool(morsel) and hmac.compare_digest(morsel.value, S.access_token)
 
     def do_GET(self):
+        if not self._host_ok():
+            return self._send(403, {"error": "nom d'hôte refusé"})
         path, _, query = self.path.partition("?")
         if not self._allowed():
             if path in ("/", "/index.html"):
@@ -520,6 +534,8 @@ class H(BaseHTTPRequestHandler):
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
+        if not self._host_ok():
+            return self._send(403, {"error": "nom d'hôte refusé"})
         path = self.path.split("?", 1)[0]
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b"{}"
