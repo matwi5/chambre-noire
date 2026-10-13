@@ -17,7 +17,12 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
         GET /api/job/<id>/result et POST /api/job/<id>/forget (incognito),
         GET /api/result?name=<png>[&download=1], GET /api/status,
         historique : GET /api/history, GET /api/thumb?name=<png>, POST /api/delete {"name": <png>},
-        images d'entrée d'une image : GET /api/input?name=<png>&file=<init.png|ref_N.png>[&thumb=1][&download=1].
+        images d'entrée d'une image : GET /api/input?name=<png>&file=<init.png|ref_N.png>[&thumb=1][&download=1],
+        notifications de fin de génération : GET /api/push/key, POST /api/push/subscribe {"subscription": …},
+        POST /api/push/unsubscribe {"endpoint": …}.
+- Notifications (Web Push, bibliothèque pywebpush) : à la fin de chaque génération, le Mac envoie une notification à
+  chaque appareil abonné, même si l'application y est fermée. Clé d'envoi propre à la machine dans
+  tools/push_vapid.pem, appareils abonnés dans tools/push_subscriptions.json (non versionnés). Jamais le prompt.
 Aucun droit administrateur, aucune modification système : tout reste dans ce dossier.
 """
 import argparse, base64, datetime, glob, hashlib, hmac, json, os, queue, re, secrets, shutil, socket, subprocess, sys, threading, time, uuid, webbrowser
@@ -164,6 +169,89 @@ f.onsubmit=async e=>{e.preventDefault(); b.disabled=true; err.textContent='';
 
 
 THUMBS = P("outputs", ".thumbs")
+PUSH_KEY = P("tools", "push_vapid.pem")
+PUSH_SUBS = P("tools", "push_subscriptions.json")
+PUSH_LOCK = threading.Lock()
+
+
+def push_vapid():
+    """Clé d'envoi des notifications (VAPID), créée au premier usage ; None si pywebpush n'est pas installé."""
+    try:
+        from py_vapid import Vapid
+    except ImportError:
+        return None
+    with PUSH_LOCK:
+        if not os.path.exists(PUSH_KEY):
+            v = Vapid()
+            v.generate_keys()
+            v.save_key(PUSH_KEY)
+            os.chmod(PUSH_KEY, 0o600)
+        return Vapid.from_file(PUSH_KEY)
+
+
+def push_public_key():
+    """Clé publique d'envoi, au format attendu par pushManager.subscribe (point non compressé, base64url)."""
+    v = push_vapid()
+    if not v:
+        return None
+    from cryptography.hazmat.primitives import serialization
+    raw = v.public_key.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
+def push_subscriptions(update=None):
+    """Appareils abonnés (abonnements Web Push) ; update(liste) modifie la liste et l'enregistre."""
+    with PUSH_LOCK:
+        try:
+            subs = json.load(open(PUSH_SUBS, encoding="utf-8"))
+        except (OSError, ValueError):
+            subs = []
+        if update:
+            subs = update(subs)
+            with open(PUSH_SUBS, "w", encoding="utf-8") as f:
+                json.dump(subs, f)
+            os.chmod(PUSH_SUBS, 0o600)
+        return subs
+
+
+def notify_job(job):
+    """Notification de fin de génération à tous les appareils abonnés, dans un thread pour ne pas retarder la file.
+    Ni prompt ni nom de fichier : le message transite (chiffré) par le service de notification du navigateur."""
+    subs = push_subscriptions()
+    if not subs or job.get("calibration"):
+        return
+    secs = job.get("seconds") or 0
+    duree = f"{int(secs // 60)} min {int(secs % 60):02d} s" if secs >= 60 else f"{int(secs)} s"
+    if job.get("status") == "done":
+        dims = "×".join(str(d) for d in job.get("dims") or [])
+        payload = {"title": "Image incognito prête" if job.get("incognito") else "Image prête",
+                   "body": f"Générée en {duree}" + (f" · {dims}" if dims else "")}
+    else:
+        payload = {"title": "Échec de la génération", "body": "Ouvrez l'application pour voir le détail."}
+    payload.update(tag="qwen-image-job", url="/")
+
+    def send():
+        try:
+            from pywebpush import webpush, WebPushException
+        except ImportError:
+            return
+        vapid, gone, sent = push_vapid(), set(), 0
+        for sub in subs:
+            try:
+                webpush(sub, json.dumps(payload, ensure_ascii=False), vapid_private_key=vapid,
+                        vapid_claims={"sub": "mailto:qwen-image-local@example.com"}, ttl=3600, timeout=15)
+                sent += 1
+            except WebPushException as e:
+                if e.response is not None and e.response.status_code in (404, 410):   # appareil désabonné
+                    gone.add(sub.get("endpoint"))
+                else:
+                    print(f"[push] envoi impossible : {e}", flush=True)
+            except Exception as e:
+                print(f"[push] envoi impossible : {e}", flush=True)
+        if gone:
+            push_subscriptions(lambda l: [x for x in l if x.get("endpoint") not in gone])
+        print(f"[push] notification envoyée à {sent} appareil{'s' if sent > 1 else ''}", flush=True)
+    threading.Thread(target=send, daemon=True).start()
 INPUTS = P("outputs", ".inputs")      # images d'entrée de chaque image de outputs/ : .inputs/<nom sans .png>/
 INPUT_RE = re.compile(r"(init|ref_\d+)\.png")
 
@@ -513,6 +601,8 @@ def worker():
                 continue
             S.current = job["id"]
             run_job(job)
+            if job.get("status") in ("done", "failed"):
+                notify_job(job)
         finally:
             S.current = None
             job.pop("proc", None)
@@ -653,6 +743,9 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, open(fp, "rb").read(), "image/png", extra)
         if path == "/api/history":
             return self._send(200, history())
+        if path == "/api/push/key":
+            key = push_public_key()
+            return self._send(200, {"key": key}) if key else self._send(503, {"error": "pywebpush non installé"})
         if path == "/api/input":                  # image d'entrée d'une image de la galerie
             out, f = output_path(q.get("name")), q.get("file", "")
             fp = os.path.join(INPUTS, os.path.basename(out)[:-4], f) if out and INPUT_RE.fullmatch(f) else None
@@ -721,6 +814,24 @@ class H(BaseHTTPRequestHandler):
                     os.remove(th)
             shutil.rmtree(os.path.join(INPUTS, stem), ignore_errors=True)
             print(f"[historique] supprimé : {os.path.basename(fp)}", flush=True)
+            return self._send(200, {"ok": True})
+        if path in ("/api/push/subscribe", "/api/push/unsubscribe"):
+            try:
+                body = json.loads(raw)
+            except ValueError:
+                body = {}
+            sub = body.get("subscription") or {}
+            endpoint = sub.get("endpoint") if path.endswith("/subscribe") else body.get("endpoint")
+            if not isinstance(endpoint, str) or not endpoint.startswith("https://"):
+                return self._send(400, {"error": "abonnement invalide"})
+            if path.endswith("/subscribe"):
+                keys = sub.get("keys") or {}
+                if not (isinstance(keys.get("p256dh"), str) and isinstance(keys.get("auth"), str)):
+                    return self._send(400, {"error": "abonnement invalide"})
+                entry = {"endpoint": endpoint, "keys": {"p256dh": keys["p256dh"], "auth": keys["auth"]}}
+                push_subscriptions(lambda l: [x for x in l if x.get("endpoint") != endpoint] + [entry])
+            else:
+                push_subscriptions(lambda l: [x for x in l if x.get("endpoint") != endpoint])
             return self._send(200, {"ok": True})
         if path == "/api/generate":
             try:

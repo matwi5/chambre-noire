@@ -176,6 +176,16 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   « Ordinateur injoignable » quand le Mac ne répond pas. `tailscale serve --https=443 off` retire cette publication.
   Les requêtes relayées par Tailscale demandent toujours le code, même si elles arrivent sur le Mac par `127.0.0.1` ;
   sans `--lan`, elles sont refusées. Sur iPhone, Safari → Partager → **Sur l'écran d'accueil** fonctionne aussi en HTTP.
+- **Notification de fin de génération** : à la fin de chaque génération (ou en cas d'échec), l'ordinateur envoie une
+  notification au téléphone, même si l'application y est fermée ou en arrière-plan ; la toucher rouvre l'application.
+  L'autorisation est demandée au premier appui sur **Générer** ; l'interrupteur **Notification en fin de génération**
+  du panneau Réglages les coupe. Elles ne passent que par l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du
+  Wi-Fi), ou sur l'ordinateur lui-même. Le message transite chiffré par le service de notification du navigateur
+  (Google pour Chrome) et ne contient ni le prompt ni le nom du fichier : « Image prête — Générée en 12 min 14 s ·
+  1024×1024 » (« Image incognito prête » en incognito). Il faut la bibliothèque `pywebpush` (installée par
+  `requirements.txt` ; sur une installation antérieure, relancer `pip install -r requirements.txt`). L'ordinateur garde
+  sa clé d'envoi dans `tools/push_vapid.pem` et les appareils abonnés dans `tools/push_subscriptions.json` ; supprimer
+  ces fichiers désabonne tous les appareils.
 - **Barre d'état** : dans l'application installée, Chrome peint la barre d'état (heure, notifications) d'une couleur
   unie ; il ne laisse pas encore une application installée dessiner dessous. L'interface lui donne en continu la couleur
   du haut de l'écran (fond flouté de l'image affichée), pour que l'application semble continuer jusqu'en haut.
@@ -506,7 +516,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 .
 ├── LICENSE               licence MIT (code du dépôt)
 ├── setup.py              installation : moteur (Vulkan, CPU, CUDA en option ; Metal sur Mac), modèle, correctif, raccourci
-├── requirements.txt      Pillow, NumPy, pywin32
+├── requirements.txt      Pillow, NumPy, pywebpush (notifications), pywin32
 ├── start.cmd             lancement alternatif (postes sans restriction de scripts)
 ├── start-ui-sdcpp.cmd    variante : interface web intégrée de sd-server, sans outil de dessin
 ├── tools/
@@ -522,7 +532,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── make_test_image.py
 │   ├── config.json       moteur, modèle et port par défaut (moteur écrit par setup.py sous Windows)
 │   ├── calibration.json  mesures de durée de la machine (créé à l'usage, non versionné)
-│   └── access_code.txt   code d'accès des appareils du Wi-Fi (créé par --lan, non versionné)
+│   ├── access_code.txt   code d'accès des appareils du Wi-Fi (créé par --lan, non versionné)
+│   └── push_vapid.pem, push_subscriptions.json   notifications : clé d'envoi et appareils abonnés (non versionnés)
 ├── tests/run_tests.py    tests de bout en bout des trois usages (interface lancée)
 └── workflows/            paramètres de référence des trois usages (JSON)
 ```

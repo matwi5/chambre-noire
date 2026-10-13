@@ -142,7 +142,7 @@
   .pane { display:none; } .pane.active { display:block; }
   .pane.active.in-l { animation:pane-l .28s var(--ease); } .pane.active.in-r { animation:pane-r .28s var(--ease); }
   @keyframes pane-l { from { opacity:0; transform:translateX(32px); } } @keyframes pane-r { from { opacity:0; transform:translateX(-32px); } }
-  .act[hidden], .btn-icon[hidden], .v-inputs[hidden] { display:none !important; }
+  .act[hidden], .btn-icon[hidden], .v-inputs[hidden], .switch[hidden] { display:none !important; }
   .pane > label:first-child { margin-top:2px; }
   label { display:block; font-size:13px; color:var(--ink2); font-weight:600; margin:14px 2px 6px; }
   textarea, select { width:100%; padding:12px 14px; border:1px solid var(--rim); border-radius:var(--r-m); font-size:16px; background:var(--field); color:var(--ink); }
@@ -586,6 +586,7 @@
   <h3>Résolution</h3><div class="chips5" id="resOpts"></div>
   <h3>Étapes</h3><div class="chips5" id="stepOpts"></div>
   <label class="switch"><input type="checkbox" id="previewChk"><span class="track"></span><span>Aperçu toutes les 5 étapes <small id="previewCost"></small></span></label>
+  <label class="switch" id="notifRow" hidden><input type="checkbox" id="notifChk"><span class="track"></span><span>Notification en fin de génération <small id="notifNote"></small></span></label>
   <div class="estimate" id="estimate"><span id="estText"></span><b id="estTime"></b></div>
 </section>
 <section class="sheet glass" id="engineSheet" role="dialog" aria-modal="true" aria-labelledby="engineTitle">
@@ -635,8 +636,8 @@ const savedOpt = (()=>{ try{ const o=JSON.parse(localStorage.getItem('qwen-opt')
   if(o.v!==2){ delete o.res; delete o.steps; delete o.preview; }   // retenus avant les défauts High, 40 étapes et aperçus : remis une fois à ces défauts
   return o; }catch(e){ return {}; } })();
 ['ratio','res','steps'].forEach(k=>{ if(savedOpt[k]) opt[k]=savedOpt[k]; });
-let incogOn = !!savedOpt.incognito;
-function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt, v:2, preview:$('previewChk').checked, incognito:incogOn})); }catch(e){} }
+let incogOn = !!savedOpt.incognito, notifyOn = savedOpt.notify!==false;
+function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt, v:2, preview:$('previewChk').checked, incognito:incogOn, notify:notifyOn})); }catch(e){} }
 const resSel = () => RES.find(p=>p.k===opt.res) || RES[1];
 const stepsSel = () => STEPS.find(p=>p.k===opt.steps) || STEPS[1];
 function currentDims(){ return dimsFor(opt.ratio, resSel().scale); }
@@ -914,6 +915,7 @@ async function followJob(j, startedAt){          // suit un job (nouveau ou repr
 }
 $('go').onclick=async()=>{
   let body; try{ body=buildRequest(); }catch(e){ toast(e.message, 'err'); return; }
+  askNotifications();                              // première génération : autorisation demandée une fois (appui en cours)
   if(estSeconds>3600 && !await ask('Génération longue', 'Temps estimé : '+fmt(estSeconds)+'. La lancer quand même ?', 'Lancer')) return;
   dropIncognito();                                // une nouvelle génération fait perdre l'image incognito affichée
   if(body.incognito) try{ localStorage.removeItem('qwen-'+mode+'_prompt'); }catch(e){}
@@ -933,6 +935,37 @@ $('go').onclick=async()=>{
   }catch(e){} })();
 async function cancelCurrent(){ if(currentJob){ log('annulation demandée'); await fetch('/api/job/'+currentJob+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'}}); } }
 $('cancel').onclick=cancelCurrent; $('cancelLoader').onclick=cancelCurrent;
+// ------------------------------------------------------------ notifications de fin de génération (Web Push, envoyées par
+// l'ordinateur même si l'application est fermée ; HTTPS ou ordinateur lui-même seulement)
+const canPush = !!(window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window);
+const b64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')+'='.repeat((4-s.length%4)%4)), c=>c.charCodeAt(0));
+const postJson = (url, body) => fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+async function pushSubscribe(){                    // abonne cet appareil (autorisation déjà donnée) ; refait à chaque ouverture
+  try{
+    const r=await fetch('/api/push/key'); if(!r.ok) return; const key=b64u((await r.json()).key);
+    const reg=await navigator.serviceWorker.ready; let sub=await reg.pushManager.getSubscription();
+    const old=sub && sub.options.applicationServerKey && new Uint8Array(sub.options.applicationServerKey);
+    if(sub && !(old && old.length===key.length && old.every((v, i)=>v===key[i]))){ await sub.unsubscribe(); sub=null; }   // clé de l'ordinateur changée
+    sub = sub || await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:key});
+    await postJson('/api/push/subscribe', {subscription:sub.toJSON()});
+  }catch(e){ log('notifications : '+e.message); } }
+async function pushUnsubscribe(){
+  try{ const sub=await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if(!sub) return;
+    await postJson('/api/push/unsubscribe', {endpoint:sub.endpoint}); await sub.unsubscribe(); }catch(e){} }
+function refreshNotif(){
+  $('notifRow').hidden=!canPush; if(!canPush) return; const denied=Notification.permission==='denied';
+  $('notifChk').checked=notifyOn && !denied; $('notifChk').disabled=denied;
+  $('notifNote').textContent=denied ? '(bloquées : à autoriser dans les réglages du navigateur)' : ''; }
+function askNotifications(){
+  if(!canPush || !notifyOn || Notification.permission!=='default') return;
+  Notification.requestPermission().then(p=>{ if(p==='granted') pushSubscribe(); refreshNotif(); }); }
+$('notifChk').addEventListener('change', async ()=>{
+  notifyOn=$('notifChk').checked; saveOpt();
+  if(!notifyOn) return pushUnsubscribe();
+  const p = Notification.permission==='default' ? await Notification.requestPermission() : Notification.permission;
+  if(p==='granted') pushSubscribe(); refreshNotif(); });
+refreshNotif();
+if(canPush && notifyOn && Notification.permission==='granted') pushSubscribe();
 // page rechargée ou quittée pendant une génération incognito : le serveur l'arrête et l'oublie
 addEventListener('pagehide', ()=>{ if(currentJob && currentIncog) forgetJob(currentJob, true); });
 // ------------------------------------------------------------ galerie et visionneuse

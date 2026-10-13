@@ -33,5 +33,8 @@ Qwen-Image.command
 
 # code d'accès des appareils du Wi-Fi (launch.py --lan)
 tools/access_code.txt
+# notifications : clé d'envoi de la machine et appareils abonnés
+tools/push_vapid.pem
+tools/push_subscriptions.json
 # fichiers du Finder
 .DS_Store

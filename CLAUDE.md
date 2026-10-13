@@ -71,6 +71,11 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
   (`/api/history`) est la liste des PNG de `outputs/` croisée avec le journal ; miniatures dans `outputs/.thumbs/`.
   Les images d'entrée (`init.png`, `ref_N.png`) sont copiées du dossier de travail vers `outputs/.inputs/<image>/` en
   fin de job (`save_inputs`, et au démarrage pour les dossiers encore présents) ; `/api/delete` les supprime avec l'image.
+- **Notifications** (Web Push, `pywebpush`) : `notify_job` envoie depuis `worker()`, dans un thread, à la fin d'un job
+  terminé ou en échec, à chaque abonnement de `tools/push_subscriptions.json` ; clé VAPID `tools/push_vapid.pem` créée au
+  premier usage. Le service worker (`tools/ui/sw.js`) affiche la notification seulement si aucune fenêtre de
+  l'application n'est visible. Le message ne contient jamais le prompt. Sans `pywebpush`, le serveur tourne, sans
+  notifications. Tester sans réseau : intercepter `requests.post` et déchiffrer avec `http_ece`.
 - **Interface** : un seul fichier `tools/ui/index.html` (HTML, CSS et JS sans dépendance ni build). Elle interroge
   `/api/job/<id>` chaque seconde, et se rattache après un rechargement au `last_job` de `/api/status`. Réglages et
   brouillons dans `localStorage` (`qwen-opt`, `qwen-<onglet>_prompt`). `manifest.webmanifest`, `sw.js` et les icônes

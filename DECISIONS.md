@@ -4,6 +4,20 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-13 · Notification de fin de génération par Web Push
+
+- **Contexte** : le porteur veut être prévenu à la fin d'une génération (souvent plus de 10 minutes) sur son téléphone,
+  où Android met en pause une application en arrière-plan.
+- **Décision** (porteur) : l'ordinateur envoie une notification Web Push (bibliothèque `pywebpush`, qui ajoute
+  `cryptography`, `py-vapid`, `http-ece`, `requests` et `aiohttp`) à chaque appareil abonné, terminée ou en échec.
+  Autorisation demandée au premier appui sur Générer, interrupteur dans Réglages pour les couper. Le message ne contient
+  ni prompt ni nom de fichier, car il transite (chiffré) par le service du navigateur ; en incognito : « Image incognito
+  prête ». Pas de notification quand l'application est à l'écran.
+- **Écarté** : notification affichée par la page seule (aucune dépendance, mais rien n'arrive une fois l'application
+  mise en pause en arrière-plan) ; service tiers comme ntfy (le message sortirait en clair vers un tiers).
+- **Conséquences** : nouvelle dépendance ; fonctionne seulement en HTTPS (Tailscale) ou sur l'ordinateur ; l'ordinateur
+  doit pouvoir joindre le service de notification (Internet).
+
 ## 2026-10-13 · Barre d'état du téléphone : couleur calculée plutôt que plein écran
 
 - **Contexte** : le porteur veut que l'application installée « continue » sous la barre d'état d'Android, sans bande
