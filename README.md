@@ -139,7 +139,8 @@ Sur Mac : `venv/bin/python tools/launch.py`.
 Options : `--port 7860` (changer de port), `--model q4|q8` (modèle Q4_K_M par défaut, Q8_0 s'il a été installé par
 `setup.py --q8`), `--backend vulkan|cuda|cpu` (Windows : forcer un moteur ; par défaut CUDA s'il est installé, sinon
 Vulkan ; sur Mac, le moteur est toujours Metal), `--no-browser`. Pour lancer Q8_0 par le raccourci, ajoutez
-`"model": "q8"` dans `tools/config.json`. L'état en haut à droite indique le moteur et le modèle utilisés.
+`"model": "q8"` dans `tools/config.json`. La pastille d'état en haut à droite indique le modèle utilisé ; un appui ouvre
+le panneau **Moteur** (moteur, modèle, calibration des estimations, journal).
 
 Par défaut, l'interface n'écoute que sur `127.0.0.1` : elle n'est pas accessible depuis le réseau.
 
@@ -148,8 +149,8 @@ Par défaut, l'interface n'écoute que sur `127.0.0.1` : elle n'est pas accessib
 Avec l'option `--lan`, l'interface est aussi accessible depuis un téléphone ou une tablette du même Wi-Fi. Tout le
 calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
 
-- **Code d'accès** : au premier lancement avec `--lan`, un code est créé dans `tools/access_code.txt`. Il s'affiche en
-  haut de l'interface ouverte sur l'ordinateur, avec l'adresse à taper sur le téléphone
+- **Code d'accès** : au premier lancement avec `--lan`, un code est créé dans `tools/access_code.txt`. Sur
+  l'ordinateur, le bouton **Téléphone** en haut de l'interface l'affiche avec l'adresse à taper sur le téléphone
   (par exemple `http://Nom-du-Mac.local:7860`). Le téléphone le demande une fois, puis le retient un an. Tout appareil
   autre que l'ordinateur lui-même doit le saisir. Pour en changer, supprimez le fichier et relancez.
 - **Veille** : sur Mac, l'ordinateur ne se met pas en veille tant que l'interface tourne avec `--lan` (l'écran peut
@@ -166,43 +167,51 @@ venv/bin/python tools/make_service.py
 
 ## Utilisation
 
+L'interface a quatre onglets, dans la barre du bas : **Créer** (texte → image), **Éditer**, **Dessiner** (dessin guidé)
+et **Galerie**. Elle s'adapte au téléphone comme à l'ordinateur, en thème sombre ou clair selon le système.
+
 ### Réglages communs
 
-Tous les réglages sont des listes à valeurs fixes :
+Sous le texte, trois pastilles résument le format, la résolution et les étapes ; un appui ouvre le panneau
+**Réglages**. Tous les réglages sont à valeurs fixes :
 
 | Réglage | Choix | Effet |
 | --- | --- | --- |
-| **Format** | 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16, et « ★ Ratio de l'image » quand une seule image est chargée | Proportions de l'image produite |
+| **Format** | 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16, et « Image » (les proportions de l'image) quand une seule image est chargée | Proportions de l'image produite |
 | **Résolution** | Low ≈512 px · Medium ≈768 px · High ≈1024 px · XHigh ≈1536 px · Max 2K natif | Nombre de pixels ; chaque option affiche les dimensions exactes |
 | **Étapes** | Low 8 · Medium 12 · High 20 · XHigh 30 · Max 40 | Finesse des détails ; chaque option affiche le **temps estimé** |
-| **Aperçu toutes les 5 étapes** | case à cocher | Montre l'image en cours de formation ; coût affiché à côté |
+| **Aperçu toutes les 5 étapes** | interrupteur | Montre l'image en cours de formation ; coût affiché à côté |
+
+Le bouton **Générer** affiche le temps estimé. Le navigateur retient les réglages choisis et le texte en cours de
+chaque onglet.
 
 Conseil : **Medium + 12 étapes** pour chercher la bonne formulation, puis montez la résolution et les étapes pour la version finale.
 Les descriptions en **anglais, longues et précises** donnent les meilleurs résultats.
 
-Pendant la génération, le panneau de droite affiche l'étape en cours, le temps restant et un bouton **Annuler**.
-On peut recharger la page sans rien perdre : elle se rattache à la génération en cours.
-Chaque image est enregistrée en PNG dans **`outputs\`** ; les boutons « → Édition » et « → Dessin guidé »
-réutilisent le résultat comme point de départ.
+Pendant la génération, l'image en cours affiche l'étape, le temps restant et un bouton d'annulation ; le bouton
+**Générer** se remplit au fil des étapes. La pastille d'état en haut suit aussi la progression, depuis n'importe quel
+onglet : un appui ramène à l'image. On peut recharger la page sans rien perdre : elle se rattache à la génération en cours.
+Chaque image est enregistrée en PNG dans **`outputs\`** ; les boutons **Éditer** et **Dessiner** sous le résultat
+le réutilisent comme point de départ.
 
-### Texte → image
+### Créer (texte → image)
 
-Écrire la description, choisir format, résolution et étapes, cliquer sur **Générer**.
+Écrire la description, ajuster les réglages si besoin, appuyer sur **Générer**.
 
-### Édition
+### Éditer
 
-Déposer 1 à 10 images (elles sont numérotées 1, 2, 3…), puis écrire une **instruction** :
+Ajouter 1 à 10 images (elles sont numérotées 1, 2, 3…), puis écrire une **instruction** :
 
 - « Replace the sky with a dramatic orange sunset, keep everything else unchanged »
 - « The woman in image 1 wears the jacket from image 2 »
 
-Avec une seule image, le format « ★ Ratio de l'image » est présélectionné pour garder ses proportions.
+Avec une seule image, le format « Image » est présélectionné pour garder ses proportions.
 Les images trop grandes sont réduites automatiquement à 2048 px de côté.
 
-### Dessin guidé
+### Dessiner (dessin guidé)
 
-1. Déposer l'image.
-2. Peindre en rouge la zone à modifier (taille du pinceau réglable, gomme, bouton Effacer).
+1. Choisir l'image.
+2. Peindre en rouge la zone à modifier (taille du pinceau réglable, gomme, bouton pour tout effacer).
 3. Choisir le mode :
    - **Masque** : seule la zone peinte est régénérée, tout le reste est conservé au pixel près ;
    - **Annotation** : le trait rouge est montré au modèle, qui s'en sert comme repère (méthode officielle de Qwen,
@@ -212,11 +221,13 @@ Les images trop grandes sont réduites automatiquement à 2048 px de côté.
 Formulez toujours une **instruction** (« Replace … with … »). Une simple description (« a fountain ») pousse souvent
 le modèle à redessiner l'original.
 
-### Historique
+### Galerie
 
-L'onglet **Historique** montre toutes les images de `outputs\`, la plus récente d'abord. Un appui sur une miniature
-l'affiche en grand avec ses réglages (date, usage, taille, étapes, modèle, durée, prompt), et propose
-**Télécharger**, **→ Édition**, **→ Dessin guidé** et **Supprimer** (définitif, après confirmation).
+L'onglet **Galerie** montre toutes les images de `outputs\`, la plus récente d'abord. Un appui sur une miniature
+l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèle, durée, prompt). Glisser sur le côté passe
+à l'image voisine (flèches du clavier sur ordinateur), glisser vers le bas ferme, un appui sur l'image masque les
+commandes. Actions : **Télécharger**, **Éditer**, **Dessiner**, **Reprendre** (remet le texte de l'image dans l'onglet
+correspondant) et **Supprimer** (définitif, après confirmation).
 
 ## Le modèle
 
@@ -345,7 +356,8 @@ devraient prendre ≈ 3 min chacune selon le modèle de coût (non mesurées).
 utilisateur (stratégie AppLocker). Utilisez le raccourci `Qwen-Image.lnk`, qui lance directement `python.exe`.
 S'il manque : `venv\Scripts\python.exe tools\make_shortcut.py`.
 
-**L'état en haut à droite indique « fichiers manquants ».** L'installation est incomplète :
+**La pastille d'état en haut à droite indique « Non prêt ».** Le panneau Moteur (un appui sur la pastille) affiche
+les fichiers manquants. L'installation est incomplète :
 `venv\Scripts\python.exe setup.py --check` puis `venv\Scripts\python.exe setup.py` (sur Mac : `venv/bin/python`).
 
 **La génération échoue immédiatement.** Le détail est dans `jobs\<identifiant>\sd-cli.log`. Sous Windows, vérifiez que
