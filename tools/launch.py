@@ -101,26 +101,49 @@ ACCESS_FILE = P("tools", "access_code.txt")
 ACCESS_COOKIE = "qwen_access"
 LOCAL_CLIENTS = ("127.0.0.1", "::1")
 LOGIN_PAGE = """<!doctype html><html lang="fr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Qwen-Image 2.1 local</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Qwen-Image 2.1 local</title>
+<meta name="theme-color" content="#0b0a16" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#eceef7" media="(prefers-color-scheme: light)">
 <style>
-:root{--bg:#f3f4f8;--card:#fff;--ink:#151827;--muted:#6a7085;--line:#e3e6ef;--accent:#5b5bd6;--err:#dc2626}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1117;--card:#1a1d2b;--ink:#eef0f7;--muted:#9aa1b8;--line:#2a2f42}}
-body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);
-font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px;box-sizing:border-box}
-form{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;width:100%;max-width:340px}
-h1{font-size:19px;margin:0 0 6px}p{color:var(--muted);margin:0 0 16px;font-size:14px}
-input{width:100%;box-sizing:border-box;font:inherit;font-size:20px;letter-spacing:.12em;text-align:center;padding:12px;
-border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--ink)}
-button{width:100%;margin-top:12px;font:inherit;font-weight:600;padding:12px;border:0;border-radius:10px;background:var(--accent);color:#fff}
-#err{color:var(--err);font-size:14px;min-height:21px;margin-top:8px}
-</style></head><body><form id="f"><h1>Qwen-Image 2.1</h1>
-<p>Code d'accès affiché sur le Mac (en haut de l'interface), à saisir une seule fois sur cet appareil.</p>
-<input id="c" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="xxxx-xxxx" autofocus>
-<button>Entrer</button><div id="err"></div></form>
+:root{color-scheme:dark;--void:#0b0a16;--ink:#f6f4ff;--ink2:rgba(236,233,255,.68);--iris:#8f7cff;--iris2:#b9a9ff;--err:#ff6b7a;
+--glass:rgba(255,255,255,.07);--glass-hi:rgba(255,255,255,.15);--field:rgba(8,6,20,.32);--rim:rgba(255,255,255,.14)}
+@media (prefers-color-scheme:light){:root{color-scheme:light;--void:#eceef7;--ink:#15131f;--ink2:rgba(21,19,31,.64);--iris:#6a52ff;
+--iris2:#8f7cff;--err:#d93a4a;--glass:rgba(255,255,255,.42);--glass-hi:rgba(255,255,255,.78);--field:rgba(255,255,255,.55);--rim:rgba(255,255,255,.75)}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:16px;background:var(--void);color:var(--ink);
+font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:-20%;z-index:-1;pointer-events:none;
+background:radial-gradient(40% 35% at 20% 18%,rgba(143,124,255,.6),transparent 70%),radial-gradient(38% 32% at 85% 30%,rgba(255,120,190,.35),transparent 70%),
+radial-gradient(45% 40% at 60% 92%,rgba(60,200,255,.3),transparent 70%)}
+form{width:100%;max-width:360px;padding:28px 22px 22px;border-radius:30px;text-align:center;border:1px solid var(--rim);
+background:linear-gradient(180deg,var(--glass-hi),var(--glass));-webkit-backdrop-filter:blur(26px) saturate(185%);backdrop-filter:blur(26px) saturate(185%);
+box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 18px 50px -18px rgba(0,0,0,.6)}
+.logo{width:52px;height:52px;margin:0 auto 14px;border-radius:16px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:24px;
+background:radial-gradient(120% 120% at 25% 15%,#d4c9ff,var(--iris) 45%,#5a3fd8);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 10px 26px -6px rgba(143,124,255,.75)}
+h1{font-size:22px;letter-spacing:-.02em;margin:0 0 6px}
+p{color:var(--ink2);margin:0 0 20px;font-size:14.5px}
+input{width:100%;font:inherit;font-size:24px;font-weight:650;letter-spacing:.16em;text-align:center;padding:14px;border-radius:18px;
+border:1px solid var(--rim);background:var(--field);color:var(--ink);outline:none}
+input:focus{border-color:var(--iris2)}
+input::placeholder{color:var(--ink2);opacity:.5}
+button{width:100%;margin-top:12px;font:inherit;font-size:17px;font-weight:700;padding:15px;border:0;border-radius:999px;color:#fff;cursor:pointer;
+background:linear-gradient(180deg,color-mix(in srgb,var(--iris2) 70%,var(--iris)),var(--iris));
+box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 10px 26px -8px var(--iris)}
+button:disabled{opacity:.6}
+#err{color:var(--err);font-size:14px;min-height:21px;margin-top:10px}
+.shake{animation:shake .4s}
+@keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+@media (prefers-reduced-motion:reduce){.shake{animation:none}}
+</style></head><body><form id="f"><div class="logo" aria-hidden="true">Q</div><h1>Qwen-Image</h1>
+<p>Saisissez le code d'accès affiché sur le Mac, sous le bouton « Téléphone » en haut de l'interface. Il n'est demandé qu'une fois sur cet appareil.</p>
+<input id="c" aria-label="Code d'accès" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="xxxx-xxxx" autofocus>
+<button id="b">Entrer</button><div id="err" role="alert"></div></form>
 <script>
-document.getElementById('f').onsubmit=async e=>{e.preventDefault();
+const f=document.getElementById('f'), b=document.getElementById('b'), err=document.getElementById('err');
+f.onsubmit=async e=>{e.preventDefault(); b.disabled=true; err.textContent='';
  const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:document.getElementById('c').value})});
- if(r.ok) location.replace('/'); else document.getElementById('err').textContent='Code incorrect.';};
+ if(r.ok) return location.replace('/');
+ b.disabled=false; err.textContent='Code incorrect.'; f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake');};
 </script></body></html>"""
 
 
