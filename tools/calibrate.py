@@ -6,7 +6,8 @@ r"""Calibration des estimations de durée : trois courtes générations dont les
 - texte → image 512×512 et 768×768 : deux tailles de séquence, pour ajuster les deux coûts d'une étape ;
 - édition 512×512 avec une référence (l'image 512×512 produite juste avant) : coût de l'encodage des références.
 Les images produites restent dans jobs/ (pas dans outputs/ ni dans le journal). --if-needed ne fait rien si ce
-moteur et ce modèle ont déjà trois mesures. setup.py lance ce script à la fin de l'installation.
+moteur et ce modèle ont déjà trois mesures faites avec la release de sd.cpp installée : après une mise à jour du
+moteur, la calibration est refaite. setup.py lance ce script à la fin de l'installation.
 """
 import argparse, base64, os, sys, time
 
@@ -27,8 +28,8 @@ def main():
     ap.add_argument("--if-needed", action="store_true", help="ne rien faire si ce moteur et ce modèle sont déjà calibrés")
     a = ap.parse_args()
     launch.setup_state(cfg, a.backend, a.model)
-    if a.if_needed and launch.S.store.count(launch.S.backend, launch.S.model) >= len(RUNS):
-        print(f"[calibration] {launch.S.backend}/{launch.S.model} : déjà faite")
+    if a.if_needed and launch.S.store.count(launch.S.backend, launch.S.model, launch.S.engine) >= len(RUNS):
+        print(f"[calibration] {launch.S.backend}/{launch.S.model} : déjà faite ({launch.S.engine})")
         return
     ref = None
     for i, (kind, w, h) in enumerate(RUNS, 1):
@@ -47,7 +48,7 @@ def main():
         print(f"[calibration] {i}/{len(RUNS)} : {job['seconds']} s", flush=True)
         if ref is None:
             ref = "data:image/png;base64," + base64.b64encode(open(job["out"], "rb").read()).decode()
-    c = launch.S.store.coefficients(launch.S.backend, launch.S.model)
+    c = launch.S.store.coefficients(launch.S.backend, launch.S.model, launch.S.engine)
     print(f"[calibration] terminée : étape {c['a'] + c['b']:.1f} s à 512×512, encodage {c['e0']:.0f} s, "
           f"décodage {c['v'] * 0.262:.0f} s à 512×512")
 

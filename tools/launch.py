@@ -61,11 +61,11 @@ BACKENDS = {
 
 def record_calib(job):
     """Ajoute la mesure de la génération aux données de calibration (voir tools/estimate.py)."""
-    sample = estimate.make_sample(job)
+    sample = estimate.make_sample(job, S.engine)
     if not sample:
         return
     S.store.add(S.backend, S.model, sample)
-    c = S.store.coefficients(S.backend, S.model)
+    c = S.store.coefficients(S.backend, S.model, S.engine)
     print(f"[calibration] {S.backend}/{S.model} : étape {sample['step']:.2f} s ({sample['w']}×{sample['h']}"
           f"{', ' + str(len(job.get('ref_px') or [])) + ' réf.' if job.get('ref_px') else ''}), "
           f"encodage {sample['enc']:.0f} s, décodage {sample['vae']:.0f} s — {c['samples']} mesure{'s' if c['samples'] > 1 else ''}", flush=True)
@@ -78,6 +78,15 @@ def load_config():
     return cfg
 
 
+def engine_tag(backend):
+    """Release de sd.cpp installée pour ce moteur (sdcpp/<moteur>/.installed, écrit par setup.py) ; une installation
+    antérieure à ce marqueur est la première release épinglée."""
+    try:
+        return open(P("sdcpp", backend, ".installed"), encoding="utf-8").read().strip() or estimate.LEGACY_ENGINE
+    except OSError:
+        return estimate.LEGACY_ENGINE
+
+
 def default_backend(cfg):
     """Moteur de config.json, ou celui de la plateforme si config.json en nomme un d'une autre (vulkan sur Mac)."""
     return cfg["backend"] if cfg["backend"] in PLATFORM_BACKENDS else PLATFORM_BACKENDS[0]
@@ -85,6 +94,7 @@ def default_backend(cfg):
 
 class State:
     backend = "vulkan"
+    engine = estimate.LEGACY_ENGINE   # release de sd.cpp du moteur choisi
     model = "q4"
     store = None
     cfg = {}
@@ -315,7 +325,7 @@ class H(BaseHTTPRequestHandler):
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model, "queued": S.q.qsize(),
                                     "current_job": S.current, "last_job": public(last) if last else None,
-                                    "estimates": S.store.coefficients(S.backend, S.model)})
+                                    "estimates": S.store.coefficients(S.backend, S.model, S.engine)})
         m = re.match(r"^/api/job/([\w-]+)(/preview)?$", path)
         if m:
             job = S.jobs.get(m.group(1))
@@ -384,7 +394,7 @@ def setup_state(cfg, backend, model):
     if not os.path.exists(exe):
         py = "venv\\Scripts\\python.exe" if os.name == "nt" else "venv/bin/python"
         sys.exit(f"binaire introuvable : {exe} (lancez : {py} setup.py)")
-    S.backend, S.model = backend, model
+    S.backend, S.model, S.engine = backend, model, engine_tag(backend)
     MODELS["diffusion"] = DIFFUSION[model]
     S.store = estimate.Store(CALIB)
 

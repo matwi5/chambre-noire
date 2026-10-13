@@ -267,7 +267,9 @@ RTX 4060/4070) : une image High de 20 étapes en moins d'une minute.
 
 - une étape coûte a·n + b·n², où n est la longueur de la séquence traitée : l'image produite plus chaque image de
   référence, que le moteur ramène à la même surface. a couvre les couches ordinaires, b l'attention, qui croît au
-  carré de la séquence ;
+  carré de la séquence. Avec le cache de préfixe du moteur Mac (release `master-903` et suivantes), les étapes ne
+  recalculent plus le texte ni les références : une étape coûte a·nt + b·nt·n, où nt ne compte que l'image produite,
+  et la première étape calcule une fois la part des références ;
 - l'encodage coûte un temps fixe pour le texte, plus un temps par mégapixel de référence (lue aussi par l'encodeur
   Qwen3-VL) ;
 - le décodage de l'image, et de chaque aperçu, est proportionnel au nombre de pixels ;
@@ -275,7 +277,9 @@ RTX 4060/4070) : une image High de 20 étapes en moins d'une minute.
 
 Les coefficients partent de valeurs propres au moteur (Vulkan, CUDA, CPU, Metal), puis sont ajustés sur les mesures de
 votre machine : les 40 dernières générations par moteur et par modèle, résumées par des médianes, si bien qu'une
-génération anormale (machine occupée, premier chargement du modèle) ne fausse pas l'estimation. Dès que deux tailles
+génération anormale (machine occupée, premier chargement du modèle) ne fausse pas l'estimation. Chaque mesure garde
+la version de stable-diffusion.cpp qui l'a produite : après une mise à jour du moteur, les anciennes mesures sont
+ignorées et `setup.py` refait la calibration. Dès que deux tailles
 d'image assez différentes ont été mesurées, a et b sont ajustés séparément, ce qui fiabilise les estimations en haute
 résolution. Pour que ce soit le cas dès la première image, `setup.py` finit par trois courtes générations de
 calibration (texte → image en 512 et 768 px, édition en 512 px) ; `--no-calibrate` les saute et

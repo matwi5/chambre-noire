@@ -208,10 +208,11 @@ function inputsFor(w, h){
   if(mode==='mask') return { refs: [w*h], init: $('mask_mode').value==='annotation' ? 0 : w*h };
   return { refs: [], init: 0 };
 }
-// étape = a·n + b·n² (n = jetons/1024, sortie + références) ; encodage, VAE et part fixe : voir tools/estimate.py
+// étape = a·n + b·n² (n = jetons/1024, sortie + références) ; avec le cache de préfixe (E.kv), a·nt + b·nt·n (nt : jetons
+// de la sortie), plus le préfixe calculé une fois (étape·nr/nt) ; encodage, VAE et part fixe : voir tools/estimate.py
 function parts(w, h, steps, inp, preview){
-  const R=inp.refs.reduce((t,p)=>t+p, 0)/1e6, I=inp.init/1e6, M=w*h/1e6, n=(w*h + R*1e6)/256/1024;
-  const step=E.a*n + E.b*n*n, enc=E.o + E.e0 + E.e1*R + E.u*(R+I), vae=E.v*M;
+  const R=inp.refs.reduce((t,p)=>t+p, 0)/1e6, I=inp.init/1e6, M=w*h/1e6, nt=w*h/256/1024, n=(w*h + R*1e6)/256/1024, p=E.kv ? nt : n;
+  const step=E.a*p + E.b*p*n, prefix=E.kv ? step*(n-nt)/nt : 0, enc=E.o + E.e0 + E.e1*R + E.u*(R+I) + prefix, vae=E.v*M;
   const previews = preview ? Math.floor(steps/PREVIEW_EVERY) : 0;
   return { step, enc, vae, previews, total: enc + steps*step + vae + previews*vae }; }
 function fmt(s){ if(s<90) return Math.round(s)+' s'; if(s<3600) return Math.round(s/60)+' min'; return (s/3600).toFixed(1).replace('.',',')+' h'; }
