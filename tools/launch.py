@@ -622,7 +622,11 @@ class H(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Set-Cookie", f"{ACCESS_COOKIE}={S.access_token}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Strict")
+            # Lax et non Strict : Chrome Android compte l'ouverture de l'application installée (écran d'accueil) comme une
+            # arrivée d'un autre site et n'enverrait pas un cookie Strict, d'où le code redemandé à chaque ouverture.
+            # Lax n'est envoyé d'un autre site que pour l'ouverture d'une page (GET, sans effet) ; les POST restent
+            # protégés par _post_refused.
+            self.send_header("Set-Cookie", f"{ACCESS_COOKIE}={S.access_token}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax")
             self.end_headers()
             self.wfile.write(body)
             return
