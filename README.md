@@ -22,12 +22,13 @@ sur Mac avec son backend **Metal**, la technologie graphique d'Apple.
 1. [Prérequis](#prérequis)
 2. [Installation](#installation)
 3. [Lancement](#lancement)
-4. [Utilisation](#utilisation)
-5. [Le modèle](#le-modèle)
-6. [Performances](#performances)
-7. [Dépannage](#dépannage)
-8. [Fonctionnement technique](#fonctionnement-technique)
-9. [Crédits et licences](#crédits-et-licences)
+4. [Depuis un téléphone](#depuis-un-téléphone)
+5. [Utilisation](#utilisation)
+6. [Le modèle](#le-modèle)
+7. [Performances](#performances)
+8. [Dépannage](#dépannage)
+9. [Fonctionnement technique](#fonctionnement-technique)
+10. [Crédits et licences](#crédits-et-licences)
 
 ---
 
@@ -140,7 +141,28 @@ Options : `--port 7860` (changer de port), `--model q4|q8` (modèle Q4_K_M par d
 Vulkan ; sur Mac, le moteur est toujours Metal), `--no-browser`. Pour lancer Q8_0 par le raccourci, ajoutez
 `"model": "q8"` dans `tools/config.json`. L'état en haut à droite indique le moteur et le modèle utilisés.
 
-L'interface n'écoute que sur `127.0.0.1` : elle n'est pas accessible depuis le réseau.
+Par défaut, l'interface n'écoute que sur `127.0.0.1` : elle n'est pas accessible depuis le réseau.
+
+## Depuis un téléphone
+
+Avec l'option `--lan`, l'interface est aussi accessible depuis un téléphone ou une tablette du même Wi-Fi. Tout le
+calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
+
+- **Code d'accès** : au premier lancement avec `--lan`, un code est créé dans `tools/access_code.txt`. Il s'affiche en
+  haut de l'interface ouverte sur l'ordinateur, avec l'adresse à taper sur le téléphone
+  (par exemple `http://Nom-du-Mac.local:7860`). Le téléphone le demande une fois, puis le retient un an. Tout appareil
+  autre que l'ordinateur lui-même doit le saisir. Pour en changer, supprimez le fichier et relancez.
+- **Veille** : sur Mac, l'ordinateur ne se met pas en veille tant que l'interface tourne avec `--lan` (l'écran peut
+  s'éteindre).
+- **Toujours disponible (Mac)** : pour que l'interface démarre seule à l'ouverture de session, sans fenêtre,
+  accessible depuis le Wi-Fi :
+
+```bash
+venv/bin/python tools/make_service.py
+```
+
+`venv/bin/python tools/make_service.py --remove` retire ce démarrage automatique. Le journal du service est dans
+`logs/service.log`. Le raccourci `Qwen-Image.command` ouvre alors simplement l'interface déjà lancée.
 
 ## Utilisation
 
@@ -189,6 +211,12 @@ Les images trop grandes sont réduites automatiquement à 2048 px de côté.
 
 Formulez toujours une **instruction** (« Replace … with … »). Une simple description (« a fountain ») pousse souvent
 le modèle à redessiner l'original.
+
+### Historique
+
+L'onglet **Historique** montre toutes les images de `outputs\`, la plus récente d'abord. Un appui sur une miniature
+l'affiche en grand avec ses réglages (date, usage, taille, étapes, modèle, durée, prompt), et propose
+**Télécharger**, **→ Édition**, **→ Dessin guidé** et **Supprimer** (définitif, après confirmation).
 
 ## Le modèle
 
@@ -387,7 +415,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     préfixe en très grande résolution ; `--mmap` fonctionne depuis `master-959` (les versions antérieures sortaient une
     image en bruit).
 - API locale : `POST /api/generate`, `GET /api/job/<id>`, `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel`,
-  `GET /api/status`.
+  `GET /api/status` ; historique : `GET /api/history`, `GET /api/thumb?name=…` (miniatures gardées dans
+  `outputs/.thumbs/`), `GET /api/result?name=…&download=1`, `POST /api/delete` ; avec `--lan`, `POST /api/login`.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés
   sous Windows (ROCm Windows ne couvre que les cartes RDNA3/RDNA4, DirectML est limité à d'anciennes versions) :
   il tournerait en CPU pur. Si vous avez une carte NVIDIA, les workflows officiels Comfy-Org
@@ -409,10 +438,12 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── ui/index.html     l'interface
 │   ├── fix_int8_te.py    correctif de l'encodeur texte int8 (Windows)
 │   ├── make_shortcut.py  crée Qwen-Image.lnk (Windows) ou Qwen-Image.command (Mac)
+│   ├── make_service.py   Mac : démarrage automatique de l'interface, accessible depuis le Wi-Fi
 │   ├── make_mask.py      génère un masque ou une annotation par script
 │   ├── make_test_image.py
 │   ├── config.json       moteur, modèle et port par défaut (moteur écrit par setup.py sous Windows)
-│   └── calibration.json  mesures de durée de la machine (créé à l'usage, non versionné)
+│   ├── calibration.json  mesures de durée de la machine (créé à l'usage, non versionné)
+│   └── access_code.txt   code d'accès des appareils du Wi-Fi (créé par --lan, non versionné)
 ├── tests/run_tests.py    tests de bout en bout des trois usages (interface lancée)
 └── workflows/            paramètres de référence des trois usages (JSON)
 ```

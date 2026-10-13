@@ -23,6 +23,8 @@ elif sys.platform == "darwin":
         f.write("#!/bin/zsh\n"
                 "# Qwen-Image 2.1 local : interface sur http://127.0.0.1:7860/ (fermer la fenêtre pour arrêter)\n"
                 'cd "$(dirname "$0")"\n'
+                "# interface déjà lancée (service de tools/make_service.py, ou autre fenêtre) : l'ouvrir simplement\n"
+                'if curl -s -o /dev/null --max-time 2 http://127.0.0.1:7860/api/status; then open http://127.0.0.1:7860/; exit 0; fi\n'
                 'exec venv/bin/python tools/launch.py "$@"\n')
     os.chmod(path, 0o755)
     print("raccourci écrit :", path)

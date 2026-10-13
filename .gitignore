@@ -30,3 +30,8 @@ tools/calibration.json
 
 # raccourci macOS généré par setup.py
 Qwen-Image.command
+
+# code d'accès des appareils du Wi-Fi (launch.py --lan)
+tools/access_code.txt
+# fichiers du Finder
+.DS_Store

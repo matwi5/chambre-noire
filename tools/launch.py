@@ -3,16 +3,21 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   Windows : venv\Scripts\python.exe tools\launch.py [--port 7860] [--backend vulkan|cuda|cpu] [--model q4|q8] [--no-browser]
   macOS   : venv/bin/python tools/launch.py [--port 7860] [--model q4|q8] [--no-browser]
 
-- L'interface écoute sur 127.0.0.1:<port> et sert tools/ui/index.html.
+- L'interface écoute sur 127.0.0.1:<port> et sert tools/ui/index.html. Avec --lan, elle écoute aussi sur le Wi-Fi
+  (téléphone, tablette) : les appareils autres que le Mac doivent saisir une fois le code d'accès de
+  tools/access_code.txt, créé au premier lancement ; sur macOS, le Mac ne se met pas en veille tant que le lanceur tourne.
 - Chaque génération lance sd-cli (rechargement quasi instantané grâce à --mmap et au cache disque),
   lit sa progression (étape k/N, secondes par étape), expose des aperçus intermédiaires optionnels et enregistre
   le PNG final dans outputs/.
 - API : POST /api/generate, GET /api/job/<id>, GET /api/job/<id>/preview, POST /api/job/<id>/cancel,
-        GET /api/result?name=<png>, GET /api/status.
+        GET /api/result?name=<png>[&download=1], GET /api/status,
+        historique : GET /api/history, GET /api/thumb?name=<png>, POST /api/delete {"name": <png>}.
 Aucun droit administrateur, aucune modification système : tout reste dans ce dossier.
 """
-import argparse, base64, datetime, glob, json, os, queue, re, shutil, subprocess, sys, threading, time, uuid, webbrowser
+import argparse, base64, datetime, glob, hashlib, hmac, json, os, queue, re, secrets, shutil, socket, subprocess, sys, threading, time, uuid, webbrowser
+from http.cookies import SimpleCookie
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+from urllib.parse import parse_qs
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import estimate
@@ -92,11 +97,126 @@ def default_backend(cfg):
     return cfg["backend"] if cfg["backend"] in PLATFORM_BACKENDS else PLATFORM_BACKENDS[0]
 
 
+ACCESS_FILE = P("tools", "access_code.txt")
+ACCESS_COOKIE = "qwen_access"
+LOCAL_CLIENTS = ("127.0.0.1", "::1")
+LOGIN_PAGE = """<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Qwen-Image 2.1 local</title>
+<style>
+:root{--bg:#f3f4f8;--card:#fff;--ink:#151827;--muted:#6a7085;--line:#e3e6ef;--accent:#5b5bd6;--err:#dc2626}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1117;--card:#1a1d2b;--ink:#eef0f7;--muted:#9aa1b8;--line:#2a2f42}}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);
+font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px;box-sizing:border-box}
+form{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;width:100%;max-width:340px}
+h1{font-size:19px;margin:0 0 6px}p{color:var(--muted);margin:0 0 16px;font-size:14px}
+input{width:100%;box-sizing:border-box;font:inherit;font-size:20px;letter-spacing:.12em;text-align:center;padding:12px;
+border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--ink)}
+button{width:100%;margin-top:12px;font:inherit;font-weight:600;padding:12px;border:0;border-radius:10px;background:var(--accent);color:#fff}
+#err{color:var(--err);font-size:14px;min-height:21px;margin-top:8px}
+</style></head><body><form id="f"><h1>Qwen-Image 2.1</h1>
+<p>Code d'accès affiché sur le Mac (en haut de l'interface), à saisir une seule fois sur cet appareil.</p>
+<input id="c" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="xxxx-xxxx" autofocus>
+<button>Entrer</button><div id="err"></div></form>
+<script>
+document.getElementById('f').onsubmit=async e=>{e.preventDefault();
+ const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:document.getElementById('c').value})});
+ if(r.ok) location.replace('/'); else document.getElementById('err').textContent='Code incorrect.';};
+</script></body></html>"""
+
+
+THUMBS = P("outputs", ".thumbs")
+
+
+def output_path(name):
+    """Chemin d'une image de outputs/ à partir de son nom, ou None si le nom sort du dossier ou n'est pas un PNG."""
+    name = os.path.basename(str(name or ""))
+    if not name or name.startswith(".") or not name.lower().endswith(".png"):
+        return None
+    fp = P("outputs", name)
+    return fp if os.path.isfile(fp) else None
+
+
+def history():
+    """Images de outputs/, la plus récente d'abord, avec les réglages notés dans outputs/journal.jsonl."""
+    meta = {}
+    try:
+        with open(P("outputs", "journal.jsonl"), encoding="utf-8") as f:
+            for line in f:
+                try:
+                    m = json.loads(line)
+                except ValueError:
+                    continue
+                meta[os.path.basename(m.get("file") or "")] = m
+    except OSError:
+        pass
+    items = []
+    for fp in glob.glob(P("outputs", "*.png")):
+        name, st = os.path.basename(fp), os.stat(fp)
+        m = meta.get(name, {})
+        items.append({"name": name, "time": int(st.st_mtime), "size": st.st_size, "mode": m.get("mode"),
+                      "prompt": m.get("prompt"), "width": m.get("width"), "height": m.get("height"),
+                      "steps": m.get("steps"), "seconds": m.get("seconds"), "model": m.get("model")})
+    return sorted(items, key=lambda x: x["time"], reverse=True)
+
+
+def thumbnail(fp):
+    """Miniature JPEG de 320 px (côté le plus long), gardée dans outputs/.thumbs/ et refaite si l'image change."""
+    th = os.path.join(THUMBS, os.path.basename(fp)[:-4] + ".jpg")
+    if not os.path.exists(th) or os.path.getmtime(th) < os.path.getmtime(fp):
+        from PIL import Image
+        os.makedirs(THUMBS, exist_ok=True)
+        with Image.open(fp) as im:
+            im = im.convert("RGB")
+            im.thumbnail((320, 320))
+            im.save(th, "JPEG", quality=82)
+    return th
+
+
+def normalize_code(code):
+    return re.sub(r"[^a-z0-9]", "", str(code).lower())
+
+
+def load_access_code():
+    """Code d'accès des appareils du Wi-Fi : créé au premier lancement avec --lan, gardé dans tools/access_code.txt."""
+    if os.path.exists(ACCESS_FILE):
+        code = open(ACCESS_FILE, encoding="utf-8").read().strip()
+        if len(normalize_code(code)) >= 6:
+            return code
+    alphabet = "abcdefghjkmnpqrstuvwxyz23456789"          # sans caractères ambigus (0/o, 1/l/i)
+    raw = "".join(secrets.choice(alphabet) for _ in range(8))
+    code = raw[:4] + "-" + raw[4:]
+    with open(ACCESS_FILE, "w", encoding="utf-8") as f:
+        f.write(code + "\n")
+    os.chmod(ACCESS_FILE, 0o600)
+    return code
+
+
+def lan_address():
+    """Nom Bonjour (.local) et adresse IP du Mac sur le réseau local, pour l'afficher à l'utilisateur."""
+    name = None
+    if sys.platform == "darwin":
+        try:
+            name = subprocess.run(["scutil", "--get", "LocalHostName"], capture_output=True, text=True).stdout.strip() + ".local"
+        except OSError:
+            pass
+    ip = None
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sk:   # aucune donnée envoyée : choisit l'interface sortante
+            sk.connect(("192.0.2.1", 9))
+            ip = sk.getsockname()[0]
+    except OSError:
+        pass
+    return name or ip, ip
+
+
 class State:
     backend = "vulkan"
     engine = estimate.LEGACY_ENGINE   # release de sd.cpp du moteur choisi
     model = "q4"
     store = None
+    access_code = None       # avec --lan : code demandé aux appareils autres que le Mac
+    access_token = None      # valeur du cookie posé après saisie du code (empreinte du code, pas le code)
+    lan_urls = []
     cfg = {}
     ui_port = 7860
     jobs = {}
@@ -302,7 +422,7 @@ class H(BaseHTTPRequestHandler):
             return
         sys.stderr.write("[ui] " + msg + "\n")
 
-    def _send(self, code, body, ctype="application/json; charset=utf-8"):
+    def _send(self, code, body, ctype="application/json; charset=utf-8", headers=None):
         if isinstance(body, (dict, list)):
             body = json.dumps(body, ensure_ascii=False).encode("utf-8")
         elif isinstance(body, str):
@@ -311,11 +431,27 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
 
+    def _local(self):
+        return self.client_address[0] in LOCAL_CLIENTS
+
+    def _allowed(self):
+        """Le Mac lui-même passe toujours ; un autre appareil doit avoir saisi le code d'accès (cookie)."""
+        if not S.access_code or self._local():
+            return True
+        morsel = SimpleCookie(self.headers.get("Cookie", "")).get(ACCESS_COOKIE)
+        return bool(morsel) and hmac.compare_digest(morsel.value, S.access_token)
+
     def do_GET(self):
         path, _, query = self.path.partition("?")
+        if not self._allowed():
+            if path in ("/", "/index.html"):
+                return self._send(200, LOGIN_PAGE, "text/html; charset=utf-8")
+            return self._send(401, {"error": "code d'accès requis"})
         if path in ("/", "/index.html"):
             return self._send(200, open(P("tools", "ui", "index.html"), "rb").read(), "text/html; charset=utf-8")
         if path == "/api/status":
@@ -325,7 +461,9 @@ class H(BaseHTTPRequestHandler):
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model, "queued": S.q.qsize(),
                                     "current_job": S.current, "last_job": public(last) if last else None,
-                                    "estimates": S.store.coefficients(S.backend, S.model, S.engine)})
+                                    "estimates": S.store.coefficients(S.backend, S.model, S.engine),
+                                    # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
+                                    "phone": {"urls": S.lan_urls, "code": S.access_code} if S.access_code and self._local() else None})
         m = re.match(r"^/api/job/([\w-]+)(/preview)?$", path)
         if m:
             job = S.jobs.get(m.group(1))
@@ -339,18 +477,60 @@ class H(BaseHTTPRequestHandler):
                 except OSError:
                     return self._send(404, {"error": "aperçu en cours d'écriture"})
             return self._send(200, public(job))
+        q = {k: v[0] for k, v in parse_qs(query).items()}
         if path == "/api/result":
-            name = os.path.basename(query.replace("name=", "").replace("%20", " "))
-            fp = P("outputs", name)
-            if os.path.isfile(fp):
-                return self._send(200, open(fp, "rb").read(), "image/png")
-            return self._send(404, {"error": "fichier inconnu"})
+            fp = output_path(q.get("name"))
+            if not fp:
+                return self._send(404, {"error": "fichier inconnu"})
+            extra = {"Content-Disposition": f'attachment; filename="{os.path.basename(fp)}"'} if q.get("download") else None
+            return self._send(200, open(fp, "rb").read(), "image/png", extra)
+        if path == "/api/history":
+            return self._send(200, history())
+        if path == "/api/thumb":
+            fp = output_path(q.get("name"))
+            if not fp:
+                return self._send(404, {"error": "fichier inconnu"})
+            try:
+                return self._send(200, open(thumbnail(fp), "rb").read(), "image/jpeg")
+            except Exception as e:
+                return self._send(500, {"error": f"miniature impossible : {e}"})
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
         path = self.path.split("?", 1)[0]
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b"{}"
+        if path == "/api/login" and S.access_code:
+            try:
+                code = json.loads(raw).get("code", "")
+            except Exception:
+                code = (parse_qs(raw.decode("utf-8", "replace")).get("code") or [""])[0]
+            if not hmac.compare_digest(normalize_code(code), normalize_code(S.access_code)):
+                time.sleep(1)                      # freine les essais en série
+                return self._send(403, {"error": "code incorrect"})
+            body = b'{"ok": true}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Set-Cookie", f"{ACCESS_COOKIE}={S.access_token}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Strict")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if not self._allowed():
+            return self._send(401, {"error": "code d'accès requis"})
+        if path == "/api/delete":
+            try:
+                fp = output_path(json.loads(raw).get("name"))
+            except Exception:
+                fp = None
+            if not fp:
+                return self._send(404, {"error": "fichier inconnu"})
+            os.remove(fp)
+            th = os.path.join(THUMBS, os.path.basename(fp)[:-4] + ".jpg")
+            if os.path.exists(th):
+                os.remove(th)
+            print(f"[historique] supprimé : {os.path.basename(fp)}", flush=True)
+            return self._send(200, {"ok": True})
         if path == "/api/generate":
             try:
                 req = json.loads(raw)
@@ -407,6 +587,8 @@ def main():
     ap.add_argument("--model", choices=list(DIFFUSION), default=cfg.get("model", "q4"),
                     help="q4 (Q4_K_M, par défaut) ou q8 (Q8_0, plus fidèle, installé par setup.py --q8)")
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--lan", action="store_true", default=bool(cfg.get("lan")),
+                    help="accessible aussi depuis le Wi-Fi (téléphone), avec un code d'accès ; Mac maintenu éveillé")
     a = ap.parse_args()
     S.ui_port = a.port
     setup_state(cfg, a.backend, a.model)
@@ -415,10 +597,20 @@ def main():
     for old in sorted(glob.glob(P("jobs", "*")))[:-20]:   # ne garde que les 20 derniers dossiers de travail
         shutil.rmtree(old, ignore_errors=True)
     threading.Thread(target=worker, daemon=True).start()
-    httpd = ThreadingHTTPServer(("127.0.0.1", a.port), H)
+    if a.lan:
+        S.access_code = load_access_code()
+        S.access_token = hashlib.sha256(("qwen-image-local:" + normalize_code(S.access_code)).encode()).hexdigest()
+        name, ip = lan_address()
+        S.lan_urls = [f"http://{h}:{a.port}/" for h in dict.fromkeys(x for x in (name, ip) if x)]
+        if sys.platform == "darwin":
+            # empêche la veille du Mac tant que ce processus tourne (l'écran peut s'éteindre)
+            subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
+    httpd = ThreadingHTTPServer(("0.0.0.0" if a.lan else "127.0.0.1", a.port), H)
     httpd.daemon_threads = True
     url = f"http://127.0.0.1:{a.port}/"
     print(f"[launch] backend {S.backend}, modèle {S.model} — interface : {url}  (Ctrl+C pour arrêter)", flush=True)
+    if a.lan:
+        print(f"[launch] depuis le Wi-Fi : {' ou '.join(S.lan_urls)} — code d'accès dans tools/access_code.txt", flush=True)
     if not a.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     try:

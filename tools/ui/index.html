@@ -22,11 +22,14 @@
   header { display:flex; align-items:center; gap:14px; padding:18px 28px; }
   .logo { width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg, var(--accent), var(--accent2)); display:grid; place-items:center; color:#fff; font-weight:800; box-shadow:var(--shadow); }
   header h1 { font-size:19px; margin:0; letter-spacing:-.01em; }
+  #phone { margin-left:auto; font-size:12px; color:var(--muted); text-align:right; line-height:1.35; }
+  #phone b { color:var(--ink); font-family:ui-monospace, Menlo, monospace; letter-spacing:.04em; }
+  #phone:not([hidden]) + #status { margin-left:0; }
   #status { margin-left:auto; font-size:13px; padding:6px 12px; border-radius:999px; background:var(--card); border:1px solid var(--line); display:flex; align-items:center; gap:8px; }
   #status::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--warn); }
   #status.ok::before { background:var(--ok); } #status.err::before { background:var(--err); }
   main { display:grid; grid-template-columns: minmax(340px, 540px) 1fr; gap:22px; padding:0 28px 32px; }
-  @media (max-width: 980px) { main { grid-template-columns:1fr; } header { padding:16px; } main { padding:0 16px 24px; } }
+  @media (max-width: 980px) { main { grid-template-columns:minmax(0, 1fr); } header { padding:16px; } main { padding:0 16px 24px; } }
   .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); }
   nav { display:flex; gap:6px; padding:6px; background:var(--bg2); border-radius:14px; margin-bottom:16px; }
   nav button { flex:1; border:0; background:transparent; color:var(--muted); padding:10px 12px; border-radius:10px; cursor:pointer; font:inherit; font-weight:600; font-size:13.5px; }
@@ -52,6 +55,16 @@
   .drop:hover, .drop.over { border-color:var(--accent); color:var(--ink); }
   .drop input { display:none; }
   .thumbs { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+  /* historique : en mode historique, les réglages de génération sont masqués */
+  .card.histmode .gen { display:none; }
+  .hist-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; color:var(--muted); font-size:13px; }
+  .hgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(104px, 1fr)); gap:8px; max-height:62vh; overflow:auto; }
+  .hgrid button { position:relative; padding:0; border:2px solid transparent; border-radius:10px; overflow:hidden; aspect-ratio:1; background:var(--bg2); cursor:pointer; }
+  .hgrid button.sel { border-color:var(--accent); }
+  .hgrid img { width:100%; height:100%; object-fit:cover; display:block; }
+  .hgrid span { position:absolute; left:4px; bottom:4px; background:rgba(0,0,0,.65); color:#fff; font-size:10.5px; padding:1px 5px; border-radius:5px; }
+  .hempty { color:var(--muted); font-size:14px; padding:20px 0; text-align:center; }
+  .btn.danger { color:var(--err); }
   .thumb { position:relative; width:96px; height:96px; border-radius:10px; overflow:hidden; background:var(--bg2); border:1px solid var(--line); }
   .thumb img { width:100%; height:100%; object-fit:cover; }
   .thumb span { position:absolute; left:6px; top:6px; background:rgba(0,0,0,.65); color:#fff; font-size:11px; padding:2px 6px; border-radius:6px; }
@@ -96,6 +109,7 @@
 <header>
   <div class="logo">Q</div>
   <h1>Qwen-Image 2.1</h1>
+  <span id="phone" hidden></span>
   <span id="status">connexion…</span>
 </header>
 
@@ -105,6 +119,7 @@
     <button data-pane="t2i" class="active">Texte → image</button>
     <button data-pane="edit">Édition</button>
     <button data-pane="mask">Dessin guidé</button>
+    <button data-pane="hist">Historique</button>
   </nav>
 
   <div class="pane active" id="pane-t2i">
@@ -138,15 +153,20 @@
     <textarea id="mask_prompt">Replace the object in the painted area with a large red hot air balloon, keep everything else unchanged</textarea>
   </div>
 
-  <div class="grid3">
+  <div class="pane" id="pane-hist">
+    <div class="hist-head"><span id="histCount">…</span><button class="btn secondary small" onclick="loadHistory()">Actualiser</button></div>
+    <div class="hgrid" id="histGrid"></div>
+  </div>
+
+  <div class="grid3 gen">
     <div><label>Format</label><select id="ratio"></select></div>
     <div><label>Résolution</label><select id="res"></select></div>
     <div><label>Étapes</label><select id="steps"></select></div>
   </div>
-  <label class="check"><input type="checkbox" id="previewChk"> Aperçu toutes les 5 étapes <span id="previewCost"></span></label>
-  <div class="estimate" id="estimate"><span id="estText"></span><b id="estTime"></b></div>
+  <label class="check gen"><input type="checkbox" id="previewChk"> Aperçu toutes les 5 étapes <span id="previewCost"></span></label>
+  <div class="estimate gen" id="estimate"><span id="estText"></span><b id="estTime"></b></div>
 
-  <div class="actions">
+  <div class="actions gen">
     <button class="btn" id="go">Générer</button>
     <button class="btn secondary" id="cancel" disabled>Annuler</button>
   </div>
@@ -166,6 +186,7 @@
     <a class="btn secondary small" id="dl" download>Télécharger</a>
     <button class="btn secondary small" onclick="useAsEditInput()">→ Édition</button>
     <button class="btn secondary small" onclick="useAsMaskInput()">→ Dessin guidé</button>
+    <button class="btn secondary small danger" onclick="deleteCurrent()">Supprimer</button>
   </div>
 </section>
 </main>
@@ -247,9 +268,12 @@ function suggestRatio(){ forceImageRatio=!!singleImage(); refreshChoices(); }
 // ------------------------------------------------------------ onglets & statut
 document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
-  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active')); mode=b.dataset.pane; $('pane-'+mode).classList.add('active'); suggestRatio(); }));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active')); mode=b.dataset.pane; $('pane-'+mode).classList.add('active');
+  b.closest('.card').classList.toggle('histmode', mode==='hist'); if(mode==='hist') loadHistory(); suggestRatio(); }));
 async function refreshStatus(){
   try{ const s=await (await fetch('/api/status')).json(); const el=$('status');
+    // adresse et code d'accès pour le téléphone : envoyés seulement quand la page est ouverte sur le Mac
+    const ph=$('phone'); ph.hidden=!s.phone; if(s.phone) ph.innerHTML='Téléphone : '+s.phone.urls[0]+'<br>code <b>'+s.phone.code+'</b>';
     if(s.sd_ready){ applyEstimates(s.estimates); el.textContent=(s.busy?'génération en cours':'prêt')+' · '+s.backend+(s.model_version?' · '+s.model_version.toUpperCase():'')+(calibrated?'':' · estimations non calibrées'); el.className='ok'; } else { el.textContent=s.detail||'non prêt'; el.className='err'; } }
   catch(e){ $('status').textContent='serveur injoignable'; $('status').className='err'; }
   setTimeout(refreshStatus, 5000);
@@ -333,7 +357,8 @@ async function followJob(j, startedAt){          // suit un job (nouveau ou repr
     const secs=j.seconds||(Date.now()-startedAt)/1000; const url='/api/result?name='+encodeURIComponent(j.name);
     if(j.dims) $('stage').style.aspectRatio=j.dims[0]+'/'+j.dims[1];
     img.src=url; img.className='final'; img.style.display='block'; showLoader(false); $('stage').style.display='block';
-    $('dl').href=url; $('dl').download=j.name; $('resultActions').style.display='flex';
+    $('dl').href=url+'&download=1'; $('dl').download=j.name; $('resultActions').style.display='flex';
+    if(mode==='hist') loadHistory();
     $('resultMeta').textContent=`${fmt(secs)} (${Math.round(secs)} s) · ${j.dims?j.dims.join('×'):''} · ${j.total||'?'} étapes${j.sec_per_it?' · '+j.sec_per_it.toFixed(1)+' s/étape':''}\n${j.path}\n${(j.size||0).toLocaleString('fr-FR')} octets`;
     lastResult={url, name:j.name}; log('terminé en '+Math.round(secs)+' s → '+j.path);
   }catch(e){ log('ERREUR '+e.message); showLoader(false); if(!lastResult){ $('stage').style.display='none'; $('resultEmpty').style.display='block'; } alert('Erreur : '+e.message); }
@@ -352,11 +377,49 @@ $('go').onclick=async()=>{
   try{ const s=await (await fetch('/api/status')).json(); const j=s.last_job; if(!j) return;
     if(['queued','running'].includes(j.status)){ log('reprise du job en cours '+j.id); await followJob(j, j.started ? j.started*1000 : Date.now()); }
     else if(j.status==='done'){ const url='/api/result?name='+encodeURIComponent(j.name); const img=$('stageImg'); if(j.dims) $('stage').style.aspectRatio=j.dims[0]+'/'+j.dims[1];
-      showLoader(false); img.src=url; img.className='final'; img.style.display='block'; $('dl').href=url; $('dl').download=j.name; $('resultActions').style.display='flex';
+      showLoader(false); img.src=url; img.className='final'; img.style.display='block'; $('dl').href=url+'&download=1'; $('dl').download=j.name; $('resultActions').style.display='flex';
       $('resultMeta').textContent=`dernière génération · ${fmt(j.seconds||0)} · ${j.dims?j.dims.join('×'):''}\n${j.path}`; lastResult={url, name:j.name}; }
   }catch(e){} })();
 async function cancelCurrent(){ if(currentJob){ log('annulation demandée'); await fetch('/api/job/'+currentJob+'/cancel',{method:'POST'}); } }
 $('cancel').onclick=cancelCurrent; $('cancelLoader').onclick=cancelCurrent;
+// ------------------------------------------------------------ historique
+let histItems=[];
+const MODE_LABELS={ t2i:'Texte → image', edit:'Édition', mask:'Masque', annot:'Annotation' };
+async function loadHistory(){
+  try{ histItems=await (await fetch('/api/history')).json(); }catch(e){ $('histCount').textContent='historique indisponible'; return; }
+  const g=$('histGrid'); g.innerHTML='';
+  $('histCount').textContent = histItems.length ? histItems.length+' image'+(histItems.length>1?'s':'') : '';
+  if(!histItems.length){ g.innerHTML='<div class="hempty">Aucune image pour l\'instant.</div>'; return; }
+  histItems.forEach(it=>{ const b=document.createElement('button'); b.title=it.prompt||it.name; b.dataset.name=it.name;
+    if(lastResult && lastResult.name===it.name) b.classList.add('sel');
+    const im=document.createElement('img'); im.loading='lazy'; im.alt=''; im.src='/api/thumb?name='+encodeURIComponent(it.name)+'&t='+it.time; b.appendChild(im);
+    if(it.mode){ const sp=document.createElement('span'); sp.textContent=MODE_LABELS[it.mode]||it.mode; b.appendChild(sp); }
+    b.onclick=()=>showHistoryItem(it); g.appendChild(b); });
+}
+function showHistoryItem(it){
+  if(currentJob) return;     // pendant une génération, le panneau de droite suit la génération
+  const url='/api/result?name='+encodeURIComponent(it.name), img=$('stageImg');
+  showLoader(false); $('stage').classList.remove('has-preview');      // affiche le panneau sans l'animation d'attente
+  if(it.width && it.height) $('stage').style.aspectRatio=it.width+'/'+it.height;
+  img.src=url; img.className='final'; img.style.display='block';
+  $('dl').href=url+'&download=1'; $('dl').download=it.name; $('resultActions').style.display='flex';
+  const date=new Date(it.time*1000).toLocaleString('fr-FR', {dateStyle:'short', timeStyle:'short'});
+  $('resultMeta').textContent=[date+(it.mode?' · '+(MODE_LABELS[it.mode]||it.mode):'')+(it.width?' · '+it.width+'×'+it.height:'')
+    +(it.steps?' · '+it.steps+' étapes':'')+(it.model?' · '+it.model.toUpperCase():'')+(it.seconds?' · '+fmt(it.seconds):''),
+    it.prompt||'', it.name].filter(Boolean).join('\n');
+  lastResult={url, name:it.name};
+  document.querySelectorAll('#histGrid button').forEach(x=>x.classList.toggle('sel', x.dataset.name===it.name));
+  if(window.innerWidth<=980) $('result').scrollIntoView({behavior:'smooth', block:'start'});   // téléphone : panneau sous la liste
+}
+async function deleteCurrent(){
+  if(!lastResult || currentJob) return;
+  if(!confirm('Supprimer définitivement '+lastResult.name+' ?')) return;
+  const r=await fetch('/api/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:lastResult.name})});
+  if(!r.ok){ alert('Suppression impossible : '+((await r.json()).error||r.status)); return; }
+  log('supprimé : '+lastResult.name); lastResult=null;
+  $('stageImg').src=''; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').textContent=''; $('resultEmpty').style.display='block';
+  loadHistory();
+}
 async function fetchLastDataUrl(){ const b=await (await fetch(lastResult.url)).blob(); return await readFile(b); }
 async function useAsEditInput(){ if(!lastResult) return; editImages.push(await toEntry(lastResult.name, await fetchLastDataUrl())); renderEditThumbs(); document.querySelector('nav button[data-pane=edit]').click(); }
 async function useAsMaskInput(){ if(!lastResult) return; await setMaskImage(lastResult.name, await fetchLastDataUrl()); document.querySelector('nav button[data-pane=mask]').click(); }
