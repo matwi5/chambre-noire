@@ -17,7 +17,8 @@
     --rim:rgba(255,255,255,.14); --spec:rgba(255,255,255,.55);
     --shadow:0 18px 50px -18px rgba(0,0,0,.7);
     --veil:linear-gradient(180deg, rgba(11,10,22,.30), rgba(11,10,22,.62) 55%, rgba(11,10,22,.80));
-    --blur:blur(26px) saturate(185%);
+    --blur:blur(26px) saturate(185%); --thick:rgba(26,22,48,.72);
+    --spring:cubic-bezier(.34,1.45,.5,1); --ease:cubic-bezier(.2,.9,.25,1);
     --r-xl:30px; --r-l:22px; --r-m:16px; --r-s:12px;
   }
   @media (prefers-color-scheme: light) {
@@ -26,7 +27,7 @@
       --iris:#6a52ff; --iris2:#8f7cff;
       --glass:rgba(255,255,255,.42); --glass-hi:rgba(255,255,255,.78); --field:rgba(255,255,255,.55);
       --rim:rgba(255,255,255,.75); --spec:#fff;
-      --shadow:0 18px 50px -22px rgba(40,30,100,.38);
+      --shadow:0 18px 50px -22px rgba(40,30,100,.38); --thick:rgba(250,250,255,.80);
       --veil:linear-gradient(180deg, rgba(236,238,247,.25), rgba(236,238,247,.55) 55%, rgba(236,238,247,.72)); }
   }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -57,29 +58,69 @@
     -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor;
     mask:linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
 
-  header { display:flex; align-items:center; gap:12px; padding:calc(14px + env(safe-area-inset-top)) 20px 14px; }
-  .logo { flex:none; width:36px; height:36px; border-radius:11px; display:grid; place-items:center; color:#fff; font-weight:750;
-    background:radial-gradient(120% 120% at 25% 15%, #c9bcff, var(--iris) 45%, #5a3fd8); box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 8px 22px -6px rgba(143,124,255,.7); }
-  header h1 { font-size:18px; margin:0; letter-spacing:-.02em; font-weight:700; white-space:nowrap; }
-  #phone { margin-left:auto; font-size:12px; color:var(--ink2); text-align:right; line-height:1.35; }
-  #phone b { color:var(--ink); letter-spacing:.04em; }
-  #phone:not([hidden]) + #status { margin-left:0; }
-  #status { margin-left:auto; min-width:0; max-width:52vw; font-size:13px; padding:7px 12px; border-radius:999px; display:flex; align-items:center; gap:8px;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background:var(--glass-hi); border:1px solid var(--rim);
-    -webkit-backdrop-filter:var(--blur); backdrop-filter:var(--blur); }
+  /* ------------------------------------------------------------ barre du haut : marque et pastille d'état */
+  .topbar { position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:10px;
+    padding:calc(10px + env(safe-area-inset-top)) 16px 10px; }
+  .topbar::before { content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
+    background:linear-gradient(180deg, color-mix(in srgb, var(--void) 70%, transparent), transparent);
+    -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+    -webkit-mask:linear-gradient(#000 60%, transparent); mask:linear-gradient(#000 60%, transparent); }
+  .brand { display:flex; align-items:center; gap:10px; min-width:0; }
+  .logo { flex:none; width:34px; height:34px; border-radius:11px; display:grid; place-items:center; color:#fff; font-weight:800; font-size:17px;
+    background:radial-gradient(120% 120% at 25% 15%, #d4c9ff, var(--iris) 45%, #5a3fd8); box-shadow:inset 0 1px 0 rgba(255,255,255,.55), 0 8px 22px -6px rgba(143,124,255,.75); }
+  .topbar h1 { font-size:18px; margin:0; letter-spacing:-.02em; font-weight:720; white-space:nowrap; }
+  .topbar h1 small { font-size:12px; font-weight:600; color:var(--ink3); margin-left:4px; letter-spacing:0; }
+  .chipbtn { display:inline-flex; align-items:center; gap:8px; height:36px; padding:0 14px; border-radius:999px; cursor:pointer;
+    font-size:14px; font-weight:600; color:var(--ink); }
+  #phoneBtn { margin-left:auto; } #phoneBtn + .island { margin-left:0; }
+  .island { margin-left:auto; min-width:0; max-width:60vw; }
+  #status { display:flex; align-items:center; gap:8px; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #status::before { content:""; flex:none; width:8px; height:8px; border-radius:50%; background:var(--warn); box-shadow:0 0 10px var(--warn); }
   #status.ok::before { background:var(--ok); box-shadow:0 0 10px var(--ok); } #status.err::before { background:var(--err); box-shadow:0 0 10px var(--err); }
-  @media (max-width: 700px) { #phone { display:none; } }
+  @media (max-width: 700px) { #phoneBtn span { display:none; } #phoneBtn { padding:0 10px; } }
 
-  main { display:grid; grid-template-columns:minmax(340px, 520px) 1fr; gap:20px; padding:0 20px 32px; }
-  @media (max-width: 980px) { main { grid-template-columns:minmax(0, 1fr); padding:0 12px 24px; gap:14px; } header { padding-inline:16px; } }
+  /* ------------------------------------------------------------ barre d'onglets flottante, lentille qui glisse */
+  .tabbar { position:fixed; z-index:30; left:50%; bottom:calc(12px + env(safe-area-inset-bottom)); transform:translateX(-50%);
+    width:min(440px, calc(100% - 24px)); height:66px; padding:5px; border-radius:999px; display:grid; grid-template-columns:repeat(4, 1fr); }
+  .tabbar button { position:relative; z-index:1; border:0; background:none; cursor:pointer; color:var(--ink2); border-radius:999px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:11.5px; font-weight:650; letter-spacing:.01em;
+    transition:color .3s; }
+  .tabbar button svg { width:24px; height:24px; transition:transform .45s var(--spring); }
+  .tabbar button.active { color:var(--ink); }
+  .tabbar button.active svg { transform:translateY(-1px) scale(1.08); color:var(--iris2); }
+  .tabbar button:focus-visible { outline:2px solid var(--iris); outline-offset:-4px; }
+  .lens { position:absolute; z-index:0; top:5px; bottom:5px; left:5px; width:calc((100% - 10px) / 4); border-radius:999px;
+    background:linear-gradient(180deg, rgba(255,255,255,.20), rgba(255,255,255,.06));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4), inset 0 -1px 0 rgba(255,255,255,.08), 0 6px 18px -6px rgba(0,0,0,.45);
+    transition:transform .55s var(--spring); }
+  @media (prefers-color-scheme: light) { .lens { background:linear-gradient(180deg, #fff, rgba(255,255,255,.7)); } }
+
+  /* ------------------------------------------------------------ panneaux du bas (fenêtres centrées sur grand écran) */
+  .scrim { position:fixed; inset:0; z-index:40; background:rgba(6,4,16,.42); opacity:0; pointer-events:none; transition:opacity .3s; }
+  .scrim.on { opacity:1; pointer-events:auto; }
+  .sheet { position:fixed; z-index:50; left:50%; bottom:0; width:min(560px, 100%); max-height:88dvh; overflow:auto; overscroll-behavior:contain;
+    padding:8px 20px calc(22px + env(safe-area-inset-bottom)); border-radius:32px 32px 0 0; background:var(--thick);
+    transform:translate(-50%, 105%); visibility:hidden; transition:transform .45s var(--ease), visibility 0s linear .45s; }
+  .sheet.on { transform:translate(-50%, 0); visibility:visible; transition:transform .45s var(--ease); }
+  .sheet .grab { display:block; width:40px; height:5px; border:0; padding:0; border-radius:3px; background:var(--ink3); margin:2px auto 12px; cursor:grab; }
+  .sheet h2 { font-size:20px; letter-spacing:-.02em; margin:0; }
+  .sheet-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px; }
+  .sheet h3 { font-size:13px; font-weight:650; color:var(--ink2); margin:18px 2px 8px; }
+  @media (min-width: 700px) {
+    .sheet { bottom:auto; top:50%; border-radius:30px; opacity:0; transform:translate(-50%, -46%) scale(.97); padding-bottom:22px;
+      transition:transform .3s var(--ease), opacity .25s, visibility 0s linear .3s; }
+    .sheet.on { opacity:1; transform:translate(-50%, -50%); transition:transform .3s var(--ease), opacity .25s; }
+    .sheet .grab { display:none; } }
+  .facts { display:grid; grid-template-columns:auto 1fr; gap:8px 16px; margin:8px 0 0; font-size:15px; }
+  .facts dt { color:var(--ink2); } .facts dd { margin:0; text-align:right; overflow-wrap:anywhere; }
+  .facts .code { font-weight:700; letter-spacing:.08em; font-variant-numeric:tabular-nums; }
+  .note { font-size:13px; color:var(--ink2); margin:8px 2px 0; }
+  main { display:grid; grid-template-columns:minmax(340px, 520px) 1fr; align-items:start; gap:20px; padding:6px 20px calc(110px + env(safe-area-inset-bottom)); }
+  @media (max-width: 980px) { main { grid-template-columns:minmax(0, 1fr); padding-inline:12px; gap:14px; } }
   .card { position:relative; border-radius:var(--r-xl); padding:16px; background:linear-gradient(180deg, var(--glass-hi), var(--glass));
     -webkit-backdrop-filter:var(--blur); backdrop-filter:var(--blur); border:1px solid var(--rim); box-shadow:inset 0 1px 0 rgba(255,255,255,.18), var(--shadow); }
-  nav { display:flex; gap:4px; padding:4px; background:var(--field); border-radius:16px; margin-bottom:14px; }
-  nav button { flex:1 1 auto; min-width:0; border:0; background:transparent; color:var(--ink2); padding:9px 6px; border-radius:12px; cursor:pointer;
-    font-weight:600; font-size:13px; white-space:nowrap; transition:background .25s, color .25s; }
-  nav button.active { background:var(--glass-hi); color:var(--ink); box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 4px 14px -4px rgba(0,0,0,.4); }
   .pane { display:none; } .pane.active { display:block; }
+  .pane > label:first-child { margin-top:2px; }
   label { display:block; font-size:13px; color:var(--ink2); font-weight:600; margin:14px 2px 6px; }
   textarea, select { width:100%; padding:12px 14px; border:1px solid var(--rim); border-radius:var(--r-m); font-size:16px; background:var(--field); color:var(--ink); }
   textarea { min-height:104px; resize:vertical; line-height:1.45; }
@@ -109,7 +150,7 @@
   .drop:hover, .drop.over { border-color:var(--iris); color:var(--ink); }
   .drop input { display:none; }
   .thumbs { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
-  .card.histmode .gen { display:none; }
+  body.m-hist .gen { display:none; }
   .hist-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; color:var(--ink2); font-size:14px; }
   .hgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:6px; max-height:62vh; overflow:auto; border-radius:var(--r-m); }
   .hgrid button { position:relative; padding:0; border:0; border-radius:12px; overflow:hidden; aspect-ratio:1; background:var(--field); cursor:pointer; }
@@ -154,28 +195,21 @@
   .bar { height:6px; background:var(--field); border-radius:999px; overflow:hidden; margin-top:14px; display:none; }
   .bar i { display:block; height:100%; width:0; background:linear-gradient(90deg, var(--iris), var(--iris2)); transition:width .9s linear; }
   #resultMeta { font-size:14px; color:var(--ink2); margin-top:12px; white-space:pre-wrap; line-height:1.6; overflow-wrap:anywhere; }
-  details { margin-top:16px; } summary { cursor:pointer; color:var(--ink2); font-size:14px; }
-  .log { font:12px/1.5 ui-monospace, Menlo, Consolas, monospace; background:var(--field); border-radius:var(--r-s); padding:10px; max-height:160px; overflow:auto; white-space:pre-wrap; margin-top:8px; }
+  .log { font:12px/1.5 ui-monospace, Menlo, Consolas, monospace; color:var(--ink2); background:var(--field); border-radius:var(--r-m); padding:12px; min-height:60px; max-height:34dvh; overflow:auto; white-space:pre-wrap; }
+  .log:empty::before { content:"Rien pour l'instant."; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; } }
 </style>
 </head>
 <body>
 <div class="ambient" aria-hidden="true"><div class="mesh"></div><img id="ambA" alt=""><img id="ambB" alt=""></div>
-<header>
-  <div class="logo">Q</div>
-  <h1>Qwen-Image</h1>
-  <span id="phone" hidden></span>
-  <span id="status">connexion…</span>
+<header class="topbar">
+  <div class="brand"><div class="logo" aria-hidden="true">Q</div><h1>Qwen-Image<small>2.1</small></h1></div>
+  <button class="chipbtn glass" id="phoneBtn" hidden onclick="openSheet('engineSheet')" aria-label="Ouvrir depuis le téléphone"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="6.5" y="2.5" width="11" height="19" rx="3"/><path d="M10.5 18.5h3"/></svg><span>Téléphone</span></button>
+  <button class="chipbtn glass island" id="island" onclick="openSheet('engineSheet')" aria-label="État du moteur"><span id="status">connexion…</span></button>
 </header>
 
 <main>
 <section class="card">
-  <nav>
-    <button data-pane="t2i" class="active">Texte → image</button>
-    <button data-pane="edit">Édition</button>
-    <button data-pane="mask">Dessin guidé</button>
-    <button data-pane="hist">Historique</button>
-  </nav>
 
   <div class="pane active" id="pane-t2i">
     <label>Description</label>
@@ -225,7 +259,6 @@
     <button class="btn" id="go">Générer</button>
     <button class="btn secondary" id="cancel" disabled>Annuler</button>
   </div>
-  <details><summary>Journal</summary><div class="log" id="log"></div></details>
 </section>
 
 <section class="card" id="result">
@@ -245,6 +278,28 @@
   </div>
 </section>
 </main>
+
+<nav class="tabbar glass" id="tabbar" aria-label="Modes">
+  <i class="lens" id="lens" aria-hidden="true"></i>
+  <button data-pane="t2i" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M11 3.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7Z"/><path d="M18.5 15c.35 1.8 1.2 2.65 3 3-1.8.35-2.65 1.2-3 3-.35-1.8-1.2-2.65-3-3 1.8-.35 2.65-1.2 3-3Z"/></svg><span>Créer</span></button>
+  <button data-pane="edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/></svg><span>Éditer</span></button>
+  <button data-pane="mask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg><span>Dessiner</span></button>
+  <button data-pane="hist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7.5" height="7.5" rx="2.2"/><rect x="13" y="3.5" width="7.5" height="7.5" rx="2.2"/><rect x="3.5" y="13" width="7.5" height="7.5" rx="2.2"/><rect x="13" y="13" width="7.5" height="7.5" rx="2.2"/></svg><span>Galerie</span></button>
+</nav>
+
+<div class="scrim" id="scrim" onclick="closeSheet()"></div>
+<section class="sheet glass" id="engineSheet" role="dialog" aria-modal="true" aria-labelledby="engineTitle">
+  <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
+  <div class="sheet-head"><h2 id="engineTitle">Moteur</h2><button class="btn secondary small" onclick="closeSheet()">Fermer</button></div>
+  <dl class="facts" id="engineFacts"></dl>
+  <div id="phone" hidden>
+    <h3>Depuis un téléphone du même Wi-Fi</h3>
+    <dl class="facts" id="phoneFacts"></dl>
+    <p class="note">Le code n'est demandé qu'une fois par appareil.</p>
+  </div>
+  <h3>Journal</h3>
+  <div class="log" id="log"></div>
+</section>
 
 <script>
 // ------------------------------------------------------------ valeurs fixes
@@ -331,16 +386,36 @@ function setAmbient(name){
 (async function initAmbient(){ try{ const h=await (await fetch('/api/history')).json(); if(h.length && !ambName) setAmbient(h[0].name); }catch(e){} })();
 
 // ------------------------------------------------------------ onglets & statut
-document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+const TABS=[...document.querySelectorAll('#tabbar button')];
+function placeLens(){ const i=TABS.findIndex(b=>b.dataset.pane===mode); $('lens').style.transform=`translateX(${i*100}%)`; }
+TABS.forEach(b=>b.addEventListener('click',()=>{
+  if(b.dataset.pane===mode) return window.scrollTo({top:0, behavior:'smooth'});
+  TABS.forEach(x=>x.classList.toggle('active', x===b));
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active')); mode=b.dataset.pane; $('pane-'+mode).classList.add('active');
-  b.closest('.card').classList.toggle('histmode', mode==='hist'); if(mode==='hist') loadHistory(); suggestRatio(); }));
+  document.body.className='m-'+mode; placeLens(); if(mode==='hist') loadHistory(); suggestRatio(); }));
+document.body.className='m-'+mode;
+
+// ------------------------------------------------------------ panneaux du bas : un seul ouvert à la fois
+let openedSheet=null;
+function openSheet(id){ closeSheet(); openedSheet=$(id); openedSheet.classList.add('on'); $('scrim').classList.add('on'); }
+function closeSheet(){ if(!openedSheet) return; openedSheet.classList.remove('on'); $('scrim').classList.remove('on'); openedSheet=null; }
+addEventListener('keydown', e=>{ if(e.key==='Escape') closeSheet(); });
+// glisser le panneau vers le bas pour le fermer
+document.querySelectorAll('.sheet').forEach(sh=>{ let y0=null, dy=0;
+  sh.addEventListener('touchstart', e=>{ y0 = sh.scrollTop<=0 ? e.touches[0].clientY : null; dy=0; }, {passive:true});
+  sh.addEventListener('touchmove', e=>{ if(y0===null) return; dy=Math.max(0, e.touches[0].clientY-y0); if(dy>0){ sh.style.transition='none'; sh.style.transform=`translate(-50%, ${dy}px)`; } }, {passive:true});
+  sh.addEventListener('touchend', ()=>{ if(y0===null) return; sh.style.transition=''; sh.style.transform=''; if(dy>90) closeSheet(); y0=null; }); });
+const esc = t => String(t).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function facts(id, rows){ $(id).innerHTML=rows.filter(r=>r[1]!=null && r[1]!=='').map(([k,v,cls])=>`<dt>${esc(k)}</dt><dd class="${cls||''}">${esc(v)}</dd>`).join(''); }
 async function refreshStatus(){
   try{ const s=await (await fetch('/api/status')).json(); const el=$('status');
     // adresse et code d'accès pour le téléphone : envoyés seulement quand la page est ouverte sur le Mac
-    const ph=$('phone'); ph.hidden=!s.phone; if(s.phone) ph.innerHTML='Téléphone : '+s.phone.urls[0]+'<br>code <b>'+s.phone.code+'</b>';
-    if(s.sd_ready){ applyEstimates(s.estimates); el.textContent=(s.busy?'génération en cours':'prêt')+' · '+s.backend+(s.model_version?' · '+s.model_version.toUpperCase():'')+(calibrated?'':' · estimations non calibrées'); el.className='ok'; } else { el.textContent=s.detail||'non prêt'; el.className='err'; } }
-  catch(e){ $('status').textContent='serveur injoignable'; $('status').className='err'; }
+    $('phone').hidden=$('phoneBtn').hidden=!s.phone; if(s.phone) facts('phoneFacts', [['Adresse', s.phone.urls[0]], ...s.phone.urls.slice(1).map(u=>['ou', u]), ['Code', s.phone.code, 'code']]);
+    const ver = s.model_version ? s.model_version.toUpperCase() : '';
+    if(s.sd_ready){ applyEstimates(s.estimates); el.textContent=(s.busy?'En cours':'Prêt')+(ver?' · '+ver:''); el.className='ok'; } else { el.textContent='Non prêt'; el.className='err'; }
+    facts('engineFacts', [['État', s.sd_ready ? (s.busy ? 'génération en cours' : 'prêt') : (s.detail||'non prêt')], ['Moteur', s.backend], ['Modèle', s.model],
+      ['File d\'attente', s.queued ? s.queued+' en attente' : ''], ['Estimations', !s.estimates ? '' : calibrated ? 'calibrées sur '+s.estimates.samples+' mesure'+(s.estimates.samples>1?'s':'') : 'non calibrées']]); }
+  catch(e){ $('status').textContent='Hors ligne'; $('status').className='err'; facts('engineFacts', [['État', 'serveur injoignable']]); }
   setTimeout(refreshStatus, 5000);
 }
 refreshStatus();
