@@ -34,6 +34,8 @@ Mis à jour le 13/10/2026.
 - Interface : réglages par défaut High (≈1024 px), 40 étapes et aperçus toutes les 5 étapes ; l'incognito passe du
   panneau Réglages à un bouton à droite de Générer. Les réglages retenus avant ce changement sont remis une fois à ces
   défauts (format et incognito gardés). Vérifié par 11 contrôles dans Chrome sans écran.
+- Incognito : l'interface passe en thème graphite sombre (couleur de la barre du navigateur comprise) tant que le mode
+  est actif ; plus de message à l'activation. Vérifié par captures dans Chrome sans écran.
 - Mise en place de la documentation de session : `CLAUDE.md`, `BRIEF.md`, `DECISIONS.md` et ce fichier, reconstitués
   depuis le README, le code et l'historique git.
 - Mode incognito (`d5a745d`) : image gardée en mémoire et remise une fois, perdue à la génération suivante ou au

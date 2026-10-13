@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0a16" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#eceef7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0a16" media="(prefers-color-scheme: dark)" data-normal="#0b0a16">
+<meta name="theme-color" content="#eceef7" media="(prefers-color-scheme: light)" data-normal="#eceef7">
 <title>Qwen-Image 2.1 local</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon-192.png" type="image/png">
@@ -37,6 +37,14 @@
       --shadow:0 18px 50px -22px rgba(40,30,100,.38); --thick:rgba(250,250,255,.80);
       --veil:linear-gradient(180deg, rgba(236,238,247,.25), rgba(236,238,247,.55) 55%, rgba(236,238,247,.72)); }
   }
+  /* incognito : graphite sombre et neutre, quel que soit le thème du système, sans couleurs ni image en fond */
+  html.incog { color-scheme: dark;
+    --void:#111113; --ink:#ececf0; --ink2:rgba(236,236,240,.64); --ink3:rgba(236,236,240,.40);
+    --iris:#4a4b55; --iris2:#7d7f8c; --on-iris:#fff;
+    --glass:rgba(255,255,255,.045); --glass-hi:rgba(255,255,255,.085); --field:rgba(0,0,0,.34);
+    --rim:rgba(255,255,255,.10); --spec:rgba(255,255,255,.22);
+    --shadow:0 18px 50px -18px rgba(0,0,0,.85); --thick:rgba(30,30,34,.86);
+    --veil:linear-gradient(180deg, rgba(17,17,19,.55), rgba(17,17,19,.85) 55%, rgba(17,17,19,.96)); }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { margin:0; }
   body { font:16px/1.45 system-ui, -apple-system, "SF Pro Text", "Segoe UI Variable", "Segoe UI", Roboto, sans-serif; color:var(--ink);
@@ -53,6 +61,10 @@
   .ambient img { position:absolute; inset:-15%; width:130%; height:130%; object-fit:cover; opacity:0;
     filter:blur(60px) saturate(1.7); transform:scale(1.1); transition:opacity 1.4s ease; }
   .ambient img.on { opacity:.95; }
+  .ambient .mesh, .ambient img.on { transition:opacity .5s ease; }
+  .incog .ambient .mesh, .incog .ambient img.on { opacity:0; }
+  .incog .logo, .incog .orb, .incog .shimmer { filter:grayscale(1); }
+  .incog .btn { box-shadow:inset 0 1px 0 rgba(255,255,255,.22), 0 10px 26px -10px rgba(0,0,0,.7); }
   .ambient::after { content:""; position:absolute; inset:0; background:var(--veil); }
   @keyframes drift { 0% { transform:translate(0,0) rotate(0); } 100% { transform:translate(4%,-3%) rotate(8deg); } }
 
@@ -165,8 +177,7 @@
   .btn-icon svg { width:22px; height:22px; }
   #cancel:disabled { display:none; }
   #incog { color:var(--ink2); }
-  #incog.on { color:var(--ink); border-color:color-mix(in srgb, var(--iris) 75%, transparent);
-    background:linear-gradient(180deg, color-mix(in srgb, var(--iris) 42%, transparent), color-mix(in srgb, var(--iris) 22%, transparent)); }
+  #incog.on { color:var(--void); background:var(--ink); border-color:transparent; }
 
   /* ------------------------------------------------------------ panneau Réglages */
   .ratios { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
@@ -628,7 +639,7 @@ function refreshChoices(){
 }
 (function init(){
   $('previewChk').checked = savedOpt.preview!==false; setIncog(incogOn);
-  $('incog').onclick=()=>{ setIncog(!incogOn); saveOpt(); toast(incogOn ? 'Incognito : la prochaine image ne sera gardée nulle part' : 'Incognito désactivé'); };
+  $('incog').onclick=()=>{ setIncog(!incogOn); saveOpt(); };
   [['ratioOpts','ratio'],['resOpts','res'],['stepOpts','steps']].forEach(([id,key])=>$(id).addEventListener('click', e=>{
     const b=e.target.closest('[data-k]'); if(!b) return; opt[key]=b.dataset.k; saveOpt(); refreshChoices(); }));
   $('pills').addEventListener('click', e=>{ if(e.target.closest('[data-open]')) openSheet('setSheet'); });
@@ -638,7 +649,9 @@ function refreshChoices(){
     try{ t.value = localStorage.getItem('qwen-'+id) || ''; }catch(e){}
     t.addEventListener('input', ()=>{ try{ if(incogOn) localStorage.removeItem('qwen-'+id); else localStorage.setItem('qwen-'+id, t.value); }catch(e){} }); });
 })();
-function setIncog(on){ incogOn=on; $('incog').classList.toggle('on', on); $('incog').setAttribute('aria-pressed', on); }
+function setIncog(on){ incogOn=on; $('incog').classList.toggle('on', on); $('incog').setAttribute('aria-pressed', on);
+  document.documentElement.classList.toggle('incog', on);        // thème graphite sombre, barre du navigateur comprise
+  document.querySelectorAll('meta[name=theme-color]').forEach(m=>m.content = on ? '#111113' : m.dataset.normal); }
 function suggestRatio(){ forceImageRatio=!!singleImage(); refreshChoices(); }
 
 // ------------------------------------------------------------ fond ambiant : miniature de l'image affichée, floutée en CSS

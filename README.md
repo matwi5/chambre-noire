@@ -207,8 +207,9 @@ Sous le texte, trois pastilles résument le format, la résolution et les étape
 | **Étapes** | Low 8 · Medium 12 · High 20 · XHigh 30 · **Max 40** (par défaut, réglage officiel du modèle) | Finesse des détails ; chaque option affiche le **temps estimé** |
 | **Aperçu toutes les 5 étapes** | interrupteur, activé par défaut | Montre l'image en cours de formation ; coût affiché à côté |
 
-Le bouton **Générer** affiche le temps estimé ; à sa droite, le bouton **Incognito** (icône de chapeau et lunettes,
-teinté quand il est actif) active le [mode incognito](#mode-incognito). Le navigateur retient les réglages choisis,
+Le bouton **Générer** affiche le temps estimé ; à sa droite, le bouton **Incognito** (icône de chapeau et lunettes)
+active le [mode incognito](#mode-incognito) : l'interface passe alors en thème graphite sombre, sans couleurs ni image
+en fond, comme la navigation privée des navigateurs. Le navigateur retient les réglages choisis,
 le mode incognito et le texte en cours de chaque onglet (sauf en incognito).
 
 Conseil : **Medium + 12 étapes** pour chercher la bonne formulation, puis montez la résolution et les étapes pour la version finale.
