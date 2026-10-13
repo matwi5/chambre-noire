@@ -12,7 +12,7 @@ Windows : venv\Scripts\python.exe setup.py [options]   ·   macOS (Apple Silicon
 Chaque étape est idempotente : relancer le script reprend les téléchargements interrompus
 et ne refait pas ce qui est déjà en place et vérifié.
 """
-import argparse, hashlib, os, subprocess, sys, time, urllib.request, zipfile
+import argparse, hashlib, os, shutil, subprocess, sys, time, urllib.request, zipfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 P = lambda *a: os.path.join(ROOT, *a)
@@ -21,15 +21,18 @@ EXE = "sd-cli.exe" if WINDOWS else "sd-cli"
 PY = r"venv\Scripts\python.exe" if WINDOWS else "venv/bin/python"
 SHORTCUT = "Qwen-Image.lnk" if WINDOWS else "Qwen-Image.command"
 
-# --- moteur stable-diffusion.cpp (version testée, épinglée) -------------------------------------
-SDCPP_TAG = "master-890-74988b2"
-SDCPP = {   # backend -> archives à extraire dans sdcpp/<backend>/ (empreintes : API GitHub de la release)
-    "vulkan": [("sd-master-74988b2-bin-win-vulkan-x64.zip", "744c8f817c66ecfd02fbb9dc8b122e1f29f7240db1f6086dfde2669403c5d896")],
-    "cpu":    [("sd-master-74988b2-bin-win-cpu-x64.zip",    "24fcac70fadc41eb3524837893f1cb7ea54895fe4d807f88ef7afdeee8bd484b")],
-    "cuda":   [("sd-master-74988b2-bin-win-cuda12-x64.zip", "e9b86c2166aaf3a89f3e13326312d34b79ec1a2b61101d0ccff2805e7ee7b269"),
-               ("cudart-sd-bin-win-cu12-x64.zip",           "fe20366827d357c00797eebb58244dddab7fd9a348d70090c3871004c320f38d")],
+# --- moteur stable-diffusion.cpp (versions testées, épinglées par moteur) ------------------------
+# Windows reste sur master-890 ; le Mac passe à master-959, qui charge les poids en --mmap sur Metal, y rend le VAE
+# rapide et ajoute le cache de préfixe de Qwen-Image 2.1 (les étapes d'une édition ne recalculent plus les références).
+SDCPP_WIN = "master-890-74988b2"
+SDCPP = {   # backend -> (release, archives à extraire dans sdcpp/<backend>/ ; empreintes : API GitHub de la release)
+    "vulkan": (SDCPP_WIN, [("sd-master-74988b2-bin-win-vulkan-x64.zip", "744c8f817c66ecfd02fbb9dc8b122e1f29f7240db1f6086dfde2669403c5d896")]),
+    "cpu":    (SDCPP_WIN, [("sd-master-74988b2-bin-win-cpu-x64.zip",    "24fcac70fadc41eb3524837893f1cb7ea54895fe4d807f88ef7afdeee8bd484b")]),
+    "cuda":   (SDCPP_WIN, [("sd-master-74988b2-bin-win-cuda12-x64.zip", "e9b86c2166aaf3a89f3e13326312d34b79ec1a2b61101d0ccff2805e7ee7b269"),
+                           ("cudart-sd-bin-win-cu12-x64.zip",           "fe20366827d357c00797eebb58244dddab7fd9a348d70090c3871004c320f38d")]),
     # macOS : binaire universel (arm64 + x86_64) compilé avec Metal
-    "metal":  [("sd-master-74988b2-bin-Darwin-macOS-26.6.2-arm64.zip", "fbffe2165d2e34098a673a3398286880d7dc1cdf2625e87ebb8b6235aac51553")],
+    "metal":  ("master-959-d637cfb", [("sd-master-d637cfb-bin-Darwin-macOS-26.6.2-arm64.zip",
+                                       "535b5eccae1d7c81a20466b41433f062d64130e5513fd069006cdd6401dc4ce5")]),
 }
 SDCPP_URL = "https://github.com/leejet/stable-diffusion.cpp/releases/download/{tag}/{name}"
 
@@ -133,30 +136,48 @@ def extract(zpath, target):
                 os.chmod(path, mode)
 
 
+def installed_tag(be):
+    """Release notée dans sdcpp/<backend>/.installed, ou None (moteur absent, ou installé avant ce marqueur)."""
+    marker = P("sdcpp", be, ".installed")
+    return open(marker, encoding="utf-8").read().strip() if os.path.exists(marker) else None
+
+
 def step_engine(backends, check_only):
     ok = True
     for be in backends:
+        tag, archives = SDCPP[be]
         target = P("sdcpp", be)
-        done_marker = os.path.join(target, ".installed")
-        if os.path.exists(done_marker) or (be != "cuda" and os.path.exists(os.path.join(target, EXE))):
+        have = installed_tag(be)
+        if have == tag or (have is None and be != "cuda" and os.path.exists(os.path.join(target, EXE))):
             print(f"[moteur] {be} : déjà installé ({target})")
             continue
         if check_only:
-            print(f"[moteur] {be} : ABSENT")
+            print(f"[moteur] {be} : " + (f"À METTRE À JOUR ({have} → {tag})" if have else "ABSENT"))
             ok = False
             continue
-        for name, digest in SDCPP[be]:
-            print(f"[moteur] {be} : téléchargement de {name}")
+        # mise à jour : extraction dans un dossier neuf, puis échange, pour ne pas réécrire en place
+        # un binaire qu'une génération en cours utiliserait
+        dest = target + ".new" if have else target
+        if have:
+            shutil.rmtree(dest, ignore_errors=True)
+        for name, digest in archives:
+            print(f"[moteur] {be} : téléchargement de {name}" + (f" (mise à jour {have} → {tag})" if have else ""))
             zpath = P("sdcpp", name)
-            download(SDCPP_URL.format(tag=SDCPP_TAG, name=name), zpath)
+            download(SDCPP_URL.format(tag=tag, name=name), zpath)
             got = sha256(zpath)
             if got != digest:
                 os.remove(zpath)
                 sys.exit(f"[moteur] empreinte inattendue pour {name} : {got}")
-            extract(zpath, target)
+            extract(zpath, dest)
             os.remove(zpath)
-        open(done_marker, "w").write(SDCPP_TAG)
-        print(f"[moteur] {be} : installé et vérifié")
+        open(os.path.join(dest, ".installed"), "w").write(tag)
+        if have:
+            old = target + ".old"
+            shutil.rmtree(old, ignore_errors=True)
+            os.replace(target, old)
+            os.replace(dest, target)
+            shutil.rmtree(old, ignore_errors=True)
+        print(f"[moteur] {be} : installé et vérifié ({tag})")
     return ok
 
 

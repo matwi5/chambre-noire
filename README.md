@@ -91,7 +91,8 @@ venv\Scripts\python.exe setup.py
 Sur Mac : `venv/bin/python setup.py`. Ce script, à lancer une seule fois :
 
 - télécharge stable-diffusion.cpp (version épinglée et vérifiée par SHA256) dans `sdcpp\` : versions Vulkan et CPU
-  sous Windows, version Metal sur Mac ;
+  sous Windows (release `master-890`), version Metal sur Mac (release `master-959`) ; relancé après une mise à jour de
+  ce dépôt, il remplace un moteur dont la version épinglée a changé ;
 - télécharge les trois fichiers du modèle depuis Hugging Face dans `models\` (≈ 14,6 Go) et vérifie chacun contre
   son empreinte SHA256 (voir [Le modèle](#le-modèle)) ;
 - prépare l'encodeur de texte pour stable-diffusion.cpp ;
@@ -319,9 +320,9 @@ l'installation ; demandez une exception à votre service informatique si nécess
 xattr -dr com.apple.quarantine sdcpp/metal
 ```
 
-**Mac : l'image sort en bruit (taches colorées sans rapport avec le prompt).** C'est le symptôme de l'option `--mmap`
-sur Metal : les poids projetés en mémoire n'atteignent pas le GPU (`buffer is nil` dans `jobs/<identifiant>/sd-cli.log`).
-Le lanceur ne la passe pas sur Mac ; vérifiez qu'elle n'a pas été ajoutée dans `extra_args` de `tools/config.json`.
+**Mac : l'image sort en bruit (taches colorées sans rapport avec le prompt).** C'est le symptôme d'un moteur antérieur
+à `master-959` lancé avec `--mmap` (`buffer is nil` dans `jobs/<identifiant>/sd-cli.log`) : relancez
+`venv/bin/python setup.py`, qui installe la version épinglée.
 
 **Mac : l'édition est longue avant la première étape.** L'encodeur Qwen3-VL tourne sur le processeur (Metal n'a pas de
 calcul int8 dans cette version de stable-diffusion.cpp) et lit chaque image de référence : comptez ≈ 2 min par
@@ -337,12 +338,12 @@ aux plateformes connues de `setup.py` et `tools/launch.py`.
 ```text
 navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance──▶ sdcpp/<moteur>/sd-cli ──▶ outputs/*.png
    tools/ui/index.html        file d'attente, suivi des étapes,         Vulkan : diffusion + VAE   (Windows)
-                              aperçus, annulation                       Metal  : diffusion         (Mac)
-                                                                        CPU    : encodeur texte (+ VAE sur Mac)
+                              aperçus, annulation                       Metal  : diffusion + VAE   (Mac)
+                                                                        CPU    : encodeur texte
 ```
 
-- Chaque génération lance `sd-cli` (`sd-cli.exe` sous Windows). Sous Windows, avec `--mmap` : après la première fois,
-  le modèle se recharge en moins d'une seconde grâce au cache disque.
+- Chaque génération lance `sd-cli` (`sd-cli.exe` sous Windows). Avec `--mmap` : après la première fois, le modèle se
+  recharge en moins d'une seconde grâce au cache disque.
 - Répartition selon le moteur :
   - Vulkan : `--backend diffusion=vulkan0,vae=vulkan0,te=cpu --offload-to-cpu`. L'encodeur int8 n'a pas de noyau
     Vulkan dans stable-diffusion.cpp, il tourne donc sur le processeur ;
@@ -350,9 +351,10 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     chemin CUDA natif (RTX 20xx et plus récentes) ; les poids restent en RAM et sont copiés à la demande, ce qui
     s'adapte aux cartes à 8 Go ;
   - CPU : `--backend cpu`, secours sans GPU ;
-  - Metal (Mac) : `--backend diffusion=MTL0,vae=cpu,te=cpu --diffusion-fa`, sans `--mmap`. Choix mesurés sur une puce
-    M6 : l'encodeur int8 n'a pas de noyau Metal (sd-cli plante s'il est placé sur le GPU) ; le VAE est ≈ 20 % plus
-    rapide sur le processeur que sur Metal ; `--mmap` laisse les poids hors de portée du GPU (image en bruit).
+  - Metal (Mac) : `--backend diffusion=MTL0,vae=MTL0,te=cpu --diffusion-fa --mmap`, avec stable-diffusion.cpp
+    `master-959`. Choix mesurés sur une puce M6 : l'encodeur int8 n'a pas de noyau Metal (sd-cli plante s'il est placé
+    sur le GPU) ; le VAE décode 11 fois plus vite sur Metal que sur le processeur (3 s contre 37 s en 512×512) ;
+    `--mmap` fonctionne depuis `master-959` (les versions antérieures sortaient une image en bruit).
 - API locale : `POST /api/generate`, `GET /api/job/<id>`, `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel`,
   `GET /api/status`.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés

@@ -4,7 +4,7 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   macOS   : venv/bin/python tools/launch.py [--port 7860] [--model q4|q8] [--no-browser]
 
 - L'interface écoute sur 127.0.0.1:<port> et sert tools/ui/index.html.
-- Chaque génération lance sd-cli (sous Windows, rechargement quasi instantané grâce à --mmap et au cache disque),
+- Chaque génération lance sd-cli (rechargement quasi instantané grâce à --mmap et au cache disque),
   lit sa progression (étape k/N, secondes par étape), expose des aperçus intermédiaires optionnels et enregistre
   le PNG final dans outputs/.
 - API : POST /api/generate, GET /api/job/<id>, GET /api/job/<id>/preview, POST /api/job/<id>/cancel,
@@ -43,12 +43,12 @@ BACKENDS = {
     "vulkan": ["--backend", "diffusion=vulkan0,vae=vulkan0,te=cpu", "--offload-to-cpu", "--mmap"],
     "cuda":   ["--backend", "cuda0", "--offload-to-cpu", "--diffusion-fa", "--mmap"],
     "cpu":    ["--backend", "cpu", "--mmap"],
-    # Metal (Mac Apple Silicon, mesuré sur M6 avec sd.cpp 74988b2) :
+    # Metal (Mac Apple Silicon, mesuré sur M6 avec sd.cpp d637cfb, release master-959) :
     # - diffusion sur le GPU ; --diffusion-fa y gagne quelques pour cent ;
+    # - VAE sur le GPU : décodage 11 fois plus rapide que sur le CPU (3 s contre 37 s en 512×512) ;
     # - encodeur sur le CPU : Metal n'a pas de noyau int8 (kernel_mul_mm_i8_i8 absent, sd-cli plante) ;
-    # - VAE sur le CPU : environ 20 % plus rapide que sur Metal à 512 comme à 1024 px ;
-    # - pas de --mmap : les poids projetés en mémoire n'atteignent pas le GPU (« buffer is nil ») et l'image sort en bruit.
-    "metal":  ["--backend", "diffusion=MTL0,vae=cpu,te=cpu", "--diffusion-fa"],
+    # - --mmap : les poids projetés en mémoire passent par des tampons Metal ; rechargement quasi instantané.
+    "metal":  ["--backend", "diffusion=MTL0,vae=MTL0,te=cpu", "--diffusion-fa", "--mmap"],
 }
 
 
@@ -219,7 +219,7 @@ def run_job(job):
                 t = TAKING_RE.search(text)
                 if t:
                     job["vae_seconds"] = float(t.group(1))
-            elif "[ERROR" in text or "GGML_ASSERT" in text:
+            elif "[ERROR" in text or text.startswith("[E]") or "GGML_ASSERT" in text:   # [E] : journaux de master-959
                 job["error_lines"] = (job.get("error_lines") or []) + [text]
     rc = proc.wait()
     logf.close()
