@@ -59,7 +59,7 @@ navigateur ──HTTP──▶ tools/launch.py ──lance une fois par généra
 tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pas de sd-server persistant)
 ```
 
-- **Un seul fichier serveur** (`tools/launch.py`, bibliothèque standard + Pillow) : état global `S` (moteur, modèle,
+- **Un seul fichier serveur** (`tools/launch.py`, bibliothèque standard + Pillow ; `Server` garde une file de 128 connexions, la galerie en ouvre une par miniature) : état global `S` (moteur, modèle,
   jobs en mémoire dans `S.jobs`, file `S.q`), un thread `worker()` qui exécute les jobs un par un via `run_job()`. Celui-ci
   construit la ligne de commande (`build_cmd`), lit la sortie de sd-cli ligne à ligne et en tire l'étape, la phase et les
   durées (`PROGRESS_RE`, lignes « … completed, taking x s ») qui alimentent la calibration. Les jobs ne survivent pas à un

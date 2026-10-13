@@ -276,7 +276,7 @@
   .mm p { margin:8px 6px 0; font-size:13px; color:var(--ink2); }
   .mm:has([value=annotation]:checked) .mm-mask, .mm:not(:has([value=annotation]:checked)) .mm-annot { display:none; }
   body.m-hist main { grid-template-columns:minmax(0, 1fr); }
-  body.m-hist #result { display:none !important; }
+  body.m-hist #result, body.m-hist #composer { display:none !important; }
   body.m-hist #panes { background:none; border:0; box-shadow:none; -webkit-backdrop-filter:none; backdrop-filter:none; padding:0; }
   .hist-head { display:flex; align-items:center; gap:10px; margin:2px 4px 12px; }
   .hist-head h2 { font-size:26px; letter-spacing:-.025em; margin:0; }
@@ -303,24 +303,32 @@
   .v-bg img { width:100%; height:100%; object-fit:cover; filter:blur(50px) saturate(1.6) brightness(.5); transform:scale(1.25); }
   .v-top { display:flex; justify-content:space-between; align-items:center; padding:calc(10px + env(safe-area-inset-top)) 14px 4px; transition:opacity .25s; }
   .v-top .btn-icon { width:44px; height:44px; }
+  .v-top a.btn-icon { color:var(--ink); }
   .v-top .chipbtn { cursor:default; font-variant-numeric:tabular-nums; }
   .v-stage { position:relative; flex:1; min-height:0; display:grid; place-items:center; padding:10px 12px; touch-action:none; user-select:none; }
   .v-stage img { max-width:100%; max-height:100%; border-radius:18px; box-shadow:0 30px 80px -20px rgba(0,0,0,.85); -webkit-user-drag:none;
     transform:scale(.96); opacity:.4; transition:transform .35s var(--ease), opacity .3s; }
   .viewer.on .v-stage img { transform:none; opacity:1; }
   .v-stage.drag img { transition:none; }
+  .viewer.zoomed .v-stage { overflow:hidden; cursor:grab; }
   .v-nav { display:none; position:absolute; top:50%; translate:0 -50%; width:46px; height:46px; }
   .v-nav.prev { left:16px; } .v-nav.next { right:16px; }
   @media (hover: hover) and (pointer: fine) { .v-nav { display:grid; } }
-  .v-panel { margin:4px 10px calc(10px + env(safe-area-inset-bottom)); padding:14px 12px 12px; border-radius:28px; transition:opacity .25s, transform .35s var(--ease); }
+  .v-panel { margin:6px 12px calc(12px + env(safe-area-inset-bottom)); padding:18px 16px 16px; border-radius:30px; transition:opacity .25s, transform .35s var(--ease); }
   @media (min-width: 700px) { .v-panel { width:min(600px, calc(100% - 24px)); margin-inline:auto; } }
   .viewer.immersive .v-top, .viewer.immersive .v-panel { opacity:0; pointer-events:none; }
   .viewer.immersive .v-panel { transform:translateY(24px); }
   .v-prompt { margin:0 6px; font-size:15px; line-height:1.45; cursor:pointer; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .v-prompt.open { -webkit-line-clamp:12; }
   .v-prompt:empty { display:none; }
-  .acts.v-acts { grid-template-columns:repeat(5, 1fr); gap:6px; margin-top:12px; }
-  .v-acts .act { background:var(--field); font-size:11px; padding:10px 2px 8px; border-radius:18px; }
+  .acts.v-acts { grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:16px; }
+  .v-acts .act { background:var(--field); font-size:12.5px; padding:13px 4px 11px; border-radius:20px; gap:7px; }
+  .v-panel .m-chips { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; margin:12px 0 0; padding:0 18px 0 2px;
+    -webkit-mask:linear-gradient(90deg, #000 85%, transparent); mask:linear-gradient(90deg, #000 85%, transparent); }
+  .v-panel .m-chips::-webkit-scrollbar { display:none; }
+  .v-panel .m-chips span { flex:none; }
+  .v-right { display:flex; align-items:center; gap:10px; }
+  .v-stage img { touch-action:none; }
   /* ------------------------------------------------------------ résultat : l'image est posée telle quelle, jamais sous du verre */
   .result { display:flex; flex-direction:column; gap:12px; min-width:0; }
   @media (min-width: 981px) { .result { position:sticky; top:72px; } }
@@ -507,7 +515,8 @@
   <div class="v-bg"><img id="vBg" alt=""></div>
   <div class="v-top">
     <button class="btn-icon glass" onclick="closeViewer()" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-    <span class="chipbtn glass" id="vCount"></span>
+    <div class="v-right"><span class="chipbtn glass" id="vCount"></span>
+      <a class="btn-icon glass" id="vDl" download aria-label="Télécharger" title="Télécharger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg></a></div>
   </div>
   <div class="v-stage" id="vStage">
     <img id="vImg" alt="">
@@ -518,7 +527,6 @@
     <p class="v-prompt" id="vPrompt" onclick="this.classList.toggle('open')"></p>
     <div class="m-chips" id="vChips"></div>
     <div class="acts v-acts">
-      <a class="act" id="vDl" download><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg><span>Télécharger</span></a>
       <button class="act" onclick="viewerAction('edit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/></svg><span>Éditer</span></button>
       <button class="act" onclick="viewerAction('mask')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg><span>Dessiner</span></button>
       <button class="act" onclick="viewerAction('prompt')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15M4.5 11.5h15M4.5 16.5h8"/><path d="m16 15.5 2.5 2.5 3-4"/></svg><span>Reprendre</span></button>
@@ -867,12 +875,14 @@ function renderGallery(){
   if(!histItems.length){ g.innerHTML='<div class="hempty">Aucune image pour l\'instant.<button class="btn" onclick="goTab(\'t2i\')">Créer une image</button></div>'; return; }
   histItems.forEach((it, i)=>{ const b=document.createElement('button'); b.dataset.name=it.name; b.setAttribute('aria-label', it.prompt||it.name);
     if(lastResult && lastResult.name===it.name) b.classList.add('sel');
-    const im=document.createElement('img'); im.loading='lazy'; im.decoding='async'; im.alt=''; im.src=thumbUrl(it); b.appendChild(im);
+    const im=document.createElement('img'); im.loading='lazy'; im.decoding='async'; im.alt='';
+    im.onerror=()=>{ if(!im.dataset.retry){ im.dataset.retry=1; setTimeout(()=>{ im.src=thumbUrl(it)+'&retry=1'; }, 700); } };   // coupure passagère : une seconde tentative
+    im.src=thumbUrl(it); b.appendChild(im);
     if(it.mode && it.mode!=='t2i'){ const sp=document.createElement('span'); sp.textContent=MODE_LABELS[it.mode]||it.mode; b.appendChild(sp); }
     b.onclick=()=>openViewer(i); g.appendChild(b); });
 }
 function openViewer(i){
-  const it=histItems[i]; if(!it) return; vIndex=i;
+  const it=histItems[i]; if(!it) return; vIndex=i; resetZoom();
   const v=$('viewer'), img=$('vImg');
   img.src=thumbUrl(it); $('vBg').src=thumbUrl(it);           // miniature tout de suite, image complète dès qu'elle est chargée
   const full=new Image(); full.onload=()=>{ if(vIndex===i) img.src=full.src; }; full.src=resultUrl(it.name);
@@ -884,21 +894,51 @@ function openViewer(i){
   $('vDl').href=resultUrl(it.name)+'&download=1'; $('vDl').download=it.name;
   if(!v.classList.contains('on')){ v.classList.remove('immersive'); v.classList.add('on'); document.body.style.overflow='hidden'; }
 }
-function closeViewer(){ $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; }
+function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; }
 function stepViewer(d){ if(vIndex<0 || !histItems.length) return; openViewer((vIndex+d+histItems.length)%histItems.length); }
 addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevented) return;
   if(e.key==='Escape') closeViewer(); else if(e.key==='ArrowLeft') stepViewer(-1); else if(e.key==='ArrowRight') stepViewer(1); });
-(function swipe(){            // glisser à gauche ou à droite : image voisine ; vers le bas : fermer ; un appui : masquer les commandes
-  const st=$('vStage'), img=$('vImg'); let x0=null, y0=null, dx=0, dy=0;
-  st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return; x0=e.clientX; y0=e.clientY; dx=dy=0; st.setPointerCapture(e.pointerId); st.classList.add('drag'); });
-  st.addEventListener('pointermove', e=>{ if(x0===null) return; dx=e.clientX-x0; dy=e.clientY-y0;
+// visionneuse : pincer, double appui ou molette pour zoomer, glisser pour déplacer l'image zoomée ; sans zoom,
+// glisser à gauche ou à droite : image voisine ; vers le bas : fermer ; un appui : masquer les commandes
+let resetZoom=()=>{};
+(function gestures(){
+  const st=$('vStage'), img=$('vImg'), v=$('viewer'), pts=new Map(), MAX=6;
+  let z={s:1, x:0, y:0}, one=null, pinch=null, lastTap=0, tapTimer=null;
+  const center=()=>{ const r=st.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2}; };
+  function apply(){ const mx=Math.max(0, (img.offsetWidth*z.s-st.clientWidth)/2), my=Math.max(0, (img.offsetHeight*z.s-st.clientHeight)/2);
+    z.x=Math.min(mx, Math.max(-mx, z.x)); z.y=Math.min(my, Math.max(-my, z.y));
+    img.style.transform = z.s>1 ? `translate(${z.x}px, ${z.y}px) scale(${z.s})` : ''; v.classList.toggle('zoomed', z.s>1); }
+  function zoomAt(s2, px, py, from=z){ const c=center(), k=s2/from.s;   // le point (px, py) de l'écran reste sous le doigt
+    z={s:s2, x:(px-c.x)-((px-c.x)-from.x)*k, y:(py-c.y)-((py-c.y)-from.y)*k}; if(s2<=1.01) z={s:1, x:0, y:0}; apply(); }
+  resetZoom=()=>{ z={s:1, x:0, y:0}; img.style.transform=''; v.classList.remove('zoomed'); };
+  const mid=()=>{ const [a,b]=[...pts.values()]; return {x:(a.x+b.x)/2, y:(a.y+b.y)/2, d:Math.hypot(a.x-b.x, a.y-b.y)}; };
+  st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return;
+    pts.set(e.pointerId, {x:e.clientX, y:e.clientY}); st.setPointerCapture(e.pointerId); st.classList.add('drag');
+    if(pts.size===2){ one=null; img.style.transform=z.s>1?img.style.transform:''; v.style.opacity=''; const m=mid(); pinch={...m, from:{...z}}; }
+    else if(pts.size===1) one={x0:e.clientX, y0:e.clientY, from:{...z}, dx:0, dy:0}; });
+  st.addEventListener('pointermove', e=>{ if(!pts.has(e.pointerId)) return; pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pinch && pts.size>=2){ const m=mid(); zoomAt(Math.min(MAX, Math.max(1, pinch.from.s*m.d/pinch.d)), pinch.x, pinch.y, pinch.from);
+      z.x+=m.x-pinch.x; z.y+=m.y-pinch.y; apply(); return; }
+    if(!one) return; one.dx=e.clientX-one.x0; one.dy=e.clientY-one.y0;
+    if(z.s>1){ z.x=one.from.x+one.dx; z.y=one.from.y+one.dy; apply(); return; }       // image zoomée : on la déplace
+    const {dx, dy}=one;
     img.style.transform = Math.abs(dx)>Math.abs(dy) ? `translateX(${dx}px) rotate(${dx/40}deg)` : `translateY(${Math.max(0,dy)}px) scale(${1-Math.max(0,dy)/1600})`;
-    $('viewer').style.opacity = dy>0 && Math.abs(dy)>Math.abs(dx) ? Math.max(.35, 1-dy/500) : ''; });
-  const end=()=>{ if(x0===null) return; st.classList.remove('drag'); img.style.transform=''; $('viewer').style.opacity=''; x0=null;
+    v.style.opacity = dy>0 && Math.abs(dy)>Math.abs(dx) ? Math.max(.35, 1-dy/500) : ''; });
+  const end=e=>{ if(!pts.delete(e.pointerId)) return;
+    if(pinch){ if(pts.size<2) pinch=null; if(!pts.size){ st.classList.remove('drag'); if(z.s<1.05) resetZoom(); } return; }
+    if(pts.size || !one) return;
+    st.classList.remove('drag'); const {dx, dy, x0, y0}=one; one=null; v.style.opacity='';
+    if(Math.abs(dx)<6 && Math.abs(dy)<6){                       // appui : double appui = zoom, appui simple = commandes
+      if(Date.now()-lastTap<300){ clearTimeout(tapTimer); lastTap=0; z.s>1 ? resetZoom() : zoomAt(2.5, x0, y0); }
+      else { lastTap=Date.now(); tapTimer=setTimeout(()=>v.classList.toggle('immersive'), 300); }
+      if(z.s<=1) img.style.transform=''; return; }
+    if(z.s>1) return;
+    img.style.transform='';
     if(Math.abs(dx)>70 && Math.abs(dx)>Math.abs(dy)) stepViewer(dx<0 ? 1 : -1);
-    else if(dy>110) closeViewer();
-    else if(Math.abs(dx)<6 && Math.abs(dy)<6) $('viewer').classList.toggle('immersive'); };
+    else if(dy>110) closeViewer(); };
   st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
+  let wheelEnd=null;
+  st.addEventListener('wheel', e=>{ e.preventDefault(); st.classList.add('drag'); clearTimeout(wheelEnd); wheelEnd=setTimeout(()=>st.classList.remove('drag'), 150); zoomAt(Math.min(MAX, Math.max(1, z.s*Math.exp(-e.deltaY*0.002))), e.clientX, e.clientY); }, {passive:false});
 })();
 async function dataUrlOf(name){ if(lastResult && lastResult.blob && lastResult.name===name) return await readFile(lastResult.blob);
   const b=await (await fetch(resultUrl(name))).blob(); return await readFile(b); }

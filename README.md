@@ -253,8 +253,10 @@ le modèle à redessiner l'original.
 L'onglet **Galerie** montre toutes les images de `outputs\`, la plus récente d'abord. Un appui sur une miniature
 l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèle, durée, prompt). Glisser sur le côté passe
 à l'image voisine (flèches du clavier sur ordinateur), glisser vers le bas ferme, un appui sur l'image masque les
-commandes. Actions : **Télécharger**, **Éditer**, **Dessiner**, **Reprendre** (remet le texte de l'image dans l'onglet
-correspondant) et **Supprimer** (définitif, après confirmation).
+commandes. Pour zoomer (jusqu'à ×6) : pincer, toucher deux fois l'image, ou la molette sur ordinateur ; une image
+zoomée se déplace au doigt, et un double appui la remet à sa taille. **Télécharger** est en haut à droite ; en bas :
+**Éditer**, **Dessiner**, **Reprendre** (remet le texte de l'image dans l'onglet correspondant) et **Supprimer**
+(définitif, après confirmation). La zone de génération est masquée dans la galerie.
 
 ### Mode incognito
 

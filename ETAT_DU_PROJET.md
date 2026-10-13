@@ -31,6 +31,13 @@ Mis à jour le 13/10/2026.
 
 ### 2026-10-13
 
+- Galerie : les miniatures manquaient parfois au premier affichage. Cause : la file d'attente des connexions du serveur
+  (5 par défaut dans Python) débordait quand la galerie demandait toutes les miniatures pendant leur fabrication, d'où
+  des connexions refusées (erreur relayée par Tailscale, absente de `logs/`). File portée à 128 (`Server`), miniatures
+  écrites puis renommées, seconde tentative côté interface. Banc : 2 à 7 miniatures cassées par essai avant, 0 sur
+  9 essais (jusqu'à 32 demandes simultanées) après. Zone de génération masquée dans la galerie ; visionneuse : zoom
+  (pincer, double appui, molette), Télécharger en haut, quatre actions plus aérées en bas. 13 contrôles dans Chrome
+  en mode tactile ; service relancé.
 - Interface : niveaux de résolution renommés d'après le format vidéo au nombre de pixels le plus proche (360p, 540p,
   720p, 1080p, 1440p) ; la pastille sous le texte affiche ce libellé. Dans les Réglages, formats et résolutions
   n'affichent plus que leur libellé (ni « Carré », « Paysage »…, ni dimensions) ; les dimensions exactes restent en bas

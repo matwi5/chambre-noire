@@ -203,10 +203,12 @@ def thumbnail(fp):
     if not os.path.exists(th) or os.path.getmtime(th) < os.path.getmtime(fp):
         from PIL import Image
         os.makedirs(THUMBS, exist_ok=True)
+        tmp = f"{th}.{threading.get_ident()}.tmp"   # écrite à côté puis renommée : jamais lue à moitié écrite
         with Image.open(fp) as im:
             im = im.convert("RGB")
             im.thumbnail((320, 320))
-            im.save(th, "JPEG", quality=82)
+            im.save(tmp, "JPEG", quality=82)
+        os.replace(tmp, th)
     return th
 
 
@@ -505,6 +507,13 @@ def public(job):
     return d
 
 
+class Server(ThreadingHTTPServer):
+    daemon_threads = True
+    # Python n'en garde que 5 par défaut : la galerie ouvre une connexion par miniature et, pendant que le processeur les
+    # fabrique, les suivantes étaient refusées (« Connection reset by peer », miniature cassée sur le téléphone)
+    request_queue_size = 128
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         msg = fmt % args
@@ -771,8 +780,7 @@ def main():
         if sys.platform == "darwin":
             # empêche la veille du Mac tant que ce processus tourne (l'écran peut s'éteindre)
             subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
-    httpd = ThreadingHTTPServer(("0.0.0.0" if a.lan else "127.0.0.1", a.port), H)
-    httpd.daemon_threads = True
+    httpd = Server(("0.0.0.0" if a.lan else "127.0.0.1", a.port), H)
     url = f"http://127.0.0.1:{a.port}/"
     print(f"[launch] backend {S.backend}, modèle {S.model} — interface : {url}  (Ctrl+C pour arrêter)", flush=True)
     if a.lan:
