@@ -6,12 +6,16 @@ Mis à jour le 13/10/2026.
 
 - **Fonctionnel** sur Windows (Vulkan, CPU, CUDA en option ; sd.cpp `master-890`) et sur Mac Apple Silicon (Metal ;
   sd.cpp `master-959`, encodeur GGUF). Modèles Q4_K_M et Q8_0. Trois usages (texte → image, édition, dessin guidé),
-  galerie, estimations calibrées, mode incognito.
+  galerie avec visionneuse (zoom au pincement, partage, copie, images d'entrée), estimations calibrées, mode incognito,
+  notification de fin de génération (Web Push).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
 - **En cours** : rien.
-- **À vérifier par le porteur** : télécharger une image incognito sur le téléphone, notamment depuis l'application
-  installée. Le téléchargement depuis une adresse `blob:` n'a été testé que dans Chrome sur le Mac.
+- **À vérifier par le porteur**, sur le téléphone par l'application installée (testé seulement dans Chrome sur le Mac,
+  en vue de téléphone) :
+  - télécharger, partager et copier une image, dont une image incognito (adresse `blob:`) ;
+  - la notification : autorisation à la première génération, réception application fermée, toucher pour la rouvrir ;
+  - la barre d'état qui prend la couleur du haut de l'écran dans la visionneuse (un bug Chromium pourrait l'empêcher).
 - **Pistes ouvertes** (aucune demandée) :
   - une exception dans `build_cmd` (prompt non textuel, image de référence illisible) tue le thread `worker()` et bloque
     la file jusqu'au redémarrage ;
