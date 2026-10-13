@@ -198,13 +198,52 @@
   .drop input { display:none; }
   .thumbs { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
   body.m-hist .gen { display:none; }
-  .hist-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; color:var(--ink2); font-size:14px; }
-  .hgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:6px; max-height:62vh; overflow:auto; border-radius:var(--r-m); }
-  .hgrid button { position:relative; padding:0; border:0; border-radius:12px; overflow:hidden; aspect-ratio:1; background:var(--field); cursor:pointer; }
-  .hgrid button.sel { outline:2px solid var(--iris); outline-offset:-2px; }
-  .hgrid img { width:100%; height:100%; object-fit:cover; display:block; }
-  .hgrid span { position:absolute; left:5px; bottom:5px; background:rgba(10,8,22,.55); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); color:#fff; font-size:11px; padding:2px 7px; border-radius:999px; }
-  .hempty { color:var(--ink2); font-size:14px; padding:20px 0; text-align:center; }
+  /* ------------------------------------------------------------ galerie : les miniatures posées sur le fond, sans carte */
+  body.m-hist main { grid-template-columns:minmax(0, 1fr); }
+  body.m-hist #result { display:none !important; }
+  body.m-hist #panes { background:none; border:0; box-shadow:none; -webkit-backdrop-filter:none; backdrop-filter:none; padding:0; }
+  .hist-head { display:flex; align-items:center; gap:10px; margin:2px 4px 12px; }
+  .hist-head h2 { font-size:26px; letter-spacing:-.025em; margin:0; }
+  .hist-head span { color:var(--ink2); font-size:14px; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .hist-head .btn-icon { width:40px; height:40px; margin-left:auto; }
+  .hist-head .btn-icon svg { width:19px; height:19px; }
+  .hgrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; }
+  @media (min-width: 700px) { .hgrid { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; } }
+  .hgrid > button { position:relative; padding:0; border:0; border-radius:14px; overflow:hidden; aspect-ratio:1; background:var(--field); cursor:pointer; }
+  .hgrid > button:active img { transform:scale(.97); }
+  .hgrid > button.sel { outline:2px solid var(--iris2); outline-offset:-2px; }
+  .hgrid > button:focus-visible { outline:2px solid var(--iris); outline-offset:2px; }
+  .hgrid img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .2s; }
+  .hgrid span { position:absolute; left:6px; bottom:6px; background:rgba(10,8,22,.5); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); color:#fff;
+    font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:999px; }
+  .hempty { grid-column:1 / -1; display:grid; justify-items:center; gap:14px; color:var(--ink2); font-size:15px; padding:56px 20px; text-align:center; }
+
+  /* ------------------------------------------------------------ visionneuse plein écran */
+  .viewer { position:fixed; inset:0; z-index:35; display:flex; flex-direction:column; background:rgba(5,4,12,.72); overscroll-behavior:contain;
+    opacity:0; visibility:hidden; transition:opacity .3s, visibility 0s linear .3s; }
+  .viewer.on { opacity:1; visibility:visible; transition:opacity .3s; }
+  .v-bg { position:absolute; inset:-20%; z-index:-1; overflow:hidden; }
+  .v-bg img { width:100%; height:100%; object-fit:cover; filter:blur(50px) saturate(1.6) brightness(.5); transform:scale(1.25); }
+  .v-top { display:flex; justify-content:space-between; align-items:center; padding:calc(10px + env(safe-area-inset-top)) 14px 4px; transition:opacity .25s; }
+  .v-top .btn-icon { width:44px; height:44px; }
+  .v-top .chipbtn { cursor:default; font-variant-numeric:tabular-nums; }
+  .v-stage { position:relative; flex:1; min-height:0; display:grid; place-items:center; padding:10px 12px; touch-action:none; user-select:none; }
+  .v-stage img { max-width:100%; max-height:100%; border-radius:18px; box-shadow:0 30px 80px -20px rgba(0,0,0,.85); -webkit-user-drag:none;
+    transform:scale(.96); opacity:.4; transition:transform .35s var(--ease), opacity .3s; }
+  .viewer.on .v-stage img { transform:none; opacity:1; }
+  .v-stage.drag img { transition:none; }
+  .v-nav { display:none; position:absolute; top:50%; translate:0 -50%; width:46px; height:46px; }
+  .v-nav.prev { left:16px; } .v-nav.next { right:16px; }
+  @media (hover: hover) and (pointer: fine) { .v-nav { display:grid; } }
+  .v-panel { margin:4px 10px calc(10px + env(safe-area-inset-bottom)); padding:14px 12px 12px; border-radius:28px; transition:opacity .25s, transform .35s var(--ease); }
+  @media (min-width: 700px) { .v-panel { width:min(600px, calc(100% - 24px)); margin-inline:auto; } }
+  .viewer.immersive .v-top, .viewer.immersive .v-panel { opacity:0; pointer-events:none; }
+  .viewer.immersive .v-panel { transform:translateY(24px); }
+  .v-prompt { margin:0 6px; font-size:15px; line-height:1.45; cursor:pointer; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .v-prompt.open { -webkit-line-clamp:12; }
+  .v-prompt:empty { display:none; }
+  .acts.v-acts { grid-template-columns:repeat(5, 1fr); gap:6px; margin-top:12px; }
+  .v-acts .act { background:var(--field); font-size:11px; padding:10px 2px 8px; border-radius:18px; }
   .btn.danger { color:var(--err); }
   .thumb { position:relative; width:88px; height:88px; border-radius:14px; overflow:hidden; background:var(--field); border:1px solid var(--rim); }
   .thumb img { width:100%; height:100%; object-fit:cover; }
@@ -324,7 +363,7 @@
   </div>
 
   <div class="pane" id="pane-hist">
-    <div class="hist-head"><span id="histCount">…</span><button class="btn secondary small" onclick="loadHistory()">Actualiser</button></div>
+    <div class="hist-head"><h2>Galerie</h2><span id="histCount"></span><button class="btn-icon glass" onclick="loadHistory()" aria-label="Actualiser la galerie"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg></button></div>
     <div class="hgrid" id="histGrid"></div>
   </div>
 </section>
@@ -374,6 +413,29 @@
   <button data-pane="hist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7.5" height="7.5" rx="2.2"/><rect x="13" y="3.5" width="7.5" height="7.5" rx="2.2"/><rect x="3.5" y="13" width="7.5" height="7.5" rx="2.2"/><rect x="13" y="13" width="7.5" height="7.5" rx="2.2"/></svg><span>Galerie</span></button>
 </nav>
 
+<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-label="Image de la galerie">
+  <div class="v-bg"><img id="vBg" alt=""></div>
+  <div class="v-top">
+    <button class="btn-icon glass" onclick="closeViewer()" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <span class="chipbtn glass" id="vCount"></span>
+  </div>
+  <div class="v-stage" id="vStage">
+    <img id="vImg" alt="">
+    <button class="btn-icon glass v-nav prev" onclick="stepViewer(-1)" aria-label="Image précédente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"/></svg></button>
+    <button class="btn-icon glass v-nav next" onclick="stepViewer(1)" aria-label="Image suivante"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg></button>
+  </div>
+  <div class="v-panel glass">
+    <p class="v-prompt" id="vPrompt" onclick="this.classList.toggle('open')"></p>
+    <div class="m-chips" id="vChips"></div>
+    <div class="acts v-acts">
+      <a class="act" id="vDl" download><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg><span>Télécharger</span></a>
+      <button class="act" onclick="viewerAction('edit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/></svg><span>Éditer</span></button>
+      <button class="act" onclick="viewerAction('mask')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg><span>Dessiner</span></button>
+      <button class="act" onclick="viewerAction('prompt')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15M4.5 11.5h15M4.5 16.5h8"/><path d="m16 15.5 2.5 2.5 3-4"/></svg><span>Reprendre</span></button>
+      <button class="act danger" onclick="viewerAction('delete')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="m6.5 7 1 12.5h9l1-12.5"/></svg><span>Supprimer</span></button>
+    </div>
+  </div>
+</div>
 <div class="toast glass" id="toast" role="status" aria-live="polite"></div>
 <div class="scrim" id="scrim" onclick="closeSheet()"></div>
 <section class="sheet glass" id="askSheet" role="alertdialog" aria-modal="true" aria-labelledby="askTitle">
@@ -519,7 +581,7 @@ let openedSheet=null;
 function openSheet(id){ closeSheet(); openedSheet=$(id); openedSheet.classList.add('on'); $('scrim').classList.add('on'); }
 function closeSheet(){ if(askResolve){ const r=askResolve; askResolve=null; r(false); }
   if(!openedSheet) return; openedSheet.classList.remove('on'); $('scrim').classList.remove('on'); openedSheet=null; }
-addEventListener('keydown', e=>{ if(e.key==='Escape') closeSheet(); });
+addEventListener('keydown', e=>{ if(e.key==='Escape' && openedSheet){ closeSheet(); e.preventDefault(); } });
 // glisser le panneau vers le bas pour le fermer
 document.querySelectorAll('.sheet').forEach(sh=>{ let y0=null, dy=0;
   sh.addEventListener('touchstart', e=>{ y0 = sh.scrollTop<=0 ? e.touches[0].clientY : null; dy=0; }, {passive:true});
@@ -676,27 +738,73 @@ $('go').onclick=async()=>{
   }catch(e){} })();
 async function cancelCurrent(){ if(currentJob){ log('annulation demandée'); await fetch('/api/job/'+currentJob+'/cancel',{method:'POST'}); } }
 $('cancel').onclick=cancelCurrent; $('cancelLoader').onclick=cancelCurrent;
-// ------------------------------------------------------------ historique
-let histItems=[];
+// ------------------------------------------------------------ galerie et visionneuse
+let histItems=[], vIndex=-1;
 const MODE_LABELS={ t2i:'Texte → image', edit:'Édition', mask:'Masque', annot:'Annotation' };
+const resultUrl = name => '/api/result?name='+encodeURIComponent(name);
+const thumbUrl = it => '/api/thumb?name='+encodeURIComponent(it.name)+'&t='+it.time;
+function goTab(m){ document.querySelector(`#tabbar [data-pane="${m}"]`).click(); }
 async function loadHistory(){
-  try{ histItems=await (await fetch('/api/history')).json(); }catch(e){ $('histCount').textContent='historique indisponible'; return; }
+  try{ histItems=await (await fetch('/api/history')).json(); }catch(e){ $('histCount').textContent='indisponible'; return; }
+  renderGallery(); }
+function renderGallery(){
   const g=$('histGrid'); g.innerHTML='';
   $('histCount').textContent = histItems.length ? histItems.length+' image'+(histItems.length>1?'s':'') : '';
-  if(!histItems.length){ g.innerHTML='<div class="hempty">Aucune image pour l\'instant.</div>'; return; }
-  histItems.forEach(it=>{ const b=document.createElement('button'); b.title=it.prompt||it.name; b.dataset.name=it.name;
+  if(!histItems.length){ g.innerHTML='<div class="hempty">Aucune image pour l\'instant.<button class="btn" onclick="goTab(\'t2i\')">Créer une image</button></div>'; return; }
+  histItems.forEach((it, i)=>{ const b=document.createElement('button'); b.dataset.name=it.name; b.setAttribute('aria-label', it.prompt||it.name);
     if(lastResult && lastResult.name===it.name) b.classList.add('sel');
-    const im=document.createElement('img'); im.loading='lazy'; im.alt=''; im.src='/api/thumb?name='+encodeURIComponent(it.name)+'&t='+it.time; b.appendChild(im);
-    if(it.mode){ const sp=document.createElement('span'); sp.textContent=MODE_LABELS[it.mode]||it.mode; b.appendChild(sp); }
-    b.onclick=()=>showHistoryItem(it); g.appendChild(b); });
+    const im=document.createElement('img'); im.loading='lazy'; im.alt=''; im.src=thumbUrl(it); b.appendChild(im);
+    if(it.mode && it.mode!=='t2i'){ const sp=document.createElement('span'); sp.textContent=MODE_LABELS[it.mode]||it.mode; b.appendChild(sp); }
+    b.onclick=()=>openViewer(i); g.appendChild(b); });
 }
-function showHistoryItem(it){
-  if(currentJob) return;     // pendant une génération, le panneau de droite suit la génération
-  showResult(it.name, it.width, it.height);
+function openViewer(i){
+  const it=histItems[i]; if(!it) return; vIndex=i;
+  const v=$('viewer'), img=$('vImg');
+  img.src=thumbUrl(it); $('vBg').src=thumbUrl(it);           // miniature tout de suite, image complète dès qu'elle est chargée
+  const full=new Image(); full.onload=()=>{ if(vIndex===i) img.src=full.src; }; full.src=resultUrl(it.name);
+  img.alt=it.prompt||it.name; $('vCount').textContent=`${i+1} / ${histItems.length}`;
+  $('vPrompt').textContent=it.prompt||''; $('vPrompt').classList.remove('open');
   const date=new Date(it.time*1000).toLocaleString('fr-FR', {dateStyle:'short', timeStyle:'short'});
-  setMeta(it.prompt, [date, MODE_LABELS[it.mode]||it.mode, it.width?it.width+'×'+it.height:'', it.steps?it.steps+' étapes':'', it.model?it.model.toUpperCase():'', it.seconds?fmt(it.seconds):''], it.name);
-  document.querySelectorAll('#histGrid button').forEach(x=>x.classList.toggle('sel', x.dataset.name===it.name));
-  if(window.innerWidth<=980) $('result').scrollIntoView({behavior:'smooth', block:'start'});   // téléphone : panneau sous la liste
+  $('vChips').innerHTML=[date, MODE_LABELS[it.mode]||it.mode, it.width?it.width+'×'+it.height:'', it.steps?it.steps+' étapes':'', it.model?it.model.toUpperCase():'', it.seconds?fmt(it.seconds):'']
+    .filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('');
+  $('vDl').href=resultUrl(it.name)+'&download=1'; $('vDl').download=it.name;
+  if(!v.classList.contains('on')){ v.classList.remove('immersive'); v.classList.add('on'); document.body.style.overflow='hidden'; }
+}
+function closeViewer(){ $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; }
+function stepViewer(d){ if(vIndex<0 || !histItems.length) return; openViewer((vIndex+d+histItems.length)%histItems.length); }
+addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevented) return;
+  if(e.key==='Escape') closeViewer(); else if(e.key==='ArrowLeft') stepViewer(-1); else if(e.key==='ArrowRight') stepViewer(1); });
+(function swipe(){            // glisser à gauche ou à droite : image voisine ; vers le bas : fermer ; un appui : masquer les commandes
+  const st=$('vStage'), img=$('vImg'); let x0=null, y0=null, dx=0, dy=0;
+  st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return; x0=e.clientX; y0=e.clientY; dx=dy=0; st.setPointerCapture(e.pointerId); st.classList.add('drag'); });
+  st.addEventListener('pointermove', e=>{ if(x0===null) return; dx=e.clientX-x0; dy=e.clientY-y0;
+    img.style.transform = Math.abs(dx)>Math.abs(dy) ? `translateX(${dx}px) rotate(${dx/40}deg)` : `translateY(${Math.max(0,dy)}px) scale(${1-Math.max(0,dy)/1600})`;
+    $('viewer').style.opacity = dy>0 && Math.abs(dy)>Math.abs(dx) ? Math.max(.35, 1-dy/500) : ''; });
+  const end=()=>{ if(x0===null) return; st.classList.remove('drag'); img.style.transform=''; $('viewer').style.opacity=''; x0=null;
+    if(Math.abs(dx)>70 && Math.abs(dx)>Math.abs(dy)) stepViewer(dx<0 ? 1 : -1);
+    else if(dy>110) closeViewer();
+    else if(Math.abs(dx)<6 && Math.abs(dy)<6) $('viewer').classList.toggle('immersive'); };
+  st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
+})();
+async function dataUrlOf(name){ const b=await (await fetch(resultUrl(name))).blob(); return await readFile(b); }
+async function useAsEditInput(name=lastResult && lastResult.name){
+  if(!name) return; if(editImages.length>=10){ toast('10 images de référence au maximum', 'err'); return; }
+  editImages.push(await toEntry(name, await dataUrlOf(name))); renderEditThumbs(); goTab('edit'); suggestRatio(); toast('Ajoutée aux images de référence'); }
+async function useAsMaskInput(name=lastResult && lastResult.name){ if(!name) return; await setMaskImage(name, await dataUrlOf(name)); goTab('mask'); }
+async function viewerAction(kind){
+  const it=histItems[vIndex]; if(!it) return;
+  if(kind==='edit' || kind==='mask'){ closeViewer(); return kind==='edit' ? useAsEditInput(it.name) : useAsMaskInput(it.name); }
+  if(kind==='prompt'){ const tab = it.mode==='edit' ? 'edit' : (it.mode==='mask' || it.mode==='annot') ? 'mask' : 't2i';
+    if(!it.prompt){ toast('Pas de texte enregistré pour cette image', 'err'); return; }
+    const t=$(tab+'_prompt'); t.value=it.prompt; t.dispatchEvent(new Event('input')); closeViewer(); goTab(tab); toast('Texte repris'); return; }
+  if(kind==='delete'){
+    if(!await ask('Supprimer cette image ?', it.name+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return;
+    const r=await fetch('/api/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:it.name})});
+    if(!r.ok){ toast('Suppression impossible : '+((await r.json()).error||r.status), 'err'); return; }
+    log('supprimé : '+it.name); toast('Image supprimée');
+    if(lastResult && lastResult.name===it.name){ lastResult=null; hideResult(); }
+    histItems.splice(vIndex, 1); renderGallery();
+    if(histItems.length) openViewer(Math.min(vIndex, histItems.length-1)); else closeViewer(); }
 }
 async function deleteCurrent(){
   if(!lastResult || currentJob) return;
@@ -706,9 +814,6 @@ async function deleteCurrent(){
   log('supprimé : '+lastResult.name); lastResult=null; hideResult(); toast('Image supprimée');
   loadHistory();
 }
-async function fetchLastDataUrl(){ const b=await (await fetch(lastResult.url)).blob(); return await readFile(b); }
-async function useAsEditInput(){ if(!lastResult) return; editImages.push(await toEntry(lastResult.name, await fetchLastDataUrl())); renderEditThumbs(); document.querySelector('nav button[data-pane=edit]').click(); }
-async function useAsMaskInput(){ if(!lastResult) return; await setMaskImage(lastResult.name, await fetchLastDataUrl()); document.querySelector('nav button[data-pane=mask]').click(); }
 </script>
 </body>
 </html>
