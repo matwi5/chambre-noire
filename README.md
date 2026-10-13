@@ -192,6 +192,8 @@ venv/bin/python tools/make_service.py
 
 L'interface a quatre onglets, dans la barre du bas : **Créer** (texte → image), **Éditer**, **Dessiner** (dessin guidé)
 et **Galerie**. Elle s'adapte au téléphone comme à l'ordinateur, en thème sombre ou clair selon le système.
+Sur un écran tactile, elle allège ses effets de verre et d'animation pour rester fluide ; ajouter `?lite=1` ou
+`?lite=0` à l'adresse force l'un ou l'autre rendu.
 
 ### Réglages communs
 
