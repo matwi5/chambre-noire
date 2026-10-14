@@ -64,7 +64,7 @@ Mis à jour le 14/10/2026.
   spec). Revue de groupe (`/code-review --fix`) : 9 constats, 6 corrigés (`52466e1`). Revue de sécurité : aucune
   faille. Fusionné, 75 tests au vert, service relancé (11 prompts types servis). Choix de la session : titre de 80
   caractères, texte de 4 000, 500 prompts au plus ; choisir un prompt en incognito ne met pas à jour sa dernière
-  utilisation (à valider par le porteur) ; Dupliquer crée la copie sans ouvrir l'éditeur ; le filtre par usage
+  utilisation (validé par le porteur) ; Dupliquer crée la copie sans ouvrir l'éditeur ; le filtre par usage
   s'applique aussi aux prompts types.
 - Revue de groupe B (`/code-review --fix` puis `/security-review`, lancées par la session du groupe) : 4 corrections
   (`f1a478f`) : « Garder celle-ci » supprimait aussi l'image gardée quand la galerie avait été rechargée pendant que la
