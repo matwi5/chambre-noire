@@ -13,6 +13,12 @@ les messages de commit.
 - **Décision** (porteur, 14/10/2026 ; mise en œuvre, groupe E) :
   - **Notification neutre** : une génération ou un lot privé notifie exactement comme une génération normale
     (« Image prête », « N images prêtes », mêmes champs) ; l'incognito garde son mot.
+  - **« Sortir » vide l'écran** : en plus des images privées (zone de résultat, grille, visionneuse), le texte et les
+    images des onglets marqués sont effacés, et une génération privée en cours ne garde à l'écran que sa progression
+    (ni aperçu, ni prompt, ni image d'entrée dans la file). Fermeture seule de l'espace (15 minutes sans requête
+    privée) : les images privées quittent l'écran comme avant, mais les onglets marqués gardent leur contenu et leur
+    marque (« Héritage » de l'entrée « Espace privé discret », inchangé dans ce cas), pour ne pas effacer un texte en
+    cours de saisie ; choix du groupe E, la décision du porteur nommant « Sortir ».
   - **Supprimer sans le code, sur le Mac seulement** : `/api/private/reset` exige une requête du Mac lui-même (au sens
     du contrôle d'accès : adresse source et nom d'hôte locaux, non relayée par Tailscale) ; ailleurs 403, et la feuille
     de l'interface dit d'ouvrir l'application sur le Mac (`local` dans `/api/status`).

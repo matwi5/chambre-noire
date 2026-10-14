@@ -408,9 +408,13 @@ du Mac, ne suffit pas pour voir les images privées.
   grille et « Garder celle-ci » restent, et la notification est celle d'un lot normal (« N images prêtes »).
 - La **Galerie** de l'espace privé ne montre que les images privées, avec la même visionneuse : télécharger,
   partager, copier, images d'entrée, Éditer, Dessiner, Reprendre, Supprimer. En sortant, elles quittent l'écran.
-- **Ce qui part de l'espace privé y reste** : un onglet dont le texte ou les images ont été saisis dans l'espace
-  (Éditer, Dessiner ou Reprendre depuis une image privée, ou saisie directe) garde une pastille sarcelle après la
-  sortie. **Générer** y demande alors le code et ne lance la génération, privée, qu'une fois dans l'espace : rien ne
+- **Sortir vide l'écran** : le texte et les images saisis dans l'espace (Créer, Éditer, Dessiner, Reprendre depuis
+  une image privée) sont effacés des onglets, comme les images privées de la zone de résultat, de la grille et de la
+  visionneuse. Une génération privée en cours continue, mais l'écran n'en montre plus que la progression, sans
+  aperçu ni prompt.
+- **Ce qui part de l'espace privé y reste** : si l'espace se ferme seul (15 minutes sans activité privée), un onglet
+  dont le texte ou les images ont été saisis dans l'espace garde son contenu et une pastille sarcelle. **Générer** y
+  demande alors le code et ne lance la génération, privée, qu'une fois dans l'espace : rien ne
   repart en clair, pas même en incognito. La pastille disparaît quand l'onglet est entièrement vidé (texte et images)
   hors de l'espace ; son texte n'est jamais retenu par le navigateur. Si l'espace privé est supprimé, ces onglets sont
   vidés.

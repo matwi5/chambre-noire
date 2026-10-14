@@ -1170,7 +1170,7 @@ function renderProgress(){                         // image en cours dans la zon
   const j=p.j, pr=progress(p), pct=Math.max(pr.frac, 0.02)*100;
   $('stepBig').textContent=pr.title; $('phaseTxt').textContent=pr.sub; $('etaTxt').textContent='≈ '+fmt(pr.remaining);
   $('bar').firstElementChild.style.transform=`scaleX(${pct/100})`; $('ringVal').style.strokeDashoffset=(100-pct).toFixed(1);
-  if(j.preview_version && j.preview_version!==p.pv){ p.pv=j.preview_version; const img=$('stageImg');
+  if(j.preview_version && j.preview_version!==p.pv && (!p.private || inPrivate())){ p.pv=j.preview_version; const img=$('stageImg');   // aperçu privé : dans l'espace seulement
     img.src='/api/job/'+j.id+'/preview?v='+p.pv; img.className='preview'; img.style.display='block'; $('stage').classList.add('has-preview'); $('shimmer').style.display='none'; } }
 function syncButtons(){ $('cancel').disabled=!(shown && isActive(shown)); }
 // image incognito : gardée par la page jusqu'à ce qu'elle ait été vue (affichée, application visible, hors galerie) puis
@@ -1646,9 +1646,12 @@ function applyPrivate(p){ if(!p) return; const was=inPrivate(); privState=p;
   document.documentElement.classList.toggle('priv', p.unlocked); document.documentElement.classList.toggle('incog', incogOn && !p.unlocked);
   if(was!==p.unlocked) changedSpace(p.unlocked); renderMarks(); }
 // entrée ou sortie de l'espace privé : la galerie suit ; en sortant, ses images quittent la page (zone de résultat,
-// pellicule, visionneuse) ; une génération privée en cours continue et sera rangée dans l'espace
+// pellicule, visionneuse) ; une génération privée en cours continue et sera rangée dans l'espace, mais l'écran ne garde
+// d'elle que sa progression (ni prompt, ni image d'entrée dans la file, ni aperçu)
 function changedSpace(inside){
-  if(!inside){ pageJobs.filter(p=>p.result && p.result.item).forEach(drop); if(vIndex>=0 && vList.some(x=>x.private)) closeViewer(); }
+  if(!inside){ pageJobs.filter(p=>p.result && p.result.item).forEach(drop); if(vIndex>=0 && vList.some(x=>x.private)) closeViewer();
+    pageJobs.filter(p=>p.private).forEach(p=>{ p.prompt=''; p.thumb=null; });
+    if(shown && shown.private && isActive(shown)) show(shown); }
   if(mode==='hist') loadHistory(); else histItems=[];
   syncThemeColor(); }
 // Ce qui part de l'espace privé y reste (récit 61) : un onglet dont le texte ou les images ont été saisis dans l'espace
@@ -1689,7 +1692,11 @@ async function privUnlock(){ if(!$('puCode').value) return;
   if(await privPost('/api/private/unlock', {code:$('puCode').value}, $('puGo'), 'puErr')){ closeSheet(); toast('Espace privé ouvert');
     if(pendingGo){ pendingGo=false; $('go').click(); } }
   else { $('puCode').select(); } }
-async function privLock(){ await postJson('/api/private/lock', {}).catch(()=>{}); await refreshStatus(); toast('Sorti de l\'espace privé'); }
+// « Sortir » vide l'écran de tout ce qui vient de l'espace (décision du porteur du 14/10/2026) : texte et images des
+// onglets marqués, en plus de ce que changedSpace retire à toute sortie (résultats, grille, visionneuse, aperçus)
+async function privLock(){ await postJson('/api/private/lock', {}).catch(()=>{}); await refreshStatus();
+  [...privTabs].forEach(clearTab);                 // une fois sorti : vidé, l'onglet perd sa marque (markTab)
+  toast('Sorti de l\'espace privé'); }
 async function privChangeCode(){ const n=$('pkNew').value;
   if(n.length<8) return $('pkErr').textContent='Nouveau code : 8 caractères au moins.';
   if(n!==$('pkNew2').value) return $('pkErr').textContent='Les deux nouveaux codes diffèrent.';
