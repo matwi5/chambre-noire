@@ -1015,7 +1015,9 @@ const canvas=$('paintCanvas'); const ctx=canvas.getContext('2d');
 $('brush').addEventListener('input',e=>$('brushVal').textContent=e.target.value+' px');
 $('modePaint').onclick=()=>{paintMode='paint'; $('modePaint').classList.add('on'); $('modeErase').classList.remove('on');};
 $('modeErase').onclick=()=>{paintMode='erase'; $('modeErase').classList.add('on'); $('modePaint').classList.remove('on');};
-async function setMaskImage(name, dataUrl){ maskImage=await toEntry(name, dataUrl); markTab('mask'); $('paintImg').src=maskImage.dataUrl; $('paintWrap').style.display='inline-block'; $('pane-mask').classList.add('has-img');
+async function setMaskImage(name, dataUrl){ maskImage=await toEntry(name, dataUrl);
+  if(!inPrivate() && !$('mask_prompt').value.trim()) privTabs.delete('mask');   // image privée remplacée hors de l'espace, texte vide : plus rien de privé
+  markTab('mask'); $('paintImg').src=maskImage.dataUrl; $('paintWrap').style.display='inline-block'; $('pane-mask').classList.add('has-img');
   canvas.width=maskImage.w; canvas.height=maskImage.h; ctx.clearRect(0,0,canvas.width,canvas.height); suggestRatio(); }
 function clearMask(){ ctx.clearRect(0,0,canvas.width,canvas.height); }
 let drawing=false, last=null, rect=null;      // rect : position du canevas, mesurée une fois par trait
@@ -1113,12 +1115,13 @@ function progress(p){
   return { frac:Math.min(0.12, elapsed/Math.max(p.est,1)), title:'Préparation', sub:(j.phase||'chargement')+'…', remaining:Math.max(0, p.est-elapsed) }; }
 // file commune : génération de cette page derrière une entrée (par identifiant ; une génération incognito, qui n'en
 // montre pas, par le jeton de la page : ses lignes à ce jeton et ses générations incognito actives sont dans le même
-// ordre, celui du lancement ; comptées depuis la fin, car une génération que la page sait finie peut encore être en tête
-// d'une file reçue un peu plus tôt), temps restant d'une entrée, attente devant une position
+// ordre, celui du lancement ; une file reçue un peu plus tôt peut encore avoir en tête une génération que la page sait
+// finie (lignes en trop : comptées depuis la fin), ou pas encore la dernière lancée (lignes en moins : depuis le début)),
+// temps restant d'une entrée, attente devant une position
 function ownOf(e){ if(e.id) return pageJobs.find(p=>p.id===e.id);
   if(e.page!==PAGE_TOKEN) return undefined;
   const rows=queueState.filter(x=>!x.id && x.page===PAGE_TOKEN), mine=pageJobs.filter(p=>(p.incognito || p.private) && isActive(p));
-  return mine[rows.indexOf(e)-(rows.length-mine.length)]; }
+  return mine[rows.indexOf(e)-Math.max(0, rows.length-mine.length)]; }
 function entryLeft(e){ const p=ownOf(e); if(p && p.j.status==='running') return progress(p).remaining;
   return e.status==='running' ? Math.max(0, e.estimate-(e.elapsed||0)-(Date.now()-queueAt)/1000) : e.estimate; }
 function waitBefore(n){ return queueState.filter(e=>e.position<n).reduce((t, e)=>t+entryLeft(e), 0); }

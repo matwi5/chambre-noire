@@ -24,6 +24,12 @@ class PrivateSpaceTest(bench.BenchCase):
         self.assertEqual(private_status(), {"available": True, "exists": True, "unlocked": False})
         self.assertEqual(call("POST", "/api/private/create", {"code": "Autre-code-1"})[0], 409)
 
+    def test_unlocking_again_replaces_the_session_of_this_device(self):
+        first = bench.create_private(CODE)
+        status, reply, headers = bench.call_full("POST", "/api/private/unlock", {"code": CODE}, private=first)
+        self.assertEqual(status, 200, reply)
+        self.assertEqual(list(bench.S.private_sessions), [bench.cookie_of(headers)])   # l'ancienne clé est oubliée
+
     def test_no_secret_in_clear_on_disk(self):
         session = bench.create_private(CODE)
         key = bench.S.private_sessions[session]["key"].private_bytes_raw()

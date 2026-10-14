@@ -585,9 +585,9 @@ def output_path(name):
 JOURNAL_LOCK = threading.Lock()       # ajout d'une ligne au journal des images et sa réécriture sans une image
 
 
-def journal_entry(name):
-    """Ligne du journal des images (outputs/journal.jsonl) d'une image de outputs/, ou {} (la dernière si plusieurs)."""
-    entry = {}
+def journal_entries():
+    """Lignes du journal des images (outputs/journal.jsonl) par nom d'image (la dernière si plusieurs)."""
+    entries = {}
     try:
         with open(P("outputs", "journal.jsonl"), encoding="utf-8") as f:
             for line in f:
@@ -595,11 +595,18 @@ def journal_entry(name):
                     m = json.loads(line)
                 except ValueError:
                     continue
-                if os.path.basename(m.get("file") or "") == name:
-                    entry = m
+                if isinstance(m, dict):
+                    entries[os.path.basename(m.get("file") or "")] = m
     except OSError:
         pass
-    return entry
+    return entries
+
+
+def append_journal(meta):
+    """Ajoute la ligne d'une image au journal, sous le verrou de « Rendre privée », qui le réécrit."""
+    with JOURNAL_LOCK:
+        with open(P("outputs", "journal.jsonl"), "a", encoding="utf-8") as f:
+            f.write(json.dumps(meta, ensure_ascii=False) + "\n")
 
 
 def write_journal(lines):
@@ -631,11 +638,24 @@ def drop_from_journal(name):
 def delete_output(fp):
     """Supprime une image de outputs/ avec ses miniatures et ses images d'entrée (sa ligne du journal reste)."""
     os.remove(fp)
-    stem = os.path.basename(fp)[:-4]
+    delete_extras(os.path.basename(fp)[:-4])
+
+
+def delete_extras(stem):
+    """Miniatures et images d'entrée d'une image de outputs/ déjà supprimée."""
     for th in [os.path.join(THUMBS, stem + ".jpg"), *glob.glob(os.path.join(THUMBS, glob.escape(stem) + "__*.jpg"))]:
         if os.path.exists(th):
             os.remove(th)
     shutil.rmtree(os.path.join(INPUTS, stem), ignore_errors=True)
+
+
+def read_inputs(d):
+    """Images d'entrée d'un dossier (init.png puis ref_N.png) avec leur contenu : [(nom, octets)]."""
+    inputs = []
+    for n in input_files(d):
+        with open(os.path.join(d, n), "rb") as f:
+            inputs.append((n, f.read()))
+    return inputs
 
 
 def adopt_output(fp, public):
@@ -643,42 +663,42 @@ def adopt_output(fp, public):
     l'espace privé, puis l'image quitte outputs/ (miniatures et entrées comprises), sa ligne quitte le journal, et sa
     génération quitte jobs/ et la mémoire du serveur. Renvoie son identifiant dans l'espace privé."""
     name = os.path.basename(fp)
-    m = journal_entry(name)
+    m = journal_entries().get(name, {})
     with open(fp, "rb") as f:
         image = f.read()
-    inputs = []
-    for n in input_files(os.path.join(INPUTS, name[:-4])):
-        with open(os.path.join(INPUTS, name[:-4], n), "rb") as f:
-            inputs.append((n, f.read()))
     meta = {k: m.get(k) for k in ("mode", "prompt", "width", "height", "steps", "seed", "seconds", "model", "lot")}
     meta["time"] = int(os.path.getmtime(fp))
-    item = store_private(public, meta, image, inputs)
-    try:                                       # journal d'abord : en cas d'échec, l'original reste entier et la copie
-        drop_from_journal(name)                # privée est retirée (pas de doublon à un nouvel essai)
-        delete_output(fp)
+    item = store_private(public, meta, image, read_inputs(os.path.join(INPUTS, name[:-4])))
+    # journal d'abord, puis l'image : en cas d'échec, l'original reste entier (sa ligne remise au journal) et la copie
+    # privée est retirée (pas de doublon à un nouvel essai)
+    try:
+        drop_from_journal(name)
     except BaseException:
         shutil.rmtree(os.path.join(PRIVATE, "items", item), ignore_errors=True)
         raise
+    try:
+        os.remove(fp)
+    except BaseException:
+        shutil.rmtree(os.path.join(PRIVATE, "items", item), ignore_errors=True)
+        if m:
+            append_journal(m)
+        raise
+    # l'image a quitté outputs/ : la copie privée est désormais la seule, gardée même si le ménage qui suit échoue
+    try:
+        delete_extras(name[:-4])
+    except OSError:
+        print("[historique] miniatures ou images d'entrée non supprimées", flush=True)   # rien qui nomme l'espace privé
     jid = name[:-4].rsplit("_", 1)[0]          # sa génération : dossier de travail (prompt dans sd-cli.log) et mémoire
-    shutil.rmtree(P("jobs", jid), ignore_errors=True)
-    if (S.jobs.get(jid) or {}).get("status") not in ACTIVE:
-        S.jobs.pop(jid, None)
+    if re.fullmatch(r"\d{8}_\d{6}_\w+", jid):  # nom donné par le serveur ; sinon (image copiée à la main) rien à retirer
+        shutil.rmtree(P("jobs", jid), ignore_errors=True)
+        if (S.jobs.get(jid) or {}).get("status") not in ACTIVE:
+            S.jobs.pop(jid, None)
     return item
 
 
 def history():
     """Images de outputs/, la plus récente d'abord, avec les réglages notés dans outputs/journal.jsonl."""
-    meta = {}
-    try:
-        with open(P("outputs", "journal.jsonl"), encoding="utf-8") as f:
-            for line in f:
-                try:
-                    m = json.loads(line)
-                except ValueError:
-                    continue
-                meta[os.path.basename(m.get("file") or "")] = m
-    except OSError:
-        pass
+    meta = journal_entries()
     items = []
     for fp in glob.glob(P("outputs", "*.png")):
         name, st = os.path.basename(fp), os.stat(fp)
@@ -992,9 +1012,7 @@ def run_job(job):
                     "sec_per_it": job.get("sec_per_it"), "file": job["out"], "size": job["size"], "backend": S.backend, "model": S.model}
             if job.get("lot"):
                 meta["lot"] = job["lot"]
-            with JOURNAL_LOCK:                   # « Rendre privée » réécrit le journal : jamais en même temps
-                with open(P("outputs", "journal.jsonl"), "a", encoding="utf-8") as f:
-                    f.write(json.dumps(meta, ensure_ascii=False) + "\n")
+            append_journal(meta)                 # « Rendre privée » réécrit le journal : jamais en même temps
             try:
                 save_inputs(job["dir"], job["out"])
             except OSError as e:
@@ -1032,13 +1050,9 @@ def keep_private(job):
     meta = {"mode": job["mode"], "prompt": r["prompt"], "width": r["width"], "height": r["height"], "steps": r["steps"],
             "seed": r.get("seed"), "seconds": job["seconds"], "model": S.model, "lot": job.get("lot"), "time": int(job["finished"]),
             "dims": job.get("dims")}
-    inputs = []
-    for n in input_files(job["dir"]):
-        with open(os.path.join(job["dir"], n), "rb") as f:
-            inputs.append((n, f.read()))
     with open(job["out"], "rb") as f:
         image = f.read()
-    return store_private(job["public"], meta, image, inputs)
+    return store_private(job["public"], meta, image, read_inputs(job["dir"]))
 
 
 def discard_cancelled(job):
@@ -1414,6 +1428,7 @@ class H(BaseHTTPRequestHandler):
 
     def _open_session(self, key):
         """Ouvre une session pour cet appareil : la clé privée reste en mémoire du serveur, l'appareil reçoit le jeton."""
+        S.private_sessions.pop(self._private_token(), None)   # session précédente de l'appareil : sa clé ne reste pas
         token = secrets.token_urlsafe(32)
         S.private_sessions[token] = {"key": key, "seen": time.time()}
         self._send_private(200, {"ok": True}, token)

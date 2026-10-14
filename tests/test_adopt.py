@@ -63,10 +63,26 @@ class AdoptTest(bench.BenchCase):
 
     def test_failure_halfway_leaves_the_original_and_no_private_copy(self):
         name, _ = self.make_image()
-        with mock.patch("launch.delete_output", side_effect=OSError("disque plein")):
+        real = os.remove
+
+        def refuse_png(path, *a, **kw):              # l'image ne peut pas quitter outputs/ (fichier ouvert ailleurs)
+            if path.endswith(name):
+                raise PermissionError("fichier ouvert")
+            return real(path, *a, **kw)
+        with mock.patch("launch.os.remove", refuse_png):
             self.assertEqual(call("POST", "/api/private/adopt", {"name": name, "code": CODE})[0], 500)
         self.assertEqual(len(files("outputs", "*.png")), 1)
         self.assertEqual(files("private", "items", "*"), [])
+        self.assertEqual([os.path.basename(m["file"]) for m in journal()], [name])   # sa ligne est remise au journal
+        self.assertEqual(call("GET", "/api/history")[1][0]["prompt"], "zq9adopt a red car")
+
+    def test_cleanup_failure_after_the_image_left_keeps_the_private_copy(self):
+        name, _ = self.make_image()
+        with mock.patch("launch.delete_extras", side_effect=PermissionError("miniature ouverte")):
+            code, reply = call("POST", "/api/private/adopt", {"name": name, "code": CODE})
+        self.assertEqual(code, 200, reply)
+        self.assertEqual(files("outputs", "*.png"), [])
+        self.assertEqual(len(files("private", "items", "*")), 1)
 
     def test_generation_ending_during_the_journal_rewrite_keeps_its_line(self):
         name, _ = self.make_image()
