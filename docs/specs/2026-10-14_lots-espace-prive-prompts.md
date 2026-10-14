@@ -305,8 +305,8 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
 - **Interface** : un bouton à côté du champ de texte ouvre une feuille avec un filtre par usage (« Tous » par défaut),
   la liste des prompts enregistrés (titre, début du texte, Modifier, Supprimer), « Enregistrer le texte actuel », puis
   la section « Prompts types » (Dupliquer). Choisir un prompt remplace le texte du champ, sélectionne le premier
-  passage entre crochets s'il y en a un, et met à jour la dernière utilisation. La suppression passe par la feuille de
-  confirmation existante.
+  passage entre crochets s'il y en a un, et met à jour la dernière utilisation, sauf en incognito (aucune trace de ce
+  mode ; validé par le porteur le 14/10/2026). La suppression passe par la feuille de confirmation existante.
 - Les prompts enregistrés restent hors de l'espace privé : enregistrer un prompt est un geste explicite, permis en
   incognito et en privé.
 
