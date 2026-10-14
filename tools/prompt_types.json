@@ -1,0 +1,13 @@
+[
+  {"id": "type-repeindre", "title": "Repeindre", "usage": "edit", "text": "Repeins [l'objet] en [couleur], en gardant les reflets, les ombres et tout le reste de l'image identique."},
+  {"id": "type-arriere-plan", "title": "Changer l'arrière-plan", "usage": "edit", "text": "Remplace l'arrière-plan par [nouveau décor], en gardant le sujet, sa position et son éclairage inchangés."},
+  {"id": "type-retirer", "title": "Retirer un élément", "usage": "edit", "text": "Retire [l'élément] de l'image et reconstitue le fond de façon naturelle."},
+  {"id": "type-fond-blanc", "title": "Fond blanc produit", "usage": "edit", "text": "Place le produit sur un fond blanc uni de studio, avec une ombre douce au sol, sans changer le produit."},
+  {"id": "type-aquarelle", "title": "Style aquarelle", "usage": "edit", "text": "Transforme l'image en peinture à l'aquarelle, couleurs douces, papier texturé, en gardant la composition."},
+  {"id": "type-heure-doree", "title": "Heure dorée", "usage": "edit", "text": "Change la lumière pour une fin de journée dorée, ombres longues et chaudes, sans changer le contenu."},
+  {"id": "type-texte", "title": "Ajouter un texte", "usage": "edit", "text": "Ajoute le texte « [texte] » sur [l'emplacement], dans une typographie [style] lisible et bien intégrée."},
+  {"id": "type-photo", "title": "Photo réaliste", "usage": "t2i", "text": "Photo réaliste de [sujet], [lieu], lumière naturelle, objectif 50 mm, faible profondeur de champ, détails nets."},
+  {"id": "type-portrait", "title": "Portrait studio", "usage": "t2i", "text": "Portrait studio de [personne], éclairage doux à trois points, fond [couleur] uni, regard vers l'objectif."},
+  {"id": "type-illustration", "title": "Illustration plate", "usage": "t2i", "text": "Illustration vectorielle plate de [sujet], palette limitée de [couleurs], formes simples, sans texte."},
+  {"id": "type-zone", "title": "Remplacer la zone", "usage": "mask", "text": "Remplace la zone peinte par [élément], en accordant la lumière et la perspective avec le reste de l'image."}
+]

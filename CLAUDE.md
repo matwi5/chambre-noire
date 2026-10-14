@@ -93,6 +93,9 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
   écrasé), modifié par `change_prompt` après `prompt_error` (400). Titre et texte seulement, jamais de réglages ;
   `used` (secondes) ordonne la liste. Ni le titre ni le texte ne vont dans les journaux du serveur. Seule exception au
   mode incognito : enregistrer un prompt est un geste explicite, permis aussi en incognito (décision de la spec).
+  Prompts types : `tools/prompt_types.json` (suivi, liste validée par le porteur, à changer seulement avec son accord),
+  relu à chaque `GET /api/prompts`, jamais écrit ; leurs `id` (`type-…`) ne croisent jamais ceux des prompts enregistrés,
+  si bien que les routes d'écriture répondent 404 pour eux. Le banc lit le fichier du dépôt (pas de repointage).
 - **Interface** : un seul fichier `tools/ui/index.html` (HTML, CSS et JS sans dépendance ni build). Elle suit les
   générations qu'elle a lancées (`pageJobs`) en interrogeant chacune par `/api/job/<id>` chaque seconde, et la file
   commune (`queue` de `/api/status`, entrées produites par `queue_entry`) toutes les 2 s tant qu'elle n'est pas vide ;

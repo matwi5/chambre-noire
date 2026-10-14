@@ -342,6 +342,12 @@ téléphone ce qui a été enregistré depuis le Mac, et inversement.
   Le prompt passe en tête de la liste.
 - Le filtre **Tous**, **Créer**, **Éditer**, **Dessiner** ne montre que les prompts enregistrés depuis cet onglet.
 - Le crayon modifie le titre et le texte ; la corbeille supprime le prompt, après confirmation.
+- Sous la liste, **Prompts types** : onze prompts prêts à l'emploi livrés avec l'application (`tools/prompt_types.json`),
+  en lecture seule : repeindre, changer l'arrière-plan, retirer un élément, fond blanc produit, style aquarelle, heure
+  dorée, ajouter un texte (Éditer) ; photo réaliste, portrait studio, illustration plate (Créer) ; remplacer la zone
+  (Dessiner). Un appui en insère le texte comme pour un prompt enregistré, avec le premier passage entre crochets
+  sélectionné ; **Dupliquer** le copie dans vos prompts enregistrés, où il se modifie à volonté. Le filtre s'y applique
+  aussi.
 
 ### Mode incognito
 
@@ -583,7 +589,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `outputs/.thumbs/`), `GET /api/result?name=…&download=1`, `POST /api/delete` ; images d'entrée d'une image :
   `GET /api/input?name=…&file=init.png|ref_N.png[&thumb=1][&download=1]` (gardées dans `outputs/.inputs/<image>/`) ;
   prompts enregistrés : `GET /api/prompts` (`{"saved": [...], "types": [...]}`, `saved` le dernier utilisé d'abord ;
-  chaque prompt : `id`, `title`, `text`, `usage` = `t2i`, `edit` ou `mask`, `used` = dernière utilisation en secondes),
+  chaque prompt : `id`, `title`, `text`, `usage` = `t2i`, `edit` ou `mask`, `used` = dernière utilisation en secondes ;
+  `types` : les prompts types de `tools/prompt_types.json`, sans `used`, qu'aucune route ne modifie),
   `POST /api/prompts {"title", "text", "usage"}` (création) ou `{"id", "title", "text"}` (modification du titre et du
   texte), `POST /api/prompts/delete {"id"}`, `POST /api/prompts/used {"id"}` (le met en tête) ; 404 pour un `id`
   inconnu ; avec `--lan`, `POST /api/login`.
@@ -626,6 +633,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── calibration.json  mesures de durée de la machine (créé à l'usage, non versionné)
 │   ├── access_code.txt   code d'accès des appareils du Wi-Fi (créé par --lan, non versionné)
 │   ├── push_vapid.pem, push_subscriptions.json   notifications : clé d'envoi et appareils abonnés (non versionnés)
+│   ├── prompt_types.json    prompts types livrés avec l'application (lecture seule)
 │   └── saved_prompts.json   prompts enregistrés, communs à tous les appareils (créé à l'usage, non versionné)
 ├── tests/
 │   ├── run_tests.py      tests de bout en bout des trois usages (interface lancée, vraies générations)

@@ -690,6 +690,8 @@
   <div class="chips4" id="promptFilter" role="group" aria-label="Usage"></div>
   <button class="btn secondary pnew" onclick="newPrompt()">Enregistrer le texte actuel</button>
   <div class="qlist" id="promptList"></div>
+  <h3 id="typeHead">Prompts types</h3>
+  <div class="qlist" id="typeList"></div>
 </section>
 <section class="sheet glass" id="promptEditSheet" role="dialog" aria-modal="true" aria-labelledby="promptEditTitle">
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
@@ -1252,10 +1254,13 @@ async function openPrompts(){ openSheet('promptSheet'); renderPrompts();
 function renderPrompts(){
   $('promptFilter').innerHTML=[['all', 'Tous'], ...Object.entries(USAGE_LABELS)].map(([k, l])=>{ const on=k===promptUsage;
     return `<button class="opt${on?' on':''}" data-k="${k}" aria-pressed="${on}"><b>${l}</b></button>`; }).join('');
-  const list=prompts.saved.filter(p=>promptUsage==='all' || p.usage===promptUsage);
-  $('promptList').innerHTML = list.length ? list.map(p=>`<div class="qrow prow" data-id="${esc(p.id)}"><button class="qtxt ptxt" data-pick><b>${esc(p.title)}</b><span>${esc(USAGE_LABELS[p.usage]||p.usage)} · ${esc(p.text)}</span></button>`
-      + `<button class="qx" data-edit aria-label="Modifier « ${esc(p.title)} »">${PEN}</button><button class="qx" data-del aria-label="Supprimer « ${esc(p.title)} »">${BIN}</button></div>`).join('')
-    : `<p class="note">${prompts.saved.length ? 'Aucun prompt enregistré pour cet usage.' : 'Aucun prompt enregistré pour l\'instant.'}</p>`; }
+  const keep=p=>promptUsage==='all' || p.usage===promptUsage, list=prompts.saved.filter(keep), types=prompts.types.filter(keep);
+  const row=(p, acts)=>`<div class="qrow prow" data-id="${esc(p.id)}"><button class="qtxt ptxt" data-pick><b>${esc(p.title)}</b><span>${esc(USAGE_LABELS[p.usage]||p.usage)} · ${esc(p.text)}</span></button>${acts}</div>`;
+  $('promptList').innerHTML = list.length ? list.map(p=>row(p, `<button class="qx" data-edit aria-label="Modifier « ${esc(p.title)} »">${PEN}</button><button class="qx" data-del aria-label="Supprimer « ${esc(p.title)} »">${BIN}</button>`)).join('')
+    : `<p class="note">${prompts.saved.length ? 'Aucun prompt enregistré pour cet usage.' : 'Aucun prompt enregistré pour l\'instant.'}</p>`;
+  // prompts types : livrés avec l'application, en lecture seule ; « Dupliquer » en fait un prompt enregistré modifiable
+  $('typeHead').hidden=!types.length;
+  $('typeList').innerHTML=types.map(p=>row(p, `<button class="btn secondary small" data-dup aria-label="Dupliquer « ${esc(p.title)} »">Dupliquer</button>`)).join(''); }
 // le texte remplace celui du champ de l'onglet ; le premier passage entre crochets (« [couleur] ») est sélectionné pour
 // être remplacé en tapant
 function usePrompt(p, saved){ const t=$(mode+'_prompt'); closeSheet();
@@ -1287,6 +1292,13 @@ $('promptList').addEventListener('click', ev=>{ const row=ev.target.closest('.pr
   if(ev.target.closest('[data-edit]')) return editPrompt(p);
   if(ev.target.closest('[data-del]')) return deletePrompt(p);
   usePrompt(p, true); });
+$('typeList').addEventListener('click', ev=>{ const row=ev.target.closest('.prow'), p=row && prompts.types.find(x=>x.id===row.dataset.id); if(!p) return;
+  if(ev.target.closest('[data-dup]')) return duplicatePrompt(p, ev.target.closest('[data-dup]'));
+  usePrompt(p, false); });
+async function duplicatePrompt(p, b){ b.disabled=true;
+  try{ const r=await postJson('/api/prompts', {title:p.title, text:p.text, usage:p.usage}), j=await r.json(); if(!r.ok) throw new Error(j.error);
+    toast('Copié dans vos prompts'); await openPrompts(); $('promptSheet').scrollTo({top:0, behavior:'smooth'}); }
+  catch(e){ toast('Copie impossible : '+e.message, 'err'); b.disabled=false; } }
 $('peTitle').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); savePrompt(); } });
 // ------------------------------------------------------------ galerie et visionneuse
 let histItems=[], vIndex=-1, vList=[];   // vList : images que parcourt la visionneuse (la galerie, ou les images d'un lot)

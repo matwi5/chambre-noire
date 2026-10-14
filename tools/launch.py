@@ -24,7 +24,8 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
         images d'entrée d'une image : GET /api/input?name=<png>&file=<init.png|ref_N.png>[&thumb=1][&download=1],
         notifications de fin de génération : GET /api/push/key, POST /api/push/subscribe {"subscription": …},
         POST /api/push/unsubscribe {"endpoint": …},
-        prompts enregistrés (tools/saved_prompts.json, communs à tous les appareils) : GET /api/prompts,
+        prompts enregistrés (tools/saved_prompts.json, communs à tous les appareils) et prompts types
+        (tools/prompt_types.json, lecture seule) : GET /api/prompts,
         POST /api/prompts (création, ou modification avec "id"), POST /api/prompts/delete, POST /api/prompts/used.
 - Notifications (Web Push, bibliothèque pywebpush) : à la fin de chaque génération, le Mac envoie une notification à
   chaque appareil abonné, même si l'application y est fermée. Clé d'envoi propre à la machine dans
@@ -226,6 +227,18 @@ PROMPTS_FILE = P("tools", "saved_prompts.json")   # prompts enregistrés (non ve
 PROMPTS_LOCK = threading.Lock()
 PROMPT_USAGES = ("t2i", "edit", "mask")            # onglet où le prompt a été enregistré
 MAX_PROMPT_TITLE, MAX_PROMPT_TEXT, MAX_SAVED_PROMPTS = 80, 4000, 500
+# prompts types livrés avec l'application (versionné, liste validée par le porteur) : lus, jamais écrits par le serveur
+PROMPT_TYPES_FILE = P("tools", "prompt_types.json")
+
+
+def prompt_types():
+    """Prompts types [{id, title, text, usage}], relus à chaque demande ; liste vide si le fichier manque ou est illisible."""
+    try:
+        with open(PROMPT_TYPES_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError) as e:
+        print(f"[prompts] prompts types illisibles : {e}", flush=True)
+        return []
 
 
 def saved_prompts(update=None):
@@ -1112,7 +1125,7 @@ class H(BaseHTTPRequestHandler):
                 saved = sorted(saved_prompts(), key=lambda p: -p["used"])
             except (OSError, ValueError) as e:
                 return self._send(500, {"error": f"prompts enregistrés illisibles : {e}"})
-            return self._send(200, {"saved": saved, "types": []})
+            return self._send(200, {"saved": saved, "types": prompt_types()})
         if path == "/api/push/key":
             key = push_public_key()
             return self._send(200, {"key": key}) if key else self._send(503, {"error": "pywebpush non installé"})

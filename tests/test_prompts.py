@@ -28,7 +28,7 @@ class PromptsCase(bench.BenchCase):
 
 class SavedPromptsTest(PromptsCase):
     def test_a_created_prompt_is_listed_and_kept_on_disk(self):
-        self.assertEqual(call("GET", "/api/prompts"), (200, {"saved": [], "types": []}))
+        self.assertEqual(saved(), [])
         p = create("Ciel orange", "Replace the sky with an orange sunset", "edit")
         self.assertEqual((p["title"], p["text"], p["usage"]), ("Ciel orange", "Replace the sky with an orange sunset", "edit"))
         self.assertEqual(saved(), [p])
@@ -116,6 +116,40 @@ class SavedPromptsTest(PromptsCase):
         for t in threads:
             t.join()
         self.assertEqual(sorted(p["title"] for p in self.on_disk()), sorted(f"P{k}" for k in range(12)))
+
+
+class PromptTypesTest(PromptsCase):
+    def test_the_validated_prompt_types_are_listed(self):
+        types = call("GET", "/api/prompts")[1]["types"]
+        self.assertEqual([(t["title"], t["usage"]) for t in types], [
+            ("Repeindre", "edit"), ("Changer l'arrière-plan", "edit"), ("Retirer un élément", "edit"),
+            ("Fond blanc produit", "edit"), ("Style aquarelle", "edit"), ("Heure dorée", "edit"),
+            ("Ajouter un texte", "edit"), ("Photo réaliste", "t2i"), ("Portrait studio", "t2i"),
+            ("Illustration plate", "t2i"), ("Remplacer la zone", "mask")])
+        self.assertEqual(types[0]["text"], "Repeins [l'objet] en [couleur], en gardant les reflets, les ombres et tout le "
+                                           "reste de l'image identique.")
+        self.assertEqual(types[6]["text"], "Ajoute le texte « [texte] » sur [l'emplacement], dans une typographie [style] "
+                                           "lisible et bien intégrée.")
+        self.assertEqual(len({t["id"] for t in types}), 11)
+        self.assertTrue(all(sorted(t) == ["id", "text", "title", "usage"] for t in types))
+
+    def test_no_route_changes_the_prompt_types(self):
+        types = call("GET", "/api/prompts")[1]["types"]
+        before = open(launch.PROMPT_TYPES_FILE, "rb").read()
+        t = types[0]
+        self.assertEqual(call("POST", "/api/prompts", {"id": t["id"], "title": "Changé", "text": "changed"})[0], 404)
+        self.assertEqual(call("POST", "/api/prompts/used", {"id": t["id"]})[0], 404)
+        self.assertEqual(call("POST", "/api/prompts/delete", {"id": t["id"]})[0], 404)
+        self.assertEqual(call("GET", "/api/prompts")[1], {"saved": [], "types": types})
+        self.assertEqual(open(launch.PROMPT_TYPES_FILE, "rb").read(), before)
+
+    def test_duplicating_a_prompt_type_makes_an_editable_saved_prompt(self):
+        t = call("GET", "/api/prompts")[1]["types"][7]
+        p = create(t["title"], t["text"], t["usage"])                # « Dupliquer » de l'interface
+        self.assertNotEqual(p["id"], t["id"])
+        q = call("POST", "/api/prompts", {"id": p["id"], "title": "Ma photo", "text": t["text"]})[1]
+        self.assertEqual((q["title"], q["usage"]), ("Ma photo", "t2i"))
+        self.assertEqual(call("GET", "/api/prompts")[1]["types"][7], t)
 
 
 class PromptsAccessTest(PromptsCase):

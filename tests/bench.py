@@ -34,6 +34,7 @@ def start():
     launch.PUSH_KEY, launch.PUSH_SUBS = launch.P("tools", "push_vapid.pem"), launch.P("tools", "push_subscriptions.json")
     launch.ACCESS_FILE = launch.P("tools", "access_code.txt")
     launch.PROMPTS_FILE = launch.P("tools", "saved_prompts.json")
+    # launch.PROMPT_TYPES_FILE reste le fichier du dépôt : le serveur le lit sans jamais l'écrire
     for d in ("tools", "outputs", "jobs", "logs", "models"):
         os.makedirs(launch.P(d))
     for table in (launch.MODELS, launch.DIFFUSION):   # modèles en fichiers vides : /api/status dit le moteur prêt
