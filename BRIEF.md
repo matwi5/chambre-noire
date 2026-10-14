@@ -22,7 +22,7 @@ sur Internet en dehors du téléchargement initial du moteur et du modèle.
   variantes d'un même prompt (mode Créer) et campagne d'édition, une image par photo (mode Éditer).
 - Prompts enregistrés, partagés entre appareils, et prompts types livrés avec l'application.
 - Galerie des images produites ; mode incognito qui ne garde rien sur l'ordinateur ; espace privé chiffré, ouvert par
-  un code distinct (en cours au 14/10/2026).
+  un code distinct, que l'on ouvre par un cadenas discret.
 - Accès depuis un téléphone protégé par un code ; démarrage automatique en service sur Mac.
 
 ## Hors périmètre

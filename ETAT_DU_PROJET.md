@@ -8,15 +8,17 @@ Mis à jour le 14/10/2026.
   sd.cpp `master-959`, encodeur GGUF). Modèles Q4_K_M et Q8_0. Trois usages (texte → image, édition, dessin guidé),
   galerie avec visionneuse (zoom au pincement, partage, copie, images d'entrée), estimations calibrées, mode incognito,
   notification de fin de génération (Web Push), file d'attente visible (« Générer » toujours actif), variantes (mode
-  Créer) et campagnes (mode Éditer) avec lots dans la galerie, prompts enregistrés et prompts types. Banc de test
-  permanent sans GPU : `venv/bin/python -m unittest discover -s tests` (75 tests).
+  Créer) et campagnes (mode Éditer) avec lots dans la galerie, prompts enregistrés et prompts types, espace privé
+  chiffré (entrée discrète par le cadenas de la Galerie). Banc de test permanent sans GPU :
+  `venv/bin/python -m unittest discover -s tests` (117 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
 - **En cours** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
   prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), découpée en 13 tickets Asana (liste et ordre dans
   `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types validée par le porteur. Groupes A (banc, robustesse, file visible, incognito dans la file) et
-  B (variantes, lots dans la galerie, campagne), revus, et C (prompts enregistrés et types) faits et fusionnés ;
-  reste D (durcissement de l'incognito, puis espace privé).
+  B (variantes, lots dans la galerie, campagne), C (prompts) et D (durcissement de l'incognito, espace privé) faits,
+  revus et fusionnés : les 14 tickets sont faits. Restent des décisions du porteur sur la revue de sécurité du groupe
+  D, les essais sur le téléphone et une vraie génération avec le nouveau code.
 - **À vérifier par le porteur**, sur le téléphone par l'application installée (testé seulement dans Chrome sur le Mac,
   en vue de téléphone) :
   - télécharger, partager et copier une image, dont une image incognito (adresse `blob:`) ;
@@ -26,7 +28,10 @@ Mis à jour le 14/10/2026.
     dans la file (deux images incognito gardées jusqu'à être vues puis quittées) ;
   - les variantes (grille, « Garder celle-ci »), les lots dans la galerie (badge, « Voir le lot », « Tout
     télécharger », qui peut demander d'autoriser plusieurs téléchargements) et la campagne ;
-  - la feuille des prompts (bouton « Prompts » sous le champ de texte).
+  - la feuille des prompts (bouton « Prompts » sous le champ de texte) ;
+  - l'espace privé : entrée par le cadenas de la Galerie, thème, sortie, verrouillage à la fermeture (inconstant dans
+    Chrome sans écran ; l'expiration après 15 min reste le filet), cookie `SameSite=Strict` avec l'application
+    installée, « Rendre privée ».
 - **Pistes ouvertes** (aucune demandée) :
   - `sd-cli.log` reste ouvert si la boucle de lecture de `run_job` lève une exception ; `queue_position` trie tout
     `S.jobs`, qui ne fait que grossir, à chaque lecture (trouvés par la revue de groupe A) ;
@@ -58,6 +63,14 @@ Mis à jour le 14/10/2026.
 
 ### 2026-10-14
 
+- Groupe D fait dans une session à part (worktree) et fusionné : durcissement de l'incognito (`df6896a` :
+  identifiants de 128 bits, image non récupérée oubliée après 24 h, reprise limitée aux générations de l'appareil,
+  jeton par page), espace privé (`429096e`), générations et galerie privées (`6421746`), lots privés et héritage
+  (`f91e980`), « Rendre privée » (`9f4673f`), revue de groupe (`4bdd66f`, 9 constats, 8 corrigés dont un échec de
+  « Rendre privée » qui pouvait perdre l'image). Revue de sécurité : aucune faille au seuil, quatre notes de
+  conception soumises au porteur. Le porteur a revu l'interface en cours de route : espace discret, on y entre par le
+  cadenas de la Galerie et on en sort par « Sortir » (DECISIONS.md) ; les trois tickets Asana concernés sont mis à
+  jour. 117 tests au vert après fusion, service relancé, `jobs/` exclu de Time Machine (vérifié par `tmutil`).
 - Groupe C fait dans une session à part (worktree), avec la nouvelle démarche par ticket (`/mattpocock-skills:tdd`,
   contrôles, `/mattpocock-skills:code-review`) : prompts enregistrés (`8e33bf1`, `tools/saved_prompts.json` non suivi,
   en 0o600) et prompts types (`cf8a254`, `tools/prompt_types.json`, les 11 validés, comparés mot pour mot à la
