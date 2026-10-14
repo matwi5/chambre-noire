@@ -98,8 +98,9 @@ Lus le 14/10/2026 dans le code (`main` à `95f96de`). Les numéros de ligne boug
 
 ## Suivi
 
-- **Fait** : cadrage, spécification, glossaire, décisions (`77c38c5`).
-- **En cours** : rien.
+- **Fait** : cadrage, spécification, glossaire, décisions (`77c38c5`) ; banc de test permanent (`tests/bench.py`,
+  `tests/fake_sdcli.py`, `tests/test_api.py`).
+- **En cours** : étape 1, groupe A (file d'attente), sur la branche `worktree-groupe-A`.
 - **À faire** : étapes 1 à 5 ; validation des prompts types par le porteur avant l'étape 4.
 - **Décidé en route** (sans demande explicite du porteur, à lui signaler ; la purge à 60 s a été remplacée le
   14/10/2026 par la règle du porteur : image incognito gardée jusqu'à être vue puis quittée) : bouton Incognito libre entre deux

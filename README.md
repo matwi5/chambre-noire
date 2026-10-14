@@ -535,12 +535,26 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── calibration.json  mesures de durée de la machine (créé à l'usage, non versionné)
 │   ├── access_code.txt   code d'accès des appareils du Wi-Fi (créé par --lan, non versionné)
 │   └── push_vapid.pem, push_subscriptions.json   notifications : clé d'envoi et appareils abonnés (non versionnés)
-├── tests/run_tests.py    tests de bout en bout des trois usages (interface lancée)
+├── tests/
+│   ├── run_tests.py      tests de bout en bout des trois usages (interface lancée, vraies générations)
+│   ├── bench.py          banc de test du serveur, sans GPU : serveur sur un port libre, dossier temporaire
+│   ├── fake_sdcli.py     faux moteur du banc
+│   └── test_*.py         tests du banc
 └── workflows/            paramètres de référence des trois usages (JSON)
 ```
 
 Créés par l'installation et l'usage, ignorés par git : `venv/`, `sdcpp/`, `models/`, `outputs/`, `jobs/`, `logs/`,
 `Qwen-Image.lnk`, `Qwen-Image.command`.
+
+Banc de test du serveur, sans GPU ni modèle : il sert `tools/launch.py` sur un port libre avec un faux moteur, dans
+un dossier temporaire (rien n'est écrit dans `outputs\`), et vérifie l'API (génération, annulation, incognito,
+notifications) en quelques secondes :
+
+```bat
+venv\Scripts\python.exe -m unittest discover -s tests
+```
+
+Sur Mac : `venv/bin/python -m unittest discover -s tests`. Le faux moteur n'a été vérifié que sur Mac.
 
 Tests de bout en bout, interface lancée :
 

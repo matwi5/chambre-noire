@@ -324,6 +324,11 @@ def normalize_code(code):
     return re.sub(r"[^a-z0-9]", "", str(code).lower())
 
 
+def access_token(code):
+    """Valeur du cookie d'accès : empreinte du code (le code lui-même ne circule pas dans le cookie)."""
+    return hashlib.sha256(("qwen-image-local:" + normalize_code(code)).encode()).hexdigest()
+
+
 def load_access_code():
     """Code d'accès des appareils du Wi-Fi : créé au premier lancement avec --lan, gardé dans tools/access_code.txt."""
     if os.path.exists(ACCESS_FILE):
@@ -935,7 +940,7 @@ def main():
     threading.Thread(target=worker, daemon=True).start()
     if a.lan:
         S.access_code = load_access_code()
-        S.access_token = hashlib.sha256(("qwen-image-local:" + normalize_code(S.access_code)).encode()).hexdigest()
+        S.access_token = access_token(S.access_code)
         name, ip = lan_address()
         ts = tailscale_hosts()
         S.lan_urls = [f"http://{h}:{a.port}/" for h in dict.fromkeys(x for x in (name, ip, *ts) if x)]

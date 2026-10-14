@@ -23,16 +23,18 @@ venv/bin/python tools/calibrate.py [--if-needed]   # 3 générations de calibrat
 venv/bin/python tools/make_service.py [--remove]   # Mac : LaunchAgent qui lance launch.py --no-browser --lan
 ```
 
-Vérifications : aucun lint, typage ni test unitaire n'est déclaré. Après un changement :
+Vérifications : aucun lint ni typage n'est déclaré. Après un changement :
 
 - Python : `venv/bin/python -m py_compile tools/launch.py` (et les fichiers touchés) ;
 - JavaScript de `tools/ui/index.html` : extraire les blocs `<script>` et lancer `node --check` dessus ;
-- comportement du serveur sans GPU : banc jetable dans `/tmp` qui importe `tools/launch.py`, repointe `launch.ROOT`,
-  `launch.CALIB` et `launch.THUMBS` vers un dossier temporaire, place un faux `sdcpp/metal/sd-cli` (script Python qui
-  imprime des lignes `k/N - x.xxs/it` et les lignes `… completed, taking x.xxs`, écrit les aperçus et le PNG `-o`), puis
-  sert `launch.H` sur un port libre avec `launch.worker` en thread. Les aperçus de moins de 1000 octets sont ignorés
-  par `latest_preview`. Pour l'interface : Chrome sans écran piloté par le protocole DevTools depuis Node (WebSocket
-  natif), sans installer Playwright. Tester dans les dimensions du téléphone du porteur (Android, application installée) :
+- comportement du serveur sans GPU : banc de test `venv/bin/python -m unittest discover -s tests` (quelques secondes).
+  `tests/bench.py` sert `tools/launch.py` sur un port libre, tous ses dossiers repointés vers un dossier temporaire,
+  avec le faux moteur `tests/fake_sdcli.py` (`FAIL` ou `SLOW[=s]` dans le prompt le font échouer ou ralentir) ;
+  `bench.capture_push()` intercepte les notifications, `bench.LOG` reçoit les sorties du serveur. Un nouveau chemin
+  calculé à l'import de `launch.py` doit être repointé dans `bench.start()`, sinon le banc écrit dans le dépôt. Les
+  aperçus de moins de 1000 octets sont ignorés par `latest_preview`. Pour l'interface : servir le banc (`bench.start()`
+  dans un script) et le piloter dans Chrome sans écran par le protocole DevTools depuis Node (WebSocket natif), sans
+  installer Playwright. Tester dans les dimensions du téléphone du porteur (Android, application installée) :
   `Emulation.setDeviceMetricsOverride` 367×760 à une densité de 2,5, `mobile: true`, tactile activé ; l'interface
   y passe en mode allégé (`html.lite`). Une vue plus grande cache des débordements, et regarder les captures ;
 - `tests/run_tests.py --steps 8 [--only t2i|edit|mask|annot]` : bout en bout, serveur lancé sur 127.0.0.1:7860. Il
