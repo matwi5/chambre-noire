@@ -25,7 +25,7 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   tools/push_vapid.pem, appareils abonnés dans tools/push_subscriptions.json (non versionnés). Jamais le prompt.
 Aucun droit administrateur, aucune modification système : tout reste dans ce dossier.
 """
-import argparse, base64, datetime, glob, hashlib, hmac, json, os, queue, re, secrets, shutil, socket, subprocess, sys, threading, time, uuid, webbrowser
+import argparse, base64, datetime, glob, hashlib, hmac, json, math, os, queue, re, secrets, shutil, socket, subprocess, sys, threading, time, uuid, webbrowser
 from http.cookies import SimpleCookie
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlsplit
@@ -414,11 +414,16 @@ class State:
 S = State()
 
 
-def write_data_url(data_url, path):
+def write_data_url(data_url, path, what="image d'entrée"):
+    """Écrit l'image d'une data URL dans path et renvoie ses dimensions ; ValueError « <what> illisible » si ce n'est
+    pas une image que Pillow sait lire."""
     b64 = data_url.split(",", 1)[1] if "," in data_url else data_url
-    with open(path, "wb") as f:
-        f.write(base64.b64decode(b64))
-    return path
+    try:
+        with open(path, "wb") as f:
+            f.write(base64.b64decode(b64))
+        return image_size(path)
+    except (ValueError, OSError) as e:          # base64 invalide, fichier qui n'est pas une image
+        raise ValueError(f"{what} illisible") from e
 
 
 def image_size(path):
@@ -439,15 +444,18 @@ def build_cmd(job):
            "--sampling-method", "euler", "-s", str(r.get("seed", -1)), "-o", job["out"]]
     if r.get("negative_prompt"):
         cmd += ["-n", r["negative_prompt"]]
-    refs = [write_data_url(ref, os.path.join(d, f"ref_{i+1}.png")) for i, ref in enumerate(r.get("ref_images") or [])]
-    for f in refs:
+    job["ref_px"] = []
+    for i, ref in enumerate(r.get("ref_images") or []):
+        f = os.path.join(d, f"ref_{i+1}.png")
+        job["ref_px"].append(estimate.ref_px(*write_data_url(ref, f, f"image de référence {i+1}"), w, h))   # telles que sd.cpp les redimensionne
         cmd += ["-r", f]
-    job["ref_px"] = [estimate.ref_px(*image_size(f), w, h) for f in refs]   # telles que sd.cpp les redimensionne
     if r.get("init_image"):
-        cmd += ["-i", write_data_url(r["init_image"], os.path.join(d, "init.png")), "--strength", str(r.get("strength", 1.0))]
+        write_data_url(r["init_image"], os.path.join(d, "init.png"), "image d'origine")
+        cmd += ["-i", os.path.join(d, "init.png"), "--strength", str(r.get("strength", 1.0))]
         job["init_px"] = w * h
     if r.get("mask_image"):
-        cmd += ["--mask", write_data_url(r["mask_image"], os.path.join(d, "mask.png"))]
+        write_data_url(r["mask_image"], os.path.join(d, "mask.png"), "masque")
+        cmd += ["--mask", os.path.join(d, "mask.png")]
     if r.get("preview"):
         interval = int(r.get("preview_interval") or 5)
         cmd += ["--preview", "vae", "--preview-path", os.path.join(d, "preview_%03d.png"), "--preview-interval", str(interval)]
@@ -609,7 +617,29 @@ def forget_files(job):
         job.pop(k, None)
 
 
+def fail_job(job, e):
+    """Exception pendant la préparation ou l'exécution d'une génération : elle échoue seule, avec un message lisible,
+    et le moteur est arrêté s'il tournait. Une génération annulée entre-temps ne laisse rien, comme d'habitude."""
+    proc = job.get("proc")
+    if proc and proc.poll() is None:
+        proc.kill()
+        proc.wait()
+    if job.get("status") == "cancelled":
+        discard_cancelled(job)
+        return
+    if job.get("status") == "done":             # image produite, journal ou calibration en échec : elle reste réussie
+        print("[job] fin de génération incomplète" + ("" if job.get("incognito") else f" : {e}"), flush=True)
+        return
+    job["status"], job["phase"] = "failed", "échec"
+    job["error"] = f"génération impossible : {e}"
+    job.setdefault("finished", time.time())
+    # en incognito, le détail (qui peut citer un fichier de travail) reste en mémoire pour l'interface, hors de logs/
+    print("[job] échec : " + ("génération incognito, erreur de préparation" if job.get("incognito") else job["error"]), flush=True)
+
+
 def worker():
+    """Thread de calcul : une génération à la fois, dans l'ordre de la file. Aucune exception ne l'arrête : la
+    génération en cause échoue et la suivante démarre."""
     while True:
         job = S.q.get()
         try:
@@ -617,14 +647,50 @@ def worker():
                 discard_cancelled(job)
                 continue
             S.current = job["id"]
-            run_job(job)
+            try:
+                run_job(job)
+            except Exception as e:
+                fail_job(job, e)
             if job.get("status") in ("done", "failed"):
                 notify_job(job)
+        except Exception as e:
+            print("[job] erreur du thread de calcul" + ("" if job.get("incognito") else f" : {e}"), flush=True)
         finally:
             S.current = None
             job.pop("proc", None)
             if job.get("incognito"):
                 forget_files(job)
+
+
+def request_error(req):
+    """Motif de refus d'une demande de génération (400), ou None : les champs que build_cmd utilise doivent avoir le bon
+    type, pour qu'une demande invalide soit refusée tout de suite au lieu d'échouer dans la file."""
+    is_int = lambda v: isinstance(v, int) and not isinstance(v, bool)
+    is_num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+    if not isinstance(req, dict):
+        return "objet JSON attendu"
+    if not isinstance(req.get("prompt"), str) or not req["prompt"].strip():
+        return "prompt vide ou non textuel"
+    for key, label, lo, hi in (("width", "largeur", 64, 4096), ("height", "hauteur", 64, 4096), ("steps", "étapes", 1, 200)):
+        if not is_int(req.get(key)) or not lo <= req[key] <= hi:
+            return f"{label} : nombre entier de {lo} à {hi} attendu"
+    seed = req.get("seed", -1)
+    if not is_int(seed) or not -1 <= seed < 2 ** 63:
+        return "graine : nombre entier attendu (-1 pour une graine au hasard)"
+    for key in ("cfg", "strength"):
+        if key in req and not is_num(req[key]):
+            return f"{key} : nombre fini attendu"
+    if req.get("preview_interval") is not None and not (is_int(req["preview_interval"]) and req["preview_interval"] >= 1):
+        return "preview_interval : nombre entier positif attendu"
+    for key in ("negative_prompt", "init_image", "mask_image"):
+        if req.get(key) is not None and not isinstance(req[key], str):
+            return f"{key} : texte attendu"
+    refs = req.get("ref_images")
+    if refs is not None and not (isinstance(refs, list) and all(isinstance(x, str) for x in refs)):
+        return "ref_images : liste d'images (data URL) attendue"
+    if not isinstance(req.get("mode", "img"), str):
+        return "mode : texte attendu"
+    return None
 
 
 def public(job):
@@ -855,8 +921,9 @@ class H(BaseHTTPRequestHandler):
                 req = json.loads(raw)
             except Exception as e:
                 return self._send(400, {"error": f"JSON invalide : {e}"})
-            if not str(req.get("prompt", "")).strip():
-                return self._send(400, {"error": "prompt vide"})
+            error = request_error(req)
+            if error:
+                return self._send(400, {"error": error})
             # une nouvelle génération fait perdre les images incognito terminées, récupérées ou non
             for k in [k for k, j in S.jobs.items() if j.get("incognito") and j.get("status") not in ("queued", "running")]:
                 S.jobs.pop(k, None)
@@ -879,7 +946,7 @@ class H(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "job inconnu"})
             if m.group(2) == "forget" and not job.get("incognito"):
                 return self._send(400, {"error": "seul un job incognito peut être oublié"})
-            if m.group(2) == "cancel" or job.get("status") in ("queued", "running"):
+            if job.get("status") in ("queued", "running"):   # une génération terminée garde son statut et son image
                 job["status"] = "cancelled"
                 job["phase"] = "annulé"
                 proc = job.get("proc")

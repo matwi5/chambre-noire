@@ -110,8 +110,9 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
 - **Moteurs** : Windows `master-890` (Vulkan, CPU, CUDA) avec l'encodeur int8 corrigé par `tools/fix_int8_te.py` ;
   Mac `master-959` avec l'encodeur GGUF et sa tour vision. Les réglages Metal (`--fa`, `--params-backend te=disk`,
   `--mmap`) sont justifiés dans le commentaire de `BACKENDS` : ne pas les retirer sans remesurer.
-- **Exception dans un job** : une exception levée par `build_cmd` (prompt non textuel, image de référence illisible)
-  sort de `worker()` et tue le thread ; la file reste bloquée jusqu'au redémarrage.
+- **Une génération qui lève une exception échoue seule** : `worker()` la passe en `failed` par `fail_job` et prend la
+  suivante. Un champ que `build_cmd` utilise tel quel se valide d'abord dans `request_error` (400), pour qu'une demande
+  invalide soit refusée tout de suite plutôt que d'échouer dans la file.
 - **`tools/config.json` est suivi par git** et contient les préférences du porteur (`"model": "q8"`) ; `setup.py` réécrit
   `backend` sous Windows. `sd_port` n'est lu nulle part.
 - **Fichiers périmés** : `start-ui-sdcpp.cmd` (nom de modèle sans `UC-`, sd-server) et `workflows/*.json` (lus par
