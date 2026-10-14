@@ -100,9 +100,10 @@ Lus le 14/10/2026 dans le code (`main` à `95f96de`). Les numéros de ligne boug
 
 - **Fait** : cadrage, spécification, glossaire, décisions (`77c38c5`) ; banc de test permanent (`tests/bench.py`,
   `tests/fake_sdcli.py`, `tests/test_api.py`) ; erreur de préparation qui ne bloque plus la file (`tests/test_robustness.py`) ;
-  file d'attente visible et Générer toujours actif (`tests/test_queue.py`).
-- **En cours** : étape 1, groupe A (file d'attente), sur la branche `worktree-groupe-A`.
-- **À faire** : étapes 1 à 5 ; validation des prompts types par le porteur avant l'étape 4.
+  file d'attente visible et Générer toujours actif (`tests/test_queue.py`) ; incognito dans la file
+  (`tests/test_incognito.py`). Étape 1 livrée (groupe A).
+- **En cours** : rien (groupe A sur la branche `worktree-groupe-A`, à fusionner).
+- **À faire** : étapes 2 à 5 ; validation des prompts types par le porteur avant l'étape 4.
 - **Décidé en route** (sans demande explicite du porteur, à lui signaler ; la purge à 60 s a été remplacée le
   14/10/2026 par la règle du porteur : image incognito gardée jusqu'à être vue puis quittée) : bouton Incognito libre entre deux
   demandes (confirmé par le porteur le 14/10/2026) ; envoi `keepalive` à la fermeture pour toutes les générations

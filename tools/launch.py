@@ -640,6 +640,28 @@ def fail_job(job, e):
     print("[job] échec : " + ("génération incognito, erreur de préparation" if job.get("incognito") else job["error"]), flush=True)
 
 
+ACTIVE = ("queued", "running")             # statuts d'une génération de la file
+
+
+def cancel_job(job):
+    """Annule une génération en file ou en cours (le moteur est arrêté) ; une génération terminée garde son statut et son
+    image. worker() supprime ensuite ses fichiers."""
+    if job.get("status") in ACTIVE:
+        job["status"] = "cancelled"
+        job["phase"] = "annulé"
+        proc = job.get("proc")
+        if proc and proc.poll() is None:
+            proc.kill()
+
+
+def forget_job(job):
+    """Génération incognito récupérée par sa page, ou page quittée : arrêtée si elle tournait encore, puis plus rien en
+    mémoire (le dossier de travail est supprimé par worker() à la fin de la génération)."""
+    cancel_job(job)
+    S.jobs.pop(job["id"], None)
+    job.pop("png", None)
+
+
 def worker():
     """Thread de calcul : une génération à la fois, dans l'ordre de la file. Aucune exception ne l'arrête : la
     génération en cause échoue et la suivante démarre."""
@@ -694,9 +716,6 @@ def request_error(req):
     if not isinstance(req.get("mode", "img"), str):
         return "mode : texte attendu"
     return None
-
-
-ACTIVE = ("queued", "running")
 
 
 def active_jobs():
@@ -852,7 +871,9 @@ class H(BaseHTTPRequestHandler):
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model,
                                     "queued": sum(j["status"] == "queued" for j in active),
                                     "queue": [e for e in (queue_entry(j, k, coefs) for k, j in enumerate(active)) if e],
-                                    "current_job": S.current, "last_job": public(last) if last else None,
+                                    # identifiant d'une génération incognito : connu de sa seule page
+                                    "current_job": None if (S.jobs.get(S.current) or {}).get("incognito") else S.current,
+                                    "last_job": public(last) if last else None,
                                     "estimates": coefs,
                                     # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
                                     "phone": {"urls": S.lan_urls, "code": S.access_code} if S.access_code and self._local() else None})
@@ -981,9 +1002,6 @@ class H(BaseHTTPRequestHandler):
             error = request_error(req)
             if error:
                 return self._send(400, {"error": error})
-            # une nouvelle génération fait perdre les images incognito terminées, récupérées ou non
-            for k in [k for k, j in S.jobs.items() if j.get("incognito") and j.get("status") not in ("queued", "running")]:
-                S.jobs.pop(k, None)
             jid = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
             mode = re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
             incognito = req.get("incognito") is True
@@ -996,6 +1014,17 @@ class H(BaseHTTPRequestHandler):
             S.jobs[jid] = job
             S.q.put(job)
             return self._send(202, public(job))
+        if path == "/api/forget":                # page fermée ou rechargée : ses générations incognito, en un seul envoi
+            try:
+                ids = json.loads(raw).get("ids")
+            except Exception:
+                ids = None
+            if not (isinstance(ids, list) and all(isinstance(i, str) for i in ids)):
+                return self._send(400, {"error": "ids : liste d'identifiants attendue"})
+            jobs = [j for j in (S.jobs.get(i) for i in ids) if j and j.get("incognito")]   # une génération normale reste
+            for job in jobs:
+                forget_job(job)
+            return self._send(200, {"forgotten": len(jobs)})
         m = re.match(r"^/api/job/([\w-]+)/(cancel|forget)$", path)
         if m:
             job = S.jobs.get(m.group(1))
@@ -1003,16 +1032,10 @@ class H(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "job inconnu"})
             if m.group(2) == "forget" and not job.get("incognito"):
                 return self._send(400, {"error": "seul un job incognito peut être oublié"})
-            if job.get("status") in ("queued", "running"):   # une génération terminée garde son statut et son image
-                job["status"] = "cancelled"
-                job["phase"] = "annulé"
-                proc = job.get("proc")
-                if proc and proc.poll() is None:
-                    proc.kill()
             if m.group(2) == "forget":            # image récupérée par l'interface, ou page quittée : plus rien en mémoire
-                S.jobs.pop(job["id"], None)
-                job.pop("png", None)
+                forget_job(job)
                 return self._send(200, {"ok": True})
+            cancel_job(job)
             return self._send(200, public(job))
         self._send(404, {"error": "not found"})
 

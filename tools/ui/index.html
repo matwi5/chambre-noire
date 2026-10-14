@@ -180,7 +180,6 @@
   .btn-icon svg { width:22px; height:22px; }
   #cancel:disabled { display:none; }
   #incog { color:var(--ink2); }
-  #incog:disabled { opacity:.4; cursor:default; }
   #incog.on { color:var(--void); background:var(--ink); border-color:transparent; }
 
   /* ------------------------------------------------------------ panneau Réglages */
@@ -715,7 +714,7 @@ function refreshChoices(){
 }
 (function init(){
   $('previewChk').checked = savedOpt.preview!==false; setIncog(incogOn);
-  $('incog').onclick=()=>{ if(pageJobs.some(isActive)) return; setIncog(!incogOn); saveOpt(); };
+  $('incog').onclick=()=>{ setIncog(!incogOn); saveOpt(); };   // libre à tout moment : chaque génération garde le mode de son lancement
   [['ratioOpts','ratio'],['resOpts','res'],['stepOpts','steps']].forEach(([id,key])=>$(id).addEventListener('click', e=>{
     const b=e.target.closest('[data-k]'); if(!b) return; opt[key]=b.dataset.k; saveOpt(); refreshChoices(); }));
   $('pills').addEventListener('click', e=>{ if(e.target.closest('[data-open]')) openSheet('setSheet'); });
@@ -770,7 +769,8 @@ TABS.forEach(b=>b.addEventListener('click',()=>{
   if(b.dataset.pane===mode) return window.scrollTo({top:0, behavior:'smooth'});
   TABS.forEach(x=>x.classList.toggle('active', x===b));
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active')); mode=b.dataset.pane; $('pane-'+mode).classList.add('active');
-  document.body.className='m-'+mode; placeLens(); if(mode==='hist') loadHistory(); suggestRatio(); }));
+  document.body.className='m-'+mode; placeLens(); if(mode==='hist') loadHistory(); suggestRatio();
+  if(mode==='hist'){ if(shown) leftBehind(shown); } else markSeen(); }));   // la galerie cache la zone de résultat
 document.body.className='m-'+mode;
 (function tabSwipe(){          // glisser horizontalement sur la page : onglet voisin (sauf sur le dessin, les rangées qui défilent, un texte en cours de saisie)
   const main=document.querySelector('main'), SKIP='#paintWrap, .opts, .ratios, .chips5, .thumbs, input, select, button.pill';
@@ -908,7 +908,7 @@ function showResult(name, w, h, reveal, inc){      // image de outputs/, ou imag
   $('dl').href=inc ? url : url+'&download=1'; $('dl').download=name; $('resultActions').style.display='';
   lastResult={url, name, blob:inc ? inc.blob : null}; if(!inc) setAmbient(name); }   // pas de fond ambiant en incognito : il passerait par une miniature sur le disque
 function hideResult(){ $('stageImg').src=''; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
-const forgetJob = (id, keepalive) => fetch('/api/job/'+id+'/forget', {method:'POST', headers:{'Content-Type':'application/json'}, keepalive}).catch(()=>{});
+const forgetJob = id => fetch('/api/job/'+id+'/forget', {method:'POST', headers:{'Content-Type':'application/json'}}).catch(()=>{});
 // progression d'une génération de la page : part faite (0 à 1), titre, détail, temps restant avant son image
 function progress(p){
   const j=p.j, elapsed=j.elapsed||0;
@@ -929,7 +929,7 @@ function waitBefore(n){ return queueState.filter(e=>e.position<n).reduce((t, e)=
 function show(p, reveal){                          // met une génération de la page dans la zone de résultat (ou rien)
   shown=p||null; renderStrip(); syncButtons();
   if(!p){ lastResult=null; return hideResult(); }
-  if(p.result){ const r=p.result; showResult(r.name, ...(r.dims||[]), reveal, r.blob ? r : null); setMeta(p.prompt, r.chips, r.file); return; }
+  if(p.result){ const r=p.result; showResult(r.name, ...(r.dims||[]), reveal, r.blob ? r : null); setMeta(p.prompt, r.chips, r.file); return markSeen(); }
   lastResult=null; if(p.w && p.h) setStageRatio(p.w, p.h);
   showLoader(true); $('resultActions').style.display='none'; setMeta('', [], '');
   const img=$('stageImg'); img.className=''; img.src=''; img.style.display='none'; $('stage').classList.remove('has-preview'); p.pv=0;
@@ -941,9 +941,14 @@ function renderProgress(){                         // image en cours dans la zon
   $('bar').firstElementChild.style.transform=`scaleX(${pct/100})`; $('ringVal').style.strokeDashoffset=(100-pct).toFixed(1);
   if(j.preview_version && j.preview_version!==p.pv){ p.pv=j.preview_version; const img=$('stageImg');
     img.src='/api/job/'+j.id+'/preview?v='+p.pv; img.className='preview'; img.style.display='block'; $('stage').classList.add('has-preview'); $('shimmer').style.display='none'; } }
-function syncButtons(){
-  $('cancel').disabled=!(shown && isActive(shown));
-  $('incog').disabled=pageJobs.some(isActive); }   // le mode incognito garde son état jusqu'à la fin des générations de la page
+function syncButtons(){ $('cancel').disabled=!(shown && isActive(shown)); }
+// image incognito : gardée par la page jusqu'à ce qu'elle ait été vue (affichée, application visible, hors galerie) puis
+// quittée par l'utilisateur (autre vignette, autre génération de la file, galerie). Lancer une demande ou la fin d'une
+// autre génération ne la fait pas disparaître.
+function markSeen(){ if(shown && shown.incognito && shown.result && mode!=='hist' && document.visibilityState==='visible') shown.seen=true; }
+function leftBehind(p){ if(p.incognito && p.result && p.seen) drop(p); }
+function pick(p){ const prev=shown; if(!p || p===prev) return; show(p); if(prev) leftBehind(prev); }   // choix de l'utilisateur
+addEventListener('visibilitychange', markSeen);
 // pellicule : une vignette par génération de la page, quand il y en a plusieurs ; un appui l'affiche
 function renderStrip(){
   const s=$('strip'); s.hidden=pageJobs.length<2; if(s.hidden){ s.innerHTML=''; return; }
@@ -956,7 +961,7 @@ function tickStrip(){                              // vignettes en cours : annea
     const pr=progress(p), pct=Math.max(pr.frac, 0.02)*100;
     b.querySelector('circle + circle').style.strokeDashoffset=(100-pct).toFixed(1);
     b.querySelector('span').textContent = p.j.status==='queued' ? '#'+(p.j.queue_position||0) : Math.round(pct)+'%'; }); }
-$('strip').addEventListener('click', e=>{ const b=e.target.closest('[data-i]'), p=b && pageJobs[+b.dataset.i]; if(p && p!==shown) show(p); });
+$('strip').addEventListener('click', e=>{ const b=e.target.closest('[data-i]'); if(b) pick(pageJobs[+b.dataset.i]); });
 // île : génération en cours (de cette page : ses étapes ; d'un autre appareil : estimation) et « +N en attente »
 function renderIsland(){
   const on=queueState.length>0 || pageJobs.some(isActive); $('island').classList.toggle('run', on); if(!on) return;
@@ -993,13 +998,15 @@ $('queueList').addEventListener('click', async ev=>{
   const p=pageJobs.find(q=>q.id===id), x=ev.target.closest('[data-cancel]');
   if(x){ x.disabled=true; log('annulation demandée');
     await postJson('/api/job/'+id+'/cancel', {}).catch(()=>{}); return refreshStatus(); }
-  if(p){ closeSheet(); if(mode==='hist') goTab(p.tab); show(p); $('stage').scrollIntoView({behavior:'smooth', block:'center'}); } });
+  if(p){ closeSheet(); if(mode==='hist') goTab(p.tab); pick(p); $('stage').scrollIntoView({behavior:'smooth', block:'center'}); } });
 // suivi des générations de la page : une interrogation par seconde de chacune tant qu'elle n'est pas terminée
 function track(j, info){
   pageJobs.push({ id:j.id, j, incognito:!!j.incognito, prompt:info.prompt||'', tab:info.tab||'t2i', w:info.w, h:info.h, thumb:info.thumb||null,
     est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0 });
   while(pageJobs.length>MAX_PAGE_JOBS){ const k=pageJobs.findIndex(p=>p.result && !p.result.blob && p!==shown); if(k<0) break; pageJobs.splice(k, 1); }
-  show(oldestActive()); renderIsland(); pollJobs(); }
+  if(shown && shown.incognito && shown.result) renderStrip();   // l'image incognito affichée le reste
+  else show(oldestActive());
+  renderIsland(); pollJobs(); }
 async function pollJobs(){
   if(polling) return; polling=true;
   try{ while(pageJobs.some(isActive)){ await sleep(1000);
@@ -1029,7 +1036,6 @@ function drop(p){                                  // retire une génération de
   const k=pageJobs.indexOf(p); if(k>=0) pageJobs.splice(k, 1);
   if(p.result && p.result.blob) URL.revokeObjectURL(p.result.url);
   if(shown===p) show(oldestActive() || [...pageJobs].reverse().find(q=>q.result)); else renderStrip(); }
-function dropIncognito(){ pageJobs.filter(p=>p.incognito && p.result).forEach(drop); }   // une nouvelle génération fait perdre les images incognito
 function inputThumb(){ return mode==='edit' && editImages.length ? editImages[0].dataUrl : mode==='mask' && maskImage ? maskImage.dataUrl : null; }
 $('go').onclick=async()=>{                         // toujours actif : la demande rejoint la file avec les réglages du moment
   let body; try{ body=buildRequest(); }catch(e){ toast(e.message, 'err'); return; }
@@ -1040,7 +1046,6 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   let r, j; try{ r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=await r.json(); }
   catch(e){ toast('Serveur injoignable', 'err'); return; }
   if(!r.ok){ toast('Erreur : '+(j.error||('HTTP '+r.status)), 'err'); return; }
-  dropIncognito();
   track(j, {prompt:body.prompt, tab:mode, w:body.width, h:body.height, thumb:inputThumb(), est:estSeconds, stepSec:stepSeconds, vaeSec:vaeSeconds});
   if(j.queue_position) toast('Ajoutée à la file · '+ordinal(j.queue_position)+' en attente');
   document.activeElement.blur(); requestAnimationFrame(()=>$('stage').scrollIntoView({behavior:'smooth', block:'center'}));
@@ -1088,8 +1093,10 @@ $('notifChk').addEventListener('change', async ()=>{
 refreshNotif();
 if(canPush) fetch('/api/push/key').then(r=>{ if(!r.ok) $('notifRow').hidden=true; }).catch(()=>{});   // serveur sans pywebpush : pas d'interrupteur
 if(canPush && notifyOn && Notification.permission==='granted') pushSubscribe();
-// page rechargée ou quittée pendant des générations incognito : le serveur les arrête et les oublie
-addEventListener('pagehide', ()=>{ pageJobs.filter(p=>p.incognito && isActive(p)).forEach(p=>forgetJob(p.id, true)); });
+// page rechargée ou quittée : le serveur arrête et oublie, en un seul envoi, ses générations incognito non terminées ou
+// dont l'image n'a pas encore été récupérée
+addEventListener('pagehide', ()=>{ const ids=pageJobs.filter(p=>p.incognito && !p.result).map(p=>p.id);
+  if(ids.length) fetch('/api/forget', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids}), keepalive:true}).catch(()=>{}); });
 // ------------------------------------------------------------ galerie et visionneuse
 let histItems=[], vIndex=-1;
 const MODE_LABELS={ t2i:'Texte → image', edit:'Édition', mask:'Masque', annot:'Annotation' };

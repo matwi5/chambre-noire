@@ -117,6 +117,10 @@ les messages de commit.
   un SSD. Garder l'image côté serveur jusqu'à une expiration : elle survivrait au rechargement de la page.
 - **Conséquences** : les fichiers touchent brièvement le disque (limite écrite dans le README). Une image qui n'a pas été
   téléchargée est perdue.
+- **Modifiée le 14/10/2026** (porteur, avec la file d'attente) : plus de purge à chaque nouvelle génération ; la page
+  garde une image incognito jusqu'à ce qu'elle ait été vue puis quittée, et le serveur jusqu'à ce que la page l'ait
+  récupérée. Le bouton Incognito n'est plus bloqué pendant une génération : chaque génération garde le mode de son
+  lancement. À la fermeture, la page fait oublier toutes ses générations incognito en un envoi (`/api/forget`).
 
 ## 2026-10-13 · Application installable via `tailscale serve`
 

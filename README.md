@@ -242,8 +242,8 @@ appui ouvre la **file d'attente** : pour chaque génération, sa place, le débu
 image, avec un bouton pour l'annuler. Une génération normale s'annule depuis n'importe quel appareil ; une génération
 incognito n'apparaît ailleurs que comme « Génération incognito », sans prompt ni aperçu, et seule la page qui l'a
 lancée peut l'annuler. On peut recharger la page sans rien perdre : elle se rattache aux générations normales de la
-file (pas aux générations incognito). Le mode incognito ne peut pas être changé tant que la page a une génération en
-cours ou en attente. Chaque image est enregistrée en PNG dans
+file (pas aux générations incognito). Le bouton Incognito se change à tout moment : chaque génération garde le mode
+choisi à son lancement. Chaque image est enregistrée en PNG dans
 **`outputs\`**, avec ses images d'entrée (références, image d'origine, zone peinte) dans `outputs\.inputs\`. Sous le
 résultat : **Télécharger**, **Partager** et **Copier** (dans le presse-papiers), puis **Éditer** et **Dessiner**, qui le
 réutilisent comme point de départ, et **Supprimer**. Partager et Copier ne sont proposés que là où le navigateur les
@@ -298,9 +298,13 @@ existait encore (les 20 derniers).
 ### Mode incognito
 
 Avec le bouton **Incognito**, à droite de **Générer**, l'image produite peut être téléchargée mais n'est gardée nulle part sur
-le Mac : ni dans `outputs\`, ni dans la galerie, ni dans le journal des générations, ni dans `logs\`. Elle est perdue
-pour de bon dès la génération suivante, quand on la supprime, ou quand la page est rechargée ou fermée (y compris pendant
-la génération, qui est alors arrêtée) : pensez à la **télécharger** avant. Le texte tapé n'est pas retenu par le
+le Mac : ni dans `outputs\`, ni dans la galerie, ni dans le journal des générations, ni dans `logs\`. La page la garde
+tant qu'on ne l'a pas vue puis quittée : lancer d'autres générations, ou en voir une autre se terminer, ne la fait pas
+disparaître, et plusieurs images incognito peuvent attendre dans la rangée de vignettes. Elle est perdue pour de bon une
+fois affichée puis quittée (autre vignette, autre génération de la file, onglet **Galerie**), quand on l'efface, ou
+quand la page est rechargée ou fermée : toutes les générations incognito de la page sont alors arrêtées et oubliées, y
+compris celles qui attendaient dans la file. Pensez à la **télécharger** avant. Les autres appareils ne voient d'elle,
+dans la file, que « Génération incognito » ; ils ne peuvent ni la suivre ni l'annuler. Le texte tapé n'est pas retenu par le
 navigateur, et la génération n'entre pas dans les mesures de calibration. Les boutons **Éditer** et **Dessiner** la
 réutilisent comme d'habitude.
 
@@ -516,7 +520,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   chaque entrée porte `status`, `position`, `lot`, `estimate` et `elapsed` en secondes, `kind`, et pour une génération
   normale seulement `id`, `mode` et le début du `prompt`) ; incognito
   (`"incognito": true` dans `/api/generate`) : `GET /api/job/<id>/result` (image gardée en
-  mémoire), `POST /api/job/<id>/forget` (l'oublier, ou arrêter la génération) ; historique : `GET /api/history`, `GET /api/thumb?name=…` (miniatures gardées dans
+  mémoire), `POST /api/job/<id>/forget` (l'oublier, ou arrêter la génération), `POST /api/forget {"ids": […]}` (toutes
+  les générations incognito d'une page, à sa fermeture ; `current_job` de `/api/status` reste vide pendant une génération
+  incognito) ; historique : `GET /api/history`, `GET /api/thumb?name=…` (miniatures gardées dans
   `outputs/.thumbs/`), `GET /api/result?name=…&download=1`, `POST /api/delete` ; images d'entrée d'une image :
   `GET /api/input?name=…&file=init.png|ref_N.png[&thumb=1][&download=1]` (gardées dans `outputs/.inputs/<image>/`) ;
   avec `--lan`, `POST /api/login`.

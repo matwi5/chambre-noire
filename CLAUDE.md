@@ -94,8 +94,9 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
   nouvelle route POST passe par ces contrôles : l'interface doit envoyer `Content-Type: application/json`, même sans corps.
 - **Mode incognito** (`"incognito": true` dans `/api/generate`) : dossier `jobs/incognito_<id>/` supprimé en fin de job
   (et au démarrage), PNG gardé en mémoire (`job["png"]`) et servi une fois par `/api/job/<id>/result`, puis oublié par
-  `/api/job/<id>/forget` ; ni `outputs/`, ni journal, ni calibration, ni détail dans `logs/`. Toute nouvelle écriture
-  sur le disque ou dans les journaux doit respecter ce mode.
+  `/api/job/<id>/forget` (ou `/api/forget` avec toutes celles de la page, envoyé à sa fermeture) ; ni `outputs/`, ni
+  journal, ni calibration, ni détail dans `logs/`. Son identifiant n'est connu que de sa page : ni `queue`, ni
+  `current_job` ne le montrent. Toute nouvelle écriture sur le disque ou dans les journaux doit respecter ce mode.
 - **Estimation des durées** : modèle de coût dans `tools/estimate.py` (`predict`, priors par moteur, mesures par
   `"<moteur>/<modèle>"` dans `tools/calibration.json`, filtrées sur la release de sd.cpp installée lue dans
   `sdcpp/<moteur>/.installed`). Les coefficients partent vers l'interface par `/api/status`.
