@@ -18,7 +18,11 @@ sur Internet en dehors du téléchargement initial du moteur et du modèle.
   dessin guidé (masque ou annotation peints sur l'image).
 - Installation en une commande (`setup.py`) : moteur stable-diffusion.cpp et modèles épinglés, vérifiés par SHA256.
 - Estimations de durée calibrées sur la machine, progression et aperçus pendant la génération, annulation.
-- Galerie des images produites ; mode incognito qui ne garde rien sur l'ordinateur.
+- File d'attente commune aux appareils (générations calculées l'une après l'autre, jamais simultanément) ; lots :
+  variantes d'un même prompt (mode Créer) et campagne d'édition, une image par photo (mode Éditer).
+- Prompts enregistrés, partagés entre appareils, et prompts types livrés avec l'application.
+- Galerie des images produites ; mode incognito qui ne garde rien sur l'ordinateur ; espace privé chiffré, ouvert par
+  un code distinct (en cours au 14/10/2026).
 - Accès depuis un téléphone protégé par un code ; démarrage automatique en service sur Mac.
 
 ## Hors périmètre
