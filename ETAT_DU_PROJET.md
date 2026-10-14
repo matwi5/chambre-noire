@@ -35,9 +35,6 @@ Mis à jour le 14/10/2026.
   - le faux moteur du banc n'a pas été essayé sous Windows (lanceur `sd-cli.cmd`) ;
   - la galerie trie par `st_mtime` en secondes entières : les images d'un même lot peuvent ressortir dans le désordre ;
   - `do_POST` lit `Content-Length` sans plafond (une campagne de 10 photos en data URL pèse lourd) ;
-  - un lot dont une partie est annulée notifie « N images prêtes » sans mentionner les annulées (à confirmer par le
-    porteur) ;
-  - les tickets cochés par les sessions portent « Statut : fait », valeur que le Hub n'emploie pas (à trancher) ;
   - accepter toute adresse IP littérale dans la liste blanche de `Host`, pour qu'un changement d'IP du Mac ne coupe plus
     l'accès par IP (décision au porteur) ;
   - `start-ui-sdcpp.cmd` et `workflows/*.json` sont périmés (à mettre à jour ou à retirer) ; `sd_port` de
@@ -56,6 +53,8 @@ Mis à jour le 14/10/2026.
 
 ### 2026-10-14
 
+- Porteur : la notification d'un lot en partie annulé garde son texte (« N images prêtes ») ; un ticket coché garde
+  la ligne « Statut : fait » (écrit dans `docs/agents/triage-labels.md`).
 - Groupe B fait dans une session à part (worktree), fusionné dans `main` (`abbd036`) et service relancé : variantes
   en mode Créer (`65b9cac`), lots dans la galerie (`ddbf2b5`), campagne en mode Éditer (`8715316`). 58 tests au vert
   après fusion, `py_compile` et `node --check` propres, contrôles dans Chrome sans écran en vue de téléphone.
