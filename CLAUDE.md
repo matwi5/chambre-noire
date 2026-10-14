@@ -92,7 +92,8 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
   `saved_prompts()` (fichier temporaire puis `os.replace` ; un fichier illisible lève une erreur et n'est jamais
   écrasé), modifié par `change_prompt` après `prompt_error` (400). Titre et texte seulement, jamais de réglages ;
   `used` (secondes) ordonne la liste. Ni le titre ni le texte ne vont dans les journaux du serveur. Seule exception au
-  mode incognito : enregistrer un prompt est un geste explicite, permis aussi en incognito (décision de la spec).
+  mode incognito : enregistrer un prompt est un geste explicite, permis aussi en incognito (décision de la spec) ;
+  choisir un prompt en incognito ne met pas à jour `used`.
   Prompts types : `tools/prompt_types.json` (suivi, liste validée par le porteur, à changer seulement avec son accord),
   relu à chaque `GET /api/prompts`, jamais écrit ; leurs `id` (`type-…`) ne croisent jamais ceux des prompts enregistrés,
   si bien que les routes d'écriture répondent 404 pour eux. Le banc lit le fichier du dépôt (pas de repointage).

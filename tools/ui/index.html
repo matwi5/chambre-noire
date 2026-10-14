@@ -1266,7 +1266,7 @@ function renderPrompts(){
 function usePrompt(p, saved){ const t=$(mode+'_prompt'); closeSheet();
   t.value=p.text; t.dispatchEvent(new Event('input')); t.focus();
   const m=/\[[^\]]*\]/.exec(p.text); if(m) t.setSelectionRange(m.index, m.index+m[0].length); else t.setSelectionRange(p.text.length, p.text.length);
-  if(saved) postJson('/api/prompts/used', {id:p.id}).catch(()=>{}); }
+  if(saved && !incogOn) postJson('/api/prompts/used', {id:p.id}).catch(()=>{}); }   // incognito : aucune trace sur le Mac
 function newPrompt(){ const text=$(mode+'_prompt').value.trim();
   if(!text) return toast('Le champ de texte est vide', 'err');
   editPrompt({title:'', text, usage:mode}); }
@@ -1299,7 +1299,9 @@ async function duplicatePrompt(p, b){ b.disabled=true;
   try{ const r=await postJson('/api/prompts', {title:p.title, text:p.text, usage:p.usage}), j=await r.json(); if(!r.ok) throw new Error(j.error);
     toast('Copié dans vos prompts'); await openPrompts(); $('promptSheet').scrollTo({top:0, behavior:'smooth'}); }
   catch(e){ toast('Copie impossible : '+e.message, 'err'); b.disabled=false; } }
-$('peTitle').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); savePrompt(); } });
+// Entrée vaut « Enregistrer », mais pas pendant un envoi déjà en cours (sinon deux appuis créent deux prompts) ni
+// pendant une saisie composée (accents, clavier prédictif)
+$('peTitle').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.isComposing){ e.preventDefault(); if(!$('peSave').disabled) savePrompt(); } });
 // ------------------------------------------------------------ galerie et visionneuse
 let histItems=[], vIndex=-1, vList=[];   // vList : images que parcourt la visionneuse (la galerie, ou les images d'un lot)
 const MODE_LABELS={ t2i:'Texte → image', edit:'Édition', mask:'Masque', annot:'Annotation' };

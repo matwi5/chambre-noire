@@ -235,7 +235,10 @@ def prompt_types():
     """Prompts types [{id, title, text, usage}], relus à chaque demande ; liste vide si le fichier manque ou est illisible."""
     try:
         with open(PROMPT_TYPES_FILE, encoding="utf-8") as f:
-            return json.load(f)
+            types = json.load(f)
+        if not (isinstance(types, list) and all(isinstance(p, dict) for p in types)):
+            raise ValueError("liste de prompts attendue")
+        return types
     except (OSError, ValueError) as e:
         print(f"[prompts] prompts types illisibles : {e}", flush=True)
         return []
@@ -261,6 +264,7 @@ def saved_prompts(update=None):
         try:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(changed, f, ensure_ascii=False)
+            os.chmod(tmp, 0o600)                   # textes de l'utilisateur : lisibles par lui seul, comme les abonnements
             os.replace(tmp, PROMPTS_FILE)
         except BaseException:
             try:
@@ -293,31 +297,37 @@ def prompt_error(action, body):
 def change_prompt(action, body):
     """Crée (« save » sans id), modifie (« save » avec id), supprime (« delete ») ou marque comme utilisé (« used ») un
     prompt enregistré ; renvoie (code HTTP, réponse). Seuls le titre et le texte sont gardés, jamais les réglages."""
-    result = [(404, {"error": "prompt inconnu"})]
+    result = (404, {"error": "prompt inconnu"})
+
+    def stamp(prompts):
+        # strictement après toutes les autres utilisations : deux gestes dans le même tic d'horloge (grossier sous
+        # Windows) ne laissent pas d'égalité, et le dernier passe bien en tête
+        return max(time.time(), max((x["used"] for x in prompts), default=0) + 0.001)
 
     def change(prompts):
+        nonlocal result
         if action == "save" and body.get("id") is None:
             if len(prompts) >= MAX_SAVED_PROMPTS:
-                result[0] = (400, {"error": f"{MAX_SAVED_PROMPTS} prompts enregistrés au plus"})
+                result = (400, {"error": f"{MAX_SAVED_PROMPTS} prompts enregistrés au plus"})
                 return None
             p = {"id": uuid.uuid4().hex[:12], "title": body["title"].strip(), "text": body["text"].strip(),
-                 "usage": body["usage"], "used": time.time()}
-            result[0] = (200, p)
+                 "usage": body["usage"], "used": stamp(prompts)}
+            result = (200, p)
             return prompts + [p]
         p = next((p for p in prompts if p["id"] == body.get("id")), None)
         if not p:
             return None
         if action == "delete":
-            result[0] = (200, {"ok": True})
+            result = (200, {"ok": True})
             return [x for x in prompts if x is not p]
         if action == "used":
-            p["used"] = time.time()
+            p["used"] = stamp(prompts)
         else:
             p.update(title=body["title"].strip(), text=body["text"].strip())
-        result[0] = (200, p)
+        result = (200, p)
         return prompts
     saved_prompts(change)
-    return result[0]
+    return result
 
 
 def duration_text(secs):

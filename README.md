@@ -339,7 +339,7 @@ téléphone ce qui a été enregistré depuis le Mac, et inversement.
   incognito. 500 prompts au plus.
 - Un appui sur un prompt remplace le texte du champ de l'onglet ouvert, quel que soit l'onglet où il a été enregistré.
   Le premier passage entre crochets (`[couleur]`, par exemple) est sélectionné : il suffit de taper pour le remplacer.
-  Le prompt passe en tête de la liste.
+  Le prompt passe en tête de la liste (sauf en incognito, où rien n'est écrit sur le Mac).
 - Le filtre **Tous**, **Créer**, **Éditer**, **Dessiner** ne montre que les prompts enregistrés depuis cet onglet.
 - Le crayon modifie le titre et le texte ; la corbeille supprime le prompt, après confirmation.
 - Sous la liste, **Prompts types** : onze prompts prêts à l'emploi livrés avec l'application (`tools/prompt_types.json`),

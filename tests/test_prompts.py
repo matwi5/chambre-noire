@@ -33,6 +33,8 @@ class SavedPromptsTest(PromptsCase):
         self.assertEqual((p["title"], p["text"], p["usage"]), ("Ciel orange", "Replace the sky with an orange sunset", "edit"))
         self.assertEqual(saved(), [p])
         self.assertEqual(self.on_disk(), [p])
+        if os.name == "posix":                      # textes de l'utilisateur : lisibles par lui seul
+            self.assertEqual(os.stat(launch.PROMPTS_FILE).st_mode & 0o777, 0o600)
 
     def test_modifying_changes_title_and_text_only(self):
         p = create("Ciel", "orange sky", "edit")
