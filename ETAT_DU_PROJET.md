@@ -7,21 +7,24 @@ Mis à jour le 14/10/2026.
 - **Fonctionnel** sur Windows (Vulkan, CPU, CUDA en option ; sd.cpp `master-890`) et sur Mac Apple Silicon (Metal ;
   sd.cpp `master-959`, encodeur GGUF). Modèles Q4_K_M et Q8_0. Trois usages (texte → image, édition, dessin guidé),
   galerie avec visionneuse (zoom au pincement, partage, copie, images d'entrée), estimations calibrées, mode incognito,
-  notification de fin de génération (Web Push), file d'attente visible (« Générer » toujours actif). Banc de test
-  permanent sans GPU : `venv/bin/python -m unittest discover -s tests` (36 tests).
+  notification de fin de génération (Web Push), file d'attente visible (« Générer » toujours actif), variantes (mode
+  Créer) et campagnes (mode Éditer) avec lots dans la galerie. Banc de test permanent sans GPU :
+  `venv/bin/python -m unittest discover -s tests` (58 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
 - **En cours** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
   prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), découpée en 13 tickets Asana (liste et ordre dans
-  `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types validée par le porteur. Groupe A (banc, robustesse, file visible, incognito dans la file) fait et
-  fusionné ; restent les groupes B (lots), C (prompts) et D (espace privé).
+  `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types validée par le porteur. Groupes A (banc, robustesse, file visible, incognito dans la file) et
+  B (variantes, lots dans la galerie, campagne) faits et fusionnés ; restent C (prompts) et D (espace privé).
 - **À vérifier par le porteur**, sur le téléphone par l'application installée (testé seulement dans Chrome sur le Mac,
   en vue de téléphone) :
   - télécharger, partager et copier une image, dont une image incognito (adresse `blob:`) ;
   - la notification : autorisation à la première génération, réception application fermée, toucher pour la rouvrir ;
   - la barre d'état qui prend la couleur du haut de l'écran dans la visionneuse (un bug Chromium pourrait l'empêcher) ;
   - la file d'attente (pastille « +N en attente », feuille de la file, rangée de vignettes sous l'image) et l'incognito
-    dans la file (deux images incognito gardées jusqu'à être vues puis quittées).
+    dans la file (deux images incognito gardées jusqu'à être vues puis quittées) ;
+  - les variantes (grille, « Garder celle-ci »), les lots dans la galerie (badge, « Voir le lot », « Tout
+    télécharger », qui peut demander d'autoriser plusieurs téléchargements) et la campagne.
 - **Pistes ouvertes** (aucune demandée) :
   - course entre la route d'annulation et `worker()` sur le statut d'une génération (sans verrou), et `open(...).read()`
     sans fermeture dans `launch.py` et `estimate.py` (avertissements masqués dans le banc) (trouvés le 14/10/2026) ;
@@ -30,6 +33,11 @@ Mis à jour le 14/10/2026.
   - une génération reprise après un rechargement n'a ni dimensions ni coefficients propres : le cadre ne prend sa forme
     qu'à la fin ;
   - le faux moteur du banc n'a pas été essayé sous Windows (lanceur `sd-cli.cmd`) ;
+  - la galerie trie par `st_mtime` en secondes entières : les images d'un même lot peuvent ressortir dans le désordre ;
+  - `do_POST` lit `Content-Length` sans plafond (une campagne de 10 photos en data URL pèse lourd) ;
+  - un lot dont une partie est annulée notifie « N images prêtes » sans mentionner les annulées (à confirmer par le
+    porteur) ;
+  - les tickets cochés par les sessions portent « Statut : fait », valeur que le Hub n'emploie pas (à trancher) ;
   - accepter toute adresse IP littérale dans la liste blanche de `Host`, pour qu'un changement d'IP du Mac ne coupe plus
     l'accès par IP (décision au porteur) ;
   - `start-ui-sdcpp.cmd` et `workflows/*.json` sont périmés (à mettre à jour ou à retirer) ; `sd_port` de
@@ -48,6 +56,9 @@ Mis à jour le 14/10/2026.
 
 ### 2026-10-14
 
+- Groupe B fait dans une session à part (worktree), fusionné dans `main` (`abbd036`) et service relancé : variantes
+  en mode Créer (`65b9cac`), lots dans la galerie (`ddbf2b5`), campagne en mode Éditer (`8715316`). 58 tests au vert
+  après fusion, `py_compile` et `node --check` propres, contrôles dans Chrome sans écran en vue de téléphone.
 - Liste des prompts types validée par le porteur (tâche Asana cochée) ; le ticket des prompts types est débloqué.
 - Groupe A fait dans une session à part (worktree), fusionné dans `main` et service relancé : banc de test permanent
   à faux moteur (`5072ad5`), une erreur de préparation n'arrête plus la file et `/api/generate` valide la demande

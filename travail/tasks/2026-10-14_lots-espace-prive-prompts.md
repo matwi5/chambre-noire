@@ -101,11 +101,20 @@ Lus le 14/10/2026 dans le code (`main` à `95f96de`). Les numéros de ligne boug
 - **Fait** : cadrage, spécification, glossaire, décisions (`77c38c5`) ; banc de test permanent (`tests/bench.py`,
   `tests/fake_sdcli.py`, `tests/test_api.py`) ; erreur de préparation qui ne bloque plus la file (`tests/test_robustness.py`) ;
   file d'attente visible et Générer toujours actif (`tests/test_queue.py`) ; incognito dans la file
-  (`tests/test_incognito.py`). Étape 1 livrée (groupe A).
-- **En cours** : rien (groupe A sur la branche `worktree-groupe-A`, à fusionner).
-- **À faire** : étapes 2 à 5 ; validation des prompts types par le porteur avant l'étape 4.
+  (`tests/test_incognito.py`). Étape 1 livrée (groupe A, fusionné). Variantes (`65b9cac`), lots dans la galerie
+  (`ddbf2b5`), campagne (`8715316`), avec `tests/test_lots.py` et `tests/test_campaign.py` : étapes 2 et 3 livrées
+  (groupe B, fusionné). Liste des prompts types validée par le porteur.
+- **En cours** : rien.
+- **À faire** : étapes 4 (prompts, groupe C) et 5 (espace privé, groupe D). Pour le ticket « héritage et lots
+  privés » : le lot n'a pas de genre (une campagne se reconnaît à `mode == "edit"`) ; trois endroits ne connaissent
+  que l'incognito et devront traiter le privé : le masquage de l'identifiant de lot dans `queue_entry`, le libellé de
+  `notify_lot` (« … incognito prêtes ») et la purge de `S.lots`.
 - **Décidé en route** (sans demande explicite du porteur, à lui signaler ; la purge à 60 s a été remplacée le
   14/10/2026 par la règle du porteur : image incognito gardée jusqu'à être vue puis quittée) : bouton Incognito libre entre deux
   demandes (confirmé par le porteur le 14/10/2026) ; envoi `keepalive` à la fermeture pour toutes les générations
   incognito et privées de la page ; mode Privé non retenu d'une visite à l'autre ; schéma X25519, scrypt, HKDF,
-  AES-256-GCM ; format masqué des Réglages en campagne.
+  AES-256-GCM ; format masqué des Réglages en campagne. Groupe B : `count=1` ou campagne d'une photo = génération
+  seule sans lot ; graine choisie avec `count` = graine, graine+1… ; « Annuler le lot » dans la feuille de la file ;
+  visionneuse généralisée à `vList` ; lot incognito : la grille compte comme vue ; badge et boutons de lot tant qu'il
+  reste au moins 2 images du lot ; `campaign` refusée avec `ref_images` ; « Garder celle-ci » réservé aux variantes ;
+  `refreshStatus()` après chaque fin de génération ; surcoût des aperçus × N.
