@@ -493,12 +493,13 @@ def duration_text(secs):
 
 
 def notify_job(job):
-    """Notification de fin d'une génération seule (celles d'un lot : notify_lot)."""
+    """Notification de fin d'une génération seule (celles d'un lot : notify_lot). Une génération privée notifie comme
+    une génération normale : rien ne trahit l'espace privé (décision du porteur du 14/10/2026)."""
     if job.get("calibration"):
         return
     if job.get("status") == "done":
         dims = "×".join(str(d) for d in job.get("dims") or [])
-        title = "Image incognito prête" if job.get("incognito") else "Image privée prête" if job.get("private") else "Image prête"
+        title = "Image incognito prête" if job.get("incognito") else "Image prête"
         push_notify({"title": title,
                      "body": f"Générée en {duration_text(job.get('seconds') or 0)}" + (f" · {dims}" if dims else "")})
     else:
@@ -507,14 +508,15 @@ def notify_job(job):
 
 def notify_lot(lot):
     """Une seule notification pour tout un lot, quand sa dernière génération se termine : images prêtes et en échec ;
-    rien si tout le lot a été annulé. Compte d'après les statuts seuls (une génération incognito a déjà oublié sa demande)."""
+    rien si tout le lot a été annulé. Compte d'après les statuts seuls (une génération incognito a déjà oublié sa demande).
+    Un lot privé notifie comme un lot normal."""
     jobs = lot["jobs"]
     done, failed = (sum(j.get("status") == s for j in jobs) for s in ("done", "failed"))
     if not done and not failed:
         return
     if done:
         s = "s" if done > 1 else ""
-        kind = " incognito" if lot["incognito"] else f" privée{s}" if lot["private"] else ""
+        kind = " incognito" if lot["incognito"] else ""
         title = f"{done} image{s}{kind} prête{s}" + (f", {failed} en échec" if failed else "")
         span = max(j.get("finished") or 0 for j in jobs) - min(j["started"] for j in jobs if j.get("started"))
         what = f"Campagne de {len(jobs)} photos terminée" if jobs[0].get("mode") == "edit" else f"Lot de {len(jobs)} images terminé"

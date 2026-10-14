@@ -128,12 +128,18 @@ class PrivateGenerationTest(bench.BenchCase):
         self.assertEqual(self.history(), [])
         self.assertFalse([line for line in bench.LOG if "zq9private" in line])
 
-    def test_notification_says_only_private_image_ready(self):
+    def test_notification_is_the_same_as_for_a_normal_image(self):
         with bench.capture_push() as sent:
             wait_job(self.generate()["id"])
             sent.wait(1)
-        self.assertEqual(sent[0]["title"], "Image privée prête")
-        self.assertNotIn("zq9", str(sent[0]))
+            wait_job(call("POST", "/api/generate", bench.gen_body("a normal image"))[1]["id"])
+            sent.wait(2)
+        private, normal = sent
+        self.assertEqual(private["title"], "Image prête")
+        self.assertEqual(sorted(private), sorted(normal))
+        self.assertRegex(private["body"], r"^Générée en \d+ s · 512×512$")
+        self.assertNotIn("zq9", str(private))
+        self.assertNotIn("priv", str(private).lower())
 
     def test_page_can_forget_a_finished_private_generation(self):
         job = self.generate()

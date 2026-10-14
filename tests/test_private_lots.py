@@ -31,8 +31,10 @@ class PrivateLotTest(bench.BenchCase):
                 self.assertEqual(wait_job(j["id"])["status"], "done")
             sent.wait(1)
             bench.wait_idle()
-        self.assertEqual([m["title"] for m in sent], ["3 images privées prêtes"])
+        self.assertEqual([m["title"] for m in sent], ["3 images prêtes"])
         self.assertNotIn("zq9lot", str(sent))
+        self.assertEqual(sent[0]["body"][:len("Lot de 3 images terminé en ")], "Lot de 3 images terminé en ")
+        self.assertNotIn("priv", str(sent).lower())
         items = self.history()
         self.assertEqual(sorted(i["lot"]["rank"] for i in items), [1, 2, 3])
         self.assertEqual(len({i["seed"] for i in items}), 3)
@@ -57,7 +59,7 @@ class PrivateLotTest(bench.BenchCase):
             for j in reply["jobs"]:
                 self.assertEqual(wait_job(j["id"])["status"], "done")
             sent.wait(1)
-        self.assertEqual(sent[0]["title"], "2 images privées prêtes")
+        self.assertEqual(sent[0]["title"], "2 images prêtes")
         items = sorted(self.history(), key=lambda i: i["lot"]["rank"])
         self.assertEqual([i["inputs"] for i in items], [["ref_1.png"], ["ref_1.png"]])
         for item, photo in zip(items, photos):
@@ -69,7 +71,7 @@ class PrivateLotTest(bench.BenchCase):
             for j in reply["jobs"]:
                 wait_job(j["id"])
             sent.wait(1)
-        self.assertEqual(sent[0]["title"], "1 image privée prête, 1 en échec")
+        self.assertEqual(sent[0]["title"], "1 image prête, 1 en échec")
 
 
 if __name__ == "__main__":

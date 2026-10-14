@@ -182,10 +182,11 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   du panneau Réglages les coupe. Elles ne passent que par l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du
   Wi-Fi), ou sur l'ordinateur lui-même. Le message transite chiffré par le service de notification du navigateur
   (Google pour Chrome) et ne contient ni le prompt ni le nom du fichier : « Image prête — Générée en 12 min 14 s ·
-  1024×1024 » (« Image incognito prête » en incognito, « Image privée prête » dans l'espace privé). Un lot
+  1024×1024 » (« Image incognito prête » en incognito ; dans l'espace privé, le même message qu'une image normale,
+  pour que rien ne le trahisse). Un lot
   (plusieurs images d'une seule demande, voir [Créer](#créer-texte--image)) n'envoie qu'une notification, à la fin de
   sa dernière image : « 3 images prêtes », « 2 images prêtes, 1 en échec », « Échec du lot » si aucune n'a réussi
-  (« 2 images incognito prêtes » en incognito, « 2 images privées prêtes » dans l'espace privé), et rien si tout le
+  (« 2 images incognito prêtes » en incognito, le même message qu'un lot normal dans l'espace privé), et rien si tout le
   lot a été annulé. Il faut la bibliothèque `pywebpush` (installée par `requirements.txt` ; sur une installation
   antérieure, relancer `pip install -r requirements.txt`). L'ordinateur garde
   sa clé d'envoi dans `tools/push_vapid.pem` et les appareils abonnés dans `tools/push_subscriptions.json` ; supprimer
@@ -395,10 +396,11 @@ du Mac, ne suffit pas pour voir les images privées.
 - Dans l'espace privé, **toute génération est privée** (Créer, Éditer, Dessiner) : son image, ses images d'entrée, sa
   miniature, son prompt et ses réglages sont chiffrés sur le Mac. Le texte tapé n'est pas retenu par le navigateur.
   Une génération privée lancée va jusqu'au bout et est rangée chiffrée même si l'espace se verrouille avant la fin, ou
-  si l'application est fermée ; sa notification dit seulement « Image privée prête ». Les autres appareils ne voient
+  si l'application est fermée ; sa notification est celle d'une image normale (« Image prête »), sans rien qui
+  trahisse l'espace privé. Les autres appareils ne voient
   d'elle, dans la file, que « Génération privée », sans prompt ni aperçu.
 - Les **variantes** et les **campagnes** marchent aussi dans l'espace privé : chaque image du lot est chiffrée, la
-  grille et « Garder celle-ci » restent, et la notification dit seulement « N images privées prêtes ».
+  grille et « Garder celle-ci » restent, et la notification est celle d'un lot normal (« N images prêtes »).
 - La **Galerie** de l'espace privé ne montre que les images privées, avec la même visionneuse : télécharger,
   partager, copier, images d'entrée, Éditer, Dessiner, Reprendre, Supprimer. En sortant, elles quittent l'écran.
 - **Ce qui part de l'espace privé y reste** : un onglet dont le texte ou les images ont été saisis dans l'espace

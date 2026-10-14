@@ -156,8 +156,9 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
     pour que le Finder, une sauvegarde ou une copie du disque ne montrent rien.
 58. Je veux qu'aucune trace d'une image privée n'existe en clair ailleurs (journal des images, mesures de
     calibration, journaux du serveur et du moteur), pour que rien ne la trahisse.
-59. Je veux que la notification d'une génération privée dise seulement « Image privée prête », pour que rien ne passe
-    par le service de notification.
+59. Je veux que la notification d'une génération privée soit celle d'une génération normale (« Image prête »), pour
+    que rien ne passe par le service de notification ni ne trahisse l'espace privé (remplacé le 14/10/2026 par le
+    porteur : la première version disait « Image privée prête »).
 60. Je veux que le prompt d'une génération privée ne soit pas gardé comme brouillon sur l'appareil, comme en
     incognito.
 61. Je veux qu'Éditer, Dessiner ou Reprendre à partir d'une image privée force la génération suivante en privé, pour
@@ -272,7 +273,8 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
   connaît son lot).
 - **Notification** : une seule par lot, envoyée quand sa dernière génération se termine : « N images prêtes »,
   « N images prêtes, M en échec », ou « Échec du lot » si aucune n'a réussi ; variantes incognito et privées :
-  « N images incognito prêtes », « N images privées prêtes ». Aucune notification si tout le lot a été annulé. Une
+  « N images incognito prêtes » ; un lot privé notifie comme un lot normal (voir section 5). Aucune notification si
+  tout le lot a été annulé. Une
   génération seule garde les messages actuels. Jamais de prompt ni de nom de fichier dans la notification.
 - **Galerie** : un badge sur la miniature des images d'un lot (« 2/4 ») ; la visionneuse offre « Voir le lot » (les
   images du lot, côte à côte, puis en grand) et « Tout télécharger », qui enchaîne les téléchargements des images

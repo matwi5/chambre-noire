@@ -4,6 +4,19 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-15 · Espace privé durci après la revue de sécurité
+
+- **Contexte** : la revue de sécurité du groupe D a relevé ce qui trahit ou expose l'espace privé hors du chiffrement
+  du disque : le texte des notifications, le contenu laissé à l'écran après la sortie, la suppression sans code depuis
+  n'importe quel appareil, le code et les images en clair sur le Wi-Fi, et un changement de code qui laissait la même
+  clé privée dans les anciennes copies de `space.json`.
+- **Décision** (porteur, 14/10/2026 ; mise en œuvre, groupe E) :
+  - **Notification neutre** : une génération ou un lot privé notifie exactement comme une génération normale
+    (« Image prête », « N images prêtes », mêmes champs) ; l'incognito garde son mot.
+- **Écarté** : « Image privée prête » (le service de notification et l'écran verrouillé du téléphone apprennent qu'un
+  espace privé existe).
+- **Conséquences** : rien, dans une notification, ne distingue une image privée d'une image normale.
+
 ## 2026-10-14 · Espace privé discret : on y entre, on en sort
 
 - **Contexte** : la spécification prévoyait un bouton « Privé » à côté de « Générer » et un mode Privé à allumer.
