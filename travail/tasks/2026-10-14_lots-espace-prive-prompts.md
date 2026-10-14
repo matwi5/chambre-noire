@@ -82,7 +82,7 @@ Lus le 14/10/2026 dans le code (`main` à `95f96de`). Les numéros de ligne boug
 1. **Banc permanent et file d'attente.** Créer le banc de `tests/` (faux sd-cli paramétrable, serveur sur port libre,
    appels HTTP avec les en-têtes du contrôle d'accès, interception des notifications), puis : robustesse du thread de
    calcul, validation de `/api/generate`, annulation sans effet sur un job terminé, position recalculée, `queue` dans
-   `/api/status`, `current_job` muet pour l'incognito, purge incognito différée de 60 s ; interface : Générer toujours
+   `/api/status`, `current_job` muet pour l'incognito, image incognito gardée jusqu'à être vue puis quittée ; interface : Générer toujours
    actif, suivi de plusieurs générations, pastille « +N », feuille de la file, `pagehide` pour toutes les générations
    incognito de la page. Mettre à jour `CLAUDE.md` (banc, piège « Exception dans un job ») et le README.
 2. **Variantes.** `count`, identifiant de lot, graines tirées par le serveur et écrites au journal, `/api/lot/<id>/cancel`,
@@ -101,7 +101,8 @@ Lus le 14/10/2026 dans le code (`main` à `95f96de`). Les numéros de ligne boug
 - **Fait** : cadrage, spécification, glossaire, décisions (`77c38c5`).
 - **En cours** : rien.
 - **À faire** : étapes 1 à 5 ; validation des prompts types par le porteur avant l'étape 4.
-- **Décidé en route** (sans demande explicite du porteur, à lui signaler) : bouton Incognito libre entre deux
-  demandes ; purge incognito différée de 60 s ; envoi `keepalive` à la fermeture pour toutes les générations
+- **Décidé en route** (sans demande explicite du porteur, à lui signaler ; la purge à 60 s a été remplacée le
+  14/10/2026 par la règle du porteur : image incognito gardée jusqu'à être vue puis quittée) : bouton Incognito libre entre deux
+  demandes (confirmé par le porteur le 14/10/2026) ; envoi `keepalive` à la fermeture pour toutes les générations
   incognito et privées de la page ; mode Privé non retenu d'une visite à l'autre ; schéma X25519, scrypt, HKDF,
   AES-256-GCM ; format masqué des Réglages en campagne.

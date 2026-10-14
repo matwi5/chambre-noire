@@ -125,6 +125,9 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
     en attente, comme aujourd'hui pour une seule.
 44. Je veux voir la grille des variantes incognito sans « Garder celle-ci », et télécharger celles que je veux, puisque
     rien n'est gardé.
+44 bis. Je veux qu'une image incognito ne disparaisse qu'après que je l'ai vue au moins une fois puis quittée dans
+    l'application pour voir autre chose, et non parce qu'une autre génération démarre ou se termine (précisé par le
+    porteur le 14/10/2026).
 
 ### Espace privé
 
@@ -231,11 +234,15 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
   lot), seulement là où l'appareil y a droit (récit 10 et 11).
 - Le bouton Incognito n'est plus bloqué pendant une génération : il peut changer entre deux demandes, et chaque
   génération garde le mode de son lancement (comme les autres réglages).
-- **Incognito et file** : la purge des générations incognito terminées, faite aujourd'hui à chaque nouvelle demande,
-  ne touche plus que celles terminées depuis plus de 60 secondes (la page récupère son image dans la seconde ; sans
-  ce délai, une demande lancée depuis un autre appareil effacerait une image incognito pas encore remise). À la
-  fermeture ou au rechargement, la page annule et fait oublier, en un seul envoi `keepalive`, toutes ses générations
-  incognito (et privées) non terminées.
+- **Incognito et file** (précisé par le porteur le 14/10/2026) : une image incognito n'est perdue qu'une fois vue au
+  moins une fois puis quittée dans l'application pour voir autre chose (ouvrir une autre image ou un autre résultat,
+  changer de vue). Côté page : lancer une nouvelle demande, ou qu'une autre génération se termine, ne fait plus
+  disparaître l'image incognito affichée ni celles pas encore vues ; elles restent dans la page (adresses `blob:`)
+  jusqu'à ce que l'utilisateur les ait vues puis quittées. Côté serveur : la purge des générations incognito
+  terminées à chaque nouvelle demande disparaît ; le serveur garde une image incognito en mémoire jusqu'à ce que la
+  page qui l'a lancée la récupère puis la fasse oublier, ou jusqu'à la fermeture de cette page, ou au redémarrage.
+  À la fermeture ou au rechargement, la page annule et fait oublier, en un seul envoi `keepalive`, toutes ses
+  générations incognito (et privées) non terminées ou non récupérées.
 - L'estimation de la file additionne les estimations des générations qui précèdent ; l'interface la calcule avec ses
   coefficients habituels à partir des réglages de chaque entrée, renvoyés par `queue`.
 
