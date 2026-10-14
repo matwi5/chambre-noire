@@ -391,16 +391,36 @@ du Mac, ne suffit pas pour voir les images privées.
 - Le cadenas **Sortir**, en haut à droite, ramène à l'application normale en verrouillant l'espace. Il se verrouille
   aussi seul après 15 minutes sans activité privée sur cet appareil, et à la fermeture ou au rechargement de
   l'application.
+- Dans l'espace privé, **toute génération est privée** (Créer, Éditer, Dessiner) : son image, ses images d'entrée, sa
+  miniature, son prompt et ses réglages sont chiffrés sur le Mac. Le texte tapé n'est pas retenu par le navigateur.
+  Une génération privée lancée va jusqu'au bout et est rangée chiffrée même si l'espace se verrouille avant la fin, ou
+  si l'application est fermée ; sa notification dit seulement « Image privée prête ». Les autres appareils ne voient
+  d'elle, dans la file, que « Génération privée », sans prompt ni aperçu.
+- La **Galerie** de l'espace privé ne montre que les images privées, avec la même visionneuse : télécharger,
+  partager, copier, images d'entrée, Éditer, Dessiner, Reprendre, Supprimer. En sortant, elles quittent l'écran.
 - **Changer le code** demande l'ancien : les images privées restent lisibles avec le nouveau.
 - **Code oublié** : il ne peut pas être retrouvé, et les images privées sont perdues. **Supprimer l'espace privé**
   (après avoir tapé `SUPPRIMER`) efface tout l'espace sans demander le code, pour pouvoir en recréer un. N'importe
   qui ayant accès à l'application peut donc effacer l'espace privé, sans pouvoir le lire.
 - Sans la bibliothèque `cryptography` (installée avec `requirements.txt`), l'espace privé n'apparaît pas.
 
-Ce que cela garantit : le dossier `private/` ne contient que la clé publique de l'espace et sa clé privée chiffrée par
-une clé tirée du code (dérivation volontairement lente : chaque essai coûte du temps et de la mémoire, même sur une
-copie du disque). Le code n'est écrit nulle part ; la clé privée déchiffrée ne reste qu'en mémoire du serveur, le temps
-de la session de l'appareil.
+Ce que cela garantit, et ses limites :
+
+- le dossier `private/` ne contient que la clé publique de l'espace, sa clé privée chiffrée par une clé tirée du code
+  (dérivation volontairement lente : chaque essai coûte du temps et de la mémoire, même sur une copie du disque), et
+  les images chiffrées, sous des noms tirés au hasard qui ne disent ni la date ni le mode (la date de modification
+  des fichiers, elle, reste visible, comme leur taille et leur nombre). Le code n'est écrit nulle
+  part ; la clé privée déchiffrée ne reste qu'en mémoire du serveur, le temps de la session de l'appareil. Le Mac
+  chiffre une image privée sans le code, avec la seule clé publique : c'est ce qui permet de la ranger même espace
+  verrouillé ;
+- rien d'une image privée ne va dans `outputs\`, dans le journal des générations, dans les mesures de calibration ni
+  dans `logs\` (le journal du moteur part à la poubelle) ;
+- comme en incognito, sd-cli ne travaille que sur des fichiers : pendant le calcul, les images d'entrée, les aperçus et
+  le PNG final passent **en clair** par `jobs/private_<identifiant>/`, supprimé dès la fin de la génération (et au
+  lancement suivant après un arrêt brutal). Sur un SSD, un fichier supprimé n'est pas effacé de façon sûre. Sur Mac,
+  le dossier `jobs/` est exclu de Time Machine au lancement de l'interface (`tmutil addexclusion`, sans droits
+  administrateur ; un échec est noté dans le journal sans bloquer) ;
+- une image **téléchargée** ou partagée sort de l'espace privé : elle est alors en clair là où elle est enregistrée.
 
 ## Le modèle
 
@@ -633,7 +653,16 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   de vie, fermée par le serveur après 15 minutes sans requête privée), `POST /api/private/lock`,
   `POST /api/private/code {"old", "new"}`, `POST /api/private/reset {"confirm": "SUPPRIMER"}` (efface l'espace et
   ferme toutes les sessions) ; `/api/status` porte `private` : `available` (bibliothèque `cryptography` présente),
-  `exists`, `unlocked` (pour cet appareil, sans prolonger la session) ; sans `cryptography`, ces routes répondent 503.
+  `exists`, `unlocked` (pour cet appareil, sans prolonger la session) ; sans `cryptography`, ces routes répondent 503 ;
+  génération privée : `"private": true` dans `/api/generate` (403 sans session, 400 avec `incognito` ou si `private`
+  n'est pas un booléen, 503 sans `cryptography`), identifiant de
+  32 caractères hexadécimaux, `kind` `private` dans `queue` (comme l'incognito : jeton `page`, ni `id` ni prompt) ;
+  `GET /api/job/<id>` porte `private` et, une fois l'image rangée, `item` (son identifiant dans l'espace privé) ;
+  `POST /api/job/<id>/forget` l'oublie (l'image reste dans l'espace) ; `/api/forget` (fermeture de la page) ne l'arrête
+  pas. Galerie privée, session exigée (403 sinon), chaque requête prolongeant la session : `GET /api/private/history`
+  (réglages déchiffrés de chaque image, avec `id`), `GET /api/private/image?id=…[&download=1]`,
+  `GET /api/private/thumb?id=…`, `GET /api/private/input?id=…&file=init.png|ref_N.png[&thumb=1][&download=1]`,
+  `POST /api/private/delete {"id"}`.
 - `POST /api/prompts` refuse (400) un titre ou un texte vide ou qui n'est pas un texte, un titre de plus de 80
   caractères, un texte de plus de 4 000, un `usage` inconnu à la création, et une création au-delà de 500 prompts.
   `tools/saved_prompts.json` est écrit dans un fichier temporaire renommé ensuite : il n'est jamais à moitié écrit. Un

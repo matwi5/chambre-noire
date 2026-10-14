@@ -13,12 +13,17 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   (références, aperçus, PNG final) vivent dans jobs/incognito_<id>/, supprimé dès la fin du job ; l'image reste en
   mémoire jusqu'à ce que l'interface la récupère (GET /api/job/<id>/result), puis l'interface fait oublier le job
   (POST /api/job/<id>/forget). Ni journal, ni galerie, ni calibration, ni ligne dans logs/.
+- Espace privé ({"private": true} dans /api/generate, session de l'espace exigée) : comme l'incognito pendant le
+  calcul (jobs/private_<id>/, ni journal, ni calibration, ni logs/), puis l'image, sa miniature, ses entrées et ses
+  réglages sont chiffrés avec la clé publique de l'espace dans private/items/<id au hasard>/ ; voir DECISIONS.md.
 - Lots : {"count": 2 à 4} dans /api/generate (mode Créer) lance autant de générations du même prompt, à la suite dans
   la file, chacune avec sa graine ; {"campaign": [{"image", "width", "height"}, …]} (mode Éditer, 10 photos au plus)
   lance une édition par photo, avec cette seule photo en référence. Les générations d'un lot sont suivies, annulées
   (POST /api/lot/<id>/cancel) et notifiées ensemble.
 - API : POST /api/generate, GET /api/job/<id>, GET /api/job/<id>/preview, POST /api/job/<id>/cancel, POST /api/lot/<id>/cancel,
-        GET /api/job/<id>/result et POST /api/job/<id>/forget (incognito),
+        GET /api/job/<id>/result et POST /api/job/<id>/forget (incognito ; forget aussi pour une génération privée),
+        espace privé : POST /api/private/create|unlock|lock|code|reset|delete, GET /api/private/history,
+        GET /api/private/image|thumb?id=<id>, GET /api/private/input?id=<id>&file=<init.png|ref_N.png>,
         GET /api/result?name=<png>[&download=1], GET /api/status,
         historique : GET /api/history, GET /api/thumb?name=<png>, POST /api/delete {"name": <png>},
         images d'entrée d'une image : GET /api/input?name=<png>&file=<init.png|ref_N.png>[&thumb=1][&download=1],
@@ -334,8 +339,10 @@ def change_prompt(action, body):
 
 try:                                           # espace privé ; sans cryptography, il est indisponible
     from cryptography.exceptions import InvalidTag
-    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
     from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
     HAVE_CRYPTO = True
 except ImportError:
@@ -347,6 +354,9 @@ PRIVATE_LOCK = threading.Lock()                # dérivations du code privé et 
 MIN_PRIVATE_CODE, MAX_PRIVATE_CODE = 8, 256
 SCRYPT_N = 2 ** 18                             # 256 Mio et ≈ 0,3 s par essai sur le Mac ; gardé dans space.json
 KEY_AAD = b"qwen-image-local private key v1"   # données associées du chiffrement de la clé privée
+FILE_MAGIC = b"QPV1"                           # en-tête d'un fichier chiffré de l'espace privé (version 1)
+FILE_INFO = b"qwen-image-local private file v1"   # contexte HKDF de la clé d'un fichier
+ITEM_RE = re.compile(r"[0-9a-f]{32}")          # nom d'une image privée : 128 bits tirés au hasard
 
 
 def b64e(raw):
@@ -355,7 +365,7 @@ def b64e(raw):
 
 def read_space():
     """Clés de l'espace privé (private/space.json), ou None s'il n'existe pas : {v, public, kdf, key}, voir
-    DECISIONS.md (« Espace privé : format des clés et sessions »)."""
+    DECISIONS.md (« Espace privé : format des clés, des fichiers et sessions »)."""
     try:
         with open(os.path.join(PRIVATE, "space.json"), encoding="utf-8") as f:
             return json.load(f)
@@ -394,6 +404,82 @@ def open_space(space, code):
     return X25519PrivateKey.from_private_bytes(raw)
 
 
+def file_key(shared, eph_pub, pub):
+    return HKDF(algorithm=hashes.SHA256(), length=32, salt=eph_pub + pub, info=FILE_INFO).derive(shared)
+
+
+def seal(data, public, label):
+    """Chiffre un fichier de l'espace privé avec sa clé publique (base64), sans la clé privée : clé éphémère X25519,
+    accord, HKDF-SHA256, AES-256-GCM. Résultat : FILE_MAGIC + clé éphémère (32) + nonce (12) + chiffré et étiquette.
+    label (« <image>/<rôle> ») entre dans les données associées : un fichier ne peut pas passer pour un autre."""
+    pub = base64.b64decode(public)
+    eph = X25519PrivateKey.generate()
+    eph_pub = eph.public_key().public_bytes_raw()
+    nonce = os.urandom(12)
+    head = FILE_MAGIC + eph_pub + nonce
+    key = file_key(eph.exchange(X25519PublicKey.from_public_bytes(pub)), eph_pub, pub)
+    return head + AESGCM(key).encrypt(nonce, data, head + label.encode())
+
+
+def unseal(blob, private_key, label):
+    """Déchiffre un fichier scellé par seal() ; InvalidTag (ou ValueError) s'il a été altéré ou vient d'ailleurs."""
+    if blob[:4] != FILE_MAGIC or len(blob) < 48:
+        raise ValueError("fichier privé illisible")
+    eph_pub, nonce = blob[4:36], blob[36:48]
+    pub = private_key.public_key().public_bytes_raw()
+    key = file_key(private_key.exchange(X25519PublicKey.from_public_bytes(eph_pub)), eph_pub, pub)
+    return AESGCM(key).decrypt(nonce, blob[48:], blob[:48] + label.encode())
+
+
+def store_private(public, meta, image, inputs):
+    """Range une image dans l'espace privé : private/items/<128 bits au hasard>/ avec meta (réglages, en JSON), image,
+    thumb (miniature fabriquée en mémoire) et input_<k> (images d'entrée), chacun scellé à part. Écrit dans un dossier
+    caché puis renommé : la galerie privée ne voit jamais une image à moitié rangée. Renvoie son identifiant."""
+    item = secrets.token_hex(16)
+    items = os.path.join(PRIVATE, "items")
+    tmp = os.path.join(items, "." + item)
+    os.makedirs(tmp)
+    try:
+        files = {"meta": json.dumps({**meta, "inputs": [n for n, _ in inputs]}, ensure_ascii=False).encode(),
+                 "image": image, "thumb": thumb_jpeg(io.BytesIO(image))}
+        files.update((f"input_{k}", raw) for k, (_, raw) in enumerate(inputs))
+        for role, data in files.items():
+            with open(os.path.join(tmp, role), "wb") as f:
+                f.write(seal(data, public, f"{item}/{role}"))
+        os.rename(tmp, os.path.join(items, item))
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    return item
+
+
+def read_private(private_key, item, role):
+    """Fichier déchiffré d'une image privée, ou None si l'image ou le fichier n'existe pas."""
+    if not ITEM_RE.fullmatch(str(item or "")):
+        return None
+    try:
+        with open(os.path.join(PRIVATE, "items", item, role), "rb") as f:
+            blob = f.read()
+    except OSError:
+        return None
+    return unseal(blob, private_key, f"{item}/{role}")
+
+
+def private_history(private_key):
+    """Images de l'espace privé, la plus récente d'abord : réglages déchiffrés et identifiant (une image illisible avec
+    cette clé est ignorée)."""
+    items = []
+    for d in glob.glob(os.path.join(PRIVATE, "items", "*")):
+        item = os.path.basename(d)
+        try:
+            meta = json.loads(read_private(private_key, item, "meta") or b"null")
+        except (InvalidTag, ValueError):
+            continue
+        if isinstance(meta, dict):
+            items.append({**meta, "id": item, "private": True})
+    return sorted(items, key=lambda x: x.get("time") or 0, reverse=True)
+
+
 def private_code_error(code):
     if not isinstance(code, str) or len(code) < MIN_PRIVATE_CODE:
         return f"code privé : {MIN_PRIVATE_CODE} caractères au moins"
@@ -412,7 +498,8 @@ def notify_job(job):
         return
     if job.get("status") == "done":
         dims = "×".join(str(d) for d in job.get("dims") or [])
-        push_notify({"title": "Image incognito prête" if job.get("incognito") else "Image prête",
+        title = "Image incognito prête" if job.get("incognito") else "Image privée prête" if job.get("private") else "Image prête"
+        push_notify({"title": title,
                      "body": f"Générée en {duration_text(job.get('seconds') or 0)}" + (f" · {dims}" if dims else "")})
     else:
         push_notify({"title": "Échec de la génération", "body": "Ouvrez l'application pour voir le détail."})
@@ -519,17 +606,25 @@ def history():
     return sorted(items, key=lambda x: x["time"], reverse=True)
 
 
+def thumb_jpeg(src):
+    """Miniature JPEG de 320 px (côté le plus long) d'une image (chemin ou fichier en mémoire), en octets."""
+    from PIL import Image
+    buf = io.BytesIO()
+    with Image.open(src) as im:
+        im = im.convert("RGB")
+        im.thumbnail((320, 320))
+        im.save(buf, "JPEG", quality=82)
+    return buf.getvalue()
+
+
 def thumbnail(fp, th=None):
-    """Miniature JPEG de 320 px (côté le plus long), gardée dans outputs/.thumbs/ et refaite si l'image change."""
+    """Miniature d'une image de outputs/, gardée dans outputs/.thumbs/ et refaite si l'image change."""
     th = th or os.path.join(THUMBS, os.path.basename(fp)[:-4] + ".jpg")
     if not os.path.exists(th) or os.path.getmtime(th) < os.path.getmtime(fp):
-        from PIL import Image
         os.makedirs(THUMBS, exist_ok=True)
         tmp = f"{th}.{threading.get_ident()}.tmp"   # écrite à côté puis renommée : jamais lue à moitié écrite
-        with Image.open(fp) as im:
-            im = im.convert("RGB")
-            im.thumbnail((320, 320))
-            im.save(tmp, "JPEG", quality=82)
+        with open(tmp, "wb") as f:
+            f.write(thumb_jpeg(fp))
         os.replace(tmp, th)
     return th
 
@@ -707,7 +802,7 @@ def run_job(job):
     job["phase"] = "chargement du modèle"
     cmd = build_cmd(job)
     job["cmd"] = " ".join(cmd)
-    logf = open(os.devnull if job.get("incognito") else os.path.join(job["dir"], "sd-cli.log"), "wb")
+    logf = open(os.devnull if secret(job) else os.path.join(job["dir"], "sd-cli.log"), "wb")
     try:
         proc = subprocess.Popen(cmd, cwd=P("sdcpp", S.backend), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     except Exception as e:
@@ -799,6 +894,11 @@ def run_job(job):
             job["status"] = "done"
             job["phase"] = "terminé"
             return
+        if job.get("private"):                   # chiffrée dans l'espace privé ; dossier supprimé par worker()
+            job["item"] = keep_private(job)
+            job["status"] = "done"
+            job["phase"] = "terminé"
+            return
         job["status"] = "done"
         job["phase"] = "terminé"
         if not job.get("calibration"):            # les générations de tools/calibrate.py restent hors du journal
@@ -822,7 +922,37 @@ def run_job(job):
         job["status"] = "failed"
         job["error"] = "sd-cli code " + str(rc) + " — " + " | ".join((job.get("error_lines") or tail)[-4:])
         # en incognito, le détail (qui peut citer le prompt) reste en mémoire pour l'interface, hors de logs/
-        print("[job] échec : " + (f"génération incognito, sd-cli code {rc}" if job.get("incognito") else job["error"]), flush=True)
+        print("[job] échec : " + (f"génération {kind_of(job)}, sd-cli code {rc}" if secret(job) else job["error"]), flush=True)
+
+
+def secret(job):
+    """Génération incognito ou privée : rien d'elle ne doit rester en clair (journal, calibration, logs/, disque)."""
+    return bool(job.get("incognito") or job.get("private"))
+
+
+def kind_of(job):
+    """Genre d'une génération secrète, pour un message de journal qui n'en dit pas plus."""
+    return "incognito" if job.get("incognito") else "privée"
+
+
+def keep_private(job):
+    """Fin d'une génération privée réussie : image, entrées et réglages chiffrés dans l'espace privé avec la clé publique
+    du lancement (aucun code ni session n'est nécessaire, l'espace peut avoir été verrouillé). Si l'espace a été
+    supprimé ou recréé entre-temps, l'image est abandonnée plutôt que rangée avec une clé disparue."""
+    space = read_space()
+    if not space or space["public"] != job["public"]:
+        raise RuntimeError("espace privé supprimé pendant la génération")
+    r = job["req"]
+    meta = {"mode": job["mode"], "prompt": r["prompt"], "width": r["width"], "height": r["height"], "steps": r["steps"],
+            "seed": r.get("seed"), "seconds": job["seconds"], "model": S.model, "lot": job.get("lot"), "time": int(job["finished"]),
+            "dims": job.get("dims")}
+    inputs = []
+    for n in input_files(job["dir"]):
+        with open(os.path.join(job["dir"], n), "rb") as f:
+            inputs.append((n, f.read()))
+    with open(job["out"], "rb") as f:
+        image = f.read()
+    return store_private(job["public"], meta, image, inputs)
 
 
 def discard_cancelled(job):
@@ -836,8 +966,9 @@ def discard_cancelled(job):
 
 
 def forget_files(job):
-    """Fin d'un job incognito : supprime son dossier de travail et retire de la mémoire le prompt, les images d'entrée et
-    la ligne de commande ; seule l'image finale (job["png"]) reste, jusqu'à sa récupération par l'interface."""
+    """Fin d'un job incognito ou privé : supprime son dossier de travail et retire de la mémoire le prompt, les images
+    d'entrée et la ligne de commande ; seule l'image finale d'un job incognito (job["png"]) reste, jusqu'à sa
+    récupération par l'interface."""
     shutil.rmtree(job["dir"], ignore_errors=True)
     for k in ("req", "cmd", "error_lines", "preview", "step_times"):
         job.pop(k, None)
@@ -854,13 +985,13 @@ def fail_job(job, e):
         discard_cancelled(job)
         return
     if job.get("status") == "done":             # image produite, journal ou calibration en échec : elle reste réussie
-        print("[job] fin de génération incomplète" + ("" if job.get("incognito") else f" : {e}"), flush=True)
+        print("[job] fin de génération incomplète" + ("" if secret(job) else f" : {e}"), flush=True)
         return
     job["status"], job["phase"] = "failed", "échec"
     job["error"] = f"génération impossible : {e}"
     job.setdefault("finished", time.time())
     # en incognito, le détail (qui peut citer un fichier de travail) reste en mémoire pour l'interface, hors de logs/
-    print("[job] échec : " + ("génération incognito, erreur de préparation" if job.get("incognito") else job["error"]), flush=True)
+    print("[job] échec : " + (f"génération {kind_of(job)}, erreur de préparation" if secret(job) else job["error"]), flush=True)
 
 
 ACTIVE = ("queued", "running")             # statuts d'une génération de la file
@@ -896,7 +1027,7 @@ def sweep():
         if now - session["seen"] > PRIVATE_IDLE:
             S.private_sessions.pop(token, None)
     for job in list(S.jobs.values()):
-        if job.get("incognito") and job.get("status") not in ACTIVE and now - (job.get("finished") or job["created"]) > INCOGNITO_TTL:
+        if secret(job) and job.get("status") not in ACTIVE and now - (job.get("finished") or job["created"]) > INCOGNITO_TTL:
             forget_job(job)
 
 
@@ -917,11 +1048,11 @@ def worker():
             if job.get("status") in ("done", "failed") and not job.get("lot"):
                 notify_job(job)
         except Exception as e:
-            print("[job] erreur du thread de calcul" + ("" if job.get("incognito") else f" : {e}"), flush=True)
+            print("[job] erreur du thread de calcul" + ("" if secret(job) else f" : {e}"), flush=True)
         finally:
             S.current = None
             job.pop("proc", None)
-            if job.get("incognito"):
+            if secret(job):
                 forget_files(job)
             if job.get("lot"):
                 end_of_lot(job)
@@ -969,6 +1100,12 @@ def request_error(req):
         return "ref_images : liste d'images (data URL) attendue"
     if not isinstance(req.get("mode", "img"), str):
         return "mode : texte attendu"
+    if req.get("private") is not None and not isinstance(req["private"], bool):
+        return "private : vrai ou faux attendu"
+    if req.get("private") and req.get("incognito"):
+        return "private et incognito s'excluent"
+    if req.get("private") and ((req.get("count") or 1) > 1 or req.get("campaign") is not None):
+        return "lots privés : pas encore disponibles"
     if req.get("page") is not None and not (isinstance(req["page"], str) and PAGE_TOKEN_RE.fullmatch(req["page"])):
         return "page : jeton de 1 à 64 lettres, chiffres, - ou _ attendu"
     count = req.get("count")
@@ -1059,9 +1196,9 @@ def queue_entry(job, position, coefs):
          "lot": lot and ({"rank": lot["rank"], "size": lot["size"]} if job.get("incognito") else dict(lot)),
          "estimate": round(estimate.predict(coefs, r["width"], r["height"], r["steps"], refs, init, previews), 1),
          "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None}
-    if job.get("incognito"):
+    if secret(job):
         # jeton de la page qui l'a lancée : elle y reconnaît ses lignes ; il n'ouvre aucune route (ni suivi, ni annulation)
-        e.update(kind="incognito", page=job.get("page"))
+        e.update(kind="incognito" if job.get("incognito") else "private", page=job.get("page"))
     else:
         prompt = " ".join(r["prompt"].split())
         e.update(kind="normal", id=job["id"], mode=job["mode"], prompt=prompt[:80] + ("…" if len(prompt) > 80 else ""))
@@ -1072,16 +1209,17 @@ def new_job(req, inputs, lot=None):
     """Génération en attente pour une demande validée (sa graine déjà fixée), avec son dossier de travail. Identifiant
     d'une génération incognito : 128 bits tirés au hasard, impossible à deviner pour un autre appareil (lui seul ouvre
     son suivi, son image et son annulation) ; celui d'une génération normale dit sa date."""
-    incognito = req.get("incognito") is True
-    jid = secrets.token_hex(16) if incognito else datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+    incognito, private = req.get("incognito") is True, req.get("private") is True
+    jid = secrets.token_hex(16) if incognito or private else datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
     mode = re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
-    d = P("jobs", ("incognito_" if incognito else "") + jid)
+    d = P("jobs", ("incognito_" if incognito else "private_" if private else "") + jid)
     os.makedirs(d, exist_ok=True)
-    # en incognito, le PNG reste dans le dossier de travail (supprimé en fin de job) ; son nom sert au téléchargement
-    out = os.path.join(d, f"{jid}_{mode}.png") if incognito else P("outputs", f"{jid}_{mode}.png")
+    # en incognito et en privé, le PNG reste dans le dossier de travail (supprimé en fin de job)
+    out = os.path.join(d, f"{jid}_{mode}.png") if incognito or private else P("outputs", f"{jid}_{mode}.png")
     return {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
-            "incognito": incognito, "inputs": inputs, "seed": req["seed"], "lot": lot,
-            "page": req.get("page") if incognito else None}   # jeton de la page, montré dans queue à la place de l'id
+            "incognito": incognito, "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot,
+            "page": req.get("page") if incognito or private else None,   # jeton de la page, montré dans queue à la place de l'id
+            "public": private and (read_space() or {}).get("public")}    # clé publique de l'espace au lancement
 
 
 def public(job):
@@ -1090,9 +1228,10 @@ def public(job):
     d = {k: job.get(k) for k in keys}
     d["queue_position"] = queue_position(job)
     d["elapsed"] = round(time.time() - job["started"], 1) if job.get("started") and not job.get("finished") else job.get("seconds")
-    d["incognito"] = bool(job.get("incognito"))
+    d["incognito"], d["private"] = bool(job.get("incognito")), bool(job.get("private"))
+    d["item"] = job.get("item")                   # image privée rangée : identifiant dans la galerie privée
     d["lot"], d["seed"] = job.get("lot"), job.get("seed")
-    d["path"] = job["out"] if job.get("status") == "done" and not job.get("incognito") else None
+    d["path"] = job["out"] if job.get("status") == "done" and not secret(job) else None
     d["name"] = os.path.basename(job["out"])
     return d
 
@@ -1195,6 +1334,35 @@ class H(BaseHTTPRequestHandler):
         S.private_sessions[token] = {"key": key, "seen": time.time()}
         self._send_private(200, {"ok": True}, token)
 
+    def _private_get(self, path, q):
+        """Lectures de l'espace privé, session exigée (elles la prolongent) : history, thumb, image, input."""
+        if not HAVE_CRYPTO:
+            return self._send(503, {"error": "espace privé indisponible : bibliothèque cryptography non installée"})
+        session = self._private_session(touch=True)
+        if not session:
+            return self._send(403, {"error": "espace privé verrouillé"})
+        key, item, action = session["key"], q.get("id"), path[len("/api/private/"):]
+        if action == "history":
+            return self._send(200, private_history(key))
+        try:
+            if action == "input":                 # images d'entrée : par leur nom dans meta (init.png, ref_N.png)
+                meta = json.loads(read_private(key, item, "meta") or b"{}")
+                names = meta.get("inputs") or []
+                raw = read_private(key, item, f"input_{names.index(q.get('file'))}") if q.get("file") in names else None
+                if raw and q.get("thumb"):
+                    return self._send(200, thumb_jpeg(io.BytesIO(raw)), "image/jpeg")
+            elif action in ("thumb", "image"):
+                raw = read_private(key, item, action)
+            else:
+                return self._send(404, {"error": "not found"})
+        except (InvalidTag, ValueError):
+            return self._send(500, {"error": "image privée illisible"})
+        if raw is None:
+            return self._send(404, {"error": "image privée inconnue"})
+        ctype = "image/jpeg" if action == "thumb" else "image/png"
+        extra = {"Content-Disposition": f'attachment; filename="prive_{item[:8]}{"_" + q["file"][:-4] if action == "input" else ""}.png"'} if q.get("download") else None
+        return self._send(200, raw, ctype, extra)
+
     def _private_post(self, path, raw):
         """Routes POST de l'espace privé : create, unlock, lock, code, reset. Rien n'en va dans les journaux."""
         if not HAVE_CRYPTO:
@@ -1206,6 +1374,14 @@ class H(BaseHTTPRequestHandler):
         if not isinstance(body, dict):
             return self._send(400, {"error": "objet JSON attendu"})
         action = path[len("/api/private/"):]
+        if action == "delete":                  # supprimer une image privée, session exigée
+            if not self._private_session(touch=True):
+                return self._send(403, {"error": "espace privé verrouillé"})
+            item = body.get("id")
+            if not (isinstance(item, str) and ITEM_RE.fullmatch(item) and os.path.isdir(os.path.join(PRIVATE, "items", item))):
+                return self._send(404, {"error": "image privée inconnue"})
+            shutil.rmtree(os.path.join(PRIVATE, "items", item))
+            return self._send(200, {"ok": True})
         if action == "lock":
             S.private_sessions.pop(self._private_token(), None)
             return self._send_private(200, {"ok": True})
@@ -1262,15 +1438,15 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/status":
             missing = [k for k, v in MODELS.items() if not os.path.exists(v)]
             # un job incognito n'est jamais repris après un rechargement de la page : il est perdu avec elle
-            last = max((j for j in list(S.jobs.values()) if not j.get("incognito")), key=lambda j: j["created"], default=None)
+            last = max((j for j in list(S.jobs.values()) if not secret(j)), key=lambda j: j["created"], default=None)
             coefs, active = S.store.coefficients(S.backend, S.model, S.engine), active_jobs()
             return self._send(200, {"sd_ready": not missing, "backend": S.backend, "busy": S.current is not None,
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model,
                                     "queued": sum(j["status"] == "queued" for j in active),
                                     "queue": [e for e in (queue_entry(j, k, coefs) for k, j in enumerate(active)) if e],
-                                    # identifiant d'une génération incognito : connu de sa seule page
-                                    "current_job": None if (S.jobs.get(S.current) or {}).get("incognito") else S.current,
+                                    # identifiant d'une génération incognito ou privée : connu de sa seule page
+                                    "current_job": None if secret(S.jobs.get(S.current) or {}) else S.current,
                                     "last_job": public(last) if last else None,
                                     "estimates": coefs,
                                     # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
@@ -1297,6 +1473,8 @@ class H(BaseHTTPRequestHandler):
                     return self._send(404, {"error": "aperçu en cours d'écriture"})
             return self._send(200, public(job))
         q = {k: v[0] for k, v in parse_qs(query).items()}
+        if path.startswith("/api/private/"):
+            return self._private_get(path, q)
         if path == "/api/result":
             fp = output_path(q.get("name"))
             if not fp:
@@ -1428,6 +1606,10 @@ class H(BaseHTTPRequestHandler):
             error = request_error(req)
             if error:
                 return self._send(400, {"error": error})
+            if req.get("private") and not HAVE_CRYPTO:
+                return self._send(503, {"error": "espace privé indisponible : bibliothèque cryptography non installée"})
+            if req.get("private") and not self._private_session(touch=True):
+                return self._send(403, {"error": "espace privé verrouillé : entrez-y pour lancer une génération privée"})
             reqs = expand_request(req)
             n = len(reqs)
             # identifiant d'un lot incognito : connu de sa seule page, aussi impossible à deviner que ses générations
@@ -1465,14 +1647,25 @@ class H(BaseHTTPRequestHandler):
             job = S.jobs.get(m.group(1))
             if not job:
                 return self._send(404, {"error": "job inconnu"})
-            if m.group(2) == "forget" and not job.get("incognito"):
-                return self._send(400, {"error": "seul un job incognito peut être oublié"})
+            if m.group(2) == "forget" and not secret(job):
+                return self._send(400, {"error": "seul un job incognito ou privé peut être oublié"})
             if m.group(2) == "forget":            # image récupérée par l'interface, ou page quittée : plus rien en mémoire
                 forget_job(job)
                 return self._send(200, {"ok": True})
             cancel_job(job)
             return self._send(200, public(job))
         self._send(404, {"error": "not found"})
+
+
+def exclude_from_backup(path):
+    """Exclut le dossier de travail de Time Machine (tmutil, sans droits administrateur) : une sauvegarde faite pendant
+    une génération incognito ou privée ne capte pas ses fichiers de passage. Un échec est noté sans bloquer."""
+    try:
+        r = subprocess.run(["tmutil", "addexclusion", path], capture_output=True, text=True, timeout=15)
+        if r.returncode:
+            print(f"[launch] exclusion de Time Machine impossible : {(r.stderr or r.stdout).strip()}", flush=True)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print(f"[launch] exclusion de Time Machine impossible : {e}", flush=True)
 
 
 def setup_state(cfg, backend, model):
@@ -1508,8 +1701,11 @@ def main():
     setup_state(cfg, a.backend, a.model)
     for d in ("outputs", "logs", "jobs"):
         os.makedirs(P(d), exist_ok=True)
-    for old in glob.glob(P("jobs", "incognito_*")):      # restes d'un job incognito interrompu par un arrêt brutal
+    # restes d'un job incognito ou privé interrompu par un arrêt brutal, et d'une image privée à moitié rangée
+    for old in glob.glob(P("jobs", "incognito_*")) + glob.glob(P("jobs", "private_*")) + glob.glob(os.path.join(PRIVATE, "items", ".*")):
         shutil.rmtree(old, ignore_errors=True)
+    if sys.platform == "darwin":
+        exclude_from_backup(P("jobs"))
     for fp in glob.glob(P("outputs", "*.png")):        # images antérieures à la conservation des entrées : reprises
         stem = os.path.basename(fp)[:-4]                # depuis leur dossier de travail tant qu'il existe
         if not os.path.isdir(os.path.join(INPUTS, stem)):

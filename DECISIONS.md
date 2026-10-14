@@ -20,7 +20,7 @@ les messages de commit.
   simplement une génération lancée depuis l'intérieur de l'espace. Les tickets Asana du groupe D décrivent encore le
   bouton « Privé » (à mettre à jour par le porteur).
 
-## 2026-10-14 · Espace privé : format des clés et sessions
+## 2026-10-14 · Espace privé : format des clés, des fichiers et sessions
 
 - **Contexte** : mise en œuvre de la décision « Espace privé chiffré à clé publique » (ci-dessous). Le format des clés
   est coûteux à changer une fois un espace créé : il est fixé ici.
@@ -31,6 +31,16 @@ les messages de commit.
     associées `qwen-image-local private key v1`. Paramètres à la création : n = 2¹⁸, r = 8, p = 1 (256 Mio et ≈ 0,3 s
     par essai sur le Mac) ; ils sont lus dans le fichier, donc modifiables pour un espace futur sans casser l'ancien.
     Changer le code rechiffre la même clé privée avec un sel neuf : les images ne bougent pas.
+  - Images : `private/items/<id>/`, `<id>` = 128 bits tirés au hasard (32 caractères hexadécimaux), sans date ni
+    mode. Un fichier par rôle, chacun chiffré à part : `meta` (JSON : mode, prompt, dimensions, étapes, graine, durée,
+    modèle, lot, heure, noms des images d'entrée), `image` (PNG), `thumb` (JPEG de 320 px, fabriqué en mémoire),
+    `input_<k>` (k-ième image d'entrée, nom dans `meta`). Format d'un fichier : `QPV1` (4 octets) + clé publique
+    X25519 éphémère (32) + nonce (12) + AES-256-GCM(contenu) ; clé = HKDF-SHA256(accord X25519 éphémère × clé
+    publique de l'espace, sel = clé éphémère + clé publique, info `qwen-image-local private file v1`, 32 octets) ;
+    données associées = les 48 premiers octets + `<id>/<rôle>`, pour qu'un fichier ne passe pas pour un autre. Le
+    serveur range une image avec la seule clé publique, notée au lancement de la génération (si l'espace a été
+    supprimé ou recréé entre-temps, l'image est abandonnée). L'image est écrite dans `private/items/.<id>/` puis le
+    dossier est renommé : la galerie privée ne voit jamais une image à moitié rangée.
   - Sessions : une par appareil, en mémoire du serveur (`S.private_sessions`), jeton aléatoire de 256 bits dans le
     cookie `qwen_private` (HttpOnly, `SameSite=Strict`, sans `Max-Age`) ; fermée après 15 min sans requête privée
     (`/api/status` et le suivi des générations ne la prolongent pas), par `/api/private/lock`, et par

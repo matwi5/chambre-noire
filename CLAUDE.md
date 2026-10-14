@@ -126,7 +126,15 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
   journal, ni calibration, ni détail dans `logs/`. Son identifiant (et celui de son lot) fait 128 bits tirés au hasard
   et n'est connu que de sa page : ni `queue`, ni `current_job` ne le montrent. Une génération incognito terminée que sa
   page n'a jamais fait oublier l'est par `sweep()`, appelé en tête de chaque requête, `INCOGNITO_TTL` (24 h) après sa
-  fin. Toute nouvelle écriture sur le disque ou dans les journaux doit respecter ce mode.
+  fin.
+- **Génération privée** (`"private": true`, session exigée) : même chemin que l'incognito pendant le calcul
+  (`jobs/private_<id>/`, `sd-cli.log` vers `os.devnull`, identifiant de 128 bits, rien dans `queue` ni les journaux),
+  puis `keep_private` chiffre image, miniature (en mémoire), entrées et réglages avec la clé publique notée au
+  lancement (`store_private`, format dans `DECISIONS.md`). `secret(job)` désigne l'un ou l'autre mode : chaque
+  `print`, écriture de journal, de calibration ou de fichier hors du dossier de travail passe par lui. **Toute nouvelle
+  écriture sur le disque ou dans les journaux doit respecter ces deux modes.** Une génération privée ne s'arrête pas
+  à la fermeture de la page (`/api/forget` ne vise que l'incognito, décision du porteur). Au lancement sur Mac,
+  `exclude_from_backup` exclut `jobs/` de Time Machine (jamais appelé par le banc, qui n'exécute pas `main()`).
 - **Estimation des durées** : modèle de coût dans `tools/estimate.py` (`predict`, priors par moteur, mesures par
   `"<moteur>/<modèle>"` dans `tools/calibration.json`, filtrées sur la release de sd.cpp installée lue dans
   `sdcpp/<moteur>/.installed`). Les coefficients partent vers l'interface par `/api/status`.
