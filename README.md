@@ -407,6 +407,12 @@ du Mac, ne suffit pas pour voir les images privées.
   repart en clair, pas même en incognito. La pastille disparaît quand l'onglet est entièrement vidé (texte et images)
   hors de l'espace ; son texte n'est jamais retenu par le navigateur. Si l'espace privé est supprimé, ces onglets sont
   vidés.
+- **Rendre privée** : dans la visionneuse de la galerie normale, une fois l'espace créé, ce petit bouton demande le
+  code privé, chiffre l'image, ses images d'entrée et ses réglages dans l'espace privé, puis l'efface de la galerie,
+  de ses miniatures, du journal des générations et du dossier de travail, sans faire entrer dans l'espace. Il n'y a
+  pas de chemin inverse (on télécharge l'image depuis l'espace privé). Les copies déjà faites restent : sauvegardes
+  Time Machine, téléchargements, partages, et, faites à sa génération, la ligne du journal du serveur (`logs\`, nom du
+  fichier et durée, sans le prompt) et sa mesure de calibration (dimensions et durées).
 - **Changer le code** demande l'ancien : les images privées restent lisibles avec le nouveau.
 - **Code oublié** : il ne peut pas être retrouvé, et les images privées sont perdues. **Supprimer l'espace privé**
   (après avoir tapé `SUPPRIMER`) efface tout l'espace sans demander le code, pour pouvoir en recréer un. N'importe
@@ -671,7 +677,11 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   pas. Galerie privée, session exigée (403 sinon), chaque requête prolongeant la session : `GET /api/private/history`
   (réglages déchiffrés de chaque image, avec `id`), `GET /api/private/image?id=…[&download=1]`,
   `GET /api/private/thumb?id=…`, `GET /api/private/input?id=…&file=init.png|ref_N.png[&thumb=1][&download=1]`,
-  `POST /api/private/delete {"id"}`.
+  `POST /api/private/delete {"id"}` ; « Rendre privée » : `POST /api/private/adopt {"name": <png de outputs/>, "code"}`
+  (sans session : le code est vérifié, 403 après une seconde s'il est faux, 404 pour une image ou un espace inconnu,
+  409 pendant la fin de sa génération ; en cas d'échec, l'original reste entier et rien n'est rangé),
+  qui répond l'`id` de l'image dans l'espace privé et retire l'image, ses miniatures, ses entrées et sa ligne de
+  `outputs/journal.jsonl` (réécrit sous le verrou de l'écriture de fin de génération).
 - `POST /api/prompts` refuse (400) un titre ou un texte vide ou qui n'est pas un texte, un titre de plus de 80
   caractères, un texte de plus de 4 000, un `usage` inconnu à la création, et une création au-delà de 500 prompts.
   `tools/saved_prompts.json` est écrit dans un fichier temporaire renommé ensuite : il n'est jamais à moitié écrit. Un

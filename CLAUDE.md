@@ -73,7 +73,9 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
   lancement), image finale `outputs/<id>_<mode>.png`, une ligne par image dans `outputs/journal.jsonl`. La galerie
   (`/api/history`) est la liste des PNG de `outputs/` croisée avec le journal ; miniatures dans `outputs/.thumbs/`.
   Les images d'entrée (`init.png`, `ref_N.png`) sont copiées du dossier de travail vers `outputs/.inputs/<image>/` en
-  fin de job (`save_inputs`, et au démarrage pour les dossiers encore présents) ; `/api/delete` les supprime avec l'image.
+  fin de job (`save_inputs`, et au démarrage pour les dossiers encore présents) ; `/api/delete` les supprime avec l'image
+  (`delete_output`). Toute écriture de `outputs/journal.jsonl` passe sous `JOURNAL_LOCK` : l'ajout de fin de
+  génération et la réécriture de « Rendre privée » (`drop_from_journal`, qui retire la ligne d'une image).
   Une génération annulée (en cours ou en file) ne laisse rien : `discard_cancelled` supprime son dossier de travail et
   une image finale déjà écrite. Le statut `cancelled` est posé avant que le moteur soit arrêté : un test doit attendre
   que `S.current` ait changé avant de regarder le disque.

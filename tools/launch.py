@@ -582,6 +582,90 @@ def output_path(name):
     return fp if os.path.isfile(fp) else None
 
 
+JOURNAL_LOCK = threading.Lock()       # ajout d'une ligne au journal des images et sa réécriture sans une image
+
+
+def journal_entry(name):
+    """Ligne du journal des images (outputs/journal.jsonl) d'une image de outputs/, ou {} (la dernière si plusieurs)."""
+    entry = {}
+    try:
+        with open(P("outputs", "journal.jsonl"), encoding="utf-8") as f:
+            for line in f:
+                try:
+                    m = json.loads(line)
+                except ValueError:
+                    continue
+                if os.path.basename(m.get("file") or "") == name:
+                    entry = m
+    except OSError:
+        pass
+    return entry
+
+
+def write_journal(lines):
+    """Remplace le journal des images par ces lignes : fichier temporaire puis renommage, jamais à moitié écrit."""
+    fp = P("outputs", "journal.jsonl")
+    with open(fp + ".tmp", "w", encoding="utf-8") as f:
+        f.writelines(lines)
+    os.replace(fp + ".tmp", fp)
+
+
+def drop_from_journal(name):
+    """Retire du journal les lignes d'une image, sous le verrou partagé avec l'ajout fait en fin de génération : une
+    génération qui se termine pendant la réécriture attend, et sa ligne n'est pas perdue."""
+    with JOURNAL_LOCK:
+        try:
+            with open(P("outputs", "journal.jsonl"), encoding="utf-8") as f:
+                lines = f.readlines()
+        except FileNotFoundError:
+            return
+
+        def other(line):
+            try:
+                return os.path.basename(json.loads(line).get("file") or "") != name
+            except (ValueError, AttributeError):
+                return True                   # ligne illisible : gardée telle quelle
+        write_journal([line for line in lines if other(line)])
+
+
+def delete_output(fp):
+    """Supprime une image de outputs/ avec ses miniatures et ses images d'entrée (sa ligne du journal reste)."""
+    os.remove(fp)
+    stem = os.path.basename(fp)[:-4]
+    for th in [os.path.join(THUMBS, stem + ".jpg"), *glob.glob(os.path.join(THUMBS, glob.escape(stem) + "__*.jpg"))]:
+        if os.path.exists(th):
+            os.remove(th)
+    shutil.rmtree(os.path.join(INPUTS, stem), ignore_errors=True)
+
+
+def adopt_output(fp, public):
+    """« Rendre privée » : l'image, ses images d'entrée et ses réglages (tirés du journal) sont rangés chiffrés dans
+    l'espace privé, puis l'image quitte outputs/ (miniatures et entrées comprises), sa ligne quitte le journal, et sa
+    génération quitte jobs/ et la mémoire du serveur. Renvoie son identifiant dans l'espace privé."""
+    name = os.path.basename(fp)
+    m = journal_entry(name)
+    with open(fp, "rb") as f:
+        image = f.read()
+    inputs = []
+    for n in input_files(os.path.join(INPUTS, name[:-4])):
+        with open(os.path.join(INPUTS, name[:-4], n), "rb") as f:
+            inputs.append((n, f.read()))
+    meta = {k: m.get(k) for k in ("mode", "prompt", "width", "height", "steps", "seed", "seconds", "model", "lot")}
+    meta["time"] = int(os.path.getmtime(fp))
+    item = store_private(public, meta, image, inputs)
+    try:                                       # journal d'abord : en cas d'échec, l'original reste entier et la copie
+        drop_from_journal(name)                # privée est retirée (pas de doublon à un nouvel essai)
+        delete_output(fp)
+    except BaseException:
+        shutil.rmtree(os.path.join(PRIVATE, "items", item), ignore_errors=True)
+        raise
+    jid = name[:-4].rsplit("_", 1)[0]          # sa génération : dossier de travail (prompt dans sd-cli.log) et mémoire
+    shutil.rmtree(P("jobs", jid), ignore_errors=True)
+    if (S.jobs.get(jid) or {}).get("status") not in ACTIVE:
+        S.jobs.pop(jid, None)
+    return item
+
+
 def history():
     """Images de outputs/, la plus récente d'abord, avec les réglages notés dans outputs/journal.jsonl."""
     meta = {}
@@ -908,8 +992,9 @@ def run_job(job):
                     "sec_per_it": job.get("sec_per_it"), "file": job["out"], "size": job["size"], "backend": S.backend, "model": S.model}
             if job.get("lot"):
                 meta["lot"] = job["lot"]
-            with open(P("outputs", "journal.jsonl"), "a", encoding="utf-8") as f:
-                f.write(json.dumps(meta, ensure_ascii=False) + "\n")
+            with JOURNAL_LOCK:                   # « Rendre privée » réécrit le journal : jamais en même temps
+                with open(P("outputs", "journal.jsonl"), "a", encoding="utf-8") as f:
+                    f.write(json.dumps(meta, ensure_ascii=False) + "\n")
             try:
                 save_inputs(job["dir"], job["out"])
             except OSError as e:
@@ -1363,7 +1448,7 @@ class H(BaseHTTPRequestHandler):
         return self._send(200, raw, ctype, extra)
 
     def _private_post(self, path, raw):
-        """Routes POST de l'espace privé : create, unlock, lock, code, reset. Rien n'en va dans les journaux."""
+        """Routes POST de l'espace privé : create, unlock, lock, code, reset, delete, adopt. Rien n'en va dans les journaux."""
         if not HAVE_CRYPTO:
             return self._send(503, {"error": "espace privé indisponible : bibliothèque cryptography non installée"})
         try:
@@ -1396,10 +1481,15 @@ class H(BaseHTTPRequestHandler):
                 except OSError as e:
                     return self._send(500, {"error": f"espace privé non supprimé en entier : {e}"})
             return self._send_private(200, {"ok": True})
-        if action not in ("create", "unlock", "code"):
+        if action not in ("create", "unlock", "code", "adopt"):
             return self._send(404, {"error": "not found"})
+        fp = output_path(body.get("name")) if action == "adopt" else None   # « Rendre privée » : une image de outputs/
+        if action == "adopt" and not fp:
+            return self._send(404, {"error": "image inconnue"})
+        if action == "adopt" and S.current == os.path.basename(fp)[:-4].rsplit("_", 1)[0]:   # journal et entrées pas encore écrits
+            return self._send(409, {"error": "génération en train de se terminer : réessayez dans un instant"})
         new = body.get("new" if action == "code" else "code")
-        error = private_code_error(new) if action != "unlock" else None
+        error = private_code_error(new) if action in ("create", "code") else None
         if error:
             return self._send(400, {"error": error})
         with PRIVATE_LOCK:                      # un essai à la fois : la dérivation coûte 256 Mio de mémoire
@@ -1415,6 +1505,12 @@ class H(BaseHTTPRequestHandler):
                 key = open_space(space, body.get("old" if action == "code" else "code"))
                 if key and action == "code":    # même paire de clés : les images restent lisibles
                     write_space(space["public"], key, new)
+        if key and action == "adopt":           # le code prouvé, sans ouvrir de session : la clé publique suffit
+            try:
+                item = adopt_output(fp, space["public"])
+            except Exception as e:
+                return self._send(500, {"error": f"image non rendue privée : {e}"})
+            return self._send(200, {"ok": True, "id": item})
         if not key:
             time.sleep(1)                       # freine les essais en série (hors du verrou : n'en bloque pas d'autres)
             return self._send(403, {"error": "code privé incorrect"})
@@ -1555,12 +1651,7 @@ class H(BaseHTTPRequestHandler):
                 fp = None
             if not fp:
                 return self._send(404, {"error": "fichier inconnu"})
-            os.remove(fp)
-            stem = os.path.basename(fp)[:-4]
-            for th in [os.path.join(THUMBS, stem + ".jpg"), *glob.glob(os.path.join(THUMBS, glob.escape(stem) + "__*.jpg"))]:
-                if os.path.exists(th):
-                    os.remove(th)
-            shutil.rmtree(os.path.join(INPUTS, stem), ignore_errors=True)
+            delete_output(fp)
             print(f"[historique] supprimé : {os.path.basename(fp)}", flush=True)
             return self._send(200, {"ok": True})
         if path in ("/api/push/subscribe", "/api/push/unsubscribe"):
