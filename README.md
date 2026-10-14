@@ -303,6 +303,12 @@ et un clic la remet à sa taille. En haut à droite : **Partager**, **Copier** e
 correspondant) et **Supprimer** (définitif, après confirmation, images d'entrée comprises). La zone de génération est
 masquée dans la galerie.
 
+Les images d'un même lot (variantes) portent un repère « 2/4 » (leur rang dans le lot) tant qu'il en reste au moins
+deux dans la galerie. Dans la visionneuse, **Voir le lot** montre les images du lot côte à côte ; un appui en ouvre une
+en grand, et l'on passe de l'une à l'autre en glissant. **Tout télécharger** enchaîne le téléchargement de chaque
+image du lot (une par fichier, pas d'archive ; le navigateur peut demander d'autoriser plusieurs téléchargements), et
+**Garder celle-ci** supprime les autres images du lot après confirmation.
+
 Pour une édition ou un dessin guidé, le bouton **Image d'entrée** (ou **N images d'entrée**) ouvre les images de
 départ en grand, une par une : glisser à gauche ou à droite passe de l'une à l'autre, vers le bas ferme. Chacune peut
 être téléchargée, ou reprise dans **Éditer** ou **Dessiner** pour repartir d'elle. Les images d'entrée sont conservées
@@ -541,7 +547,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   (`"incognito": true` dans `/api/generate`) : `GET /api/job/<id>/result` (image gardée en
   mémoire), `POST /api/job/<id>/forget` (l'oublier, ou arrêter la génération), `POST /api/forget {"ids": […]}` (toutes
   les générations incognito d'une page, à sa fermeture ; `current_job` de `/api/status` reste vide pendant une génération
-  incognito) ; historique : `GET /api/history`, `GET /api/thumb?name=…` (miniatures gardées dans
+  incognito) ; historique : `GET /api/history` (une entrée par image, avec ses réglages, sa `seed` et son `lot` :
+  `id`, `rank`, `size`, ou `null` pour une image seule), `GET /api/thumb?name=…` (miniatures gardées dans
   `outputs/.thumbs/`), `GET /api/result?name=…&download=1`, `POST /api/delete` ; images d'entrée d'une image :
   `GET /api/input?name=…&file=init.png|ref_N.png[&thumb=1][&download=1]` (gardées dans `outputs/.inputs/<image>/`) ;
   avec `--lan`, `POST /api/login`.

@@ -298,6 +298,8 @@
   .hgrid img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .2s; }
   .hgrid span { position:absolute; left:6px; bottom:6px; background:rgba(10,8,22,.5); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); color:#fff;
     font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:999px; }
+  .hgrid b.lotb { position:absolute; right:6px; top:6px; background:rgba(10,8,22,.62); color:#fff; font-size:10.5px; font-weight:700;
+    padding:2px 7px; border-radius:999px; font-variant-numeric:tabular-nums; pointer-events:none; }
   .hempty { grid-column:1 / -1; display:grid; justify-items:center; gap:14px; color:var(--ink2); font-size:15px; padding:56px 20px; text-align:center; }
 
   /* ------------------------------------------------------------ visionneuse plein écran */
@@ -327,6 +329,13 @@
   .viewer.immersive .v-panel { transform:translateY(24px); }
   .acts.v-acts { grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:16px; }
   .v-panel .keep { width:100%; margin-top:14px; }
+  .v-lot { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px; }
+  .v-lot[hidden] { display:none; }
+  .lotsheet-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
+  .lotsheet-grid button { position:relative; padding:0; border:0; border-radius:16px; overflow:hidden; aspect-ratio:var(--ar, 1); background:var(--field); cursor:pointer; }
+  .lotsheet-grid img { width:100%; height:100%; object-fit:cover; display:block; }
+  .lotsheet-grid b { position:absolute; left:8px; top:8px; padding:2px 9px; border-radius:999px; font-size:12px; color:#fff; background:rgba(10,8,22,.62); }
+  #lotSheet > .btn { width:100%; margin-top:14px; }
   .keep[hidden] { display:none; }
   .v-acts .act { background:var(--field); font-size:12.5px; padding:13px 4px 11px; border-radius:20px; gap:7px; }
   .v-panel .m-chips { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; margin:0; padding:0 18px 0 2px;
@@ -465,7 +474,7 @@
   .lite :is(.tabbar, .island, #phoneBtn, .toast, .sheet, .swap) { -webkit-backdrop-filter:var(--blur); backdrop-filter:var(--blur); }
   .lite .topbar::before { -webkit-backdrop-filter:none; backdrop-filter:none; -webkit-mask:none; mask:none;
     background:linear-gradient(180deg, color-mix(in srgb, var(--void) 92%, transparent), color-mix(in srgb, var(--void) 55%, transparent) 65%, transparent); }
-  .lite :is(.thumb span, .thumb button, .hgrid span) { -webkit-backdrop-filter:none; backdrop-filter:none; background:rgba(10,8,22,.62); }
+  .lite :is(.thumb span, .thumb button, .hgrid span, .hgrid b.lotb) { -webkit-backdrop-filter:none; backdrop-filter:none; background:rgba(10,8,22,.62); }
   .lite .hud { background:var(--thick); }
   .lite .stage img.reveal { animation-name:reveal-lite; }
   @keyframes reveal-lite { from { opacity:0; transform:scale(1.03); } }
@@ -589,6 +598,7 @@
   <div class="v-panel glass">
     <div class="m-chips" id="vChips"></div>
     <button class="v-inputs" id="vInputs" onclick="openInputs(0)" hidden></button>
+    <div class="v-lot" id="vLot" hidden><button class="btn secondary small" id="vLotOpen" onclick="openLot()">Voir le lot</button><button class="btn secondary small" onclick="downloadLot()">Tout télécharger</button></div>
     <button class="btn keep" id="vKeep" onclick="keepThis()" hidden>Garder celle-ci</button>
     <div class="acts v-acts">
       <button class="act" onclick="viewerAction('edit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/></svg><span>Éditer</span></button>
@@ -646,6 +656,12 @@
   </div>
   <h3>Journal</h3>
   <div class="log" id="log"></div>
+</section>
+<section class="sheet glass" id="lotSheet" role="dialog" aria-modal="true" aria-labelledby="lotTitle">
+  <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
+  <div class="sheet-head"><h2 id="lotTitle">Lot</h2><button class="btn secondary small" onclick="closeSheet()">Fermer</button></div>
+  <div class="lotsheet-grid" id="lotSheetGrid"></div>
+  <button class="btn" onclick="closeSheet(); downloadLot()">Tout télécharger</button>
 </section>
 <section class="sheet glass" id="queueSheet" role="dialog" aria-modal="true" aria-labelledby="queueTitle">
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
@@ -1182,12 +1198,16 @@ function renderGallery(){
   const g=$('histGrid'); g.innerHTML='';
   $('histCount').textContent = histItems.length ? histItems.length+' image'+(histItems.length>1?'s':'') : '';
   if(!histItems.length){ g.innerHTML='<div class="hempty">Aucune image pour l\'instant.<button class="btn" onclick="goTab(\'t2i\')">Créer une image</button></div>'; return; }
+  const inLot={};                                  // images de chaque lot encore dans la galerie
+  histItems.forEach(it=>{ if(it.lot) inLot[it.lot.id]=(inLot[it.lot.id]||0)+1; });
   histItems.forEach((it, i)=>{ const b=document.createElement('button'); b.dataset.name=it.name; b.setAttribute('aria-label', it.prompt||it.name);
     if(lastResult && lastResult.name===it.name) b.classList.add('sel');
     const im=document.createElement('img'); im.loading='lazy'; im.decoding='async'; im.alt='';
     im.onerror=()=>{ if(!im.dataset.retry){ im.dataset.retry=1; setTimeout(()=>{ im.src=thumbUrl(it)+'&retry=1'; }, 700); } };   // coupure passagère : une seconde tentative
     im.src=thumbUrl(it); b.appendChild(im);
     if(it.mode && it.mode!=='t2i'){ const sp=document.createElement('span'); sp.textContent=MODE_LABELS[it.mode]||it.mode; b.appendChild(sp); }
+    // repère des images d'un lot (rang sur la taille du lot), tant qu'il en reste au moins deux dans la galerie
+    if(it.lot && inLot[it.lot.id]>1){ const lb=document.createElement('b'); lb.className='lotb'; lb.textContent=`${it.lot.rank}/${it.lot.size}`; b.appendChild(lb); }
     b.onclick=()=>openViewer(i, histItems); g.appendChild(b); });
 }
 function openViewer(i, list=vList){
@@ -1202,7 +1222,9 @@ function openViewer(i, list=vList){
     .filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('');
   $('vDl').href=it.url || resultUrl(it.name)+'&download=1'; $('vDl').download=it.name; renderInputsButton(it);
   // garder la meilleure d'un lot : seulement s'il en reste d'autres sur le Mac (jamais pour une image incognito)
-  $('vKeep').hidden=!(it.lot && !it.url && list.some(x=>x!==it && x.lot && x.lot.id===it.lot.id));
+  const members=lotMembers(it);
+  $('vKeep').hidden=!(it.lot && !it.url && members.length>1);
+  $('vLot').hidden=members.length<2; $('vLotOpen').textContent=`Voir le lot (${members.length})`;
   $('vDelete').querySelector('span').textContent = it.url ? 'Effacer' : 'Supprimer';
   if(!v.classList.contains('on')){ v.classList.remove('immersive'); v.classList.add('on'); document.body.style.overflow='hidden'; }
   syncThemeColor();
@@ -1328,9 +1350,24 @@ function removeFromViewer(gone){                  // images supprimées : hors d
   const list=vList.filter(keep), at=Math.min(vIndex, list.length-1);
   histItems=histItems.filter(keep); renderGallery();
   if(list.length) openViewer(at, list); else closeViewer(); }
+// images du même lot qu'it, par rang : celles de la page pour une image de la page, sinon celles de la galerie
+function lotMembers(it){ if(!it || !it.lot) return [];
+  return (it.page ? vList : histItems).filter(x=>x.lot && x.lot.id===it.lot.id).sort((a, b)=>a.lot.rank-b.lot.rank); }
+function openLot(){                               // « Voir le lot » : ses images côte à côte, un appui en ouvre une en grand
+  const items=lotMembers(vList[vIndex]); if(!items.length) return; const it=items[0];
+  $('lotTitle').textContent=`Lot de ${items.length} image${items.length>1?'s':''}`;
+  const g=$('lotSheetGrid'); g.style.setProperty('--ar', it.width && it.height ? it.width/it.height : 1);
+  g.innerHTML=items.map((x, i)=>`<button data-k="${i}" aria-label="Ouvrir l'image ${x.lot.rank}"><img src="${thumbOf(x)}" alt=""><b>${x.lot.rank}/${x.lot.size}</b></button>`).join('');
+  g.onclick=e=>{ const b=e.target.closest('[data-k]'); if(!b) return; closeSheet(); openViewer(+b.dataset.k, items); };
+  openSheet('lotSheet'); }
+async function downloadLot(){                     // « Tout télécharger » : un téléchargement par image, l'un après l'autre (pas d'archive)
+  const items=lotMembers(vList[vIndex]);
+  for(const x of items){ const a=document.createElement('a'); a.href=x.url || resultUrl(x.name)+'&download=1'; a.download=x.name;
+    document.body.appendChild(a); a.click(); a.remove(); await sleep(400); }   // un temps entre deux : le navigateur les accepte tous
+  if(items.length) toast(items.length+' téléchargements lancés'); }
 async function keepThis(){                        // variantes : garder cette image, supprimer les autres images du lot
   const it=vList[vIndex]; if(!it || !it.lot) return;
-  const others=vList.filter(x=>x!==it && x.lot && x.lot.id===it.lot.id && !x.url);
+  const others=lotMembers(it).filter(x=>x!==it && !x.url);
   if(!others.length) return;
   const n=others.length, s=n>1 ? 's' : '';
   if(!await ask('Garder celle-ci ?', `${n===1 ? "L'autre image" : 'Les '+n+' autres images'} du lot ser${n>1?'ont':'a'} supprimée${s} définitivement du Mac.`, 'Garder', true)) return;
@@ -1338,7 +1375,7 @@ async function keepThis(){                        // variantes : garder cette im
   for(const o of others){ const r=await postJson('/api/delete', {name:o.name}).catch(()=>null);
     if(r && r.ok){ gone.push(o); forgetResult(o.name); log('supprimé : '+o.name); } }
   toast(gone.length===n ? 'Image gardée, '+n+' supprimée'+s : 'Suppression incomplète', gone.length===n ? '' : 'err');
-  removeFromViewer(gone); openViewer(vList.indexOf(it)); }
+  removeFromViewer(gone); const k=vList.indexOf(it); if(k>=0) openViewer(k); }
 function forgetResult(name){                      // image supprimée : elle quitte la zone de résultat et la pellicule
   const p=pageJobs.find(q=>q.result && q.result.name===name);
   if(p) drop(p); else if(lastResult && lastResult.name===name){ lastResult=null; hideResult(); } }

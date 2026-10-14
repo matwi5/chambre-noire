@@ -152,5 +152,24 @@ class LotNotificationTest(bench.BenchCase):
             self.assertEqual(self.only(sent)["title"], "2 images prêtes")
 
 
+class HistoryLotTest(bench.BenchCase):
+    def test_history_gives_the_lot_of_each_image_and_nothing_for_a_single_one(self):
+        jobs = generate_lot(count=2)["jobs"]
+        single = bench.generate("alone")
+        for j in jobs + [single]:
+            wait_job(j["id"])
+        items = {it["name"]: it for it in call("GET", "/api/history")[1]}
+        self.assertEqual(len(items), 3)
+        self.assertEqual([items[j["name"]]["lot"] for j in jobs], [j["lot"] for j in jobs])
+        self.assertIsNone(items[single["name"]]["lot"])
+        self.assertTrue(all(isinstance(it["seed"], int) for it in items.values()))
+
+    def test_incognito_lot_stays_out_of_the_history(self):
+        jobs = generate_lot("secret", count=2, incognito=True)["jobs"]
+        for j in jobs:
+            wait_job(j["id"])
+        self.assertEqual(call("GET", "/api/history")[1], [])
+
+
 if __name__ == "__main__":
     unittest.main()

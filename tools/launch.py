@@ -328,6 +328,7 @@ def history():
         items.append({"name": name, "time": int(st.st_mtime), "size": st.st_size, "mode": m.get("mode"),
                       "prompt": m.get("prompt"), "width": m.get("width"), "height": m.get("height"),
                       "steps": m.get("steps"), "seconds": m.get("seconds"), "model": m.get("model"), "seed": m.get("seed"),
+                      "lot": m.get("lot"),        # identifiant, rang et taille d'une image de lot ; None pour une image seule
                       "inputs": input_files(os.path.join(INPUTS, name[:-4]))})
     return sorted(items, key=lambda x: x["time"], reverse=True)
 
