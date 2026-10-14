@@ -33,8 +33,17 @@ def start():
     launch.THUMBS, launch.INPUTS = launch.P("outputs", ".thumbs"), launch.P("outputs", ".inputs")
     launch.PUSH_KEY, launch.PUSH_SUBS = launch.P("tools", "push_vapid.pem"), launch.P("tools", "push_subscriptions.json")
     launch.ACCESS_FILE = launch.P("tools", "access_code.txt")
-    for d in ("tools", "outputs", "jobs", "logs"):
+    for d in ("tools", "outputs", "jobs", "logs", "models"):
         os.makedirs(launch.P(d))
+    for table in (launch.MODELS, launch.DIFFUSION):   # modèles en fichiers vides : /api/status dit le moteur prêt
+        for k, path in table.items():
+            table[k] = launch.P("models", os.path.basename(path))
+            open(table[k], "w").close()
+    ui = os.path.join(os.path.dirname(HERE), "tools", "ui")   # l'interface du dépôt, relue à chaque requête
+    try:
+        os.symlink(ui, launch.P("tools", "ui"))
+    except OSError:                                 # Windows sans droit de créer un lien : copie
+        shutil.copytree(ui, launch.P("tools", "ui"))
     S.backend, S.model, S.engine = launch.PLATFORM_BACKENDS[0], "q4", "master-959-0000000"
     S.cfg = {"cfg_scale": 1.0, "extra_args": []}
     S.store = estimate.Store(launch.CALIB)

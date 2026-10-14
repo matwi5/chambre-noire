@@ -81,8 +81,10 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
   premier usage. Le service worker (`tools/ui/sw.js`) affiche la notification seulement si aucune fenêtre de
   l'application n'est visible. Le message ne contient jamais le prompt. Sans `pywebpush`, le serveur tourne, sans
   notifications. Tester sans réseau : intercepter `requests.post` et déchiffrer avec `http_ece`.
-- **Interface** : un seul fichier `tools/ui/index.html` (HTML, CSS et JS sans dépendance ni build). Elle interroge
-  `/api/job/<id>` chaque seconde, et se rattache après un rechargement au `last_job` de `/api/status`. Réglages et
+- **Interface** : un seul fichier `tools/ui/index.html` (HTML, CSS et JS sans dépendance ni build). Elle suit les
+  générations qu'elle a lancées (`pageJobs`) en interrogeant chacune par `/api/job/<id>` chaque seconde, et la file
+  commune (`queue` de `/api/status`, entrées produites par `queue_entry`) toutes les 2 s tant qu'elle n'est pas vide ;
+  après un rechargement, elle se rattache aux générations normales de `queue`. Réglages et
   brouillons dans `localStorage` (`qwen-opt`, `qwen-<onglet>_prompt`). `manifest.webmanifest`, `sw.js` et les icônes
   servent à l'installation sur le téléphone ; le service worker ne touche qu'à la navigation, jamais à `/api/*`.
 - **Contrôle d'accès** (dans cet ordre, dans `H`) : `_host_ok` (liste blanche de `Host` contre le rebinding DNS, noms du
@@ -103,6 +105,7 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
 - **Formule dupliquée en JavaScript** : `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()` et
   `ref_px()` de `estimate.py` (jetons de 16×16 px, arrondi à 32). Une modification de la formule ou d'un coefficient se
   fait des deux côtés. `PREVIEW_EVERY = 5` côté interface doit égaler le défaut `preview_interval` de `build_cmd`.
+  L'estimation de chaque entrée de la file (`queue_entry`) appelle `estimate.predict` : pas de troisième copie.
 - **Noms des modèles** : ceux de `setup.py` doivent correspondre à `MODELS` et `DIFFUSION` en tête de `tools/launch.py`.
 - **Release de sd.cpp** : `.installed` doit garder le format `master-NNN-hash` ; `estimate.prefix_cache` en lit le numéro
   (cache de préfixe à partir de 903). Si sd-cli change le texte de ses lignes « completed », `make_sample` renvoie

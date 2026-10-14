@@ -229,11 +229,21 @@ le mode incognito et le texte en cours de chaque onglet (sauf en incognito).
 Conseil : **540p + 12 étapes** pour chercher la bonne formulation, puis montez la résolution et les étapes pour la version finale.
 Les descriptions en **anglais, longues et précises** donnent les meilleurs résultats.
 
-Pendant la génération, l'image en cours affiche l'étape, le temps restant et un bouton d'annulation (une génération
-annulée ne laisse aucun fichier : ni image, ni images d'entrée, ni aperçus, ni journal du moteur) ; le bouton
-**Générer** se remplit au fil des étapes. La pastille d'état en haut suit aussi la progression, depuis n'importe quel
-onglet : un appui ramène à l'image. On peut recharger la page sans rien perdre : elle se rattache à la génération en cours (sauf en incognito).
-Le mode incognito ne peut pas être changé pendant une génération. Chaque image est enregistrée en PNG dans
+**Générer** reste actif pendant une génération : chaque appui ajoute une demande à la **file d'attente**, avec les
+réglages du moment. Le Mac calcule les générations une à une, dans l'ordre d'arrivée, qu'elles viennent de
+l'ordinateur ou du téléphone. Pendant le calcul, l'image en cours affiche l'étape, le temps restant et un bouton
+d'annulation (une génération annulée ne laisse aucun fichier : ni image, ni images d'entrée, ni aperçus, ni journal du
+moteur) ; une génération qui attend affiche sa place dans la file et le temps avant son image. La zone de résultat
+suit la plus ancienne génération de la page qui n'est pas terminée, puis montre son image ; quand la page en a lancé
+plusieurs, une rangée de vignettes sous l'image passe de l'une à l'autre.
+
+La pastille d'état en haut suit la génération en cours depuis n'importe quel onglet et affiche « +N en attente ». Un
+appui ouvre la **file d'attente** : pour chaque génération, sa place, le début de son prompt et le temps avant son
+image, avec un bouton pour l'annuler. Une génération normale s'annule depuis n'importe quel appareil ; une génération
+incognito n'apparaît ailleurs que comme « Génération incognito », sans prompt ni aperçu, et seule la page qui l'a
+lancée peut l'annuler. On peut recharger la page sans rien perdre : elle se rattache aux générations normales de la
+file (pas aux générations incognito). Le mode incognito ne peut pas être changé tant que la page a une génération en
+cours ou en attente. Chaque image est enregistrée en PNG dans
 **`outputs\`**, avec ses images d'entrée (références, image d'origine, zone peinte) dans `outputs\.inputs\`. Sous le
 résultat : **Télécharger**, **Partager** et **Copier** (dans le presse-papiers), puis **Éditer** et **Dessiner**, qui le
 réutilisent comme point de départ, et **Supprimer**. Partager et Copier ne sont proposés que là où le navigateur les
@@ -500,8 +510,11 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     `--params-backend te=disk` libère les poids de l'encodeur après l'encodage, ce qui laisse la place au cache de
     préfixe en très grande résolution ; `--mmap` fonctionne depuis `master-959` (les versions antérieures sortaient une
     image en bruit).
-- API locale : `POST /api/generate`, `GET /api/job/<id>`, `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel`
-  (sans effet sur une génération déjà terminée, réussie, en échec ou annulée), `GET /api/status` ; incognito
+- API locale : `POST /api/generate`, `GET /api/job/<id>` (`queue_position` : nombre de générations devant elle,
+  recalculé à chaque lecture), `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel` (sans effet sur une génération
+  déjà terminée, réussie, en échec ou annulée), `GET /api/status` (`queue` : la file, génération en cours d'abord ;
+  chaque entrée porte `status`, `position`, `lot`, `estimate` et `elapsed` en secondes, `kind`, et pour une génération
+  normale seulement `id`, `mode` et le début du `prompt`) ; incognito
   (`"incognito": true` dans `/api/generate`) : `GET /api/job/<id>/result` (image gardée en
   mémoire), `POST /api/job/<id>/forget` (l'oublier, ou arrêter la génération) ; historique : `GET /api/history`, `GET /api/thumb?name=…` (miniatures gardées dans
   `outputs/.thumbs/`), `GET /api/result?name=…&download=1`, `POST /api/delete` ; images d'entrée d'une image :

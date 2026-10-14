@@ -25,7 +25,7 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   tools/push_vapid.pem, appareils abonnés dans tools/push_subscriptions.json (non versionnés). Jamais le prompt.
 Aucun droit administrateur, aucune modification système : tout reste dans ce dossier.
 """
-import argparse, base64, datetime, glob, hashlib, hmac, json, math, os, queue, re, secrets, shutil, socket, subprocess, sys, threading, time, uuid, webbrowser
+import argparse, base64, datetime, glob, hashlib, hmac, io, json, math, os, queue, re, secrets, shutil, socket, subprocess, sys, threading, time, uuid, webbrowser
 from http.cookies import SimpleCookie
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlsplit
@@ -414,13 +414,16 @@ class State:
 S = State()
 
 
+def data_url_bytes(data_url):
+    return base64.b64decode(data_url.split(",", 1)[1] if "," in data_url else data_url)
+
+
 def write_data_url(data_url, path, what="image d'entrée"):
     """Écrit l'image d'une data URL dans path et renvoie ses dimensions ; ValueError « <what> illisible » si ce n'est
     pas une image que Pillow sait lire."""
-    b64 = data_url.split(",", 1)[1] if "," in data_url else data_url
     try:
         with open(path, "wb") as f:
-            f.write(base64.b64decode(b64))
+            f.write(data_url_bytes(data_url))
         return image_size(path)
     except (ValueError, OSError) as e:          # base64 invalide, fichier qui n'est pas une image
         raise ValueError(f"{what} illisible") from e
@@ -693,10 +696,61 @@ def request_error(req):
     return None
 
 
+ACTIVE = ("queued", "running")
+
+
+def active_jobs():
+    """Générations de la file : celle en cours d'abord, puis les autres dans l'ordre d'arrivée (S.jobs garde l'ordre
+    d'insertion, qui est celui de S.q)."""
+    return sorted((j for j in list(S.jobs.values()) if j.get("status") in ACTIVE), key=lambda j: j.get("status") != "running")
+
+
+def queue_position(job):
+    """Nombre de générations devant celle-ci dans la file (0 : en cours ou la prochaine), None si elle n'y est plus.
+    Calculée à chaque lecture : elle avance à mesure que la file se vide."""
+    return next((k for k, j in enumerate(active_jobs()) if j is job), None)
+
+
+def request_inputs(req):
+    """Pixels des images d'entrée tels que build_cmd les donnera au moteur, lus dans l'en-tête des images dès la demande,
+    pour estimer la durée avant le calcul : (références, image de départ). Une image illisible ne compte pas (elle
+    fera échouer sa génération)."""
+    from PIL import Image
+    w, h, refs = req["width"], req["height"], []
+    for ref in req.get("ref_images") or []:
+        try:
+            with Image.open(io.BytesIO(data_url_bytes(ref))) as im:
+                refs.append(estimate.ref_px(*im.size, w, h))
+        except Exception:
+            pass
+    return refs, (w * h if req.get("init_image") else 0)
+
+
+def queue_entry(job, position, coefs):
+    """Entrée de la liste de la file (/api/status). Une génération incognito n'y montre que son genre : ni identifiant
+    (seule la page qui l'a lancée peut la suivre ou l'annuler), ni prompt, ni mode. None si la génération vient de
+    finir (forget_files a pu retirer sa demande)."""
+    r = job.get("req")
+    if r is None:
+        return None
+    refs, init = job["inputs"]
+    previews = r["steps"] // (r.get("preview_interval") or 5) if r.get("preview") else 0
+    e = {"status": job["status"], "position": position, "lot": None,
+         "estimate": round(estimate.predict(coefs, r["width"], r["height"], r["steps"], refs, init, previews), 1),
+         "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None}
+    if job.get("incognito"):
+        e["kind"] = "incognito"
+    else:
+        prompt = " ".join(r["prompt"].split())
+        e.update(kind="normal", id=job["id"], mode=job["mode"], prompt=prompt[:80] + ("…" if len(prompt) > 80 else ""))
+    return e
+
+
 def public(job):
     keys = ("id", "status", "phase", "step", "total", "sec_per_it", "sec_per_it_recent", "started", "finished", "seconds", "encode_seconds",
-            "preview_version", "preview_interval", "size", "dims", "error", "queue_position")
+            "preview_version", "preview_interval", "size", "dims", "error")
     d = {k: job.get(k) for k in keys}
+    d["queue_position"] = queue_position(job)
     d["elapsed"] = round(time.time() - job["started"], 1) if job.get("started") and not job.get("finished") else job.get("seconds")
     d["incognito"] = bool(job.get("incognito"))
     d["path"] = job["out"] if job.get("status") == "done" and not job.get("incognito") else None
@@ -791,12 +845,15 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/status":
             missing = [k for k, v in MODELS.items() if not os.path.exists(v)]
             # un job incognito n'est jamais repris après un rechargement de la page : il est perdu avec elle
-            last = max((j for j in S.jobs.values() if not j.get("incognito")), key=lambda j: j["created"], default=None)
+            last = max((j for j in list(S.jobs.values()) if not j.get("incognito")), key=lambda j: j["created"], default=None)
+            coefs, active = S.store.coefficients(S.backend, S.model, S.engine), active_jobs()
             return self._send(200, {"sd_ready": not missing, "backend": S.backend, "busy": S.current is not None,
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
-                                    "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model, "queued": S.q.qsize(),
+                                    "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model,
+                                    "queued": sum(j["status"] == "queued" for j in active),
+                                    "queue": [e for e in (queue_entry(j, k, coefs) for k, j in enumerate(active)) if e],
                                     "current_job": S.current, "last_job": public(last) if last else None,
-                                    "estimates": S.store.coefficients(S.backend, S.model, S.engine),
+                                    "estimates": coefs,
                                     # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
                                     "phone": {"urls": S.lan_urls, "code": S.access_code} if S.access_code and self._local() else None})
         m = re.match(r"^/api/job/([\w-]+)(/preview|/result)?$", path)
@@ -934,8 +991,8 @@ class H(BaseHTTPRequestHandler):
             os.makedirs(d, exist_ok=True)
             # en incognito, le PNG reste dans le dossier de travail (supprimé en fin de job) ; son nom sert au téléchargement
             out = os.path.join(d, f"{jid}_{mode}.png") if incognito else P("outputs", f"{jid}_{mode}.png")
-            job = {"id": jid, "req": req, "dir": d, "out": out, "status": "queued", "created": time.time(), "incognito": incognito,
-                   "queue_position": S.q.qsize() + (1 if S.current else 0)}
+            job = {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
+                   "incognito": incognito, "inputs": request_inputs(req)}
             S.jobs[jid] = job
             S.q.put(job)
             return self._send(202, public(job))
