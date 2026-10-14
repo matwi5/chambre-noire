@@ -689,8 +689,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   ferme toutes les sessions ; 403 hors du Mac lui-même) ; `/api/status` porte `private` : `available` (bibliothèque
   `cryptography` présente), `exists`, `unlocked` (pour cet appareil, sans prolonger la session), `secure` (l'espace
   peut s'ouvrir par cette adresse) et `local` (le Mac lui-même, seul à pouvoir supprimer l'espace sans le code) ; sans
-  `cryptography`, ces routes répondent 503. Toutes les routes de l'espace privé sauf `lock`, et la génération privée,
-  répondent 403 hors du Mac lui-même et de l'adresse HTTPS de « tailscale serve » (jugé sur l'adresse source
+  `cryptography`, ces routes répondent 503. Toutes les routes de l'espace privé sauf `lock`, la génération privée et
+  l'aperçu d'une génération privée (`/api/job/<id>/preview`) répondent 403 hors du Mac lui-même et de l'adresse HTTPS de « tailscale serve » (jugé sur l'adresse source
   127.0.0.1 et le nom d'hôte, jamais sur les en-têtes de relais) ;
   génération privée : `"private": true` dans `/api/generate` (403 sans session, 400 avec `incognito` ou si `private`
   n'est pas un booléen, 503 sans `cryptography`), identifiant de

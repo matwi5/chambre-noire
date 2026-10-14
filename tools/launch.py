@@ -41,6 +41,10 @@ import argparse, base64, datetime, glob, hashlib, hmac, io, json, math, os, queu
 from http.cookies import SimpleCookie
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlsplit
+try:
+    import fcntl                                # F_FULLFSYNC de macOS (sync_fd) ; absent sous Windows
+except ImportError:
+    fcntl = None
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import estimate
@@ -389,10 +393,44 @@ def write_space(public, private_key, code, fp=None):
     sealed = AESGCM(code_key(code, kdf)).encrypt(nonce, private_key.private_bytes_raw(), KEY_AAD)
     fp = fp or os.path.join(PRIVATE, "space.json")
     os.makedirs(os.path.dirname(fp), exist_ok=True)
-    with open(fp + ".tmp", "w", encoding="utf-8") as f:
-        json.dump({"v": 1, "public": public, "kdf": kdf, "key": b64e(nonce + sealed)}, f)
+    write_synced(fp + ".tmp", json.dumps({"v": 1, "public": public, "kdf": kdf, "key": b64e(nonce + sealed)}).encode())
     os.chmod(fp + ".tmp", 0o600)
     os.replace(fp + ".tmp", fp)
+    sync_dir(os.path.dirname(fp))
+
+
+def sync_fd(fd):
+    """Attend que le fichier ou dossier ouvert soit sur le disque : F_FULLFSYNC sur macOS (fsync y laisse les données
+    dans le cache du disque), fsync ailleurs."""
+    if hasattr(fcntl, "F_FULLFSYNC"):
+        try:
+            return fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
+        except OSError:                         # système de fichiers qui ne le connaît pas : fsync
+            pass
+    os.fsync(fd)
+
+
+def write_synced(fp, data):
+    """Écrit un fichier et attend qu'il soit sur le disque : une coupure de courant ne le laisse ni vide ni tronqué
+    derrière un renommage qui, lui, aurait été écrit."""
+    with open(fp, "wb") as f:
+        f.write(data)
+        f.flush()
+        sync_fd(f.fileno())
+
+
+def sync_dir(d):
+    """Met sur le disque les créations et renommages d'un dossier (sans effet là où un dossier ne s'ouvre pas : Windows)."""
+    try:
+        fd = os.open(d, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        sync_fd(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
 
 
 def open_space(space, code):
@@ -477,8 +515,7 @@ def rekey_space(old_key, code):
     public = b64e(key.public_key().public_bytes_raw())
     try:
         os.makedirs(os.path.join(staging, "items"))
-        with open(os.path.join(staging, "public"), "w", encoding="utf-8") as f:
-            f.write(public)                     # marque la bascule : space.json porte-t-il déjà cette clé ?
+        write_synced(os.path.join(staging, "public"), public.encode())   # marque de la bascule : space.json porte-t-il cette clé ?
         for d in glob.glob(os.path.join(PRIVATE, "items", "*")):
             item = os.path.basename(d)
             if not ITEM_RE.fullmatch(item):
@@ -491,10 +528,12 @@ def rekey_space(old_key, code):
                     blob = seal(unseal(blob, old_key, f"{item}/{role}"), public, f"{item}/{role}")
                 except (InvalidTag, ValueError):
                     pass                        # déjà illisible avec l'ancienne clé : gardé tel quel, rien n'est perdu
-                with open(os.path.join(staging, "items", item, role), "wb") as f:
-                    f.write(blob)
-        write_space(public, key, code, os.path.join(staging, "space.json"))
+                write_synced(os.path.join(staging, "items", item, role), blob)
+            sync_dir(os.path.join(staging, "items", item))
+        sync_dir(os.path.join(staging, "items"))
+        write_space(public, key, code, os.path.join(staging, "space.json"))   # copies sur le disque avant la bascule
         os.replace(os.path.join(staging, "space.json"), os.path.join(PRIVATE, "space.json"))   # la bascule
+        sync_dir(PRIVATE)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
@@ -521,6 +560,7 @@ def finish_rekey():
         if os.path.exists(dst):
             shutil.rmtree(dst)                  # l'ancienne version, illisible avec la nouvelle clé (la nouvelle est écrite)
         os.rename(d, dst)
+    sync_dir(os.path.join(PRIVATE, "items"))
     shutil.rmtree(staging)
 
 
@@ -1677,6 +1717,8 @@ class H(BaseHTTPRequestHandler):
                     return self._send(404, {"error": "image incognito indisponible"})
                 return self._send(200, png, "image/png")
             if m.group(2):
+                if job.get("private") and not self._secure():   # aperçu privé, en clair : jamais par http:// sur le Wi-Fi
+                    return self._send(403, {"error": PRIVATE_HTTPS_ONLY})
                 if not job.get("preview"):
                     return self._send(404, {"error": "pas d'aperçu"})
                 try:

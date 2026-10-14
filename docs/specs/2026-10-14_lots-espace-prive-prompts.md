@@ -274,8 +274,7 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
 - **Notification** : une seule par lot, envoyée quand sa dernière génération se termine : « N images prêtes »,
   « N images prêtes, M en échec », ou « Échec du lot » si aucune n'a réussi ; variantes incognito et privées :
   « N images incognito prêtes » ; un lot privé notifie comme un lot normal (voir section 5). Aucune notification si
-  tout le lot a été annulé. Une
-  génération seule garde les messages actuels. Jamais de prompt ni de nom de fichier dans la notification.
+  tout le lot a été annulé. Une génération seule garde les messages actuels. Jamais de prompt ni de nom de fichier dans la notification.
 - **Galerie** : un badge sur la miniature des images d'un lot (« 2/4 ») ; la visionneuse offre « Voir le lot » (les
   images du lot, côte à côte, puis en grand) et « Tout télécharger », qui enchaîne les téléchargements des images
   du lot (pas d'archive zip).
@@ -343,8 +342,9 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
   appareil, s'il peut s'ouvrir par cette adresse (`secure`) et si cet appareil est le Mac lui-même (`local`, qui seul
   peut supprimer l'espace sans le code). Toutes ces routes sauf `lock`, et la génération privée, répondent 403 hors du
   Mac lui-même et de l'adresse HTTPS de « tailscale serve » (adresse source 127.0.0.1 et nom d'hôte local ou HTTPS,
-  jamais les en-têtes de relais) ; l'interface le dit au lieu de demander le code. Sans `cryptography`, ces routes répondent qu'elles ne sont pas disponibles et l'interface masque tout ce
-  qui touche à l'espace privé.
+  jamais les en-têtes de relais), comme l'aperçu d'une génération privée ; l'interface le dit au lieu de demander le
+  code. Sans `cryptography`, ces routes répondent qu'elles ne sont pas disponibles et l'interface masque tout ce qui
+  touche à l'espace privé.
 - **Génération privée** : `/api/generate` avec `private: true` exige une session privée valide au lancement
   (sinon 403). Le dossier de travail est un dossier de travail privé, supprimé en fin de génération et au démarrage,
   comme pour l'incognito ; le journal du moteur va à la poubelle (`os.devnull`) ; aucune ligne dans le journal des
@@ -442,8 +442,8 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
   incognito passent donc en clair dans le dossier de travail pendant le calcul (et ses aperçus), puis sont supprimées.
   Sur un SSD, un fichier supprimé n'est pas effacé de façon sûre. À écrire dans le README.
 - **Supprimer l'espace privé** ne demande pas le code (c'est son but quand on l'a oublié) ; depuis le durcissement
-  (section 5), seulement sur le Mac lui-même. Avant lui : quiconque a l'application
-  peut donc effacer l'espace privé, sans pouvoir le lire. Confirmation par la saisie de `SUPPRIMER`.
+  (section 5), seulement sur le Mac lui-même ; avant lui, quiconque avait l'application pouvait effacer l'espace
+  privé, sans pouvoir le lire. Confirmation par la saisie de `SUPPRIMER`.
 - Un lot de N images dure N fois une image : une campagne de 10 photos à 720p et 40 étapes dure plus d'une heure et
   demie ; la confirmation au-delà d'une heure, qui existe déjà, s'applique à la durée totale du lot.
 - Pièges de `CLAUDE.md` à revoir à la livraison : « Exception dans un job » (réglé par l'étape 1), banc jetable (devient

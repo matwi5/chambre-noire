@@ -23,15 +23,17 @@ les messages de commit.
     du contrôle d'accès : adresse source et nom d'hôte locaux, non relayée par Tailscale) ; ailleurs 403, et la feuille
     de l'interface dit d'ouvrir l'application sur le Mac (`local` dans `/api/status`).
   - **En HTTPS ou sur le Mac seulement** : toutes les routes de l'espace privé sauf `lock` (création, déverrouillage,
-    changement de code, « Rendre privée », galerie et lectures déchiffrées, suppression d'une image) et la génération
-    privée exigent une requête « sûre » (`_secure`) : adresse source 127.0.0.1 ou ::1 **et** nom d'hôte local ou nom
+    changement de code, « Rendre privée », galerie et lectures déchiffrées, suppression d'une image), la génération
+    privée et l'aperçu d'une génération privée (`/api/job/<id>/preview`, en clair) exigent une requête « sûre » (`_secure`) : adresse source 127.0.0.1 ou ::1 **et** nom d'hôte local ou nom
     HTTPS de « tailscale serve » (`S.https_hosts`, le relais arrivant de 127.0.0.1). Ailleurs 403 avec un message qui
     dit de passer par l'adresse HTTPS ; `secure` dans `/api/status` permet à l'interface de le dire avant toute saisie.
   - **Changer le code change les clés** : une nouvelle paire X25519 est tirée, chaque fichier de chaque image est
     déchiffré avec l'ancienne clé et rescellé avec la nouvelle (même identifiant d'image, mêmes rôles, même format),
     toutes les sessions sont fermées. Ordre d'écriture sûr : tout s'écrit d'abord à part dans `private/.rekey/`
     (fichier `public` avec la nouvelle clé publique, `items/<id>/<rôle>` rechiffrés, `space.json` scellé par le nouveau
-    code) ; **la bascule** est le remplacement atomique de `private/space.json` par le nouveau ; ensuite chaque image
+    code), chaque fichier et dossier mis sur le disque (`F_FULLFSYNC` sur macOS, `fsync` ailleurs) pour qu'une coupure
+    de courant ne bascule pas sur des copies vides ; **la bascule** est le remplacement atomique de
+    `private/space.json` par le nouveau ; ensuite chaque image
     rechiffrée remplace l'ancienne (ancienne supprimée, puis nouvelle renommée à sa place) et `.rekey/` est supprimé.
     `finish_rekey`, appelé au démarrage et sous le verrou en tête de toute ouverture ou écriture de l'espace, répare
     une interruption : si `space.json` porte la clé de `.rekey/public`, la bascule a eu lieu et le rangement se

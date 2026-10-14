@@ -51,6 +51,17 @@ class PrivateOverHttpsOnlyTest(bench.BenchCase):
         self.assertEqual(call("POST", "/api/private/lock", {}, private=session, wifi=True)[0], 200)   # verrouiller : toujours
         self.assertFalse(private_status(session)["unlocked"])
 
+    def test_preview_of_a_private_generation_is_not_served_over_wifi(self):
+        session = bench.create_private(CODE)
+        code, job = call("POST", "/api/generate", bench.gen_body("SLOW=0.05 zq9 preview", private=True, preview=True, steps=10),
+                         private=session)
+        wait_job(job["id"], ("running",), check=lambda j: j.get("preview_version"))
+        path = f"/api/job/{job['id']}/preview"
+        self.assert_refused("GET", path, wifi=True)
+        self.assertEqual(call("GET", path, remote=True)[0], 200)
+        self.assertEqual(call("GET", path)[0], 200)
+        wait_job(job["id"])
+
     def test_change_code_and_make_private_over_wifi_are_refused(self):
         bench.create_private(CODE)
         self.assert_refused("POST", "/api/private/code", {"old": CODE, "new": "Nouveau-code"}, wifi=True)
