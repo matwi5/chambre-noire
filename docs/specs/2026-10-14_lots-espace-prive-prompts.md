@@ -2,8 +2,8 @@
 
 Spécification du 14/10/2026, issue d'une séance de questions avec le porteur (toutes les réponses validées). Décisions
 de conception liées dans `DECISIONS.md` (« Pas de génération simultanée : une file d'attente », « Espace privé chiffré
-à clé publique ») ; vocabulaire dans `GLOSSARY.md`. Statut : **prête pour l'implémentation**, la liste des prompts
-types (fin du document) restant à valider par le porteur.
+à clé publique ») ; vocabulaire dans `GLOSSARY.md`. Statut : **prête pour l'implémentation** ; liste des prompts types
+(fin du document) validée par le porteur le 14/10/2026.
 
 ## Problème
 
@@ -416,7 +416,7 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
 - Pièges de `CLAUDE.md` à revoir à la livraison : « Exception dans un job » (réglé par l'étape 1), banc jetable (devient
   le banc de `tests/`), mode incognito (la règle « toute nouvelle écriture » s'étend à l'espace privé).
 
-## Prompts types proposés (à valider par le porteur)
+## Prompts types (validés par le porteur le 14/10/2026)
 
 | Titre | Usage | Texte |
 |---|---|---|

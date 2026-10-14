@@ -13,8 +13,7 @@ Mis à jour le 14/10/2026.
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
 - **En cours** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
   prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), découpée en 13 tickets Asana (liste et ordre dans
-  `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types à valider par le porteur
-  (tâche Asana qui lui est assignée). Groupe A (banc, robustesse, file visible, incognito dans la file) fait et
+  `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types validée par le porteur. Groupe A (banc, robustesse, file visible, incognito dans la file) fait et
   fusionné ; restent les groupes B (lots), C (prompts) et D (espace privé).
 - **À vérifier par le porteur**, sur le téléphone par l'application installée (testé seulement dans Chrome sur le Mac,
   en vue de téléphone) :
@@ -49,6 +48,7 @@ Mis à jour le 14/10/2026.
 
 ### 2026-10-14
 
+- Liste des prompts types validée par le porteur (tâche Asana cochée) ; le ticket des prompts types est débloqué.
 - Groupe A fait dans une session à part (worktree), fusionné dans `main` et service relancé : banc de test permanent
   à faux moteur (`5072ad5`), une erreur de préparation n'arrête plus la file et `/api/generate` valide la demande
   (`cf4f825`), file d'attente visible avec « Générer » toujours actif (`b9d58ca`), incognito dans la file (`db6342d`).
