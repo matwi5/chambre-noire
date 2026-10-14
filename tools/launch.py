@@ -399,10 +399,11 @@ def write_space(public, private_key, code, fp=None):
     sync_dir(os.path.dirname(fp))
 
 
-def sync_fd(fd):
+def sync_fd(fd, full=True):
     """Attend que le fichier ou dossier ouvert soit sur le disque : F_FULLFSYNC sur macOS (fsync y laisse les données
-    dans le cache du disque), fsync ailleurs."""
-    if hasattr(fcntl, "F_FULLFSYNC"):
+    dans le cache du disque), fsync ailleurs. full=False : fsync seul, quand un F_FULLFSYNC suit avant que l'écriture
+    compte (il vide tout le cache du disque, y compris ce que les fsync précédents y ont envoyé)."""
+    if full and hasattr(fcntl, "F_FULLFSYNC"):
         try:
             return fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
         except OSError:                         # système de fichiers qui ne le connaît pas : fsync
@@ -410,23 +411,23 @@ def sync_fd(fd):
     os.fsync(fd)
 
 
-def write_synced(fp, data):
+def write_synced(fp, data, full=True):
     """Écrit un fichier et attend qu'il soit sur le disque : une coupure de courant ne le laisse ni vide ni tronqué
     derrière un renommage qui, lui, aurait été écrit."""
     with open(fp, "wb") as f:
         f.write(data)
         f.flush()
-        sync_fd(f.fileno())
+        sync_fd(f.fileno(), full)
 
 
-def sync_dir(d):
+def sync_dir(d, full=True):
     """Met sur le disque les créations et renommages d'un dossier (sans effet là où un dossier ne s'ouvre pas : Windows)."""
     try:
         fd = os.open(d, os.O_RDONLY)
     except OSError:
         return
     try:
-        sync_fd(fd)
+        sync_fd(fd, full)
     except OSError:
         pass
     finally:
@@ -508,14 +509,15 @@ def rekey_space(old_key, code):
     dans private/.rekey/ (la nouvelle clé publique, chaque fichier rechiffré sous son nom, les nouvelles clés scellées
     par le nouveau code) ; la bascule est le remplacement de space.json, atomique ; finish_rekey() range ensuite les
     images rechiffrées à la place des anciennes. Une panne avant la bascule laisse l'ancien espace intact. Sous
-    PRIVATE_LOCK ; renvoie la nouvelle clé publique."""
-    finish_rekey()                              # reste d'un changement interrompu : terminé ou abandonné d'abord
+    PRIVATE_LOCK, après finish_rekey() (aucun reste d'un changement interrompu) ; renvoie la nouvelle clé publique."""
     staging = os.path.join(PRIVATE, REKEY)
     key = X25519PrivateKey.generate()
     public = b64e(key.public_key().public_bytes_raw())
     try:
         os.makedirs(os.path.join(staging, "items"))
-        write_synced(os.path.join(staging, "public"), public.encode())   # marque de la bascule : space.json porte-t-il cette clé ?
+        # fichiers et dossiers copiés : fsync seul ; le F_FULLFSYNC de write_space, avant la bascule, les met tous sur
+        # le disque d'un coup (un F_FULLFSYNC par fichier viderait le cache du disque autant de fois)
+        write_synced(os.path.join(staging, "public"), public.encode(), full=False)   # marque de la bascule : space.json porte-t-il cette clé ?
         for d in glob.glob(os.path.join(PRIVATE, "items", "*")):
             item = os.path.basename(d)
             if not ITEM_RE.fullmatch(item):
@@ -528,15 +530,18 @@ def rekey_space(old_key, code):
                     blob = seal(unseal(blob, old_key, f"{item}/{role}"), public, f"{item}/{role}")
                 except (InvalidTag, ValueError):
                     pass                        # déjà illisible avec l'ancienne clé : gardé tel quel, rien n'est perdu
-                write_synced(os.path.join(staging, "items", item, role), blob)
-            sync_dir(os.path.join(staging, "items", item))
-        sync_dir(os.path.join(staging, "items"))
+                write_synced(os.path.join(staging, "items", item, role), blob, full=False)
+            sync_dir(os.path.join(staging, "items", item), full=False)
+        sync_dir(os.path.join(staging, "items"), full=False)
         write_space(public, key, code, os.path.join(staging, "space.json"))   # copies sur le disque avant la bascule
-        os.replace(os.path.join(staging, "space.json"), os.path.join(PRIVATE, "space.json"))   # la bascule
-        sync_dir(PRIVATE)
+        sync_dir(PRIVATE)                       # l'entrée de .rekey/ elle-même, avant la bascule qui la rend nécessaire
+        # la bascule, dernière instruction du try : si elle échoue, rien n'a changé et les copies sont jetées ; si elle
+        # réussit, plus rien ne doit les jeter (space.json porte déjà la nouvelle clé)
+        os.replace(os.path.join(staging, "space.json"), os.path.join(PRIVATE, "space.json"))
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
+    sync_dir(PRIVATE)
     return public
 
 
@@ -784,15 +789,18 @@ def adopt_output(fp, public):
     item = store_private(public, meta, image, read_inputs(os.path.join(INPUTS, name[:-4])))
     # journal d'abord, puis l'image : en cas d'échec, l'original reste entier (sa ligne remise au journal) et la copie
     # privée est retirée (pas de doublon à un nouvel essai)
+    # (copie retirée sous PRIVATE_LOCK : un changement de code ne la recopie pas pour la remettre ensuite en place)
     try:
         drop_from_journal(name)
     except BaseException:
-        shutil.rmtree(os.path.join(PRIVATE, "items", item), ignore_errors=True)
+        with PRIVATE_LOCK:
+            shutil.rmtree(os.path.join(PRIVATE, "items", item), ignore_errors=True)
         raise
     try:
         os.remove(fp)
     except BaseException:
-        shutil.rmtree(os.path.join(PRIVATE, "items", item), ignore_errors=True)
+        with PRIVATE_LOCK:
+            shutil.rmtree(os.path.join(PRIVATE, "items", item), ignore_errors=True)
         if m:
             append_journal(m)
         raise
@@ -1546,11 +1554,12 @@ class H(BaseHTTPRequestHandler):
         self._send(code, reply, headers={"Set-Cookie": f"{PRIVATE_COOKIE}={token}; Path=/;{'' if token else ' Max-Age=0;'} HttpOnly; SameSite=Strict"})
 
     def _open_session(self, key):
-        """Ouvre une session pour cet appareil : la clé privée reste en mémoire du serveur, l'appareil reçoit le jeton."""
+        """Ouvre une session pour cet appareil et renvoie son jeton (cookie) : la clé privée reste en mémoire du serveur.
+        Sous PRIVATE_LOCK : un changement de code qui suit ferme aussi cette session."""
         S.private_sessions.pop(self._private_token(), None)   # session précédente de l'appareil : sa clé ne reste pas
         token = secrets.token_urlsafe(32)
         S.private_sessions[token] = {"key": key, "seen": time.time()}
-        self._send_private(200, {"ok": True}, token)
+        return token
 
     def _private_get(self, path, q):
         """Lectures de l'espace privé, session exigée (elles la prolongent) : history, thumb, image, input."""
@@ -1659,6 +1668,9 @@ class H(BaseHTTPRequestHandler):
                     except OSError:
                         return self._send_private(500, {"error": "code privé changé, mais images pas encore toutes rangées : "
                                                                  "elles le seront à la prochaine ouverture de l'espace"})
+            # session ouverte sous le verrou : un changement de code ne peut pas se glisser entre la vérification du code
+            # et l'ouverture, qui laisserait une session avec l'ancienne clé après S.private_sessions.clear()
+            token = self._open_session(key) if key and action in ("create", "unlock") else ""
         if key and action == "adopt":           # le code prouvé, sans ouvrir de session : la clé publique suffit
             try:
                 item = adopt_output(fp, space["public"])
@@ -1668,7 +1680,7 @@ class H(BaseHTTPRequestHandler):
         if not key:
             time.sleep(1)                       # freine les essais en série (hors du verrou : n'en bloque pas d'autres)
             return self._send(403, {"error": "code privé incorrect"})
-        return self._send_private(200, {"ok": True}) if action == "code" else self._open_session(key)
+        return self._send_private(200, {"ok": True}, token)   # code : cookie effacé (toutes les sessions sont fermées)
 
     def do_GET(self):
         if not self._host_ok():
@@ -1955,7 +1967,7 @@ def main():
         os.makedirs(P(d), exist_ok=True)
     try:                                               # changement de code privé interrompu par un arrêt brutal
         finish_rekey()                                 # (rien n'est écrit au journal sur l'espace privé)
-    except OSError:
+    except (OSError, ValueError):                      # ValueError : space.json illisible ; le serveur démarre quand même
         pass
     # restes d'un job incognito ou privé interrompu par un arrêt brutal, et d'une image privée à moitié rangée
     for old in glob.glob(P("jobs", "incognito_*")) + glob.glob(P("jobs", "private_*")) + glob.glob(os.path.join(PRIVATE, "items", ".*")):

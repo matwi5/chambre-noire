@@ -31,7 +31,8 @@ les messages de commit.
     déchiffré avec l'ancienne clé et rescellé avec la nouvelle (même identifiant d'image, mêmes rôles, même format),
     toutes les sessions sont fermées. Ordre d'écriture sûr : tout s'écrit d'abord à part dans `private/.rekey/`
     (fichier `public` avec la nouvelle clé publique, `items/<id>/<rôle>` rechiffrés, `space.json` scellé par le nouveau
-    code), chaque fichier et dossier mis sur le disque (`F_FULLFSYNC` sur macOS, `fsync` ailleurs) pour qu'une coupure
+    code), chaque fichier et dossier mis sur le disque (`fsync` pour chaque copie, puis un seul `F_FULLFSYNC` sur
+    macOS, qui vide tout le cache du disque, avec le nouveau `space.json` et le dossier `private/`) pour qu'une coupure
     de courant ne bascule pas sur des copies vides ; **la bascule** est le remplacement atomique de
     `private/space.json` par le nouveau ; ensuite chaque image
     rechiffrée remplace l'ancienne (ancienne supprimée, puis nouvelle renommée à sa place) et `.rekey/` est supprimé.

@@ -1667,13 +1667,16 @@ function renderMarks(){ TABS.forEach(b=>{ const on=privTabs.has(b.dataset.pane) 
   if(on) b.title='Contenu de l\'espace privé'; else b.removeAttribute('title'); }); }
 let pendingGo=false;   // Générer touché sur un onglet marqué : relancé une fois entré dans l'espace
 function openPrivSheet(id, fromMark){
-  // en http:// sur le Wi-Fi, l'espace ne s'ouvre pas (le code passerait en clair) : la feuille le dit, sans champ de code
-  if(!privState.secure && id!=='privResetSheet'){ pendingGo=false; return openSheet('privHttpsSheet'); }
+  // en http:// sur le Wi-Fi, l'espace ne s'ouvre pas (le code passerait en clair) : la feuille le dit, sans champ de code.
+  // secure ou local absent (serveur pas encore relancé après une mise à jour de cette page) : rien n'est masqué, le
+  // serveur reste seul juge
+  if(privState.secure===false){ pendingGo=false; return openSheet('privHttpsSheet'); }
   $('puNote').hidden=!fromMark; if(!fromMark) pendingGo=false;
   ['pcCode','pcCode2','puCode','pkOld','pkNew','pkNew2','prWord','paCode'].forEach(k=>$(k).value='');
   ['pcErr','puErr','pkErr','prErr','paErr'].forEach(k=>$(k).textContent='');
   // supprimer sans le code : sur le Mac lui-même seulement (décision du porteur) ; ailleurs, la feuille le dit
-  $('prMac').hidden=privState.local; $('prForm').hidden=$('prActs').hidden=!privState.local; $('prBack').hidden=privState.local;
+  const local=privState.local!==false;
+  $('prMac').hidden=local; $('prForm').hidden=$('prActs').hidden=!local; $('prBack').hidden=local;
   openSheet(id); const inp=$(id).querySelector('input'); if(inp && inp.offsetParent) inp.focus(); }
 $('privEntry').onclick=()=>openPrivSheet(!privState.exists ? 'privCreateSheet' : 'privUnlockSheet');
 // envoi d'une feuille : bouton grisé pendant l'envoi (la dérivation du code prend un temps), message d'erreur sous les champs
