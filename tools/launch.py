@@ -23,7 +23,9 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
         historique : GET /api/history, GET /api/thumb?name=<png>, POST /api/delete {"name": <png>},
         images d'entrée d'une image : GET /api/input?name=<png>&file=<init.png|ref_N.png>[&thumb=1][&download=1],
         notifications de fin de génération : GET /api/push/key, POST /api/push/subscribe {"subscription": …},
-        POST /api/push/unsubscribe {"endpoint": …}.
+        POST /api/push/unsubscribe {"endpoint": …},
+        prompts enregistrés (tools/saved_prompts.json, communs à tous les appareils) : GET /api/prompts,
+        POST /api/prompts (création, ou modification avec "id"), POST /api/prompts/delete, POST /api/prompts/used.
 - Notifications (Web Push, bibliothèque pywebpush) : à la fin de chaque génération, le Mac envoie une notification à
   chaque appareil abonné, même si l'application y est fermée. Clé d'envoi propre à la machine dans
   tools/push_vapid.pem, appareils abonnés dans tools/push_subscriptions.json (non versionnés). Jamais le prompt.
@@ -218,6 +220,91 @@ def push_subscriptions(update=None):
                 json.dump(subs, f)
             os.chmod(PUSH_SUBS, 0o600)
         return subs
+
+
+PROMPTS_FILE = P("tools", "saved_prompts.json")   # prompts enregistrés (non versionné), partagés par tous les appareils
+PROMPTS_LOCK = threading.Lock()
+PROMPT_USAGES = ("t2i", "edit", "mask")            # onglet où le prompt a été enregistré
+MAX_PROMPT_TITLE, MAX_PROMPT_TEXT, MAX_SAVED_PROMPTS = 80, 4000, 500
+
+
+def saved_prompts(update=None):
+    """Prompts enregistrés : [{id, title, text, usage, used}], used = dernière utilisation (secondes). update(liste)
+    renvoie la liste modifiée, ou None pour ne rien écrire ; l'écriture passe par un fichier temporaire renommé
+    ensuite, pour que le fichier ne soit jamais à moitié écrit. Un fichier illisible lève ValueError sans être écrasé."""
+    with PROMPTS_LOCK:
+        try:
+            with open(PROMPTS_FILE, encoding="utf-8") as f:
+                prompts = json.load(f)
+        except FileNotFoundError:
+            prompts = []
+        if not (isinstance(prompts, list) and all(isinstance(p, dict) and isinstance(p.get("id"), str)
+                                                  and isinstance(p.get("used"), (int, float)) for p in prompts)):
+            raise ValueError("liste de prompts attendue")
+        changed = update(prompts) if update else None
+        if changed is None:
+            return prompts
+        tmp = PROMPTS_FILE + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(changed, f, ensure_ascii=False)
+            os.replace(tmp, PROMPTS_FILE)
+        except BaseException:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
+        return changed
+
+
+def prompt_error(action, body):
+    """Motif du refus (400) d'une demande sur un prompt enregistré, ou None. « delete » et « used » : un id ; « save »
+    sans id : création, avec son usage ; avec id : modification du titre et du texte (l'usage reste celui de
+    l'enregistrement)."""
+    if action != "save":
+        return None if isinstance(body.get("id"), str) else "id : identifiant attendu"
+    for key, label, most in (("title", "titre", MAX_PROMPT_TITLE), ("text", "texte", MAX_PROMPT_TEXT)):
+        v = body.get(key)
+        if not isinstance(v, str) or not v.strip():
+            return f"{label} : texte non vide attendu"
+        if len(v.strip()) > most:
+            return f"{label} : {most} caractères au plus"
+    if body.get("id") is None and body.get("usage") not in PROMPT_USAGES:
+        return "usage : t2i, edit ou mask attendu"
+    if body.get("id") is not None and not isinstance(body["id"], str):
+        return "id : identifiant attendu"
+    return None
+
+
+def change_prompt(action, body):
+    """Crée (« save » sans id), modifie (« save » avec id), supprime (« delete ») ou marque comme utilisé (« used ») un
+    prompt enregistré ; renvoie (code HTTP, réponse). Seuls le titre et le texte sont gardés, jamais les réglages."""
+    result = [(404, {"error": "prompt inconnu"})]
+
+    def change(prompts):
+        if action == "save" and body.get("id") is None:
+            if len(prompts) >= MAX_SAVED_PROMPTS:
+                result[0] = (400, {"error": f"{MAX_SAVED_PROMPTS} prompts enregistrés au plus"})
+                return None
+            p = {"id": uuid.uuid4().hex[:12], "title": body["title"].strip(), "text": body["text"].strip(),
+                 "usage": body["usage"], "used": time.time()}
+            result[0] = (200, p)
+            return prompts + [p]
+        p = next((p for p in prompts if p["id"] == body.get("id")), None)
+        if not p:
+            return None
+        if action == "delete":
+            result[0] = (200, {"ok": True})
+            return [x for x in prompts if x is not p]
+        if action == "used":
+            p["used"] = time.time()
+        else:
+            p.update(title=body["title"].strip(), text=body["text"].strip())
+        result[0] = (200, p)
+        return prompts
+    saved_prompts(change)
+    return result[0]
 
 
 def duration_text(secs):
@@ -1020,6 +1107,12 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, open(fp, "rb").read(), "image/png", extra)
         if path == "/api/history":
             return self._send(200, history())
+        if path == "/api/prompts":                # prompts enregistrés, le dernier utilisé d'abord
+            try:
+                saved = sorted(saved_prompts(), key=lambda p: -p["used"])
+            except (OSError, ValueError) as e:
+                return self._send(500, {"error": f"prompts enregistrés illisibles : {e}"})
+            return self._send(200, {"saved": saved, "types": []})
         if path == "/api/push/key":
             key = push_public_key()
             return self._send(200, {"key": key}) if key else self._send(503, {"error": "pywebpush non installé"})
@@ -1110,6 +1203,22 @@ class H(BaseHTTPRequestHandler):
             else:
                 push_subscriptions(lambda l: [x for x in l if x.get("endpoint") != endpoint])
             return self._send(200, {"ok": True})
+        m = re.match(r"^/api/prompts(?:/(delete|used))?$", path)
+        if m:                                    # prompts enregistrés : créer ou modifier, supprimer, marquer utilisé
+            try:
+                body = json.loads(raw)
+            except ValueError:
+                body = None
+            if not isinstance(body, dict):
+                return self._send(400, {"error": "objet JSON attendu"})
+            action = m.group(1) or "save"
+            error = prompt_error(action, body)
+            if error:
+                return self._send(400, {"error": error})
+            try:
+                return self._send(*change_prompt(action, body))
+            except (OSError, ValueError) as e:
+                return self._send(500, {"error": f"prompts enregistrés non modifiés : {e}"})
         if path == "/api/generate":
             try:
                 req = json.loads(raw)

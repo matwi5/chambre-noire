@@ -327,6 +327,22 @@ départ en grand, une par une : glisser à gauche ou à droite passe de l'une à
 depuis le 13/10/2026 ; pour les images plus anciennes, elles ont été récupérées tant que leur dossier de travail
 existait encore (les 20 derniers).
 
+### Prompts enregistrés
+
+Le bouton **Prompts**, sous le champ de texte de **Créer**, **Éditer** et **Dessiner**, ouvre la liste des prompts
+enregistrés, le dernier utilisé en tête. Elle est gardée sur le Mac (`tools/saved_prompts.json`) : on retrouve sur le
+téléphone ce qui a été enregistré depuis le Mac, et inversement.
+
+- **Enregistrer le texte actuel** demande un titre (80 caractères au plus) et garde le texte du champ (4 000
+  caractères au plus), modifiable avant d'enregistrer. Seuls le titre et le texte sont gardés, pas les réglages
+  (format, résolution, étapes) : un prompt sert à tous les formats. C'est un geste explicite, permis aussi en
+  incognito. 500 prompts au plus.
+- Un appui sur un prompt remplace le texte du champ de l'onglet ouvert, quel que soit l'onglet où il a été enregistré.
+  Le premier passage entre crochets (`[couleur]`, par exemple) est sélectionné : il suffit de taper pour le remplacer.
+  Le prompt passe en tête de la liste.
+- Le filtre **Tous**, **Créer**, **Éditer**, **Dessiner** ne montre que les prompts enregistrés depuis cet onglet.
+- Le crayon modifie le titre et le texte ; la corbeille supprime le prompt, après confirmation.
+
 ### Mode incognito
 
 Avec le bouton **Incognito**, à droite de **Générer**, l'image produite peut être téléchargée mais n'est gardée nulle part sur
@@ -566,7 +582,15 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `id`, `rank`, `size`, ou `null` pour une image seule), `GET /api/thumb?name=…` (miniatures gardées dans
   `outputs/.thumbs/`), `GET /api/result?name=…&download=1`, `POST /api/delete` ; images d'entrée d'une image :
   `GET /api/input?name=…&file=init.png|ref_N.png[&thumb=1][&download=1]` (gardées dans `outputs/.inputs/<image>/`) ;
-  avec `--lan`, `POST /api/login`.
+  prompts enregistrés : `GET /api/prompts` (`{"saved": [...], "types": [...]}`, `saved` le dernier utilisé d'abord ;
+  chaque prompt : `id`, `title`, `text`, `usage` = `t2i`, `edit` ou `mask`, `used` = dernière utilisation en secondes),
+  `POST /api/prompts {"title", "text", "usage"}` (création) ou `{"id", "title", "text"}` (modification du titre et du
+  texte), `POST /api/prompts/delete {"id"}`, `POST /api/prompts/used {"id"}` (le met en tête) ; 404 pour un `id`
+  inconnu ; avec `--lan`, `POST /api/login`.
+- `POST /api/prompts` refuse (400) un titre ou un texte vide ou qui n'est pas un texte, un titre de plus de 80
+  caractères, un texte de plus de 4 000, un `usage` inconnu à la création, et une création au-delà de 500 prompts.
+  `tools/saved_prompts.json` est écrit dans un fichier temporaire renommé ensuite : il n'est jamais à moitié écrit. Un
+  fichier illisible (modifié à la main) n'est jamais écrasé : les routes répondent 500 tant qu'il n'est pas réparé.
 - `POST /api/generate` refuse (code 400, avec un message) une demande dont le prompt n'est pas un texte non vide, dont
   la largeur ou la hauteur n'est pas un entier de 64 à 4096, les étapes un entier de 1 à 200, ou la graine un entier
   (-1 : au hasard), ou `count` qui n'est pas un entier de 1 à 4 ou qui accompagne un autre mode que Créer, ou une `campaign` hors du
@@ -601,7 +625,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── config.json       moteur, modèle et port par défaut (moteur écrit par setup.py sous Windows)
 │   ├── calibration.json  mesures de durée de la machine (créé à l'usage, non versionné)
 │   ├── access_code.txt   code d'accès des appareils du Wi-Fi (créé par --lan, non versionné)
-│   └── push_vapid.pem, push_subscriptions.json   notifications : clé d'envoi et appareils abonnés (non versionnés)
+│   ├── push_vapid.pem, push_subscriptions.json   notifications : clé d'envoi et appareils abonnés (non versionnés)
+│   └── saved_prompts.json   prompts enregistrés, communs à tous les appareils (créé à l'usage, non versionné)
 ├── tests/
 │   ├── run_tests.py      tests de bout en bout des trois usages (interface lancée, vraies générations)
 │   ├── bench.py          banc de test du serveur, sans GPU : serveur sur un port libre, dossier temporaire

@@ -145,13 +145,13 @@
   .act[hidden], .btn-icon[hidden], .v-inputs[hidden], .switch[hidden] { display:none !important; }
   .pane > label:first-child { margin-top:2px; }
   label { display:block; font-size:13px; color:var(--ink2); font-weight:600; margin:14px 2px 6px; }
-  textarea, select { width:100%; padding:12px 14px; border:1px solid var(--rim); border-radius:var(--r-m); font-size:16px; background:var(--field); color:var(--ink); }
+  textarea, select, input.field { width:100%; padding:12px 14px; border:1px solid var(--rim); border-radius:var(--r-m); font-size:16px; background:var(--field); color:var(--ink); }
   textarea { min-height:104px; resize:vertical; line-height:1.45; }
   select { appearance:none; -webkit-appearance:none; text-overflow:ellipsis; padding-right:34px; cursor:pointer;
     background-image:linear-gradient(45deg, transparent 50%, var(--ink2) 50%), linear-gradient(135deg, var(--ink2) 50%, transparent 50%);
     background-position:calc(100% - 18px) 55%, calc(100% - 13px) 55%; background-size:5px 5px, 5px 5px; background-repeat:no-repeat; }
   select option { background:#1b1830; color:#f6f4ff; }
-  textarea:focus, select:focus { outline:2px solid color-mix(in srgb, var(--iris) 55%, transparent); outline-offset:1px; }
+  textarea:focus, select:focus, input.field:focus { outline:2px solid color-mix(in srgb, var(--iris) 55%, transparent); outline-offset:1px; }
   .col { display:flex; flex-direction:column; gap:14px; min-width:0; }
   body.m-t2i #panes { display:none; }
 
@@ -163,7 +163,9 @@
   .prompt::placeholder { color:var(--ink3); }
   body.m-t2i .for-t2i, body.m-edit .for-edit, body.m-mask .for-mask { display:block; }
   .composer:focus-within { border-color:color-mix(in srgb, var(--iris) 55%, var(--rim)); }
-  .opts { display:flex; gap:6px; padding:4px 8px 10px; overflow-x:auto; scrollbar-width:none; }
+  .optrow { display:flex; align-items:center; gap:6px; padding:4px 0 10px 8px; }
+  .opts { flex:1; min-width:0; display:flex; gap:6px; padding-right:8px; overflow-x:auto; scrollbar-width:none; }
+  #promptsBtn svg { width:15px; height:15px; }
   .opts::-webkit-scrollbar { display:none; }
   .pill { flex:none; display:inline-flex; align-items:center; gap:7px; height:34px; padding:0 12px; border-radius:999px; cursor:pointer;
     border:1px solid var(--rim); background:var(--field); color:var(--ink); font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; }
@@ -452,6 +454,13 @@
   .qx { flex:none; width:36px; height:36px; border-radius:50%; border:0; display:grid; place-items:center; cursor:pointer; color:var(--ink); background:var(--glass-hi); }
   .qx svg { width:16px; height:16px; }
   .qx:disabled { opacity:.4; }
+  /* ------------------------------------------------------------ prompts enregistrés */
+  .pnew { width:100%; margin-top:14px; }
+  .prow { padding:4px 8px 4px 4px; gap:6px; }
+  .ptxt { border:0; background:none; color:inherit; padding:7px 8px; text-align:left; cursor:pointer; border-radius:14px; }
+  .ptxt span { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+  #peText { min-height:150px; }
+  #promptEditSheet .ask-acts { margin-top:18px; }
   .qlot { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 4px -2px; font-size:13px; font-weight:650; color:var(--ink2); }
 
   /* ------------------------------------------------------------ messages et confirmations */
@@ -537,7 +546,10 @@
   <textarea id="t2i_prompt" class="prompt for-t2i" rows="4" aria-label="Description" placeholder="Décrivez l'image, de préférence en anglais : sujet, lieu, lumière, style…"></textarea>
   <textarea id="edit_prompt" class="prompt for-edit" rows="4" aria-label="Instruction" placeholder="Que faut-il changer ? Ex. : Replace the sky with a dramatic orange sunset, keep everything else unchanged"></textarea>
   <textarea id="mask_prompt" class="prompt for-mask" rows="4" aria-label="Instruction" placeholder="Que mettre dans la zone peinte ? Ex. : Replace the object in the painted area with a stone fountain"></textarea>
-  <div class="opts" id="pills"></div>
+  <div class="optrow">
+    <button class="pill" id="promptsBtn" onclick="openPrompts()" aria-label="Prompts enregistrés"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h10A1.5 1.5 0 0 1 18.5 5v15.5L12 16.5l-6.5 4V5A1.5 1.5 0 0 1 7 3.5Z"/></svg>Prompts</button>
+    <div class="opts" id="pills"></div>
+  </div>
   <div class="go-row">
     <button class="btn" id="go"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 3.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7Z"/><path d="M18.5 15c.35 1.8 1.2 2.65 3 3-1.8.35-2.65 1.2-3 3-.35-1.8-1.2-2.65-3-3 1.8-.35 2.65-1.2 3-3Z"/></svg><span id="goLabel">Générer</span><small id="goEta"></small></button>
     <button class="btn-icon glass" id="incog" aria-pressed="false" aria-label="Incognito : image gardée nulle part sur le Mac" title="Incognito"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18"/><path d="M6 12l1.6-6.2a1.5 1.5 0 0 1 2-1l2.4 1 2.4-1a1.5 1.5 0 0 1 2 1L18 12"/><circle cx="7.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/><path d="M10 16.5h4"/></svg></button>
@@ -671,6 +683,20 @@
   <div class="sheet-head"><h2 id="queueTitle">File d'attente</h2><button class="btn secondary small" onclick="closeSheet()">Fermer</button></div>
   <p class="note" id="queueNote"></p>
   <div class="qlist" id="queueList"></div>
+</section>
+<section class="sheet glass" id="promptSheet" role="dialog" aria-modal="true" aria-labelledby="promptTitle">
+  <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
+  <div class="sheet-head"><h2 id="promptTitle">Prompts</h2><button class="btn secondary small" onclick="closeSheet()">Fermer</button></div>
+  <div class="chips4" id="promptFilter" role="group" aria-label="Usage"></div>
+  <button class="btn secondary pnew" onclick="newPrompt()">Enregistrer le texte actuel</button>
+  <div class="qlist" id="promptList"></div>
+</section>
+<section class="sheet glass" id="promptEditSheet" role="dialog" aria-modal="true" aria-labelledby="promptEditTitle">
+  <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
+  <div class="sheet-head"><h2 id="promptEditTitle">Enregistrer le prompt</h2></div>
+  <label for="peTitle">Titre</label><input class="field" id="peTitle" maxlength="80" autocomplete="off" enterkeyhint="done">
+  <label for="peText">Texte</label><textarea id="peText" rows="5" maxlength="4000"></textarea>
+  <div class="ask-acts"><button class="btn secondary" onclick="openPrompts()">Annuler</button><button class="btn" id="peSave" onclick="savePrompt()">Enregistrer</button></div>
 </section>
 
 <script>
@@ -1213,6 +1239,55 @@ if(canPush && notifyOn && Notification.permission==='granted') pushSubscribe();
 // dont l'image n'a pas encore été récupérée
 addEventListener('pagehide', ()=>{ const ids=pageJobs.filter(p=>p.incognito && !p.result).map(p=>p.id);
   if(ids.length) fetch('/api/forget', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids}), keepalive:true}).catch(()=>{}); });
+// ------------------------------------------------------------ prompts enregistrés : liste gardée sur le Mac, commune à
+// tous les appareils (/api/prompts), la dernière utilisée d'abord. Un prompt sert dans n'importe quel onglet ; son usage
+// (l'onglet où il a été enregistré) ne sert qu'au filtre. Enregistrer est un geste explicite, permis en incognito.
+const USAGE_LABELS = { t2i:'Créer', edit:'Éditer', mask:'Dessiner' };
+const PEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg>';
+const BIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="m6.5 7 1 12.5h9l1-12.5"/></svg>';
+let prompts={saved:[], types:[]}, promptUsage='all', editingPrompt=null;
+async function openPrompts(){ openSheet('promptSheet'); renderPrompts();
+  try{ const r=await fetch('/api/prompts'), j=await r.json(); if(!r.ok) throw new Error(j.error); prompts=j; renderPrompts(); }
+  catch(e){ toast('Prompts indisponibles : '+e.message, 'err'); } }
+function renderPrompts(){
+  $('promptFilter').innerHTML=[['all', 'Tous'], ...Object.entries(USAGE_LABELS)].map(([k, l])=>{ const on=k===promptUsage;
+    return `<button class="opt${on?' on':''}" data-k="${k}" aria-pressed="${on}"><b>${l}</b></button>`; }).join('');
+  const list=prompts.saved.filter(p=>promptUsage==='all' || p.usage===promptUsage);
+  $('promptList').innerHTML = list.length ? list.map(p=>`<div class="qrow prow" data-id="${esc(p.id)}"><button class="qtxt ptxt" data-pick><b>${esc(p.title)}</b><span>${esc(USAGE_LABELS[p.usage]||p.usage)} · ${esc(p.text)}</span></button>`
+      + `<button class="qx" data-edit aria-label="Modifier « ${esc(p.title)} »">${PEN}</button><button class="qx" data-del aria-label="Supprimer « ${esc(p.title)} »">${BIN}</button></div>`).join('')
+    : `<p class="note">${prompts.saved.length ? 'Aucun prompt enregistré pour cet usage.' : 'Aucun prompt enregistré pour l\'instant.'}</p>`; }
+// le texte remplace celui du champ de l'onglet ; le premier passage entre crochets (« [couleur] ») est sélectionné pour
+// être remplacé en tapant
+function usePrompt(p, saved){ const t=$(mode+'_prompt'); closeSheet();
+  t.value=p.text; t.dispatchEvent(new Event('input')); t.focus();
+  const m=/\[[^\]]*\]/.exec(p.text); if(m) t.setSelectionRange(m.index, m.index+m[0].length); else t.setSelectionRange(p.text.length, p.text.length);
+  if(saved) postJson('/api/prompts/used', {id:p.id}).catch(()=>{}); }
+function newPrompt(){ const text=$(mode+'_prompt').value.trim();
+  if(!text) return toast('Le champ de texte est vide', 'err');
+  editPrompt({title:'', text, usage:mode}); }
+function editPrompt(p){ editingPrompt=p; $('promptEditTitle').textContent=p.id ? 'Modifier le prompt' : 'Enregistrer le prompt';
+  $('peTitle').value=p.title; $('peText').value=p.text; openSheet('promptEditSheet'); $('peTitle').focus(); }
+async function savePrompt(){ const p=editingPrompt, body={title:$('peTitle').value.trim(), text:$('peText').value.trim()};
+  if(!body.title) return toast('Donnez un titre au prompt', 'err');
+  if(!body.text) return toast('Le texte est vide', 'err');
+  if(p.id) body.id=p.id; else body.usage=p.usage;
+  $('peSave').disabled=true;
+  try{ const r=await postJson('/api/prompts', body), j=await r.json(); if(!r.ok) throw new Error(j.error);
+    if(promptUsage!=='all' && promptUsage!==j.usage) promptUsage='all';   // le prompt enregistré reste visible
+    toast(p.id ? 'Prompt modifié' : 'Prompt enregistré'); openPrompts(); }
+  catch(e){ toast('Enregistrement impossible : '+e.message, 'err'); }
+  finally{ $('peSave').disabled=false; } }
+async function deletePrompt(p){
+  if(await ask('Supprimer ce prompt ?', p.title, 'Supprimer', true))
+    try{ const r=await postJson('/api/prompts/delete', {id:p.id}); if(!r.ok) throw new Error((await r.json()).error); toast('Prompt supprimé'); }
+    catch(e){ toast('Suppression impossible : '+e.message, 'err'); }
+  openPrompts(); }
+$('promptFilter').addEventListener('click', ev=>{ const b=ev.target.closest('[data-k]'); if(!b) return; promptUsage=b.dataset.k; renderPrompts(); });
+$('promptList').addEventListener('click', ev=>{ const row=ev.target.closest('.prow'), p=row && prompts.saved.find(x=>x.id===row.dataset.id); if(!p) return;
+  if(ev.target.closest('[data-edit]')) return editPrompt(p);
+  if(ev.target.closest('[data-del]')) return deletePrompt(p);
+  usePrompt(p, true); });
+$('peTitle').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); savePrompt(); } });
 // ------------------------------------------------------------ galerie et visionneuse
 let histItems=[], vIndex=-1, vList=[];   // vList : images que parcourt la visionneuse (la galerie, ou les images d'un lot)
 const MODE_LABELS={ t2i:'Texte → image', edit:'Édition', mask:'Masque', annot:'Annotation' };

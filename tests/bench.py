@@ -33,6 +33,7 @@ def start():
     launch.THUMBS, launch.INPUTS = launch.P("outputs", ".thumbs"), launch.P("outputs", ".inputs")
     launch.PUSH_KEY, launch.PUSH_SUBS = launch.P("tools", "push_vapid.pem"), launch.P("tools", "push_subscriptions.json")
     launch.ACCESS_FILE = launch.P("tools", "access_code.txt")
+    launch.PROMPTS_FILE = launch.P("tools", "saved_prompts.json")
     for d in ("tools", "outputs", "jobs", "logs", "models"):
         os.makedirs(launch.P(d))
     for table in (launch.MODELS, launch.DIFFUSION):   # modèles en fichiers vides : /api/status dit le moteur prêt

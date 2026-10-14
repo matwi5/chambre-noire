@@ -36,5 +36,8 @@ tools/access_code.txt
 # notifications : clé d'envoi de la machine et appareils abonnés
 tools/push_vapid.pem
 tools/push_subscriptions.json
+# prompts enregistrés de l'utilisateur (et le fichier temporaire de leur écriture)
+tools/saved_prompts.json
+tools/saved_prompts.json.tmp
 # fichiers du Finder
 .DS_Store

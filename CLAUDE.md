@@ -88,6 +88,11 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
   premier usage. Le service worker (`tools/ui/sw.js`) affiche la notification seulement si aucune fenêtre de
   l'application n'est visible. Le message ne contient jamais le prompt. Sans `pywebpush`, le serveur tourne, sans
   notifications. Tester sans réseau : intercepter `requests.post` et déchiffrer avec `http_ece`.
+- **Prompts enregistrés** : `tools/saved_prompts.json` (non suivi), lu et écrit sous `PROMPTS_LOCK` par
+  `saved_prompts()` (fichier temporaire puis `os.replace` ; un fichier illisible lève une erreur et n'est jamais
+  écrasé), modifié par `change_prompt` après `prompt_error` (400). Titre et texte seulement, jamais de réglages ;
+  `used` (secondes) ordonne la liste. Ni le titre ni le texte ne vont dans les journaux du serveur. Seule exception au
+  mode incognito : enregistrer un prompt est un geste explicite, permis aussi en incognito (décision de la spec).
 - **Interface** : un seul fichier `tools/ui/index.html` (HTML, CSS et JS sans dépendance ni build). Elle suit les
   générations qu'elle a lancées (`pageJobs`) en interrogeant chacune par `/api/job/<id>` chaque seconde, et la file
   commune (`queue` de `/api/status`, entrées produites par `queue_entry`) toutes les 2 s tant qu'elle n'est pas vide ;
