@@ -10,16 +10,16 @@ Mis à jour le 14/10/2026.
   notification de fin de génération (Web Push), file d'attente visible (« Générer » toujours actif), variantes (mode
   Créer) et campagnes (mode Éditer) avec lots dans la galerie, prompts enregistrés et prompts types, espace privé
   chiffré (entrée discrète par le cadenas de la Galerie). Banc de test permanent sans GPU :
-  `venv/bin/python -m unittest discover -s tests` (117 tests).
+  `venv/bin/python -m unittest discover -s tests` (129 tests, ≈ 1 min).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
 - **En cours** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
   prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), découpée en 13 tickets Asana (liste et ordre dans
   `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types validée par le porteur. Groupes A (banc, robustesse, file visible, incognito dans la file) et
   B (variantes, lots dans la galerie, campagne), C (prompts) et D (durcissement de l'incognito, espace privé) faits,
-  revus et fusionnés : les 14 tickets sont faits. Reste le ticket « Durcir l'espace privé après la revue de
-  sécurité » (`1219520417161822`, groupe E), puis les essais sur le téléphone et une vraie génération avec le nouveau
-  code.
+  revus et fusionnés, puis E (durcissement de l'espace privé) : les 15 tickets sont faits. Restent les essais sur le
+  téléphone et une vraie génération avec le nouveau code. L'espace privé ne s'ouvre plus que par l'adresse HTTPS
+  (`tailscale serve`) ou sur le Mac.
 - **À vérifier par le porteur**, sur le téléphone par l'application installée (testé seulement dans Chrome sur le Mac,
   en vue de téléphone) :
   - télécharger, partager et copier une image, dont une image incognito (adresse `blob:`) ;
@@ -42,6 +42,9 @@ Mis à jour le 14/10/2026.
     qu'à la fin ;
   - le faux moteur du banc n'a pas été essayé sous Windows (lanceur `sd-cli.cmd`) ;
   - la galerie trie par `st_mtime` en secondes entières : les images d'un même lot peuvent ressortir dans le désordre ;
+  - la file affiche « Génération privée » à tout appareil connecté (`queue_entry` publie `kind: "private"`), ce qui
+    révèle l'espace comme le faisait la notification ; le résultat d'une génération incognito reste servi en `http://`
+    sur le Wi-Fi (trouvés par le groupe E, décision du porteur attendue) ;
   - `do_POST` lit `Content-Length` sans plafond (une campagne de 10 photos en data URL pèse lourd) ;
   - `push_subscriptions()` écrit `tools/push_subscriptions.json` en place, de façon non atomique ; les messages 500
     des routes de prompts citent le texte de l'exception (chemin local possible, visible des seuls appareils admis) ;
@@ -62,6 +65,14 @@ Mis à jour le 14/10/2026.
 
 ## Journal
 
+### 2026-10-15
+
+- Groupe E fait dans une session à part (worktree) et fusionné (`e30c75b` à `8178d8d`) : notification neutre pour le
+  privé, « Sortir » vide l'écran, suppression de l'espace sans code seulement depuis le Mac, espace privé seulement en
+  HTTPS ou sur le Mac (`_secure` : adresse source locale et nom d'hôte local ou HTTPS de `tailscale serve`, jamais les
+  en-têtes de relais), nouvelle paire de clés et rechiffrement au changement de code par `private/.rekey/` et bascule
+  atomique de `space.json` (pannes simulées à 7 étapes sans perte). Revue de groupe : 9 constats, 7 corrigés ; revue
+  de sécurité : aucune faille. 129 tests au vert après fusion, service relancé (nom HTTPS repéré au démarrage).
 ### 2026-10-14
 
 - Porteur, sur les notes de la revue de sécurité du groupe D : notification neutre pour le privé, onglets privés
