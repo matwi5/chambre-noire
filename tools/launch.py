@@ -13,7 +13,9 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   (références, aperçus, PNG final) vivent dans jobs/incognito_<id>/, supprimé dès la fin du job ; l'image reste en
   mémoire jusqu'à ce que l'interface la récupère (GET /api/job/<id>/result), puis l'interface fait oublier le job
   (POST /api/job/<id>/forget). Ni journal, ni galerie, ni calibration, ni ligne dans logs/.
-- API : POST /api/generate, GET /api/job/<id>, GET /api/job/<id>/preview, POST /api/job/<id>/cancel,
+- Lots : {"count": 2 à 4} dans /api/generate (mode Créer) lance autant de générations du même prompt, à la suite dans
+  la file, chacune avec sa graine ; elles sont suivies, annulées (POST /api/lot/<id>/cancel) et notifiées ensemble.
+- API : POST /api/generate, GET /api/job/<id>, GET /api/job/<id>/preview, POST /api/job/<id>/cancel, POST /api/lot/<id>/cancel,
         GET /api/job/<id>/result et POST /api/job/<id>/forget (incognito),
         GET /api/result?name=<png>[&download=1], GET /api/status,
         historique : GET /api/history, GET /api/thumb?name=<png>, POST /api/delete {"name": <png>},
@@ -55,6 +57,7 @@ PLATFORM_BACKENDS = ["metal"] if sys.platform == "darwin" else ["vulkan", "cuda"
 PROGRESS_RE = re.compile(r"(\d+)/(\d+)\s*-\s*([\d.]+)(s/it|it/s)")
 TAKING_RE = re.compile(r"taking ([\d.]+)\s*s")
 CALIB = P("tools", "calibration.json")
+MAX_VARIANTS = 4                          # images d'un lot de variantes (mode Créer)
 # Répartition par backend. CUDA : tout sur la carte (l'encodeur int8 convrot a un chemin CUDA natif, RTX 20xx+) ;
 # --offload-to-cpu garde les poids en RAM et les copie à la demande, ce qui s'adapte à toute taille de VRAM.
 # --mmap : rechargement quasi instantané du modèle d'une génération à l'autre grâce au cache disque.
@@ -214,20 +217,44 @@ def push_subscriptions(update=None):
         return subs
 
 
+def duration_text(secs):
+    return f"{int(secs // 60)} min {int(secs % 60):02d} s" if secs >= 60 else f"{int(secs)} s"
+
+
 def notify_job(job):
-    """Notification de fin de génération à tous les appareils abonnés, dans un thread pour ne pas retarder la file.
-    Ni prompt ni nom de fichier : le message transite (chiffré) par le service de notification du navigateur."""
-    subs = push_subscriptions()
-    if not subs or job.get("calibration"):
+    """Notification de fin d'une génération seule (celles d'un lot : notify_lot)."""
+    if job.get("calibration"):
         return
-    secs = job.get("seconds") or 0
-    duree = f"{int(secs // 60)} min {int(secs % 60):02d} s" if secs >= 60 else f"{int(secs)} s"
     if job.get("status") == "done":
         dims = "×".join(str(d) for d in job.get("dims") or [])
-        payload = {"title": "Image incognito prête" if job.get("incognito") else "Image prête",
-                   "body": f"Générée en {duree}" + (f" · {dims}" if dims else "")}
+        push_notify({"title": "Image incognito prête" if job.get("incognito") else "Image prête",
+                     "body": f"Générée en {duration_text(job.get('seconds') or 0)}" + (f" · {dims}" if dims else "")})
     else:
-        payload = {"title": "Échec de la génération", "body": "Ouvrez l'application pour voir le détail."}
+        push_notify({"title": "Échec de la génération", "body": "Ouvrez l'application pour voir le détail."})
+
+
+def notify_lot(lot):
+    """Une seule notification pour tout un lot, quand sa dernière génération se termine : images prêtes et en échec ;
+    rien si tout le lot a été annulé. Compte d'après les statuts seuls (une génération incognito a déjà oublié sa demande)."""
+    jobs = lot["jobs"]
+    done, failed = (sum(j.get("status") == s for j in jobs) for s in ("done", "failed"))
+    if not done and not failed:
+        return
+    if done:
+        s = "s" if done > 1 else ""
+        title = f"{done} image{s}{' incognito' if lot['incognito'] else ''} prête{s}" + (f", {failed} en échec" if failed else "")
+        span = max(j.get("finished") or 0 for j in jobs) - min(j["started"] for j in jobs if j.get("started"))
+        push_notify({"title": title, "body": f"Lot de {len(jobs)} images terminé en {duration_text(span)}"})
+    else:
+        push_notify({"title": "Échec du lot", "body": "Ouvrez l'application pour voir le détail."})
+
+
+def push_notify(payload):
+    """Envoie une notification à tous les appareils abonnés, dans un thread pour ne pas retarder la file.
+    Ni prompt ni nom de fichier : le message transite (chiffré) par le service de notification du navigateur."""
+    subs = push_subscriptions()
+    if not subs:
+        return
     payload.update(tag="qwen-image-job", url="/")
 
     def send():
@@ -300,7 +327,7 @@ def history():
         m = meta.get(name, {})
         items.append({"name": name, "time": int(st.st_mtime), "size": st.st_size, "mode": m.get("mode"),
                       "prompt": m.get("prompt"), "width": m.get("width"), "height": m.get("height"),
-                      "steps": m.get("steps"), "seconds": m.get("seconds"), "model": m.get("model"),
+                      "steps": m.get("steps"), "seconds": m.get("seconds"), "model": m.get("model"), "seed": m.get("seed"),
                       "inputs": input_files(os.path.join(INPUTS, name[:-4]))})
     return sorted(items, key=lambda x: x["time"], reverse=True)
 
@@ -407,7 +434,10 @@ class State:
     cfg = {}
     ui_port = 7860
     jobs = {}
+    lots = {}                # lots en cours par identifiant : {"jobs": [...], "incognito"} ; garde les générations d'un
+                             # lot même quand une génération incognito a quitté S.jobs, jusqu'à la fin du lot
     q = queue.Queue()
+    enqueue = threading.Lock()   # les générations d'un lot entrent dans la file à la suite, sans autre demande entre elles
     current = None
 
 
@@ -584,6 +614,8 @@ def run_job(job):
             meta = {"mode": job["req"].get("mode"), "prompt": job["req"]["prompt"], "width": job["req"]["width"], "height": job["req"]["height"],
                     "steps": job["req"]["steps"], "seed": job["req"].get("seed"), "seconds": job["seconds"], "encode_seconds": job.get("encode_seconds"),
                     "sec_per_it": job.get("sec_per_it"), "file": job["out"], "size": job["size"], "backend": S.backend, "model": S.model}
+            if job.get("lot"):
+                meta["lot"] = job["lot"]
             with open(P("outputs", "journal.jsonl"), "a", encoding="utf-8") as f:
                 f.write(json.dumps(meta, ensure_ascii=False) + "\n")
             try:
@@ -676,7 +708,7 @@ def worker():
                 run_job(job)
             except Exception as e:
                 fail_job(job, e)
-            if job.get("status") in ("done", "failed"):
+            if job.get("status") in ("done", "failed") and not job.get("lot"):
                 notify_job(job)
         except Exception as e:
             print("[job] erreur du thread de calcul" + ("" if job.get("incognito") else f" : {e}"), flush=True)
@@ -685,6 +717,22 @@ def worker():
             job.pop("proc", None)
             if job.get("incognito"):
                 forget_files(job)
+            if job.get("lot"):
+                end_of_lot(job)
+
+
+def end_of_lot(job):
+    """Après chaque génération d'un lot, terminée ou annulée en file : le lot est fini quand aucune de ses générations
+    n'attend ni ne tourne. Il quitte alors S.lots (rien n'en reste en mémoire pour un lot incognito oublié par sa page)
+    et sa notification part, une seule fois : une génération annulée en file passe encore par worker() après la fin
+    du lot, mais ne le trouve plus."""
+    lot = S.lots.get(job["lot"]["id"])
+    if lot and not any(j.get("status") in ACTIVE for j in lot["jobs"]):
+        S.lots.pop(job["lot"]["id"], None)
+        try:
+            notify_lot(lot)
+        except Exception as e:
+            print("[push] notification du lot impossible" + ("" if lot["incognito"] else f" : {e}"), flush=True)
 
 
 def request_error(req):
@@ -715,7 +763,26 @@ def request_error(req):
         return "ref_images : liste d'images (data URL) attendue"
     if not isinstance(req.get("mode", "img"), str):
         return "mode : texte attendu"
+    count = req.get("count")
+    if count is not None:
+        if not is_int(count) or not 1 <= count <= MAX_VARIANTS:
+            return f"count : nombre entier de 1 à {MAX_VARIANTS} attendu"
+        if req.get("mode") != "t2i":
+            return "count : variantes en mode Créer (t2i) seulement"
     return None
+
+
+def draw_seeds(seed, n):
+    """Graines des n générations d'une demande. Graine au hasard (-1) : tirées par le serveur, distinctes, pour qu'elles
+    soient connues et écrites au journal ; graine choisie : seed, seed+1… (variantes reproductibles)."""
+    if seed != -1:
+        return [(seed + k) % 2 ** 63 for k in range(n)]
+    seeds = []
+    while len(seeds) < n:
+        s = secrets.randbelow(2 ** 31)       # reste exact en JavaScript et dans le JSON
+        if s not in seeds:
+            seeds.append(s)
+    return seeds
 
 
 def active_jobs():
@@ -754,7 +821,10 @@ def queue_entry(job, position, coefs):
         return None
     refs, init = job["inputs"]
     previews = r["steps"] // (r.get("preview_interval") or 5) if r.get("preview") else 0
-    e = {"status": job["status"], "position": position, "lot": None,
+    lot = job.get("lot")
+    e = {"status": job["status"], "position": position,
+         # identifiant d'un lot incognito : connu de sa seule page, comme celui de ses générations
+         "lot": lot and ({"rank": lot["rank"], "size": lot["size"]} if job.get("incognito") else dict(lot)),
          "estimate": round(estimate.predict(coefs, r["width"], r["height"], r["steps"], refs, init, previews), 1),
          "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None}
     if job.get("incognito"):
@@ -765,6 +835,19 @@ def queue_entry(job, position, coefs):
     return e
 
 
+def new_job(req, inputs, lot=None):
+    """Génération en attente pour une demande validée (sa graine déjà fixée), avec son dossier de travail."""
+    jid = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+    mode = re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
+    incognito = req.get("incognito") is True
+    d = P("jobs", ("incognito_" if incognito else "") + jid)
+    os.makedirs(d, exist_ok=True)
+    # en incognito, le PNG reste dans le dossier de travail (supprimé en fin de job) ; son nom sert au téléchargement
+    out = os.path.join(d, f"{jid}_{mode}.png") if incognito else P("outputs", f"{jid}_{mode}.png")
+    return {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
+            "incognito": incognito, "inputs": inputs, "seed": req["seed"], "lot": lot}
+
+
 def public(job):
     keys = ("id", "status", "phase", "step", "total", "sec_per_it", "sec_per_it_recent", "started", "finished", "seconds", "encode_seconds",
             "preview_version", "preview_interval", "size", "dims", "error")
@@ -772,6 +855,7 @@ def public(job):
     d["queue_position"] = queue_position(job)
     d["elapsed"] = round(time.time() - job["started"], 1) if job.get("started") and not job.get("finished") else job.get("seconds")
     d["incognito"] = bool(job.get("incognito"))
+    d["lot"], d["seed"] = job.get("lot"), job.get("seed")
     d["path"] = job["out"] if job.get("status") == "done" and not job.get("incognito") else None
     d["name"] = os.path.basename(job["out"])
     return d
@@ -1002,18 +1086,18 @@ class H(BaseHTTPRequestHandler):
             error = request_error(req)
             if error:
                 return self._send(400, {"error": error})
-            jid = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
-            mode = re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
-            incognito = req.get("incognito") is True
-            d = P("jobs", ("incognito_" if incognito else "") + jid)
-            os.makedirs(d, exist_ok=True)
-            # en incognito, le PNG reste dans le dossier de travail (supprimé en fin de job) ; son nom sert au téléchargement
-            out = os.path.join(d, f"{jid}_{mode}.png") if incognito else P("outputs", f"{jid}_{mode}.png")
-            job = {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
-                   "incognito": incognito, "inputs": request_inputs(req)}
-            S.jobs[jid] = job
-            S.q.put(job)
-            return self._send(202, public(job))
+            n = req.pop("count", None) or 1
+            inputs = request_inputs(req)
+            lot = {"id": uuid.uuid4().hex[:12], "size": n} if n > 1 else None
+            jobs = [new_job({**req, "seed": seed}, inputs, lot and {"id": lot["id"], "rank": k + 1, "size": n})
+                    for k, seed in enumerate(draw_seeds(req.get("seed", -1), n))]
+            if lot:
+                S.lots[lot["id"]] = {"jobs": jobs, "incognito": jobs[0]["incognito"]}
+            with S.enqueue:                      # générations d'un lot : à la suite dans la file, dans l'ordre
+                for job in jobs:
+                    S.jobs[job["id"]] = job
+                    S.q.put(job)
+            return self._send(202, {"lot": lot, "jobs": [public(j) for j in jobs]} if lot else public(jobs[0]))
         if path == "/api/forget":                # page fermée ou rechargée : ses générations incognito, en un seul envoi
             try:
                 ids = json.loads(raw).get("ids")
@@ -1025,6 +1109,15 @@ class H(BaseHTTPRequestHandler):
             for job in jobs:
                 forget_job(job)
             return self._send(200, {"forgotten": len(jobs)})
+        m = re.match(r"^/api/lot/([\w-]+)/cancel$", path)
+        if m:                                    # toutes les générations non terminées du lot
+            lot = S.lots.get(m.group(1))
+            if not lot:
+                return self._send(404, {"error": "lot inconnu"})
+            active = [j for j in lot["jobs"] if j.get("status") in ACTIVE]
+            for job in active:
+                cancel_job(job)
+            return self._send(200, {"cancelled": len(active)})
         m = re.match(r"^/api/job/([\w-]+)/(cancel|forget)$", path)
         if m:
             job = S.jobs.get(m.group(1))

@@ -219,6 +219,7 @@ class BenchCase(unittest.TestCase):
                 call("POST", f"/api/job/{j['id']}/cancel")
         wait_idle()
         S.jobs.clear()
+        S.lots.clear()
         for d in ("outputs", "jobs"):
             shutil.rmtree(launch.P(d))
             os.makedirs(launch.P(d))

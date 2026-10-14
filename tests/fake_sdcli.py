@@ -6,6 +6,7 @@ lignes « … completed, taking x.xxs »), écrit les aperçus et l'image finale
 
 Commandes glissées dans le prompt, pour un test :
 - FAIL (mot entier) : échoue après la première étape (ligne [ERROR], code de sortie 1, aucune image) ;
+- FAILSEED=<n> : échoue de même si la graine (-s) vaut n, pour faire échouer une seule image d'un lot ;
 - SLOW ou SLOW=<s> (mot entier) : chaque étape dure <s> secondes (0,3 s pour SLOW seul ; 0,01 s sans commande).
 """
 import os, re, struct, sys, time, zlib
@@ -30,6 +31,8 @@ def main(argv):
     prompt = arg(argv, "-p", "")
     w, h, steps = int(arg(argv, "-W", 512)), int(arg(argv, "-H", 512)), int(arg(argv, "--steps", 8))
     out, preview, every = arg(argv, "-o"), arg(argv, "--preview-path"), int(arg(argv, "--preview-interval", 0) or 0)
+    fail_seed = re.search(r"\bFAILSEED=(-?\d+)\b", prompt)
+    fail = re.search(r"\bFAIL\b", prompt) or (fail_seed and fail_seed.group(1) == arg(argv, "-s"))
     slow = re.search(r"\bSLOW(?:=(\d+(?:\.\d+)?))?\b", prompt)
     delay = float(slow.group(1) or 0.3) if slow else 0.01
     print("Version: faux sd-cli du banc de test", flush=True)
@@ -38,7 +41,7 @@ def main(argv):
     for k in range(1, steps + 1):
         time.sleep(delay)
         print(f"  |{'=' * k}| {k}/{steps} - {max(delay, 0.01):.2f}s/it", flush=True)
-        if re.search(r"\bFAIL\b", prompt):
+        if fail:
             print("[ERROR] panne simulée par le banc de test", flush=True)
             return 1
         if preview and every and k % every == 0:

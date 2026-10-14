@@ -185,6 +185,8 @@
   /* ------------------------------------------------------------ panneau Réglages */
   .ratios { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
   .chips5 { display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; }
+  .chips4 { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
+  body:not(.m-t2i) #countRow { display:none; }
   .opt { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; min-width:0; padding:10px 2px 9px;
     border-radius:16px; border:1px solid var(--rim); background:var(--field); color:var(--ink2); cursor:pointer; transition:background .2s, color .2s, border-color .2s; }
   .opt b { font-size:14px; color:var(--ink); font-weight:650; }
@@ -324,6 +326,8 @@
   .viewer.immersive .v-top, .viewer.immersive .v-panel { opacity:0; pointer-events:none; }
   .viewer.immersive .v-panel { transform:translateY(24px); }
   .acts.v-acts { grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:16px; }
+  .v-panel .keep { width:100%; margin-top:14px; }
+  .keep[hidden] { display:none; }
   .v-acts .act { background:var(--field); font-size:12.5px; padding:13px 4px 11px; border-radius:20px; gap:7px; }
   .v-panel .m-chips { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; margin:0; padding:0 18px 0 2px;
     -webkit-mask:linear-gradient(90deg, #000 85%, transparent); mask:linear-gradient(90deg, #000 85%, transparent); }
@@ -346,7 +350,7 @@
   /* ------------------------------------------------------------ résultat : l'image est posée telle quelle, jamais sous du verre */
   .result { display:flex; flex-direction:column; gap:12px; min-width:0; }
   @media (min-width: 981px) { .result { position:sticky; top:72px; } }
-  @media (max-width: 980px) { #result:not(:has(#stage[style*="block"])) { display:none; } }
+  @media (max-width: 980px) { #result:not(:has(#stage[style*="block"], #lotGrid:not([hidden]))) { display:none; } }
   .empty { display:grid; place-items:center; align-content:center; gap:12px; aspect-ratio:1; border-radius:var(--r-xl); color:var(--ink2); text-align:center; padding:24px; }
   .empty svg { width:44px; height:44px; color:var(--ink3); }
   .empty p { margin:0; max-width:24ch; }
@@ -376,6 +380,21 @@
   .hud-x svg { width:18px; height:18px; }
   .bar { position:absolute; left:0; right:0; bottom:0; height:3px; display:none; }
   .bar i { display:block; height:100%; transform:scaleX(0); transform-origin:left; background:linear-gradient(90deg, var(--iris), var(--iris2)); box-shadow:0 0 12px var(--iris2); transition:transform .9s linear; }
+  /* grille d'un lot terminé : ses images côte à côte, un appui ouvre la visionneuse */
+  .lotgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:min(100%, 640px); margin-inline:auto; }
+  .lotgrid[hidden] { display:none; }
+  .cell { position:relative; border-radius:20px; overflow:hidden; aspect-ratio:var(--ar, 1); background:var(--field);
+    box-shadow:0 18px 40px -24px rgba(0,0,0,.85), 0 0 0 1px rgba(255,255,255,.08); }
+  .cell > button { display:block; width:100%; height:100%; padding:0; border:0; background:none; cursor:pointer; }
+  .cell img { width:100%; height:100%; object-fit:cover; display:block; }
+  .cell > span { position:absolute; left:8px; top:8px; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:700; color:#fff;
+    background:rgba(10,8,22,.62); pointer-events:none; font-variant-numeric:tabular-nums; }
+  .cell > a { position:absolute; right:8px; bottom:8px; width:40px; height:40px; border-radius:50%; display:grid; place-items:center; color:#fff;
+    background:rgba(10,8,22,.62); }
+  .cell > a svg { width:20px; height:20px; }
+  .lotbadge { position:absolute; z-index:2; left:12px; top:12px; padding:5px 11px; border-radius:999px; font-size:13px; font-weight:700; color:#fff;
+    background:rgba(10,8,22,.55); font-variant-numeric:tabular-nums; pointer-events:none; }
+  .lotbadge[hidden] { display:none; }
   .meta:empty { display:none; }
   .m-prompt { margin:0 6px; font-size:15px; line-height:1.45; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .m-chips { display:flex; flex-wrap:wrap; gap:6px; margin:8px 4px 0; }
@@ -422,6 +441,7 @@
   .qx { flex:none; width:36px; height:36px; border-radius:50%; border:0; display:grid; place-items:center; cursor:pointer; color:var(--ink); background:var(--glass-hi); }
   .qx svg { width:16px; height:16px; }
   .qx:disabled { opacity:.4; }
+  .qlot { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 4px -2px; font-size:13px; font-weight:650; color:var(--ink2); }
 
   /* ------------------------------------------------------------ messages et confirmations */
   .toast { position:fixed; z-index:60; left:50%; top:calc(62px + env(safe-area-inset-top)); transform:translate(-50%, -16px) scale(.96); opacity:0; pointer-events:none;
@@ -519,6 +539,7 @@
   <div class="stage" id="stage">
     <div class="shimmer" id="shimmer"><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div></div>
     <img id="stageImg" alt="Image générée">
+    <span class="lotbadge" id="lotBadge" hidden></span>
     <div class="loader" id="loader">
       <div class="hud glass">
         <svg class="pring" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16" pathLength="100"/><circle id="ringVal" cx="20" cy="20" r="16" pathLength="100"/></svg>
@@ -529,6 +550,7 @@
     </div>
     <div class="bar" id="bar"><i></i></div>
   </div>
+  <div class="lotgrid" id="lotGrid" hidden></div>
   <div class="strip" id="strip" hidden></div>
   <div id="resultMeta" class="meta"></div>
   <div class="acts" id="resultActions" style="display:none">
@@ -567,11 +589,12 @@
   <div class="v-panel glass">
     <div class="m-chips" id="vChips"></div>
     <button class="v-inputs" id="vInputs" onclick="openInputs(0)" hidden></button>
+    <button class="btn keep" id="vKeep" onclick="keepThis()" hidden>Garder celle-ci</button>
     <div class="acts v-acts">
       <button class="act" onclick="viewerAction('edit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/></svg><span>Éditer</span></button>
       <button class="act" onclick="viewerAction('mask')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg><span>Dessiner</span></button>
       <button class="act" onclick="viewerAction('prompt')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15M4.5 11.5h15M4.5 16.5h8"/><path d="m16 15.5 2.5 2.5 3-4"/></svg><span>Reprendre</span></button>
-      <button class="act danger" onclick="viewerAction('delete')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="m6.5 7 1 12.5h9l1-12.5"/></svg><span>Supprimer</span></button>
+      <button class="act danger" id="vDelete" onclick="viewerAction('delete')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="m6.5 7 1 12.5h9l1-12.5"/></svg><span>Supprimer</span></button>
     </div>
   </div>
 </div>
@@ -607,6 +630,7 @@
   <h3>Format</h3><div class="ratios" id="ratioOpts"></div>
   <h3>Résolution</h3><div class="chips5" id="resOpts"></div>
   <h3>Étapes</h3><div class="chips5" id="stepOpts"></div>
+  <div id="countRow"><h3>Images</h3><div class="chips4" id="countOpts"></div></div>
   <label class="switch"><input type="checkbox" id="previewChk"><span class="track"></span><span>Aperçu toutes les 5 étapes <small id="previewCost"></small></span></label>
   <label class="switch" id="notifRow" hidden><input type="checkbox" id="notifChk"><span class="track"></span><span>Notification en fin de génération <small id="notifNote"></small></span></label>
   <div class="estimate" id="estimate"><span id="estText"></span><b id="estTime"></b></div>
@@ -637,7 +661,7 @@ const RATIO_LABELS = { '1:1':'Carré 1:1', '4:3':'Paysage 4:3', '3:4':'Portrait 
 // libellés : format vidéo au nombre de pixels le plus proche (640×360, 960×540, 1280×720, 1920×1080, 2560×1440)
 const RES   = [ {k:'low',label:'360p',scale:0.25}, {k:'medium',label:'540p',scale:0.375}, {k:'high',label:'720p',scale:0.5}, {k:'xhigh',label:'1080p',scale:0.75}, {k:'max',label:'1440p',scale:1.0} ];
 const STEPS = [ {k:'low',label:'Low',steps:8}, {k:'medium',label:'Medium',steps:12}, {k:'high',label:'High',steps:20}, {k:'xhigh',label:'XHigh',steps:30}, {k:'max',label:'Max',steps:40} ];
-const CFG = 1, MAX_PIXELS = 2048*2048, MAX_INPUT_SIDE = 2048, PREVIEW_EVERY = 5;
+const CFG = 1, MAX_PIXELS = 2048*2048, MAX_INPUT_SIDE = 2048, PREVIEW_EVERY = 5, MAX_VARIANTS = 4;
 // coefficients d'estimation envoyés par /api/status (tools/estimate.py) : valeurs de départ du moteur, puis ajustées
 // sur les générations mesurées de la machine. Même formule que estimate.predict() côté serveur.
 let E = null, calibrated = false, lastE = '';
@@ -647,7 +671,7 @@ function applyEstimates(est){
 }
 
 const $ = id => document.getElementById(id);
-let mode='t2i', editImages=[], maskImage=null, paintMode='paint', lastResult=null, estSeconds=0, stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
+let mode='t2i', editImages=[], maskImage=null, paintMode='paint', lastResult=null, estSeconds=0, estOne=0, stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
 
 function log(m){ const l=$('log'); l.textContent += new Date().toLocaleTimeString()+'  '+m+'\n'; l.scrollTop=l.scrollHeight; }
 const round32 = v => Math.max(256, Math.round(v/32)*32);
@@ -659,16 +683,18 @@ function dimsExact(iw, ih, scale){ const px=MAX_PIXELS*scale*scale, r=iw/ih, h0=
   return [best.w, best.h]; }
 function dimsFor(key, scale){ const im=singleImage(); if(key==='image' && im) return dimsExact(im.w, im.h, scale); const [w,h]=RATIOS[key in RATIOS ? key : '1:1']; return [round32(w*scale), round32(h*scale)]; }
 // réglages choisis, retenus par ce navigateur d'une visite à l'autre
-const opt = { ratio:'1:1', res:'high', steps:'max' };
+const opt = { ratio:'1:1', res:'high', steps:'max', count:1 };   // count : images d'un lot de variantes (mode Créer)
 const savedOpt = (()=>{ try{ const o=JSON.parse(localStorage.getItem('qwen-opt')||'{}');
   if(o.v!==2){ delete o.res; delete o.steps; delete o.preview; }   // retenus avant les défauts High, 40 étapes et aperçus : remis une fois à ces défauts
   return o; }catch(e){ return {}; } })();
 ['ratio','res','steps'].forEach(k=>{ if(savedOpt[k]) opt[k]=savedOpt[k]; });
+if(Number.isInteger(savedOpt.count) && savedOpt.count>=1 && savedOpt.count<=MAX_VARIANTS) opt.count=savedOpt.count;
 let incogOn = !!savedOpt.incognito, notifyOn = savedOpt.notify!==false;
 function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt, v:2, preview:$('previewChk').checked, incognito:incogOn, notify:notifyOn})); }catch(e){} }
 const resSel = () => RES.find(p=>p.k===opt.res) || RES[1];
 const stepsSel = () => STEPS.find(p=>p.k===opt.steps) || STEPS[1];
 function currentDims(){ return dimsFor(opt.ratio, resSel().scale); }
+const variants = () => mode==='t2i' ? opt.count : 1;   // images de la prochaine demande
 // pixels d'une référence telle que sd.cpp la donne au modèle : ramenée à la surface de la sortie, côtés multiples de 32
 function refPx(rw, rh, w, h){ const vw=Math.sqrt(w*h*rw/rh), vh=vw*rh/rw, snap=x=>Math.max(32, Math.floor(x/32+0.5)*32); return snap(vw)*snap(vh); }
 // références et image de départ envoyées au moteur pour le mode courant (voir buildBody)
@@ -695,19 +721,22 @@ function refreshChoices(){
   const ratioDims = r => r==='image' ? [im.w, im.h] : RATIOS[r];
   $('ratioOpts').innerHTML = (im ? ['image'] : []).concat(Object.keys(RATIOS)).map(r=>{ const [rw,rh]=ratioDims(r), on=r===opt.ratio;
     return `<button class="opt ratio${on?' on':''}${r===near?' near':''}" data-k="${r}" aria-pressed="${on}"${r===near?' title="Proche des proportions de l\'image"':''}>${shape(rw,rh,26)}<b>${r==='image'?'Image':r}</b></button>`; }).join('');
-  const steps=stepsSel().steps; const [w,h]=currentDims(); const inp=inputsFor(w, h);
+  const steps=stepsSel().steps; const [w,h]=currentDims(); const inp=inputsFor(w, h); const n=variants();
   $('resOpts').innerHTML = RES.map(p=>{ const on=p.k===opt.res;
     return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}"><b>${p.label}</b></button>`; }).join('');
   const approx = s => E ? '≈ '+fmt(s) : '…';     // avant le premier /api/status, pas de coefficients
   $('stepOpts').innerHTML = STEPS.map(p=>{ const on=p.k===opt.steps;
-    return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}" title="${p.label}"><b>${p.steps}</b><small>${approx(E && parts(w,h,p.steps,inp,pv).total)}</small></button>`; }).join('');
+    return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}" title="${p.label}"><b>${p.steps}</b><small>${approx(E && n*parts(w,h,p.steps,inp,pv).total)}</small></button>`; }).join('');
+  $('countOpts').innerHTML = Array.from({length:MAX_VARIANTS}, (_, i)=>i+1).map(k=>{ const on=k===opt.count;
+    return `<button class="opt${on?' on':''}" data-k="${k}" aria-pressed="${on}"><b>${k}</b></button>`; }).join('');
   const [rw,rh] = ratioDims(opt.ratio);
   $('pills').innerHTML = `<button class="pill" data-open>${shape(rw,rh,16)}${opt.ratio==='image'?'Image':opt.ratio}</button>`
     + `<button class="pill" data-open title="${w}×${h}">${resSel().label}</button><button class="pill" data-open>${steps} étapes</button>`
-    + (pv ? `<button class="pill" data-open>Aperçus</button>` : '');
-  $('estText').textContent=`${w}×${h} · ${steps} étapes${nrefs>1?' · '+nrefs+' références':''}`;
-  if(!E){ estSeconds=0; $('previewCost').textContent=''; $('estTime').textContent=$('goEta').textContent='…'; return; }
-  const pr=parts(w,h,steps,inp,pv); estSeconds=pr.total; stepSeconds=pr.step; vaeSeconds=pr.vae;
+    + (n>1 ? `<button class="pill" data-open>${n} images</button>` : '') + (pv ? `<button class="pill" data-open>Aperçus</button>` : '');
+  $('estText').textContent=`${w}×${h} · ${steps} étapes${nrefs>1?' · '+nrefs+' références':''}${n>1?' · '+n+' images':''}`;
+  if(!E){ estSeconds=estOne=0; $('previewCost').textContent=''; $('estTime').textContent=$('goEta').textContent='…'; return; }
+  // estimation d'une image (suivi de chaque génération) et de toute la demande (bouton, confirmation au-delà d'une heure)
+  const pr=parts(w,h,steps,inp,pv); estOne=pr.total; estSeconds=n*pr.total; stepSeconds=pr.step; vaeSeconds=pr.vae;
   $('previewCost').textContent = `(+ ${fmt(parts(w,h,steps,inp,true).previews*pr.vae)})`;
   $('estTime').textContent=$('goEta').textContent='≈ '+fmt(estSeconds);
   $('estimate').classList.toggle('warn', estSeconds>3600); $('goEta').classList.toggle('warn', estSeconds>3600);
@@ -717,6 +746,7 @@ function refreshChoices(){
   $('incog').onclick=()=>{ setIncog(!incogOn); saveOpt(); };   // libre à tout moment : chaque génération garde le mode de son lancement
   [['ratioOpts','ratio'],['resOpts','res'],['stepOpts','steps']].forEach(([id,key])=>$(id).addEventListener('click', e=>{
     const b=e.target.closest('[data-k]'); if(!b) return; opt[key]=b.dataset.k; saveOpt(); refreshChoices(); }));
+  $('countOpts').addEventListener('click', e=>{ const b=e.target.closest('[data-k]'); if(!b) return; opt.count=+b.dataset.k; saveOpt(); refreshChoices(); });
   $('pills').addEventListener('click', e=>{ if(e.target.closest('[data-open]')) openSheet('setSheet'); });
   ['previewChk','mask_mode'].forEach(id=>$(id).addEventListener('change', ()=>{ saveOpt(); refreshChoices(); })); refreshChoices();
   // brouillons des trois textes, retenus par ce navigateur, sauf en incognito (le brouillon modifié est alors effacé)
@@ -743,7 +773,7 @@ async function syncThemeColor(){
   const seq=++tintSeq, m=getComputedStyle(document.documentElement).getPropertyValue('--void').trim().match(/^#(..)(..)(..)$/);
   const voidRgb=m ? m.slice(1).map(h=>parseInt(h, 16)) : [11, 10, 22]; let c=voidRgb;
   if(!incogOn && ivIndex<0){
-    if(vIndex>=0){ const it=histItems[vIndex], t=it && await tintOf(thumbUrl(it));          // visionneuse : image floutée assombrie (.v-bg img)
+    if(vIndex>=0){ const it=vList[vIndex], t=it && await tintOf(thumbOf(it));          // visionneuse : image floutée assombrie (.v-bg img)
       c=t ? saturate(t, 1.6).map(v=>v*.5) : [5, 4, 12]; }
     else if(ambName){ const t=await tintOf('/api/thumb?name='+encodeURIComponent(ambName));   // page : dégradé de la barre du haut sur le fond
       if(t) c=mixRgb(voidRgb, mixRgb(voidRgb, saturate(t, 1.7), .7), document.documentElement.classList.contains('lite') ? .08 : .3); } }
@@ -865,7 +895,7 @@ function paintedReference(w,h,opaque){ const a=document.createElement('canvas');
 function buildRequest(){
   const [w,h]=currentDims(); const steps=stepsSel().steps;
   const body={ mode, prompt:'', width:w, height:h, steps, cfg:CFG, seed:-1, preview:$("previewChk").checked, preview_interval:PREVIEW_EVERY, ref_images:[], init_image:null, mask_image:null, strength:1.0, incognito:incogOn };
-  if(mode==='t2i'){ body.prompt=$('t2i_prompt').value.trim(); }
+  if(mode==='t2i'){ body.prompt=$('t2i_prompt').value.trim(); if(opt.count>1) body.count=opt.count; }   // variantes : un lot
   else if(mode==='edit'){ if(!editImages.length) throw new Error('Ajoutez au moins une image de référence.'); body.prompt=$('edit_prompt').value.trim(); body.ref_images=editImages.map(x=>x.dataUrl); }
   else { if(!maskImage) throw new Error('Chargez une image.'); if(!paintedPixels()) throw new Error('Peignez une zone.'); body.prompt=$('mask_prompt').value.trim();
     if(maskMode()==='annotation'){ body.mode='annot'; body.ref_images=[paintedReference(w,h,true)]; }
@@ -892,6 +922,11 @@ const pageJobs=[], MAX_PAGE_JOBS=12;
 let shown=null, polling=false;
 const isActive = p => ['queued','running'].includes(p.j.status);
 const oldestActive = () => pageJobs.find(isActive);
+// lot : générations de la page lancées d'une même demande (p.lot : id, rang, taille). Lot terminé avec au moins deux
+// images : la zone de résultat montre leur grille.
+const lotOf = p => p && p.lot ? pageJobs.filter(q=>q.lot && q.lot.id===p.lot.id) : [];
+const sameLot = (a, b) => !!(a && b && a.lot && b.lot && a.lot.id===b.lot.id);
+const gridOf = p => { const l=lotOf(p); return !l.some(isActive) && l.filter(q=>q.result).length>1 ? l.filter(q=>q.result) : null; };
 const ordinal = n => n===1 ? '1re' : n+'e';
 const tabOf = m => m==='edit' ? 'edit' : (m==='mask' || m==='annot') ? 'mask' : 't2i';
 function setStageRatio(w, h){ $('stage').style.aspectRatio=w+'/'+h; $('stage').style.setProperty('--ar', w/h); }
@@ -927,13 +962,32 @@ function entryLeft(e){ const p=ownOf(e); if(p && p.j.status==='running') return 
   return e.status==='running' ? Math.max(0, e.estimate-(e.elapsed||0)-(Date.now()-queueAt)/1000) : e.estimate; }
 function waitBefore(n){ return queueState.filter(e=>e.position<n).reduce((t, e)=>t+entryLeft(e), 0); }
 function show(p, reveal){                          // met une génération de la page dans la zone de résultat (ou rien)
-  shown=p||null; renderStrip(); syncButtons();
+  shown=p||null; renderStrip(); syncButtons(); $('lotGrid').hidden=true;
   if(!p){ lastResult=null; return hideResult(); }
+  const grid=gridOf(p); if(grid) return showGrid(grid);
+  $('lotBadge').hidden=!p.lot; if(p.lot) $('lotBadge').textContent=`Image ${p.lot.rank} sur ${p.lot.size}`;
   if(p.result){ const r=p.result; showResult(r.name, ...(r.dims||[]), reveal, r.blob ? r : null); setMeta(p.prompt, r.chips, r.file); return markSeen(); }
   lastResult=null; if(p.w && p.h) setStageRatio(p.w, p.h);
   showLoader(true); $('resultActions').style.display='none'; setMeta('', [], '');
   const img=$('stageImg'); img.className=''; img.src=''; img.style.display='none'; $('stage').classList.remove('has-preview'); p.pv=0;
   renderProgress(); }
+function showGrid(items){                          // lot terminé : ses images en grille ; un appui ouvre la visionneuse
+  const first=items[0], [w,h]=first.result.dims||[1,1], incog=first.incognito, g=$('lotGrid');
+  lastResult=null; $('stageImg').src=''; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultEmpty').style.display='none';
+  g.style.setProperty('--ar', w/h); g.hidden=false;
+  g.innerHTML=items.map((q, i)=>`<div class="cell"><button data-k="${i}" aria-label="Ouvrir l'image ${q.lot.rank}"><img src="${q.result.blob ? q.result.url : '/api/thumb?name='+encodeURIComponent(q.result.name)}" alt=""></button><span>${q.lot.rank}</span>`
+    + (incog ? `<a href="${q.result.url}" download="${esc(q.result.name)}" aria-label="Télécharger l'image ${q.lot.rank}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg></a>` : '') + '</div>').join('');
+  const secs=items.reduce((t, q)=>t+(q.j.seconds||0), 0), size=first.lot.size;
+  setMeta(first.prompt, [items.length+(items.length<size ? ' sur '+size : '')+' images', fmt(secs), first.result.dims ? first.result.dims.join('×') : '', (first.j.total||'?')+' étapes'],
+    incog ? 'Incognito · non enregistrées : téléchargez celles à garder' : 'Touchez une image pour la voir en grand et garder la meilleure');
+  if(!incog) setAmbient(first.result.name);
+  markSeen(); }
+$('lotGrid').addEventListener('click', e=>{ const b=e.target.closest('button[data-k]'); if(!b || !shown) return;
+  const items=gridOf(shown); if(items) openViewer(+b.dataset.k, items.map(pageItem)); });
+// image de la page telle que la visionneuse l'attend (même forme qu'une entrée de /api/history ; url : image incognito)
+function pageItem(p){ const r=p.result;
+  return { name:r.name, time:Math.round(p.j.finished||Date.now()/1000), mode:'t2i', prompt:p.prompt, width:r.dims&&r.dims[0], height:r.dims&&r.dims[1],
+    steps:p.j.total, seconds:p.j.seconds, seed:p.j.seed, lot:p.lot, inputs:[], url:r.blob ? r.url : null, page:p }; }
 function renderProgress(){                         // image en cours dans la zone de résultat : étape, temps restant, aperçu
   const p=shown; if(!p || !isActive(p)) return;
   const j=p.j, pr=progress(p), pct=Math.max(pr.frac, 0.02)*100;
@@ -945,14 +999,18 @@ function syncButtons(){ $('cancel').disabled=!(shown && isActive(shown)); }
 // image incognito : gardée par la page jusqu'à ce qu'elle ait été vue (affichée, application visible, hors galerie) puis
 // quittée par l'utilisateur (autre vignette, autre génération de la file, galerie). Lancer une demande ou la fin d'une
 // autre génération ne la fait pas disparaître.
-function markSeen(){ if(shown && shown.incognito && shown.result && mode!=='hist' && document.visibilityState==='visible') shown.seen=true; }
-function leftBehind(p){ if(p.incognito && p.result && p.seen) drop(p); }
-function pick(p){ const prev=shown; if(!p || p===prev) return; show(p); if(prev) leftBehind(prev); }   // choix de l'utilisateur
+// Un lot incognito ne compte comme quitté que quand on passe à autre chose que ses propres images ; sa grille montre
+// toutes ses images à la fois.
+function markSeen(){ if(!shown || !shown.incognito || mode==='hist' || document.visibilityState!=='visible') return;
+  (gridOf(shown) || [shown]).forEach(q=>{ if(q.result) q.seen=true; }); }
+function leftBehind(p){ (p.lot ? lotOf(p) : [p]).forEach(q=>{ if(q.incognito && q.result && q.seen) drop(q); }); }
+function pick(p){ const prev=shown; if(!p || p===prev) return; show(p); if(prev && !sameLot(prev, p)) leftBehind(prev); }   // choix de l'utilisateur
 addEventListener('visibilitychange', markSeen);
 // pellicule : une vignette par génération de la page, quand il y en a plusieurs ; un appui l'affiche
 function renderStrip(){
   const s=$('strip'); s.hidden=pageJobs.length<2; if(s.hidden){ s.innerHTML=''; return; }
-  s.innerHTML=pageJobs.map((p, i)=>{ const cls=`tile${p===shown?' sel':''}`;
+  const grid=gridOf(shown);
+  s.innerHTML=pageJobs.map((p, i)=>{ const cls=`tile${p===shown || (grid && grid.includes(p)) ?' sel':''}`;
     if(p.result) return `<button class="${cls}" data-i="${i}" aria-label="Image ${i+1}"><img src="${p.result.blob ? p.result.url : '/api/thumb?name='+encodeURIComponent(p.result.name)}" alt=""></button>`;
     return `<button class="${cls}" data-i="${i}" aria-label="Génération ${i+1} en cours"><svg class="pring" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16" pathLength="100"/><circle cx="20" cy="20" r="16" pathLength="100"/></svg><span></span></button>`; }).join('');
   tickStrip(); }
@@ -984,16 +1042,21 @@ const QICON = {
   incognito:'<path d="M3 12h18"/><path d="M6 12l1.6-6.2a1.5 1.5 0 0 1 2-1l2.4 1 2.4-1a1.5 1.5 0 0 1 2 1L18 12"/><circle cx="7.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/>' };
 function renderQueue(){
   if(openedSheet!==$('queueSheet')) return;
-  const q=queueState; let wait=0;
+  const q=queueState, lots=new Set(); let wait=0;
   $('queueNote').textContent = q.length ? `${q.length} génération${q.length>1?'s':''}, une à la fois · file vide dans ≈ ${fmt(q.reduce((t, e)=>t+entryLeft(e), 0))}` : 'Rien en cours.';
   $('queueList').innerHTML=q.map(e=>{ const p=ownOf(e), incog=e.kind==='incognito'; wait+=entryLeft(e);
     const pic = p && p.thumb ? `<img src="${p.thumb}" alt="">`
       : `<span class="qicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${QICON[incog ? 'incognito' : tabOf(e.mode)]}</svg></span>`;
-    const sub=[e.status==='running' ? 'En cours' : ordinal(e.position)+' en attente', incog ? '' : MODE_LABELS[e.mode]||e.mode, 'prête dans ≈ '+fmt(wait), p ? 'cet appareil' : ''];
+    const sub=[e.status==='running' ? 'En cours' : ordinal(e.position)+' en attente', incog || e.lot ? '' : MODE_LABELS[e.mode]||e.mode, e.lot ? `image ${e.lot.rank}/${e.lot.size}` : '', 'prête dans ≈ '+fmt(wait), p ? 'cet appareil' : ''];
+    // lot : un en-tête avant sa première image de la file, avec l'annulation de tout le lot là où l'appareil y a droit
+    // (lot normal : partout ; lot incognito : sa page seulement, seule à connaître son identifiant)
+    const lot=e.lot && (e.lot.id || (p && p.lot && p.lot.id)), head=lot && !lots.has(lot) ? (lots.add(lot), `<div class="qlot"><span>Lot de ${e.lot.size} images</span><button class="btn secondary small" data-cancel-lot="${esc(lot)}">Annuler le lot</button></div>`) : '';
     // l'identifiant de la ligne est fixé à l'affichage : la file peut avancer avant l'appui
-    return `<div class="qrow${p?' own':''}" data-id="${esc(e.id || (p && p.id) || '')}">${pic}<div class="qtxt"><b>${esc(incog ? 'Génération incognito' : e.prompt)}</b><span>${sub.filter(Boolean).map(esc).join(' · ')}</span></div>`
+    return head + `<div class="qrow${p?' own':''}" data-id="${esc(e.id || (p && p.id) || '')}">${pic}<div class="qtxt"><b>${esc(incog ? 'Génération incognito' : e.prompt)}</b><span>${sub.filter(Boolean).map(esc).join(' · ')}</span></div>`
       + (e.id || p ? '<button class="qx" data-cancel aria-label="Annuler cette génération"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>' : '') + '</div>'; }).join(''); }
 $('queueList').addEventListener('click', async ev=>{
+  const lot=ev.target.closest('[data-cancel-lot]');
+  if(lot){ lot.disabled=true; log('annulation du lot demandée'); await postJson('/api/lot/'+lot.dataset.cancelLot+'/cancel', {}).catch(()=>{}); return refreshStatus(); }
   const row=ev.target.closest('.qrow'), id=row && row.dataset.id; if(!id) return;
   const p=pageJobs.find(q=>q.id===id), x=ev.target.closest('[data-cancel]');
   if(x){ x.disabled=true; log('annulation demandée');
@@ -1001,7 +1064,7 @@ $('queueList').addEventListener('click', async ev=>{
   if(p){ closeSheet(); if(mode==='hist') goTab(p.tab); pick(p); $('stage').scrollIntoView({behavior:'smooth', block:'center'}); } });
 // suivi des générations de la page : une interrogation par seconde de chacune tant qu'elle n'est pas terminée
 function track(j, info){
-  pageJobs.push({ id:j.id, j, incognito:!!j.incognito, prompt:info.prompt||'', tab:info.tab||'t2i', w:info.w, h:info.h, thumb:info.thumb||null,
+  pageJobs.push({ id:j.id, j, incognito:!!j.incognito, lot:j.lot||null, prompt:info.prompt||'', tab:info.tab||'t2i', w:info.w, h:info.h, thumb:info.thumb||null,
     est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0 });
   while(pageJobs.length>MAX_PAGE_JOBS){ const k=pageJobs.findIndex(p=>p.result && !p.result.blob && p!==shown); if(k<0) break; pageJobs.splice(k, 1); }
   if(shown && shown.incognito && shown.result) renderStrip();   // l'image incognito affichée le reste
@@ -1009,11 +1072,12 @@ function track(j, info){
   renderIsland(); pollJobs(); }
 async function pollJobs(){
   if(polling) return; polling=true;
-  try{ while(pageJobs.some(isActive)){ await sleep(1000);
+  try{ while(pageJobs.some(isActive)){ await sleep(1000); let ended=false;
       for(const p of pageJobs.filter(isActive)){ let r;
         try{ r=await fetch('/api/job/'+p.id); }catch(e){ continue; }              // serveur injoignable : on réessaie
         p.j = r.ok ? await r.json() : {...p.j, status:'failed', error:'génération introuvable (serveur relancé ?)'};
-        if(!isActive(p)) await finish(p); }
+        if(!isActive(p)){ await finish(p); ended=true; } }
+      if(ended) refreshStatus();                   // l'île et la file suivent tout de suite (la suivante a démarré)
       renderProgress(); tickStrip(); renderIsland(); } }
   finally{ polling=false; syncButtons(); } }
 async function finish(p){                          // génération terminée : son image entre dans la page, ou elle en sort
@@ -1025,9 +1089,12 @@ async function finish(p){                          // génération terminée : s
   if(j.status==='done'){ const secs=j.seconds||0;
     p.result={...(p.result||{}), name:j.name, dims:j.dims, file:j.incognito ? 'Incognito · non enregistrée : téléchargez-la pour la garder' : j.name,
       chips:[fmt(secs), j.dims?j.dims.join('×'):'', (j.total||'?')+' étapes', j.sec_per_it?j.sec_per_it.toFixed(1)+' s/étape':''] };
-    log('terminé en '+Math.round(secs)+' s → '+(j.incognito ? 'image incognito, non enregistrée' : j.path)); toast('Image prête en '+fmt(secs));
+    log('terminé en '+Math.round(secs)+' s → '+(j.incognito ? 'image incognito, non enregistrée' : j.path));
+    const lot=lotOf(p), next=lot.find(isActive);
+    toast(!p.lot ? 'Image prête en '+fmt(secs) : next ? `Image ${p.lot.rank} sur ${p.lot.size} prête` : 'Lot terminé');
     if(mode==='hist') loadHistory();
-    if(shown===p) show(p, true); else renderStrip();
+    // lot en cours : la zone de résultat passe à son image suivante ; à la fin du lot, sa grille
+    if(shown===p) show(next || p, !next); else if(sameLot(shown, p) && !next) show(shown); else renderStrip();
     return; }
   if(j.status==='cancelled'){ log('génération annulée'); toast('Génération annulée'); }
   else { log('ERREUR '+(j.error||j.status)); toast('Échec : '+(j.error||j.status), 'err'); }
@@ -1035,7 +1102,9 @@ async function finish(p){                          // génération terminée : s
 function drop(p){                                  // retire une génération de la page (annulée, en échec, image supprimée)
   const k=pageJobs.indexOf(p); if(k>=0) pageJobs.splice(k, 1);
   if(p.result && p.result.blob) URL.revokeObjectURL(p.result.url);
-  if(shown===p) show(oldestActive() || [...pageJobs].reverse().find(q=>q.result)); else renderStrip(); }
+  const lot=lotOf(p);                              // de préférence une autre image de son lot (ou sa grille)
+  if(shown===p) show(lot.find(isActive) || lot.find(q=>q.result) || oldestActive() || [...pageJobs].reverse().find(q=>q.result));
+  else if(sameLot(shown, p) && !isActive(shown)) show(shown); else renderStrip(); }
 function inputThumb(){ return mode==='edit' && editImages.length ? editImages[0].dataUrl : mode==='mask' && maskImage ? maskImage.dataUrl : null; }
 $('go').onclick=async()=>{                         // toujours actif : la demande rejoint la file avec les réglages du moment
   let body; try{ body=buildRequest(); }catch(e){ toast(e.message, 'err'); return; }
@@ -1046,8 +1115,9 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   let r, j; try{ r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=await r.json(); }
   catch(e){ toast('Serveur injoignable', 'err'); return; }
   if(!r.ok){ toast('Erreur : '+(j.error||('HTTP '+r.status)), 'err'); return; }
-  track(j, {prompt:body.prompt, tab:mode, w:body.width, h:body.height, thumb:inputThumb(), est:estSeconds, stepSec:stepSeconds, vaeSec:vaeSeconds});
-  if(j.queue_position) toast('Ajoutée à la file · '+ordinal(j.queue_position)+' en attente');
+  const jobs=j.jobs || [j];                         // un lot : une génération par image, suivies une à une
+  jobs.forEach(x=>track(x, {prompt:body.prompt, tab:mode, w:body.width, h:body.height, thumb:inputThumb(), est:estOne, stepSec:stepSeconds, vaeSec:vaeSeconds}));
+  if(jobs[0].queue_position) toast((j.lot ? `Lot de ${jobs.length} images ajouté` : 'Ajoutée')+' à la file · '+ordinal(jobs[0].queue_position)+' en attente');
   document.activeElement.blur(); requestAnimationFrame(()=>$('stage').scrollIntoView({behavior:'smooth', block:'center'}));
   refreshStatus();
 };
@@ -1098,10 +1168,12 @@ if(canPush && notifyOn && Notification.permission==='granted') pushSubscribe();
 addEventListener('pagehide', ()=>{ const ids=pageJobs.filter(p=>p.incognito && !p.result).map(p=>p.id);
   if(ids.length) fetch('/api/forget', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids}), keepalive:true}).catch(()=>{}); });
 // ------------------------------------------------------------ galerie et visionneuse
-let histItems=[], vIndex=-1;
+let histItems=[], vIndex=-1, vList=[];   // vList : images que parcourt la visionneuse (la galerie, ou les images d'un lot)
 const MODE_LABELS={ t2i:'Texte → image', edit:'Édition', mask:'Masque', annot:'Annotation' };
 const resultUrl = name => '/api/result?name='+encodeURIComponent(name);
 const thumbUrl = it => '/api/thumb?name='+encodeURIComponent(it.name)+'&t='+it.time;
+const srcOf = it => it.url || resultUrl(it.name);      // it.url : image incognito gardée par la page
+const thumbOf = it => it.url || thumbUrl(it);
 function goTab(m){ document.querySelector(`#tabbar [data-pane="${m}"]`).click(); }
 async function loadHistory(){
   try{ histItems=await (await fetch('/api/history')).json(); }catch(e){ $('histCount').textContent='indisponible'; return; }
@@ -1116,23 +1188,27 @@ function renderGallery(){
     im.onerror=()=>{ if(!im.dataset.retry){ im.dataset.retry=1; setTimeout(()=>{ im.src=thumbUrl(it)+'&retry=1'; }, 700); } };   // coupure passagère : une seconde tentative
     im.src=thumbUrl(it); b.appendChild(im);
     if(it.mode && it.mode!=='t2i'){ const sp=document.createElement('span'); sp.textContent=MODE_LABELS[it.mode]||it.mode; b.appendChild(sp); }
-    b.onclick=()=>openViewer(i); g.appendChild(b); });
+    b.onclick=()=>openViewer(i, histItems); g.appendChild(b); });
 }
-function openViewer(i){
-  const it=histItems[i]; if(!it) return; vIndex=i; resetZoom();
+function openViewer(i, list=vList){
+  const it=list[i]; if(!it) return; vList=list; vIndex=i; resetZoom();
   const v=$('viewer'), img=$('vImg');
-  img.src=thumbUrl(it); $('vBg').src=thumbUrl(it);           // miniature tout de suite, image complète dès qu'elle est chargée
-  const full=new Image(); full.onload=()=>{ if(vIndex===i) img.src=full.src; }; full.src=resultUrl(it.name);
-  img.alt=it.prompt||it.name; $('vCount').textContent=`${i+1} / ${histItems.length}`;
+  img.src=thumbOf(it); $('vBg').src=thumbOf(it);           // miniature tout de suite, image complète dès qu'elle est chargée
+  const full=new Image(); full.onload=()=>{ if(vIndex===i && vList===list) img.src=full.src; }; full.src=srcOf(it);
+  img.alt=it.prompt||it.name; $('vCount').textContent=`${i+1} / ${list.length}`;
   const date=new Date(it.time*1000).toLocaleString('fr-FR', {dateStyle:'short', timeStyle:'short'});
-  $('vChips').innerHTML=[date, MODE_LABELS[it.mode]||it.mode, it.width?it.width+'×'+it.height:'', it.steps?it.steps+' étapes':'', it.model?it.model.toUpperCase():'', it.seconds?fmt(it.seconds):'']
+  $('vChips').innerHTML=[date, MODE_LABELS[it.mode]||it.mode, it.width?it.width+'×'+it.height:'', it.steps?it.steps+' étapes':'', it.model?it.model.toUpperCase():'', it.seconds?fmt(it.seconds):'',
+    it.lot ? `image ${it.lot.rank}/${it.lot.size}` : '', it.seed!=null && it.seed>=0 ? 'graine '+it.seed : '']
     .filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('');
-  $('vDl').href=resultUrl(it.name)+'&download=1'; $('vDl').download=it.name; renderInputsButton(it);
+  $('vDl').href=it.url || resultUrl(it.name)+'&download=1'; $('vDl').download=it.name; renderInputsButton(it);
+  // garder la meilleure d'un lot : seulement s'il en reste d'autres sur le Mac (jamais pour une image incognito)
+  $('vKeep').hidden=!(it.lot && !it.url && list.some(x=>x!==it && x.lot && x.lot.id===it.lot.id));
+  $('vDelete').querySelector('span').textContent = it.url ? 'Effacer' : 'Supprimer';
   if(!v.classList.contains('on')){ v.classList.remove('immersive'); v.classList.add('on'); document.body.style.overflow='hidden'; }
   syncThemeColor();
 }
 function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor(); }
-function stepViewer(d){ if(vIndex<0 || !histItems.length) return; openViewer((vIndex+d+histItems.length)%histItems.length); }
+function stepViewer(d){ if(vIndex<0 || !vList.length) return; openViewer((vIndex+d+vList.length)%vList.length); }
 addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevented) return;
   if(ivIndex>=0){ if(e.key==='Escape') closeInputs(); else if(e.key==='ArrowLeft') showInput(ivIndex-1); else if(e.key==='ArrowRight') showInput(ivIndex+1); return; }
   if(e.key==='Escape') closeViewer(); else if(e.key==='ArrowLeft') stepViewer(-1); else if(e.key==='ArrowRight') stepViewer(1); });
@@ -1179,6 +1255,7 @@ let resetZoom=()=>{};
   st.addEventListener('wheel', e=>{ e.preventDefault(); st.classList.add('drag'); clearTimeout(wheelEnd); wheelEnd=setTimeout(()=>st.classList.remove('drag'), 150); zoomAt(Math.min(MAX, Math.max(1, z.s*Math.exp(-e.deltaY*0.002))), e.clientX, e.clientY); }, {passive:false});
 })();
 async function dataUrlOf(name){ if(lastResult && lastResult.blob && lastResult.name===name) return await readFile(lastResult.blob);
+  const own=pageJobs.find(p=>p.result && p.result.blob && p.result.name===name); if(own) return await readFile(own.result.blob);   // image incognito d'un lot
   const b=await (await fetch(resultUrl(name))).blob(); return await readFile(b); }
 async function useAsEditInput(name=lastResult && lastResult.name){
   if(!name) return; if(editImages.length>=10){ toast('10 images de référence au maximum', 'err'); return; }
@@ -1197,8 +1274,8 @@ async function copyImage(url){
   catch(e){ toast('Copie impossible : '+e.message, 'err'); } }
 function shareResult(){ if(lastResult) shareImage(lastResult.url, lastResult.name); }
 function copyResult(){ if(lastResult) copyImage(lastResult.url); }
-function viewerShare(){ const it=histItems[vIndex]; if(it) shareImage(resultUrl(it.name), it.name); }
-function viewerCopy(){ const it=histItems[vIndex]; if(it) copyImage(resultUrl(it.name)); }
+function viewerShare(){ const it=vList[vIndex]; if(it) shareImage(srcOf(it), it.name); }
+function viewerCopy(){ const it=vList[vIndex]; if(it) copyImage(srcOf(it)); }
 // ------------------------------------------------------------ images d'entrée d'une image de la galerie
 let ivIndex=-1, ivOwner=null;
 const inputUrl = (name, f, extra='') => '/api/input?name='+encodeURIComponent(name)+'&file='+encodeURIComponent(f)+extra;
@@ -1207,7 +1284,7 @@ function renderInputsButton(it){
   const b=$('vInputs'), list=it.inputs||[]; b.hidden=!list.length; if(!list.length) return;
   b.innerHTML=`<span class="v-in-thumbs">${list.slice(0,3).map(f=>`<img src="${inputUrl(it.name, f, '&thumb=1&t='+it.time)}" alt="">`).join('')}</span>`
     + `<span>${list.length>1 ? list.length+" images d'entrée" : "Image d'entrée"}</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>`; }
-function openInputs(i){ const it=histItems[vIndex]; if(!it || !(it.inputs||[]).length) return; ivOwner=it; showInput(i); $('iv').classList.add('on'); syncThemeColor(); }
+function openInputs(i){ const it=vList[vIndex]; if(!it || !(it.inputs||[]).length) return; ivOwner=it; showInput(i); $('iv').classList.add('on'); syncThemeColor(); }
 function showInput(i){
   const it=ivOwner, n=it.inputs.length; ivIndex=(i+n)%n; const f=it.inputs[ivIndex];
   $('ivImg').src=inputUrl(it.name, f); $('ivImg').alt=inputLabel(it, f); $('ivLabel').textContent=inputLabel(it, f);
@@ -1231,20 +1308,37 @@ async function inputAction(kind){             // repartir de cette image d'entr�
   st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
 })();
 async function viewerAction(kind){
-  const it=histItems[vIndex]; if(!it) return;
+  const it=vList[vIndex]; if(!it) return;
   if(kind==='edit' || kind==='mask'){ closeViewer(); return kind==='edit' ? useAsEditInput(it.name) : useAsMaskInput(it.name); }
   if(kind==='prompt'){ const tab = tabOf(it.mode);
     if(!it.prompt){ toast('Pas de texte enregistré pour cette image', 'err'); return; }
     const t=$(tab+'_prompt'); t.value=it.prompt; t.dispatchEvent(new Event('input')); closeViewer(); goTab(tab); toast('Texte repris'); return; }
   if(kind==='delete'){
+    if(it.url){                                    // image incognito d'un lot : gardée par la page seulement
+      if(!await ask('Effacer cette image ?', 'Elle n\'est enregistrée nulle part : sans téléchargement, elle sera perdue.', 'Effacer', true)) return;
+      forgetResult(it.name); toast('Image effacée'); return removeFromViewer([it]); }
     if(!await ask('Supprimer cette image ?', it.name+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return;
     const r=await fetch('/api/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:it.name})});
     if(!r.ok){ toast('Suppression impossible : '+((await r.json()).error||r.status), 'err'); return; }
     log('supprimé : '+it.name); toast('Image supprimée');
-    forgetResult(it.name);
-    histItems.splice(vIndex, 1); renderGallery();
-    if(histItems.length) openViewer(Math.min(vIndex, histItems.length-1)); else closeViewer(); }
+    forgetResult(it.name); removeFromViewer([it]); }
 }
+function removeFromViewer(gone){                  // images supprimées : hors de la galerie et de la liste de la visionneuse
+  const names=new Set(gone.map(x=>x.name)), keep=x=>!names.has(x.name);
+  const list=vList.filter(keep), at=Math.min(vIndex, list.length-1);
+  histItems=histItems.filter(keep); renderGallery();
+  if(list.length) openViewer(at, list); else closeViewer(); }
+async function keepThis(){                        // variantes : garder cette image, supprimer les autres images du lot
+  const it=vList[vIndex]; if(!it || !it.lot) return;
+  const others=vList.filter(x=>x!==it && x.lot && x.lot.id===it.lot.id && !x.url);
+  if(!others.length) return;
+  const n=others.length, s=n>1 ? 's' : '';
+  if(!await ask('Garder celle-ci ?', `${n===1 ? "L'autre image" : 'Les '+n+' autres images'} du lot ser${n>1?'ont':'a'} supprimée${s} définitivement du Mac.`, 'Garder', true)) return;
+  const gone=[];
+  for(const o of others){ const r=await postJson('/api/delete', {name:o.name}).catch(()=>null);
+    if(r && r.ok){ gone.push(o); forgetResult(o.name); log('supprimé : '+o.name); } }
+  toast(gone.length===n ? 'Image gardée, '+n+' supprimée'+s : 'Suppression incomplète', gone.length===n ? '' : 'err');
+  removeFromViewer(gone); openViewer(vList.indexOf(it)); }
 function forgetResult(name){                      // image supprimée : elle quitte la zone de résultat et la pellicule
   const p=pageJobs.find(q=>q.result && q.result.name===name);
   if(p) drop(p); else if(lastResult && lastResult.name===name){ lastResult=null; hideResult(); } }

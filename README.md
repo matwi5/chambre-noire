@@ -182,7 +182,10 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   du panneau Réglages les coupe. Elles ne passent que par l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du
   Wi-Fi), ou sur l'ordinateur lui-même. Le message transite chiffré par le service de notification du navigateur
   (Google pour Chrome) et ne contient ni le prompt ni le nom du fichier : « Image prête — Générée en 12 min 14 s ·
-  1024×1024 » (« Image incognito prête » en incognito). Il faut la bibliothèque `pywebpush` (installée par
+  1024×1024 » (« Image incognito prête » en incognito). Un lot (plusieurs images d'une seule demande, voir
+  [Créer](#créer-texte--image)) n'envoie qu'une notification, à la fin de sa dernière image : « 3 images prêtes »,
+  « 2 images prêtes, 1 en échec », « Échec du lot » si aucune n'a réussi (« 2 images incognito prêtes » en
+  incognito), et rien si tout le lot a été annulé. Il faut la bibliothèque `pywebpush` (installée par
   `requirements.txt` ; sur une installation antérieure, relancer `pip install -r requirements.txt`). L'ordinateur garde
   sa clé d'envoi dans `tools/push_vapid.pem` et les appareils abonnés dans `tools/push_subscriptions.json` ; supprimer
   ces fichiers désabonne tous les appareils.
@@ -219,6 +222,7 @@ Sous le texte, trois pastilles résument le format, la résolution et les étape
 | **Format** | 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16, et « Image » (les proportions de l'image) quand une seule image est chargée | Proportions de l'image produite |
 | **Résolution** | 360p (512×512) · 540p (768×768) · **720p** (1024×1024, par défaut) · 1080p (1536×1536) · 1440p (2048×2048, 2K natif du modèle) | Nombre de pixels, nommé d'après le format vidéo qui en compte autant (720p : ≈ 0,9 à 1 million de pixels) ; les dimensions exactes, qui dépendent du format, s'affichent en bas du panneau |
 | **Étapes** | Low 8 · Medium 12 · High 20 · XHigh 30 · **Max 40** (par défaut, réglage officiel du modèle) | Finesse des détails ; chaque option affiche le **temps estimé** |
+| **Images** (Créer seulement) | **1**, 2, 3 ou 4 | Nombre de variantes du même prompt, chacune avec sa graine (voir [Créer](#créer-texte--image)) ; le temps affiché est celui de toutes les images |
 | **Aperçu toutes les 5 étapes** | interrupteur, activé par défaut | Montre l'image en cours de formation ; coût affiché à côté |
 
 Le bouton **Générer** affiche le temps estimé ; à sa droite, le bouton **Incognito** (icône de chapeau et lunettes)
@@ -254,6 +258,16 @@ du Wi-Fi).
 
 Écrire la description, ajuster les réglages si besoin, appuyer sur **Générer**.
 
+Pour obtenir plusieurs propositions du même prompt, choisir 2, 3 ou 4 **Images** dans les Réglages (une pastille
+« 3 images » le rappelle sous le texte ; le choix est retenu). Une seule demande lance alors un **lot de variantes** :
+une génération par image, à la suite dans la file (jamais en même temps), chacune avec sa propre graine. Le bouton
+**Générer** affiche le temps de tout le lot. Pendant le calcul, l'image en cours porte « Image 2 sur 3 » et la rangée
+de vignettes montre les suivantes ; dans la file d'attente, le lot a son en-tête avec **Annuler le lot** (le bouton
+de l'image en cours n'annule que celle-ci, et une image en échec n'arrête pas les autres). À la fin, une **grille**
+remplace l'image unique : un appui ouvre une image en grand, avec sa graine, et **Garder celle-ci** supprime les autres
+images du lot après confirmation. Sans choix, toutes les images restent dans la galerie. En incognito, la grille n'a
+pas **Garder celle-ci** : chaque image a son bouton de téléchargement, et elles sont perdues une fois la grille quittée.
+
 ### Éditer
 
 Ajouter 1 à 10 images (elles sont numérotées 1, 2, 3…), puis écrire une **instruction** :
@@ -280,7 +294,7 @@ le modèle à redessiner l'original.
 ### Galerie
 
 L'onglet **Galerie** montre toutes les images de `outputs\`, la plus récente d'abord. Un appui sur une miniature
-l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèle, durée). Glisser sur le côté passe
+l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèle, durée, et la graine quand elle est connue). Glisser sur le côté passe
 à l'image voisine (flèches du clavier sur ordinateur), glisser vers le bas ferme, un appui sur l'image masque les
 commandes. Pour zoomer (jusqu'à ×6), pincer l'image : elle passe au-dessus de tout, peut couvrir tout l'écran, suit
 les doigts, et revient à sa taille dès qu'on les relâche. Sur ordinateur, la molette zoome, glisser déplace l'image
@@ -515,10 +529,15 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     préfixe en très grande résolution ; `--mmap` fonctionne depuis `master-959` (les versions antérieures sortaient une
     image en bruit).
 - API locale : `POST /api/generate`, `GET /api/job/<id>` (`queue_position` : nombre de générations devant elle,
-  recalculé à chaque lecture), `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel` (sans effet sur une génération
+  recalculé à chaque lecture ; `seed` : graine utilisée ; `lot`), `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel` (sans effet sur une génération
   déjà terminée, réussie, en échec ou annulée), `GET /api/status` (`queue` : la file, génération en cours d'abord ;
   chaque entrée porte `status`, `position`, `lot`, `estimate` et `elapsed` en secondes, `kind`, et pour une génération
-  normale seulement `id`, `mode` et le début du `prompt`) ; incognito
+  normale seulement `id`, `mode` et le début du `prompt`) ; lots : `"count"` de 2 à 4 dans `/api/generate` (mode
+  Créer, `"mode": "t2i"` ; 1 : génération seule) crée autant de générations, à la suite dans la file, et la réponse devient
+  `{"lot": {"id", "size"}, "jobs": [...]}` ; chaque génération porte `lot` (`id`, `rank`, `size`), aussi écrit dans
+  `outputs/journal.jsonl` (un lot incognito ne montre dans `queue` que `rank` et `size`) ; `POST /api/lot/<id>/cancel`
+  annule toutes ses générations non terminées (404 une fois le lot fini). Graine `-1` : le serveur la tire lui-même (distincte pour chaque
+  image d'un lot) et l'écrit au journal ; graine choisie avec `count` : graine, graine + 1… ; incognito
   (`"incognito": true` dans `/api/generate`) : `GET /api/job/<id>/result` (image gardée en
   mémoire), `POST /api/job/<id>/forget` (l'oublier, ou arrêter la génération), `POST /api/forget {"ids": […]}` (toutes
   les générations incognito d'une page, à sa fermeture ; `current_job` de `/api/status` reste vide pendant une génération
@@ -528,7 +547,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   avec `--lan`, `POST /api/login`.
 - `POST /api/generate` refuse (code 400, avec un message) une demande dont le prompt n'est pas un texte non vide, dont
   la largeur ou la hauteur n'est pas un entier de 64 à 4096, les étapes un entier de 1 à 200, ou la graine un entier
-  (-1 : au hasard) ; les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Une
+  (-1 : au hasard), ou `count` qui n'est pas un entier de 1 à 4 ou qui accompagne un autre mode que Créer ; les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Une
   génération qui ne peut pas se préparer (image d'entrée illisible, par exemple) échoue seule,
   avec un message, et la file passe à la suivante.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés

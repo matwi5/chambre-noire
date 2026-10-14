@@ -29,7 +29,8 @@ Vérifications : aucun lint ni typage n'est déclaré. Après un changement :
 - JavaScript de `tools/ui/index.html` : extraire les blocs `<script>` et lancer `node --check` dessus ;
 - comportement du serveur sans GPU : banc de test `venv/bin/python -m unittest discover -s tests` (quelques secondes).
   `tests/bench.py` sert `tools/launch.py` sur un port libre, tous ses dossiers repointés vers un dossier temporaire,
-  avec le faux moteur `tests/fake_sdcli.py` (`FAIL` ou `SLOW[=s]` dans le prompt le font échouer ou ralentir) ;
+  avec le faux moteur `tests/fake_sdcli.py` (`FAIL` ou `SLOW[=s]` dans le prompt le font échouer ou ralentir,
+  `FAILSEED=<n>` échouer pour la seule graine n, une image d'un lot) ;
   `bench.capture_push()` intercepte les notifications, `bench.LOG` reçoit les sorties du serveur. Un nouveau chemin
   calculé à l'import de `launch.py` doit être repointé dans `bench.start()`, sinon le banc écrit dans le dépôt. Les
   aperçus de moins de 1000 octets sont ignorés par `latest_preview`. Pour l'interface : servir le banc (`bench.start()`
@@ -76,15 +77,22 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
   Une génération annulée (en cours ou en file) ne laisse rien : `discard_cancelled` supprime son dossier de travail et
   une image finale déjà écrite. Le statut `cancelled` est posé avant que le moteur soit arrêté : un test doit attendre
   que `S.current` ait changé avant de regarder le disque.
+- **Lots** (`count` de 2 à 4, mode Créer) : `/api/generate` crée une génération par image (`new_job`), reliées par
+  `job["lot"]` (`id`, `rank`, `size`) et gardées dans `S.lots` même quand une génération incognito quitte `S.jobs`. Les
+  graines à -1 sont tirées par le serveur (`draw_seeds`) pour être écrites au journal. Une seule notification par lot
+  (`notify_lot`), envoyée par `end_of_lot` depuis le `finally` de `worker()` quand plus aucune génération du lot n'est
+  active ; le lot quitte alors `S.lots`, ce qui empêche un doublon quand une génération annulée en file passe ensuite.
 - **Notifications** (Web Push, `pywebpush`) : `notify_job` envoie depuis `worker()`, dans un thread, à la fin d'un job
-  terminé ou en échec, à chaque abonnement de `tools/push_subscriptions.json` ; clé VAPID `tools/push_vapid.pem` créée au
+  hors lot terminé ou en échec, à chaque abonnement de `tools/push_subscriptions.json` ; clé VAPID `tools/push_vapid.pem` créée au
   premier usage. Le service worker (`tools/ui/sw.js`) affiche la notification seulement si aucune fenêtre de
   l'application n'est visible. Le message ne contient jamais le prompt. Sans `pywebpush`, le serveur tourne, sans
   notifications. Tester sans réseau : intercepter `requests.post` et déchiffrer avec `http_ece`.
 - **Interface** : un seul fichier `tools/ui/index.html` (HTML, CSS et JS sans dépendance ni build). Elle suit les
   générations qu'elle a lancées (`pageJobs`) en interrogeant chacune par `/api/job/<id>` chaque seconde, et la file
   commune (`queue` de `/api/status`, entrées produites par `queue_entry`) toutes les 2 s tant qu'elle n'est pas vide ;
-  après un rechargement, elle se rattache aux générations normales de `queue`. Réglages et
+  après un rechargement, elle se rattache aux générations normales de `queue`. Un lot terminé s'affiche en grille
+  (`gridOf`) ; la visionneuse parcourt `vList` (la galerie, ou les images d'un lot de la page, incognito comprises par
+  leur adresse `blob:`), jamais `histItems` directement. Réglages et
   brouillons dans `localStorage` (`qwen-opt`, `qwen-<onglet>_prompt`). `manifest.webmanifest`, `sw.js` et les icônes
   servent à l'installation sur le téléphone ; le service worker ne touche qu'à la navigation, jamais à `/api/*`.
 - **Contrôle d'accès** (dans cet ordre, dans `H`) : `_host_ok` (liste blanche de `Host` contre le rebinding DNS, noms du
