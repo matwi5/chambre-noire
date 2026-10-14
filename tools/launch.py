@@ -514,7 +514,8 @@ def notify_lot(lot):
         return
     if done:
         s = "s" if done > 1 else ""
-        title = f"{done} image{s}{' incognito' if lot['incognito'] else ''} prête{s}" + (f", {failed} en échec" if failed else "")
+        kind = " incognito" if lot["incognito"] else f" privée{s}" if lot["private"] else ""
+        title = f"{done} image{s}{kind} prête{s}" + (f", {failed} en échec" if failed else "")
         span = max(j.get("finished") or 0 for j in jobs) - min(j["started"] for j in jobs if j.get("started"))
         what = f"Campagne de {len(jobs)} photos terminée" if jobs[0].get("mode") == "edit" else f"Lot de {len(jobs)} images terminé"
         push_notify({"title": title, "body": f"{what} en {duration_text(span)}"})
@@ -716,8 +717,8 @@ class State:
     cfg = {}
     ui_port = 7860
     jobs = {}
-    lots = {}                # lots en cours par identifiant : {"jobs": [...], "incognito"} ; garde les générations d'un
-                             # lot même quand une génération incognito a quitté S.jobs, jusqu'à la fin du lot
+    lots = {}                # lots en cours par identifiant : {"jobs": [...], "incognito", "private"} ; garde les générations
+                             # d'un lot même quand une génération incognito ou privée a quitté S.jobs, jusqu'à la fin du lot
     private_sessions = {}    # sessions de l'espace privé : {jeton du cookie : {"key": clé privée, "seen": dernière requête privée}}
     q = queue.Queue()
     enqueue = threading.Lock()   # les générations d'un lot entrent dans la file à la suite, sans autre demande entre elles
@@ -1069,7 +1070,7 @@ def end_of_lot(job):
         try:
             notify_lot(lot)
         except Exception as e:
-            print("[push] notification du lot impossible" + ("" if lot["incognito"] else f" : {e}"), flush=True)
+            print("[push] notification du lot impossible" + ("" if secret(lot["jobs"][0]) else f" : {e}"), flush=True)
 
 
 def request_error(req):
@@ -1104,8 +1105,6 @@ def request_error(req):
         return "private : vrai ou faux attendu"
     if req.get("private") and req.get("incognito"):
         return "private et incognito s'excluent"
-    if req.get("private") and ((req.get("count") or 1) > 1 or req.get("campaign") is not None):
-        return "lots privés : pas encore disponibles"
     if req.get("page") is not None and not (isinstance(req["page"], str) and PAGE_TOKEN_RE.fullmatch(req["page"])):
         return "page : jeton de 1 à 64 lettres, chiffres, - ou _ attendu"
     count = req.get("count")
@@ -1193,7 +1192,7 @@ def queue_entry(job, position, coefs):
     lot = job.get("lot")
     e = {"status": job["status"], "position": position,
          # identifiant d'un lot incognito : connu de sa seule page, comme celui de ses générations
-         "lot": lot and ({"rank": lot["rank"], "size": lot["size"]} if job.get("incognito") else dict(lot)),
+         "lot": lot and ({"rank": lot["rank"], "size": lot["size"]} if secret(job) else dict(lot)),
          "estimate": round(estimate.predict(coefs, r["width"], r["height"], r["steps"], refs, init, previews), 1),
          "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None}
     if secret(job):
@@ -1613,10 +1612,11 @@ class H(BaseHTTPRequestHandler):
             reqs = expand_request(req)
             n = len(reqs)
             # identifiant d'un lot incognito : connu de sa seule page, aussi impossible à deviner que ses générations
-            lot = {"id": secrets.token_hex(16) if req.get("incognito") is True else uuid.uuid4().hex[:12], "size": n} if n > 1 else None
+            secret_lot = req.get("incognito") is True or req.get("private") is True
+            lot = {"id": secrets.token_hex(16) if secret_lot else uuid.uuid4().hex[:12], "size": n} if n > 1 else None
             jobs = [new_job(r, request_inputs(r), lot and {"id": lot["id"], "rank": k + 1, "size": n}) for k, r in enumerate(reqs)]
             if lot:
-                S.lots[lot["id"]] = {"jobs": jobs, "incognito": jobs[0]["incognito"]}
+                S.lots[lot["id"]] = {"jobs": jobs, "incognito": jobs[0]["incognito"], "private": jobs[0]["private"]}
             with S.enqueue:                      # générations d'un lot : à la suite dans la file, dans l'ordre
                 for job in jobs:
                     S.jobs[job["id"]] = job

@@ -17,7 +17,10 @@ les messages de commit.
 - **Écarté** : bouton « Privé » à côté de « Générer » (visible à l'arrivée) ; geste caché (appui long sur le logo) ;
   mode Privé dans la feuille Réglages ; galerie normale visible depuis l'espace privé.
 - **Conséquences** : il n'y a plus de « mode Privé » distinct de l'état déverrouillé ; une génération privée est
-  simplement une génération lancée depuis l'intérieur de l'espace. Les tickets Asana du groupe D décrivent encore le
+  simplement une génération lancée depuis l'intérieur de l'espace. Héritage (récit 61) : un onglet dont le contenu a
+  été saisi dans l'espace reste marqué après la sortie, non pas « jusqu'à la génération suivante » (toute génération
+  faite dans l'espace est privée de toute façon) mais jusqu'à ce qu'il soit vidé hors de l'espace (groupe D, sans le
+  porteur) ; hors de l'espace, Générer y demande le code et relance une fois entré. Les tickets Asana du groupe D décrivent encore le
   bouton « Privé » (à mettre à jour par le porteur).
 
 ## 2026-10-14 · Espace privé : format des clés, des fichiers et sessions

@@ -182,11 +182,12 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   du panneau Réglages les coupe. Elles ne passent que par l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du
   Wi-Fi), ou sur l'ordinateur lui-même. Le message transite chiffré par le service de notification du navigateur
   (Google pour Chrome) et ne contient ni le prompt ni le nom du fichier : « Image prête — Générée en 12 min 14 s ·
-  1024×1024 » (« Image incognito prête » en incognito). Un lot (plusieurs images d'une seule demande, voir
-  [Créer](#créer-texte--image)) n'envoie qu'une notification, à la fin de sa dernière image : « 3 images prêtes »,
-  « 2 images prêtes, 1 en échec », « Échec du lot » si aucune n'a réussi (« 2 images incognito prêtes » en
-  incognito), et rien si tout le lot a été annulé. Il faut la bibliothèque `pywebpush` (installée par
-  `requirements.txt` ; sur une installation antérieure, relancer `pip install -r requirements.txt`). L'ordinateur garde
+  1024×1024 » (« Image incognito prête » en incognito, « Image privée prête » dans l'espace privé). Un lot
+  (plusieurs images d'une seule demande, voir [Créer](#créer-texte--image)) n'envoie qu'une notification, à la fin de
+  sa dernière image : « 3 images prêtes », « 2 images prêtes, 1 en échec », « Échec du lot » si aucune n'a réussi
+  (« 2 images incognito prêtes » en incognito, « 2 images privées prêtes » dans l'espace privé), et rien si tout le
+  lot a été annulé. Il faut la bibliothèque `pywebpush` (installée par `requirements.txt` ; sur une installation
+  antérieure, relancer `pip install -r requirements.txt`). L'ordinateur garde
   sa clé d'envoi dans `tools/push_vapid.pem` et les appareils abonnés dans `tools/push_subscriptions.json` ; supprimer
   ces fichiers désabonne tous les appareils.
 - **Barre d'état** : dans l'application installée, Chrome peint la barre d'état (heure, notifications) d'une couleur
@@ -396,8 +397,16 @@ du Mac, ne suffit pas pour voir les images privées.
   Une génération privée lancée va jusqu'au bout et est rangée chiffrée même si l'espace se verrouille avant la fin, ou
   si l'application est fermée ; sa notification dit seulement « Image privée prête ». Les autres appareils ne voient
   d'elle, dans la file, que « Génération privée », sans prompt ni aperçu.
+- Les **variantes** et les **campagnes** marchent aussi dans l'espace privé : chaque image du lot est chiffrée, la
+  grille et « Garder celle-ci » restent, et la notification dit seulement « N images privées prêtes ».
 - La **Galerie** de l'espace privé ne montre que les images privées, avec la même visionneuse : télécharger,
   partager, copier, images d'entrée, Éditer, Dessiner, Reprendre, Supprimer. En sortant, elles quittent l'écran.
+- **Ce qui part de l'espace privé y reste** : un onglet dont le texte ou les images ont été saisis dans l'espace
+  (Éditer, Dessiner ou Reprendre depuis une image privée, ou saisie directe) garde une pastille sarcelle après la
+  sortie. **Générer** y demande alors le code et ne lance la génération, privée, qu'une fois dans l'espace : rien ne
+  repart en clair, pas même en incognito. La pastille disparaît quand l'onglet est entièrement vidé (texte et images)
+  hors de l'espace ; son texte n'est jamais retenu par le navigateur. Si l'espace privé est supprimé, ces onglets sont
+  vidés.
 - **Changer le code** demande l'ancien : les images privées restent lisibles avec le nouveau.
 - **Code oublié** : il ne peut pas être retrouvé, et les images privées sont perdues. **Supprimer l'espace privé**
   (après avoir tapé `SUPPRIMER`) efface tout l'espace sans demander le code, pour pouvoir en recréer un. N'importe
