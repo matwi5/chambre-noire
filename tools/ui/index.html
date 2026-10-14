@@ -187,6 +187,8 @@
   .chips5 { display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; }
   .chips4 { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
   body:not(.m-t2i) #countRow { display:none; }
+  #setSheet.camp :is(#fmtHead, #ratioOpts) { display:none; }   /* campagne : chaque photo a son format */
+  .pane-head b { font-weight:inherit; }
   .opt { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; min-width:0; padding:10px 2px 9px;
     border-radius:16px; border:1px solid var(--rim); background:var(--field); color:var(--ink2); cursor:pointer; transition:background .2s, color .2s, border-color .2s; }
   .opt b { font-size:14px; color:var(--ink); font-weight:650; }
@@ -495,12 +497,13 @@
   <div class="pane active" id="pane-t2i"></div>
 
   <div class="pane" id="pane-edit">
-    <div class="pane-head">Images de référence<span id="refCount"></span></div>
+    <div class="pane-head"><b id="refTitle">Images de référence</b><span id="refCount"></span></div>
     <div class="refs" id="refs">
       <div class="thumbs" id="edit_thumbs"></div>
-      <div class="drop" id="edit_drop" role="button" tabindex="0" aria-label="Ajouter des images de référence"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M12 8.5v7M8.5 12h7"/></svg><b>Ajouter des images</b><small>1 à 10 images, à citer dans l'instruction</small><input type="file" id="edit_files" accept="image/*" multiple></div>
+      <div class="drop" id="edit_drop" role="button" tabindex="0" aria-label="Ajouter des images de référence"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M12 8.5v7M8.5 12h7"/></svg><b>Ajouter des images</b><small id="dropHint">1 à 10 images, à citer dans l'instruction</small><input type="file" id="edit_files" accept="image/*" multiple></div>
     </div>
     <p class="hint" id="refHint" hidden>Désignez-les par leur numéro : « the woman in image 1 wears the jacket from image 2 ».</p>
+    <label class="switch"><input type="checkbox" id="campChk"><span class="track"></span><span>Campagne <small>le même texte appliqué à chaque photo séparément, une image par photo</small></span></label>
   </div>
 
   <div class="pane" id="pane-mask">
@@ -637,7 +640,7 @@
 <section class="sheet glass" id="setSheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
   <div class="sheet-head"><h2 id="setTitle">Réglages</h2><button class="btn small" onclick="closeSheet()">OK</button></div>
-  <h3>Format</h3><div class="ratios" id="ratioOpts"></div>
+  <h3 id="fmtHead">Format</h3><div class="ratios" id="ratioOpts"></div>
   <h3>Résolution</h3><div class="chips5" id="resOpts"></div>
   <h3>Étapes</h3><div class="chips5" id="stepOpts"></div>
   <div id="countRow"><h3>Images</h3><div class="chips4" id="countOpts"></div></div>
@@ -677,7 +680,7 @@ const RATIO_LABELS = { '1:1':'Carré 1:1', '4:3':'Paysage 4:3', '3:4':'Portrait 
 // libellés : format vidéo au nombre de pixels le plus proche (640×360, 960×540, 1280×720, 1920×1080, 2560×1440)
 const RES   = [ {k:'low',label:'360p',scale:0.25}, {k:'medium',label:'540p',scale:0.375}, {k:'high',label:'720p',scale:0.5}, {k:'xhigh',label:'1080p',scale:0.75}, {k:'max',label:'1440p',scale:1.0} ];
 const STEPS = [ {k:'low',label:'Low',steps:8}, {k:'medium',label:'Medium',steps:12}, {k:'high',label:'High',steps:20}, {k:'xhigh',label:'XHigh',steps:30}, {k:'max',label:'Max',steps:40} ];
-const CFG = 1, MAX_PIXELS = 2048*2048, MAX_INPUT_SIDE = 2048, PREVIEW_EVERY = 5, MAX_VARIANTS = 4;
+const CFG = 1, MAX_PIXELS = 2048*2048, MAX_INPUT_SIDE = 2048, PREVIEW_EVERY = 5, MAX_VARIANTS = 4, MAX_REFS = 10;   // MAX_REFS : références d'une édition, photos d'une campagne
 // coefficients d'estimation envoyés par /api/status (tools/estimate.py) : valeurs de départ du moteur, puis ajustées
 // sur les générations mesurées de la machine. Même formule que estimate.predict() côté serveur.
 let E = null, calibrated = false, lastE = '';
@@ -687,7 +690,7 @@ function applyEstimates(est){
 }
 
 const $ = id => document.getElementById(id);
-let mode='t2i', editImages=[], maskImage=null, paintMode='paint', lastResult=null, estSeconds=0, estOne=0, stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
+let mode='t2i', editImages=[], maskImage=null, paintMode='paint', lastResult=null, estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
 
 function log(m){ const l=$('log'); l.textContent += new Date().toLocaleTimeString()+'  '+m+'\n'; l.scrollTop=l.scrollHeight; }
 const round32 = v => Math.max(256, Math.round(v/32)*32);
@@ -705,12 +708,16 @@ const savedOpt = (()=>{ try{ const o=JSON.parse(localStorage.getItem('qwen-opt')
   return o; }catch(e){ return {}; } })();
 ['ratio','res','steps'].forEach(k=>{ if(savedOpt[k]) opt[k]=savedOpt[k]; });
 if(Number.isInteger(savedOpt.count) && savedOpt.count>=1 && savedOpt.count<=MAX_VARIANTS) opt.count=savedOpt.count;
-let incogOn = !!savedOpt.incognito, notifyOn = savedOpt.notify!==false;
-function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt, v:2, preview:$('previewChk').checked, incognito:incogOn, notify:notifyOn})); }catch(e){} }
+let incogOn = !!savedOpt.incognito, notifyOn = savedOpt.notify!==false, campaignOn = !!savedOpt.campaign;
+function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt, v:2, preview:$('previewChk').checked, incognito:incogOn, notify:notifyOn, campaign:campaignOn})); }catch(e){} }
 const resSel = () => RES.find(p=>p.k===opt.res) || RES[1];
 const stepsSel = () => STEPS.find(p=>p.k===opt.steps) || STEPS[1];
 function currentDims(){ return dimsFor(opt.ratio, resSel().scale); }
 const variants = () => mode==='t2i' ? opt.count : 1;   // images de la prochaine demande
+const inCampaign = () => mode==='edit' && campaignOn && editImages.length>0;
+// campagne : chaque photo est éditée seule, au format pris en charge le plus proche de sa forme, à la résolution choisie
+function photoDims(im){ const [rw,rh]=RATIOS[closestRatio(im.w, im.h)], sc=resSel().scale; return [round32(rw*sc), round32(rh*sc)]; }
+function campaignPlan(){ return editImages.map(im=>{ const [w,h]=photoDims(im); return { im, w, h, inp:{ refs:[refPx(im.w, im.h, w, h)], init:0 } }; }); }
 // pixels d'une référence telle que sd.cpp la donne au modèle : ramenée à la surface de la sortie, côtés multiples de 32
 function refPx(rw, rh, w, h){ const vw=Math.sqrt(w*h*rw/rh), vh=vw*rh/rw, snap=x=>Math.max(32, Math.floor(x/32+0.5)*32); return snap(vw)*snap(vh); }
 // références et image de départ envoyées au moteur pour le mode courant (voir buildBody)
@@ -738,22 +745,28 @@ function refreshChoices(){
   $('ratioOpts').innerHTML = (im ? ['image'] : []).concat(Object.keys(RATIOS)).map(r=>{ const [rw,rh]=ratioDims(r), on=r===opt.ratio;
     return `<button class="opt ratio${on?' on':''}${r===near?' near':''}" data-k="${r}" aria-pressed="${on}"${r===near?' title="Proche des proportions de l\'image"':''}>${shape(rw,rh,26)}<b>${r==='image'?'Image':r}</b></button>`; }).join('');
   const steps=stepsSel().steps; const [w,h]=currentDims(); const inp=inputsFor(w, h); const n=variants();
+  const plan=inCampaign() ? campaignPlan() : null;  // campagne : estimation photo par photo
+  const total=(st, prev)=>plan ? plan.reduce((t, x)=>t+parts(x.w, x.h, st, x.inp, prev).total, 0) : n*parts(w, h, st, inp, prev).total;
+  const campMode=mode==='edit' && campaignOn; $('setSheet').classList.toggle('camp', campMode);
   $('resOpts').innerHTML = RES.map(p=>{ const on=p.k===opt.res;
     return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}"><b>${p.label}</b></button>`; }).join('');
   const approx = s => E ? '≈ '+fmt(s) : '…';     // avant le premier /api/status, pas de coefficients
   $('stepOpts').innerHTML = STEPS.map(p=>{ const on=p.k===opt.steps;
-    return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}" title="${p.label}"><b>${p.steps}</b><small>${approx(E && n*parts(w,h,p.steps,inp,pv).total)}</small></button>`; }).join('');
+    return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}" title="${p.label}"><b>${p.steps}</b><small>${approx(E && total(p.steps, pv))}</small></button>`; }).join('');
   $('countOpts').innerHTML = Array.from({length:MAX_VARIANTS}, (_, i)=>i+1).map(k=>{ const on=k===opt.count;
     return `<button class="opt${on?' on':''}" data-k="${k}" aria-pressed="${on}"><b>${k}</b></button>`; }).join('');
   const [rw,rh] = ratioDims(opt.ratio);
-  $('pills').innerHTML = `<button class="pill" data-open>${shape(rw,rh,16)}${opt.ratio==='image'?'Image':opt.ratio}</button>`
+  $('pills').innerHTML = (campMode ? `<button class="pill" data-open>Campagne${plan ? ` · ${plan.length} photo${plan.length>1?'s':''}` : ''}</button>` : `<button class="pill" data-open>${shape(rw,rh,16)}${opt.ratio==='image'?'Image':opt.ratio}</button>`)
     + `<button class="pill" data-open title="${w}×${h}">${resSel().label}</button><button class="pill" data-open>${steps} étapes</button>`
     + (n>1 ? `<button class="pill" data-open>${n} images</button>` : '') + (pv ? `<button class="pill" data-open>Aperçus</button>` : '');
-  $('estText').textContent=`${w}×${h} · ${steps} étapes${nrefs>1?' · '+nrefs+' références':''}${n>1?' · '+n+' images':''}`;
-  if(!E){ estSeconds=estOne=0; $('previewCost').textContent=''; $('estTime').textContent=$('goEta').textContent='…'; return; }
+  $('estText').textContent = plan ? `${plan.length} photo${plan.length>1?'s':''}, chacune à son format · ${steps} étapes`
+    : `${w}×${h} · ${steps} étapes${nrefs>1?' · '+nrefs+' références':''}${n>1?' · '+n+' images':''}`;
+  if(!E){ estSeconds=estOne=0; campaignEst=[]; $('previewCost').textContent=''; $('estTime').textContent=$('goEta').textContent='…'; return; }
   // estimation d'une image (suivi de chaque génération) et de toute la demande (bouton, confirmation au-delà d'une heure)
-  const pr=parts(w,h,steps,inp,pv); estOne=pr.total; estSeconds=n*pr.total; stepSeconds=pr.step; vaeSeconds=pr.vae;
-  $('previewCost').textContent = `(+ ${fmt(parts(w,h,steps,inp,true).previews*pr.vae)})`;
+  const pr=plan ? parts(plan[0].w, plan[0].h, steps, plan[0].inp, pv) : parts(w,h,steps,inp,pv);
+  estOne=pr.total; estSeconds=total(steps, pv); stepSeconds=pr.step; vaeSeconds=pr.vae;
+  campaignEst = plan ? plan.map(x=>parts(x.w, x.h, steps, x.inp, pv).total) : [];
+  $('previewCost').textContent = `(+ ${fmt(total(steps, true)-total(steps, false))})`;
   $('estTime').textContent=$('goEta').textContent='≈ '+fmt(estSeconds);
   $('estimate').classList.toggle('warn', estSeconds>3600); $('goEta').classList.toggle('warn', estSeconds>3600);
 }
@@ -762,6 +775,8 @@ function refreshChoices(){
   $('incog').onclick=()=>{ setIncog(!incogOn); saveOpt(); };   // libre à tout moment : chaque génération garde le mode de son lancement
   [['ratioOpts','ratio'],['resOpts','res'],['stepOpts','steps']].forEach(([id,key])=>$(id).addEventListener('click', e=>{
     const b=e.target.closest('[data-k]'); if(!b) return; opt[key]=b.dataset.k; saveOpt(); refreshChoices(); }));
+  $('campChk').checked=campaignOn;
+  $('campChk').addEventListener('change', ()=>{ campaignOn=$('campChk').checked; saveOpt(); renderEditThumbs(); refreshChoices(); });
   $('countOpts').addEventListener('click', e=>{ const b=e.target.closest('[data-k]'); if(!b) return; opt.count=+b.dataset.k; saveOpt(); refreshChoices(); });
   $('pills').addEventListener('click', e=>{ if(e.target.closest('[data-open]')) openSheet('setSheet'); });
   ['previewChk','mask_mode'].forEach(id=>$(id).addEventListener('change', ()=>{ saveOpt(); refreshChoices(); })); refreshChoices();
@@ -873,12 +888,19 @@ async function toEntry(name, dataUrl){ let im=await loadImg(dataUrl); let w=im.n
 function wireDrop(dropId, inputId, handler){ const d=$(dropId), inp=$(inputId); d.addEventListener('click',()=>inp.click());
   d.addEventListener('dragover',e=>{e.preventDefault(); d.classList.add('over');}); d.addEventListener('dragleave',()=>d.classList.remove('over'));
   d.addEventListener('drop',e=>{e.preventDefault(); d.classList.remove('over'); handler(e.dataTransfer.files);}); inp.addEventListener('change',e=>{ handler(e.target.files); e.target.value=''; }); }
-wireDrop('edit_drop','edit_files', async files=>{ for(const f of files){ if(editImages.length>=10) break; editImages.push(await toEntry(f.name, await readFile(f))); } renderEditThumbs(); suggestRatio(); });
+wireDrop('edit_drop','edit_files', async files=>{ let skipped=0;
+  for(const f of files){ if(editImages.length>=MAX_REFS){ skipped++; continue; } editImages.push(await toEntry(f.name, await readFile(f))); }
+  renderEditThumbs(); suggestRatio();
+  if(skipped) toast(`${MAX_REFS} ${campaignOn ? 'photos' : 'images'} au maximum : ${skipped} non ajoutée${skipped>1?'s':''}`, 'err'); });
 wireDrop('mask_drop','mask_file', async files=>{ const f=files[0]; if(f) await setMaskImage(f.name, await readFile(f)); });
 const maskMode = () => document.querySelector('input[name=mask_mode]:checked').value;
 ['edit_drop','mask_drop'].forEach(id=>$(id).addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); $(id).querySelector('input').click(); } }));
 function renderEditThumbs(){ const t=$('edit_thumbs'); t.innerHTML='';
-  $('refCount').textContent = editImages.length ? editImages.length+' / 10' : ''; $('refs').classList.toggle('full', editImages.length>=10); $('refHint').hidden = editImages.length<2;
+  const k=editImages.length;                       // campagne : des photos éditées une à une, pas des références numérotées
+  $('refTitle').textContent = campaignOn ? 'Photos de la campagne' : 'Images de référence';
+  $('dropHint').textContent = campaignOn ? `1 à ${MAX_REFS} photos, chacune éditée séparément` : `1 à ${MAX_REFS} images, à citer dans l'instruction`;
+  $('refCount').textContent = !k ? '' : campaignOn ? k+' photo'+(k>1?'s':'') : k+' / '+MAX_REFS;
+  $('refs').classList.toggle('full', k>=MAX_REFS); $('refHint').hidden = k<2 || campaignOn;
   editImages.forEach((im,i)=>{ const d=document.createElement('div'); d.className='thumb'; d.innerHTML=`<img src="${im.dataUrl}" alt=""><span>${i+1}</span><button aria-label="Retirer l'image ${i+1}">×</button>`;
     d.querySelector('button').onclick=()=>{ editImages.splice(i,1); renderEditThumbs(); suggestRatio(); }; t.appendChild(d); }); }
 
@@ -912,7 +934,9 @@ function buildRequest(){
   const [w,h]=currentDims(); const steps=stepsSel().steps;
   const body={ mode, prompt:'', width:w, height:h, steps, cfg:CFG, seed:-1, preview:$("previewChk").checked, preview_interval:PREVIEW_EVERY, ref_images:[], init_image:null, mask_image:null, strength:1.0, incognito:incogOn };
   if(mode==='t2i'){ body.prompt=$('t2i_prompt').value.trim(); if(opt.count>1) body.count=opt.count; }   // variantes : un lot
-  else if(mode==='edit'){ if(!editImages.length) throw new Error('Ajoutez au moins une image de référence.'); body.prompt=$('edit_prompt').value.trim(); body.ref_images=editImages.map(x=>x.dataUrl); }
+  else if(mode==='edit'){ if(!editImages.length) throw new Error(campaignOn ? 'Ajoutez au moins une photo.' : 'Ajoutez au moins une image de référence.'); body.prompt=$('edit_prompt').value.trim();
+    if(campaignOn){ body.campaign=campaignPlan().map(x=>({image:x.im.dataUrl, width:x.w, height:x.h})); body.width=body.campaign[0].width; body.height=body.campaign[0].height; }
+    else body.ref_images=editImages.map(x=>x.dataUrl); }
   else { if(!maskImage) throw new Error('Chargez une image.'); if(!paintedPixels()) throw new Error('Peignez une zone.'); body.prompt=$('mask_prompt').value.trim();
     if(maskMode()==='annotation'){ body.mode='annot'; body.ref_images=[paintedReference(w,h,true)]; }
     else { body.init_image=resizeDataUrl(maskImage.img,w,h); body.mask_image=exportMask(w,h); body.ref_images=[paintedReference(w,h,false)]; } }
@@ -981,7 +1005,7 @@ function show(p, reveal){                          // met une génération de la
   shown=p||null; renderStrip(); syncButtons(); $('lotGrid').hidden=true;
   if(!p){ lastResult=null; return hideResult(); }
   const grid=gridOf(p); if(grid) return showGrid(grid);
-  $('lotBadge').hidden=!p.lot; if(p.lot) $('lotBadge').textContent=`Image ${p.lot.rank} sur ${p.lot.size}`;
+  $('lotBadge').hidden=!p.lot; if(p.lot) $('lotBadge').textContent=`${p.tab==='edit' ? 'Photo' : 'Image'} ${p.lot.rank} sur ${p.lot.size}`;
   if(p.result){ const r=p.result; showResult(r.name, ...(r.dims||[]), reveal, r.blob ? r : null); setMeta(p.prompt, r.chips, r.file); return markSeen(); }
   lastResult=null; if(p.w && p.h) setStageRatio(p.w, p.h);
   showLoader(true); $('resultActions').style.display='none'; setMeta('', [], '');
@@ -990,20 +1014,22 @@ function show(p, reveal){                          // met une génération de la
 function showGrid(items){                          // lot terminé : ses images en grille ; un appui ouvre la visionneuse
   const first=items[0], [w,h]=first.result.dims||[1,1], incog=first.incognito, g=$('lotGrid');
   lastResult=null; $('stageImg').src=''; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultEmpty').style.display='none';
-  g.style.setProperty('--ar', w/h); g.hidden=false;
-  g.innerHTML=items.map((q, i)=>`<div class="cell"><button data-k="${i}" aria-label="Ouvrir l'image ${q.lot.rank}"><img src="${q.result.blob ? q.result.url : '/api/thumb?name='+encodeURIComponent(q.result.name)}" alt=""></button><span>${q.lot.rank}</span>`
+  g.hidden=false;                                  // chaque case à la forme de son image (une campagne en mélange plusieurs)
+  g.innerHTML=items.map((q, i)=>`<div class="cell" style="--ar:${q.result.dims ? q.result.dims[0]/q.result.dims[1] : w/h}"><button data-k="${i}" aria-label="Ouvrir l'image ${q.lot.rank}"><img src="${q.result.blob ? q.result.url : '/api/thumb?name='+encodeURIComponent(q.result.name)}" alt=""></button><span>${q.lot.rank}</span>`
     + (incog ? `<a href="${q.result.url}" download="${esc(q.result.name)}" aria-label="Télécharger l'image ${q.lot.rank}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg></a>` : '') + '</div>').join('');
-  const secs=items.reduce((t, q)=>t+(q.j.seconds||0), 0), size=first.lot.size;
-  setMeta(first.prompt, [items.length+(items.length<size ? ' sur '+size : '')+' images', fmt(secs), first.result.dims ? first.result.dims.join('×') : '', (first.j.total||'?')+' étapes'],
-    incog ? 'Incognito · non enregistrées : téléchargez celles à garder' : 'Touchez une image pour la voir en grand et garder la meilleure');
+  const secs=items.reduce((t, q)=>t+(q.j.seconds||0), 0), size=first.lot.size, camp=first.tab==='edit';
+  const dims=new Set(items.map(q=>(q.result.dims||[]).join('×')));
+  setMeta(first.prompt, [items.length+(items.length<size ? ' sur '+size : '')+' images', fmt(secs), dims.size===1 ? [...dims][0] : '', (first.j.total||'?')+' étapes'],
+    incog ? 'Incognito · non enregistrées : téléchargez celles à garder' : camp ? 'Touchez une image pour la voir en grand' : 'Touchez une image pour la voir en grand et garder la meilleure');
   if(!incog) setAmbient(first.result.name);
   markSeen(); }
 $('lotGrid').addEventListener('click', e=>{ const b=e.target.closest('button[data-k]'); if(!b || !shown) return;
   const items=gridOf(shown); if(items) openViewer(+b.dataset.k, items.map(pageItem)); });
 // image de la page telle que la visionneuse l'attend (même forme qu'une entrée de /api/history ; url : image incognito)
 function pageItem(p){ const r=p.result;
-  return { name:r.name, time:Math.round(p.j.finished||Date.now()/1000), mode:'t2i', prompt:p.prompt, width:r.dims&&r.dims[0], height:r.dims&&r.dims[1],
-    steps:p.j.total, seconds:p.j.seconds, seed:p.j.seed, lot:p.lot, inputs:[], url:r.blob ? r.url : null, page:p }; }
+  return { name:r.name, time:Math.round(p.j.finished||Date.now()/1000), mode:p.tab==='edit' ? 'edit' : 't2i', prompt:p.prompt, width:r.dims&&r.dims[0], height:r.dims&&r.dims[1],
+    steps:p.j.total, seconds:p.j.seconds, seed:p.j.seed, lot:p.lot, url:r.blob ? r.url : null, page:p,
+    inputs:p.tab==='edit' && !r.blob ? ['ref_1.png'] : [] }; }   // photo d'une campagne, gardée avec son image
 function renderProgress(){                         // image en cours dans la zone de résultat : étape, temps restant, aperçu
   const p=shown; if(!p || !isActive(p)) return;
   const j=p.j, pr=progress(p), pct=Math.max(pr.frac, 0.02)*100;
@@ -1063,10 +1089,11 @@ function renderQueue(){
   $('queueList').innerHTML=q.map(e=>{ const p=ownOf(e), incog=e.kind==='incognito'; wait+=entryLeft(e);
     const pic = p && p.thumb ? `<img src="${p.thumb}" alt="">`
       : `<span class="qicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${QICON[incog ? 'incognito' : tabOf(e.mode)]}</svg></span>`;
-    const sub=[e.status==='running' ? 'En cours' : ordinal(e.position)+' en attente', incog || e.lot ? '' : MODE_LABELS[e.mode]||e.mode, e.lot ? `image ${e.lot.rank}/${e.lot.size}` : '', 'prête dans ≈ '+fmt(wait), p ? 'cet appareil' : ''];
+    const camp=e.mode==='edit' || !!(p && p.tab==='edit');   // lot du mode Éditer : une campagne (incognito : connue de sa page)
+    const sub=[e.status==='running' ? 'En cours' : ordinal(e.position)+' en attente', incog || e.lot ? '' : MODE_LABELS[e.mode]||e.mode, e.lot ? `${camp ? 'photo' : 'image'} ${e.lot.rank}/${e.lot.size}` : '', 'prête dans ≈ '+fmt(wait), p ? 'cet appareil' : ''];
     // lot : un en-tête avant sa première image de la file, avec l'annulation de tout le lot là où l'appareil y a droit
     // (lot normal : partout ; lot incognito : sa page seulement, seule à connaître son identifiant)
-    const lot=e.lot && (e.lot.id || (p && p.lot && p.lot.id)), head=lot && !lots.has(lot) ? (lots.add(lot), `<div class="qlot"><span>Lot de ${e.lot.size} images</span><button class="btn secondary small" data-cancel-lot="${esc(lot)}">Annuler le lot</button></div>`) : '';
+    const lot=e.lot && (e.lot.id || (p && p.lot && p.lot.id)), head=lot && !lots.has(lot) ? (lots.add(lot), `<div class="qlot"><span>${camp ? 'Campagne de '+e.lot.size+' photos' : 'Lot de '+e.lot.size+' images'}</span><button class="btn secondary small" data-cancel-lot="${esc(lot)}">Annuler le lot</button></div>`) : '';
     // l'identifiant de la ligne est fixé à l'affichage : la file peut avancer avant l'appui
     return head + `<div class="qrow${p?' own':''}" data-id="${esc(e.id || (p && p.id) || '')}">${pic}<div class="qtxt"><b>${esc(incog ? 'Génération incognito' : e.prompt)}</b><span>${sub.filter(Boolean).map(esc).join(' · ')}</span></div>`
       + (e.id || p ? '<button class="qx" data-cancel aria-label="Annuler cette génération"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>' : '') + '</div>'; }).join(''); }
@@ -1127,13 +1154,15 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   askNotifications();                              // première génération : autorisation demandée une fois (appui en cours)
   if(estSeconds>3600 && !await ask('Génération longue', 'Temps estimé : '+fmt(estSeconds)+'. La lancer quand même ?', 'Lancer')) return;
   if(body.incognito) try{ localStorage.removeItem('qwen-'+mode+'_prompt'); }catch(e){}
-  log(`${body.mode} ${body.width}x${body.height} ${body.steps} étapes refs=${body.ref_images.length} mask=${body.mask_image?'oui':'non'} aperçus=${body.preview?'oui':'non'} estimation=${fmt(estSeconds)}`);
+  log(`${body.mode} ${body.width}x${body.height} ${body.steps} étapes refs=${body.ref_images.length}${body.campaign ? ' campagne='+body.campaign.length : ''} mask=${body.mask_image?'oui':'non'} aperçus=${body.preview?'oui':'non'} estimation=${fmt(estSeconds)}`);
   let r, j; try{ r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=await r.json(); }
   catch(e){ toast('Serveur injoignable', 'err'); return; }
   if(!r.ok){ toast('Erreur : '+(j.error||('HTTP '+r.status)), 'err'); return; }
   const jobs=j.jobs || [j];                         // un lot : une génération par image, suivies une à une
-  jobs.forEach(x=>track(x, {prompt:body.prompt, tab:mode, w:body.width, h:body.height, thumb:inputThumb(), est:estOne, stepSec:stepSeconds, vaeSec:vaeSeconds}));
-  if(jobs[0].queue_position) toast((j.lot ? `Lot de ${jobs.length} images ajouté` : 'Ajoutée')+' à la file · '+ordinal(jobs[0].queue_position)+' en attente');
+  const camp=body.campaign;                         // campagne : chaque génération a sa photo, ses dimensions et son estimation
+  jobs.forEach((x, k)=>track(x, {prompt:body.prompt, tab:mode, w:camp ? camp[k].width : body.width, h:camp ? camp[k].height : body.height,
+    thumb:camp ? camp[k].image : inputThumb(), est:camp ? campaignEst[k]||estOne : estOne, stepSec:stepSeconds, vaeSec:vaeSeconds}));
+  if(jobs[0].queue_position) toast((!j.lot ? 'Ajoutée' : camp ? `Campagne de ${jobs.length} photos ajoutée` : `Lot de ${jobs.length} images ajouté`)+' à la file · '+ordinal(jobs[0].queue_position)+' en attente');
   document.activeElement.blur(); requestAnimationFrame(()=>$('stage').scrollIntoView({behavior:'smooth', block:'center'}));
   refreshStatus();
 };
@@ -1221,9 +1250,9 @@ function openViewer(i, list=vList){
     it.lot ? `image ${it.lot.rank}/${it.lot.size}` : '', it.seed!=null && it.seed>=0 ? 'graine '+it.seed : '']
     .filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('');
   $('vDl').href=it.url || resultUrl(it.name)+'&download=1'; $('vDl').download=it.name; renderInputsButton(it);
-  // garder la meilleure d'un lot : seulement s'il en reste d'autres sur le Mac (jamais pour une image incognito)
+  // garder la meilleure de variantes : seulement s'il en reste d'autres sur le Mac (ni campagne, ni image incognito)
   const members=lotMembers(it);
-  $('vKeep').hidden=!(it.lot && !it.url && members.length>1);
+  $('vKeep').hidden=!(it.lot && it.mode==='t2i' && !it.url && members.length>1);
   $('vLot').hidden=members.length<2; $('vLotOpen').textContent=`Voir le lot (${members.length})`;
   $('vDelete').querySelector('span').textContent = it.url ? 'Effacer' : 'Supprimer';
   if(!v.classList.contains('on')){ v.classList.remove('immersive'); v.classList.add('on'); document.body.style.overflow='hidden'; }
@@ -1354,10 +1383,10 @@ function removeFromViewer(gone){                  // images supprimées : hors d
 function lotMembers(it){ if(!it || !it.lot) return [];
   return (it.page ? vList : histItems).filter(x=>x.lot && x.lot.id===it.lot.id).sort((a, b)=>a.lot.rank-b.lot.rank); }
 function openLot(){                               // « Voir le lot » : ses images côte à côte, un appui en ouvre une en grand
-  const items=lotMembers(vList[vIndex]); if(!items.length) return; const it=items[0];
-  $('lotTitle').textContent=`Lot de ${items.length} image${items.length>1?'s':''}`;
-  const g=$('lotSheetGrid'); g.style.setProperty('--ar', it.width && it.height ? it.width/it.height : 1);
-  g.innerHTML=items.map((x, i)=>`<button data-k="${i}" aria-label="Ouvrir l'image ${x.lot.rank}"><img src="${thumbOf(x)}" alt=""><b>${x.lot.rank}/${x.lot.size}</b></button>`).join('');
+  const items=lotMembers(vList[vIndex]); if(!items.length) return; const n=items.length, s=n>1 ? 's' : '';
+  $('lotTitle').textContent = items[0].mode==='edit' ? `Campagne de ${n} photo${s}` : `Lot de ${n} image${s}`;
+  const g=$('lotSheetGrid');                       // chaque vignette à la forme de son image (une campagne en mélange plusieurs)
+  g.innerHTML=items.map((x, i)=>`<button data-k="${i}" style="--ar:${x.width && x.height ? x.width/x.height : 1}" aria-label="Ouvrir l'image ${x.lot.rank}"><img src="${thumbOf(x)}" alt=""><b>${x.lot.rank}/${x.lot.size}</b></button>`).join('');
   g.onclick=e=>{ const b=e.target.closest('[data-k]'); if(!b) return; closeSheet(); openViewer(+b.dataset.k, items); };
   openSheet('lotSheet'); }
 async function downloadLot(){                     // « Tout télécharger » : un téléchargement par image, l'un après l'autre (pas d'archive)

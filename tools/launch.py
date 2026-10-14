@@ -14,7 +14,9 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   mémoire jusqu'à ce que l'interface la récupère (GET /api/job/<id>/result), puis l'interface fait oublier le job
   (POST /api/job/<id>/forget). Ni journal, ni galerie, ni calibration, ni ligne dans logs/.
 - Lots : {"count": 2 à 4} dans /api/generate (mode Créer) lance autant de générations du même prompt, à la suite dans
-  la file, chacune avec sa graine ; elles sont suivies, annulées (POST /api/lot/<id>/cancel) et notifiées ensemble.
+  la file, chacune avec sa graine ; {"campaign": [{"image", "width", "height"}, …]} (mode Éditer, 10 photos au plus)
+  lance une édition par photo, avec cette seule photo en référence. Les générations d'un lot sont suivies, annulées
+  (POST /api/lot/<id>/cancel) et notifiées ensemble.
 - API : POST /api/generate, GET /api/job/<id>, GET /api/job/<id>/preview, POST /api/job/<id>/cancel, POST /api/lot/<id>/cancel,
         GET /api/job/<id>/result et POST /api/job/<id>/forget (incognito),
         GET /api/result?name=<png>[&download=1], GET /api/status,
@@ -58,6 +60,7 @@ PROGRESS_RE = re.compile(r"(\d+)/(\d+)\s*-\s*([\d.]+)(s/it|it/s)")
 TAKING_RE = re.compile(r"taking ([\d.]+)\s*s")
 CALIB = P("tools", "calibration.json")
 MAX_VARIANTS = 4                          # images d'un lot de variantes (mode Créer)
+MAX_CAMPAIGN = 10                         # photos d'une campagne (mode Éditer), comme les références d'une édition
 # Répartition par backend. CUDA : tout sur la carte (l'encodeur int8 convrot a un chemin CUDA natif, RTX 20xx+) ;
 # --offload-to-cpu garde les poids en RAM et les copie à la demande, ce qui s'adapte à toute taille de VRAM.
 # --mmap : rechargement quasi instantané du modèle d'une génération à l'autre grâce au cache disque.
@@ -770,7 +773,33 @@ def request_error(req):
             return f"count : nombre entier de 1 à {MAX_VARIANTS} attendu"
         if req.get("mode") != "t2i":
             return "count : variantes en mode Créer (t2i) seulement"
+    campaign = req.get("campaign")
+    if campaign is not None:
+        if req.get("mode") != "edit":
+            return "campaign : campagne en mode Éditer (edit) seulement"
+        if not isinstance(campaign, list) or not 1 <= len(campaign) <= MAX_CAMPAIGN:
+            return f"campaign : liste de 1 à {MAX_CAMPAIGN} photos attendue"
+        if req.get("ref_images"):
+            return "campaign : les photos vont dans campaign, pas dans ref_images"
+        for c in campaign:                   # chaque photo devient une génération : mêmes contrôles qu'une demande seule
+            if not isinstance(c, dict) or not isinstance(c.get("image"), str):
+                return "campaign : chaque photo porte son image (data URL)"
+            if not all(is_int(c.get(k)) and 64 <= c[k] <= 4096 for k in ("width", "height")):
+                return "campaign : largeur et hauteur de chaque photo, nombres entiers de 64 à 4096"
     return None
+
+
+def expand_request(req):
+    """Demandes des générations d'une demande validée, chacune avec sa graine : une seule, ou une par image d'un lot
+    (variantes : count fois le même prompt ; campagne : une édition par photo, cette seule photo en référence, à ses
+    dimensions)."""
+    campaign = req.pop("campaign", None)
+    n = req.pop("count", None) or 1
+    seeds = draw_seeds(req.get("seed", -1), len(campaign) if campaign else n)
+    if campaign:
+        return [{**req, "ref_images": [c["image"]], "width": c["width"], "height": c["height"], "seed": seed}
+                for c, seed in zip(campaign, seeds)]
+    return [{**req, "seed": seed} for seed in seeds]
 
 
 def draw_seeds(seed, n):
@@ -1087,11 +1116,10 @@ class H(BaseHTTPRequestHandler):
             error = request_error(req)
             if error:
                 return self._send(400, {"error": error})
-            n = req.pop("count", None) or 1
-            inputs = request_inputs(req)
+            reqs = expand_request(req)
+            n = len(reqs)
             lot = {"id": uuid.uuid4().hex[:12], "size": n} if n > 1 else None
-            jobs = [new_job({**req, "seed": seed}, inputs, lot and {"id": lot["id"], "rank": k + 1, "size": n})
-                    for k, seed in enumerate(draw_seeds(req.get("seed", -1), n))]
+            jobs = [new_job(r, request_inputs(r), lot and {"id": lot["id"], "rank": k + 1, "size": n}) for k, r in enumerate(reqs)]
             if lot:
                 S.lots[lot["id"]] = {"jobs": jobs, "incognito": jobs[0]["incognito"]}
             with S.enqueue:                      # générations d'un lot : à la suite dans la file, dans l'ordre

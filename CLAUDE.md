@@ -77,8 +77,9 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
   Une génération annulée (en cours ou en file) ne laisse rien : `discard_cancelled` supprime son dossier de travail et
   une image finale déjà écrite. Le statut `cancelled` est posé avant que le moteur soit arrêté : un test doit attendre
   que `S.current` ait changé avant de regarder le disque.
-- **Lots** (`count` de 2 à 4, mode Créer) : `/api/generate` crée une génération par image (`new_job`), reliées par
-  `job["lot"]` (`id`, `rank`, `size`) et gardées dans `S.lots` même quand une génération incognito quitte `S.jobs`. Les
+- **Lots** (variantes : `count` de 2 à 4, mode Créer ; campagne : `campaign`, 2 à 10 photos avec leurs dimensions,
+  mode Éditer) : `expand_request` en tire une demande par image, `/api/generate` une génération par demande
+  (`new_job`), reliées par `job["lot"]` (`id`, `rank`, `size`) et gardées dans `S.lots` même quand une génération incognito quitte `S.jobs`. Les
   graines à -1 sont tirées par le serveur (`draw_seeds`) pour être écrites au journal. Une seule notification par lot
   (`notify_lot`), envoyée par `end_of_lot` depuis le `finally` de `worker()` quand plus aucune génération du lot n'est
   active ; le lot quitte alors `S.lots`, ce qui empêche un doublon quand une génération annulée en file passe ensuite.

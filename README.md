@@ -276,7 +276,19 @@ Ajouter 1 à 10 images (elles sont numérotées 1, 2, 3…), puis écrire une **
 - « The woman in image 1 wears the jacket from image 2 »
 
 Avec une seule image, le format « Image » est présélectionné pour garder ses proportions.
-Les images trop grandes sont réduites automatiquement à 2048 px de côté.
+Les images trop grandes sont réduites automatiquement à 2048 px de côté. Au-delà de 10, les images en trop ne sont pas
+ajoutées et un message le signale.
+
+**Campagne** : pour appliquer la même instruction à toute une série de photos (« 6 voitures rouges → 6 voitures
+bleues »), activer l'interrupteur **Campagne** sous les images (le choix est retenu ; il n'existe que dans Éditer).
+Chaque photo est alors éditée seule, avec cette seule photo en référence : une image par photo, jusqu'à 10 photos, au
+lieu d'une image qui les combine. Le compteur passe à « n photos », la pastille « Campagne · n photos » remplace celle
+du format, et le choix du format disparaît des Réglages : chaque image prend la forme de sa photo (le format pris en
+charge le plus proche, à la résolution choisie, côtés multiples de 32 ; une photo en portrait reste en portrait). Le
+temps estimé additionne les photos une à une. La campagne est un lot comme les variantes : suivie image par image
+(« Photo 2 sur 6 »), annulable en entier depuis la file d'attente, une seule notification à la fin, une grille des
+images, et chaque image garde sa photo comme image d'entrée dans la galerie. Interrupteur désactivé, l'édition reste
+celle d'avant (1 à 10 références combinées en une image).
 
 ### Dessiner (dessin guidé)
 
@@ -539,7 +551,10 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   déjà terminée, réussie, en échec ou annulée), `GET /api/status` (`queue` : la file, génération en cours d'abord ;
   chaque entrée porte `status`, `position`, `lot`, `estimate` et `elapsed` en secondes, `kind`, et pour une génération
   normale seulement `id`, `mode` et le début du `prompt`) ; lots : `"count"` de 2 à 4 dans `/api/generate` (mode
-  Créer, `"mode": "t2i"` ; 1 : génération seule) crée autant de générations, à la suite dans la file, et la réponse devient
+  Créer, `"mode": "t2i"` ; 1 : génération seule) crée autant de générations ; `"campaign": [{"image": <data URL>, "width",
+  "height"}, …]` (1 à 10 photos, mode Éditer, `"mode": "edit"`, sans `ref_images`) crée une édition par photo, avec
+  cette seule photo en référence et à ses dimensions (une seule photo : génération seule) ; les générations d'un lot
+  passent à la suite dans la file, et la réponse devient
   `{"lot": {"id", "size"}, "jobs": [...]}` ; chaque génération porte `lot` (`id`, `rank`, `size`), aussi écrit dans
   `outputs/journal.jsonl` (un lot incognito ne montre dans `queue` que `rank` et `size`) ; `POST /api/lot/<id>/cancel`
   annule toutes ses générations non terminées (404 une fois le lot fini). Graine `-1` : le serveur la tire lui-même (distincte pour chaque
@@ -554,7 +569,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   avec `--lan`, `POST /api/login`.
 - `POST /api/generate` refuse (code 400, avec un message) une demande dont le prompt n'est pas un texte non vide, dont
   la largeur ou la hauteur n'est pas un entier de 64 à 4096, les étapes un entier de 1 à 200, ou la graine un entier
-  (-1 : au hasard), ou `count` qui n'est pas un entier de 1 à 4 ou qui accompagne un autre mode que Créer ; les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Une
+  (-1 : au hasard), ou `count` qui n'est pas un entier de 1 à 4 ou qui accompagne un autre mode que Créer, ou une `campaign` hors du
+  mode Éditer, de plus de 10 photos, ou dont une photo n'a pas d'image ou de dimensions valides ; les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Une
   génération qui ne peut pas se préparer (image d'entrée illisible, par exemple) échoue seule,
   avec un message, et la file passe à la suivante.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés
