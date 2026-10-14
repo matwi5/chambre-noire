@@ -2,7 +2,7 @@
 
 ## État
 
-Mis à jour le 13/10/2026.
+Mis à jour le 14/10/2026.
 
 - **Fonctionnel** sur Windows (Vulkan, CPU, CUDA en option ; sd.cpp `master-890`) et sur Mac Apple Silicon (Metal ;
   sd.cpp `master-959`, encodeur GGUF). Modèles Q4_K_M et Q8_0. Trois usages (texte → image, édition, dessin guidé),
@@ -10,7 +10,9 @@ Mis à jour le 13/10/2026.
   notification de fin de génération (Web Push).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
-- **En cours** : rien.
+- **En cours** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
+  prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), liste des prompts types à valider par le porteur ;
+  implémentation pas commencée, en cinq étapes dans l'ordre de la spécification.
 - **À vérifier par le porteur**, sur le téléphone par l'application installée (testé seulement dans Chrome sur le Mac,
   en vue de téléphone) :
   - télécharger, partager et copier une image, dont une image incognito (adresse `blob:`) ;
@@ -18,9 +20,11 @@ Mis à jour le 13/10/2026.
   - la barre d'état qui prend la couleur du haut de l'écran dans la visionneuse (un bug Chromium pourrait l'empêcher).
 - **Pistes ouvertes** (aucune demandée) :
   - une exception dans `build_cmd` (prompt non textuel, image de référence illisible) tue le thread `worker()` et bloque
-    la file jusqu'au redémarrage ;
+    la file jusqu'au redémarrage (réglé par l'étape 1 de la spécification du 14/10/2026) ;
   - un autre appareil connecté peut suivre les aperçus d'une génération incognito en cours (`current_job` est exposé
-    par `/api/status`) ;
+    par `/api/status`) (réglé par l'étape 1 de la même spécification) ;
+  - annuler une génération déjà terminée la repasse en `cancelled` sans supprimer son image, et la position dans la
+    file est figée à la création (trouvés le 14/10/2026 en lisant le code, non reproduits ; réglés par l'étape 1) ;
   - accepter toute adresse IP littérale dans la liste blanche de `Host`, pour qu'un changement d'IP du Mac ne coupe plus
     l'accès par IP (décision au porteur) ;
   - `start-ui-sdcpp.cmd` et `workflows/*.json` sont périmés (à mettre à jour ou à retirer) ; `sd_port` de
@@ -36,6 +40,15 @@ Mis à jour le 13/10/2026.
   propres au réseau du porteur : la supprimer plutôt que la pousser.
 
 ## Journal
+
+### 2026-10-14
+
+- Cadrage (séance de questions, toutes les réponses validées par le porteur) de quatre fonctions : file d'attente
+  visible avec « Générer » toujours actif, lots (variantes 1 à 4 en mode Créer, campagne de 10 photos au plus en mode
+  Éditer), prompts enregistrés et prompts types, espace privé chiffré. Pas de calcul simultané : d'après les mesures de
+  calibration, ≈ 95 % d'une génération est du calcul GPU (déduit, non mesuré en parallèle). Écrits :
+  `docs/specs/2026-10-14_lots-espace-prive-prompts.md`, `GLOSSARY.md` (nouveau, vocabulaire de l'application) et deux
+  entrées de `DECISIONS.md`. Le banc à faux moteur deviendra un banc permanent dans `tests/` (accord du porteur).
 
 ### 2026-10-13
 
