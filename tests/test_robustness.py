@@ -1,5 +1,6 @@
 """Une demande invalide est refusée, une génération qui ne peut pas se préparer échoue seule : la file continue."""
-import os, unittest
+import os, threading, time, unittest
+from unittest import mock
 
 import bench
 from bench import call, gen_body, generate, wait_job
@@ -73,6 +74,26 @@ class PreparationFailureTest(bench.BenchCase):
             wait_job(generate("make it blue", mode="edit", ref_images=["data:image/png;base64,bm9u"])["id"])
             sent.wait(1)
         self.assertEqual(sent[0]["title"], "Échec de la génération")
+
+
+class CancelDuringPreparationTest(bench.BenchCase):
+    def test_cancel_while_inputs_are_prepared_stops_the_engine_at_once(self):
+        preparing, real = threading.Event(), bench.launch.build_cmd
+
+        def slow_build(job):                    # préparation longue (grosses images d'entrée) : le temps d'annuler
+            preparing.set()
+            time.sleep(0.5)
+            return real(job)
+        with mock.patch.object(bench.launch, "build_cmd", slow_build):
+            jid = generate("SLOW=1 long one", steps=20)["id"]
+            self.assertTrue(preparing.wait(5))
+            self.assertEqual(call("POST", f"/api/job/{jid}/cancel")[1]["status"], "cancelled")
+            t0 = time.time()
+            bench.wait_idle()
+        self.assertLess(time.time() - t0, 5)       # le moteur n'a pas tourné ses 20 s
+        self.assertEqual(bench.job(jid)["status"], "cancelled")
+        self.assertEqual(bench.files("outputs", "*.png"), [])
+        self.assertEqual(bench.files("jobs", jid), [])
 
 
 class CancelFinishedTest(bench.BenchCase):

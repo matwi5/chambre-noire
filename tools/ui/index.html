@@ -1125,9 +1125,10 @@ async function pollJobs(){
   finally{ polling=false; syncButtons(); } }
 async function finish(p){                          // génération terminée : son image entre dans la page, ou elle en sort
   const j=p.j;
-  if(j.status==='done' && j.incognito){            // image gardée en mémoire par le serveur : récupérée une fois, puis oubliée
-    try{ const r=await fetch('/api/job/'+j.id+'/result'); if(!r.ok) throw new Error(); const blob=await r.blob(); p.result={blob, url:URL.createObjectURL(blob)}; }
-    catch(e){ j.status='failed'; j.error='image incognito indisponible'; }
+  if(j.incognito){                                 // image gardée en mémoire par le serveur : récupérée une fois ; puis la
+    if(j.status==='done')                          // génération est oubliée, qu'elle ait réussi, échoué ou été annulée
+      try{ const r=await fetch('/api/job/'+j.id+'/result'); if(!r.ok) throw new Error(); const blob=await r.blob(); p.result={blob, url:URL.createObjectURL(blob)}; }
+      catch(e){ j.status='failed'; j.error='image incognito indisponible'; }
     forgetJob(j.id); }
   if(j.status==='done'){ const secs=j.seconds||0;
     p.result={...(p.result||{}), name:j.name, dims:j.dims, file:j.incognito ? 'Incognito · non enregistrée : téléchargez-la pour la garder' : j.name,

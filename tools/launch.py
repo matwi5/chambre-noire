@@ -464,6 +464,7 @@ def write_data_url(data_url, path, what="image d'entrée"):
 
 
 def image_size(path):
+    """Dimensions d'une image : chemin de fichier ou objet fichier (io.BytesIO)."""
     from PIL import Image
     with Image.open(path) as im:
         return im.size
@@ -531,6 +532,8 @@ def run_job(job):
         logf.close()
         return
     job["proc"] = proc
+    if job.get("status") == "cancelled":         # annulée pendant la préparation (images d'entrée) : moteur arrêté aussitôt
+        proc.kill()
     buf = b""
     tail = []
     fd = proc.stdout.fileno()
@@ -831,12 +834,10 @@ def request_inputs(req):
     """Pixels des images d'entrée tels que build_cmd les donnera au moteur, lus dans l'en-tête des images dès la demande,
     pour estimer la durée avant le calcul : (références, image de départ). Une image illisible ne compte pas (elle
     fera échouer sa génération)."""
-    from PIL import Image
     w, h, refs = req["width"], req["height"], []
     for ref in req.get("ref_images") or []:
         try:
-            with Image.open(io.BytesIO(data_url_bytes(ref))) as im:
-                refs.append(estimate.ref_px(*im.size, w, h))
+            refs.append(estimate.ref_px(*image_size(io.BytesIO(data_url_bytes(ref))), w, h))
         except Exception:
             pass
     return refs, (w * h if req.get("init_image") else 0)
