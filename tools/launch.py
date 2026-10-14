@@ -357,6 +357,8 @@ KEY_AAD = b"qwen-image-local private key v1"   # données associées du chiffrem
 FILE_MAGIC = b"QPV1"                           # en-tête d'un fichier chiffré de l'espace privé (version 1)
 FILE_INFO = b"qwen-image-local private file v1"   # contexte HKDF de la clé d'un fichier
 ITEM_RE = re.compile(r"[0-9a-f]{32}")          # nom d'une image privée : 128 bits tirés au hasard
+PRIVATE_HTTPS_ONLY = ("espace privé : ouvrez l'application par son adresse HTTPS (Tailscale) ou sur le Mac ; "
+                      "en http:// sur le Wi-Fi, le code et les images passeraient en clair")
 
 
 def b64e(raw):
@@ -820,6 +822,7 @@ class State:
     access_token = None      # valeur du cookie posé après saisie du code (empreinte du code, pas le code)
     lan_urls = []            # adresses affichées pour le téléphone
     lan_hosts = set()        # noms d'hôte admis en plus des noms locaux (ceux de lan_urls et le nom HTTPS de Tailscale)
+    https_hosts = set()      # nom HTTPS de « tailscale serve » : seule origine, avec le Mac, où l'espace privé s'ouvre
     cfg = {}
     ui_port = 7860
     jobs = {}
@@ -1389,6 +1392,12 @@ class H(BaseHTTPRequestHandler):
         jamais une requête relayée."""
         return self.client_address[0] in LOCAL_CLIENTS and self._host() in self._local_hosts() and not self._proxied()
 
+    def _secure(self):
+        """Requête qui ne passe pas en clair sur le réseau : le Mac lui-même, ou l'adresse HTTPS de « tailscale serve »,
+        qui relaie depuis 127.0.0.1. Jugé sur l'adresse source et le nom d'hôte, jamais sur les en-têtes de relais, qu'un
+        appareil du Wi-Fi peut envoyer en http://. Seule origine où l'espace privé s'ouvre (décision du porteur)."""
+        return self.client_address[0] in LOCAL_CLIENTS and self._host() in self._local_hosts() | S.https_hosts
+
     def _post_refused(self):
         """Refus d'un POST venu d'un autre site (CSRF) : (code, motif), ou None s'il vient de l'interface. Un formulaire
         d'un autre site peut poster du JSON en text/plain sans contrôle préalable du navigateur ; exiger
@@ -1439,6 +1448,8 @@ class H(BaseHTTPRequestHandler):
         """Lectures de l'espace privé, session exigée (elles la prolongent) : history, thumb, image, input."""
         if not HAVE_CRYPTO:
             return self._send(503, {"error": "espace privé indisponible : bibliothèque cryptography non installée"})
+        if not self._secure():
+            return self._send(403, {"error": PRIVATE_HTTPS_ONLY})
         session = self._private_session(touch=True)
         if not session:
             return self._send(403, {"error": "espace privé verrouillé"})
@@ -1475,6 +1486,8 @@ class H(BaseHTTPRequestHandler):
         if not isinstance(body, dict):
             return self._send(400, {"error": "objet JSON attendu"})
         action = path[len("/api/private/"):]
+        if action not in ("lock", "reset") and not self._secure():   # verrouiller : partout ; reset : le Mac seul
+            return self._send(403, {"error": PRIVATE_HTTPS_ONLY})
         if action == "delete":                  # supprimer une image privée, session exigée
             if not self._private_session(touch=True):
                 return self._send(403, {"error": "espace privé verrouillé"})
@@ -1566,10 +1579,11 @@ class H(BaseHTTPRequestHandler):
                                     # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
                                     "phone": {"urls": S.lan_urls, "code": S.access_code} if S.access_code and self._local() else None,
                                     # espace privé : existe-t-il, est-il déverrouillé pour cet appareil (sans prolonger la
-                                    # session), et peut-il y être supprimé sans le code (le Mac lui-même seulement)
+                                    # session), peut-il s'ouvrir par cette adresse (HTTPS ou le Mac) et y être supprimé
+                                    # sans le code (le Mac lui-même seulement)
                                     "private": {"available": HAVE_CRYPTO, "exists": HAVE_CRYPTO and os.path.exists(os.path.join(PRIVATE, "space.json")),
                                                 "unlocked": HAVE_CRYPTO and self._private_session() is not None,
-                                                "local": self._local()}})
+                                                "secure": self._secure(), "local": self._local()}})
         m = re.match(r"^/api/job/([\w-]+)(/preview|/result)?$", path)
         if m:
             job = S.jobs.get(m.group(1))
@@ -1719,6 +1733,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(400, {"error": error})
             if req.get("private") and not HAVE_CRYPTO:
                 return self._send(503, {"error": "espace privé indisponible : bibliothèque cryptography non installée"})
+            if req.get("private") and not self._secure():   # prompt et images d'entrée privés : jamais en clair
+                return self._send(403, {"error": PRIVATE_HTTPS_ONLY})
             if req.get("private") and not self._private_session(touch=True):
                 return self._send(403, {"error": "espace privé verrouillé : entrez-y pour lancer une génération privée"})
             reqs = expand_request(req)
@@ -1838,6 +1854,7 @@ def main():
         dns = next((h for h in ts if h.endswith(".ts.net")), None)
         if dns:
             S.lan_hosts.add(dns)                    # nom HTTPS de « tailscale serve », admis même s'il est activé plus tard
+            S.https_hosts.add(dns)
             https = tailscale_serve_url(dns, a.port)
             if https:
                 S.lan_urls.insert(0, https)         # seule adresse où le téléphone peut installer l'application

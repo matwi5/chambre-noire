@@ -386,6 +386,11 @@ du Mac, ne suffit pas pour voir les images privées.
 - Rien ne le signale à l'arrivée sur l'application. Son entrée est le petit **cadenas** de l'en-tête de la
   **Galerie** : la première fois, il crée l'espace (code de 8 caractères au moins, lettres, chiffres, signes ;
   majuscules et minuscules comptent ; saisi deux fois).
+- **En HTTPS ou sur le Mac seulement** : l'espace privé ne s'ouvre (création, entrée, galerie privée, Changer le
+  code, Rendre privée) que sur le Mac lui-même ou par l'adresse HTTPS de Tailscale (celle en `https://` du panneau
+  Téléphone). Par l'adresse `http://` du Wi-Fi, le code et les images passeraient en clair sur le réseau : le cadenas
+  le dit et ne demande pas le code. Le téléphone doit donc passer par l'adresse HTTPS, ce qu'il fait déjà s'il a
+  installé l'application depuis elle.
 - Ensuite, le cadenas demande le code pour **entrer** dans l'espace privé, sur l'appareil où on le touche et seulement
   sur lui. Un code faux est suivi d'une attente d'une seconde. Dans l'espace privé, toute l'application passe en
   teintes sarcelle sombres (comme le graphite de l'incognito : on sait où l'on est), et le bouton Incognito
@@ -670,8 +675,12 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   seconde si le code est faux), qui ouvrent une session pour l'appareil (cookie `qwen_private`, HttpOnly, sans durée
   de vie, fermée par le serveur après 15 minutes sans requête privée), `POST /api/private/lock`,
   `POST /api/private/code {"old", "new"}`, `POST /api/private/reset {"confirm": "SUPPRIMER"}` (efface l'espace et
-  ferme toutes les sessions) ; `/api/status` porte `private` : `available` (bibliothèque `cryptography` présente),
-  `exists`, `unlocked` (pour cet appareil, sans prolonger la session) ; sans `cryptography`, ces routes répondent 503 ;
+  ferme toutes les sessions ; 403 hors du Mac lui-même) ; `/api/status` porte `private` : `available` (bibliothèque
+  `cryptography` présente), `exists`, `unlocked` (pour cet appareil, sans prolonger la session), `secure` (l'espace
+  peut s'ouvrir par cette adresse) et `local` (le Mac lui-même, seul à pouvoir supprimer l'espace sans le code) ; sans
+  `cryptography`, ces routes répondent 503. Toutes les routes de l'espace privé sauf `lock`, et la génération privée,
+  répondent 403 hors du Mac lui-même et de l'adresse HTTPS de « tailscale serve » (jugé sur l'adresse source
+  127.0.0.1 et le nom d'hôte, jamais sur les en-têtes de relais) ;
   génération privée : `"private": true` dans `/api/generate` (403 sans session, 400 avec `incognito` ou si `private`
   n'est pas un booléen, 503 sans `cryptography`), identifiant de
   32 caractères hexadécimaux, `kind` `private` dans `queue` (comme l'incognito : jeton `page`, ni `id` ni prompt) ;

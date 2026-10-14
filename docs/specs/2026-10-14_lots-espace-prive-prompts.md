@@ -339,7 +339,10 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
   `GET /api/private/history` (liste déchiffrée, session exigée) ; lecture d'une image privée, de sa miniature et de ses
   images d'entrée, avec téléchargement (session exigée) ; POST `/api/private/delete` ; POST `/api/private/adopt`
   (« Rendre privée », session exigée). `/api/status` indique si l'espace existe, s'il est déverrouillé pour cet
-  appareil et si cet appareil est le Mac lui-même (`local`, qui seul peut supprimer l'espace sans le code). Sans `cryptography`, ces routes répondent qu'elles ne sont pas disponibles et l'interface masque tout ce
+  appareil, s'il peut s'ouvrir par cette adresse (`secure`) et si cet appareil est le Mac lui-même (`local`, qui seul
+  peut supprimer l'espace sans le code). Toutes ces routes sauf `lock`, et la génération privée, répondent 403 hors du
+  Mac lui-même et de l'adresse HTTPS de « tailscale serve » (adresse source 127.0.0.1 et nom d'hôte local ou HTTPS,
+  jamais les en-têtes de relais) ; l'interface le dit au lieu de demander le code. Sans `cryptography`, ces routes répondent qu'elles ne sont pas disponibles et l'interface masque tout ce
   qui touche à l'espace privé.
 - **Génération privée** : `/api/generate` avec `private: true` exige une session privée valide au lancement
   (sinon 403). Le dossier de travail est un dossier de travail privé, supprimé en fin de génération et au démarrage,

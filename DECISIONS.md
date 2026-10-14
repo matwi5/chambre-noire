@@ -16,12 +16,21 @@ les messages de commit.
   - **Supprimer sans le code, sur le Mac seulement** : `/api/private/reset` exige une requête du Mac lui-même (au sens
     du contrôle d'accès : adresse source et nom d'hôte locaux, non relayée par Tailscale) ; ailleurs 403, et la feuille
     de l'interface dit d'ouvrir l'application sur le Mac (`local` dans `/api/status`).
+  - **En HTTPS ou sur le Mac seulement** : toutes les routes de l'espace privé sauf `lock` (création, déverrouillage,
+    changement de code, « Rendre privée », galerie et lectures déchiffrées, suppression d'une image) et la génération
+    privée exigent une requête « sûre » (`_secure`) : adresse source 127.0.0.1 ou ::1 **et** nom d'hôte local ou nom
+    HTTPS de « tailscale serve » (`S.https_hosts`, le relais arrivant de 127.0.0.1). Ailleurs 403 avec un message qui
+    dit de passer par l'adresse HTTPS ; `secure` dans `/api/status` permet à l'interface de le dire avant toute saisie.
 - **Écarté** : « Image privée prête » (le service de notification et l'écran verrouillé du téléphone apprennent qu'un
   espace privé existe) ; suppression depuis un autre appareil avec le code (non demandée : avec le code, on entre et
-  on supprime les images).
+  on supprime les images) ; juger le HTTPS sur les en-têtes `X-Forwarded-*` ou `Tailscale-User-Login` (un appareil du
+  Wi-Fi peut les envoyer en `http://`) ; admettre l'adresse Tailscale directe en `http://` (chiffrée par WireGuard,
+  mais la décision du porteur nomme le HTTPS et le Mac seulement).
 - **Conséquences** : rien, dans une notification, ne distingue une image privée d'une image normale. Quelqu'un qui
   connaît le code d'accès du téléphone ne peut plus effacer l'espace privé à distance ; le porteur qui a oublié son
-  code doit passer par le Mac.
+  code doit passer par le Mac. Le téléphone n'ouvre l'espace privé que par l'adresse HTTPS de Tailscale (« tailscale
+  serve » actif) ; le Mac ouvert par son propre nom Wi-Fi (`http://<nom>.local:7860`) n'est pas « sûr » non plus : il
+  passe par `127.0.0.1` ou `localhost`.
 
 ## 2026-10-14 · Espace privé discret : on y entre, on en sort
 

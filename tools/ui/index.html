@@ -760,6 +760,13 @@
   <p class="err" id="pkErr" role="alert"></p>
   <button class="btn" id="pkGo" onclick="privChangeCode()">Changer le code</button>
 </section>
+<section class="sheet glass privsheet" id="privHttpsSheet" role="dialog" aria-modal="true" aria-labelledby="privHttpsTitle">
+  <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
+  <div class="sheet-head"><h2 id="privHttpsTitle">Espace privé</h2></div>
+  <p class="note">L'espace privé ne s'ouvre qu'en HTTPS ou sur le Mac lui-même : par cette adresse en http://, le code et les images passeraient en clair sur le Wi-Fi.</p>
+  <p class="note">Ouvrez l'application par son adresse HTTPS (Tailscale), celle qui commence par https:// dans le panneau Téléphone du Mac.</p>
+  <button class="btn" onclick="closeSheet()">Compris</button>
+</section>
 <section class="sheet glass privsheet" id="privResetSheet" role="alertdialog" aria-modal="true" aria-labelledby="privResetTitle">
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
   <div class="sheet-head"><h2 id="privResetTitle">Supprimer l'espace privé</h2></div>
@@ -1657,6 +1664,8 @@ function renderMarks(){ TABS.forEach(b=>{ const on=privTabs.has(b.dataset.pane) 
   if(on) b.title='Contenu de l\'espace privé'; else b.removeAttribute('title'); }); }
 let pendingGo=false;   // Générer touché sur un onglet marqué : relancé une fois entré dans l'espace
 function openPrivSheet(id, fromMark){
+  // en http:// sur le Wi-Fi, l'espace ne s'ouvre pas (le code passerait en clair) : la feuille le dit, sans champ de code
+  if(!privState.secure && id!=='privResetSheet'){ pendingGo=false; return openSheet('privHttpsSheet'); }
   $('puNote').hidden=!fromMark; if(!fromMark) pendingGo=false;
   ['pcCode','pcCode2','puCode','pkOld','pkNew','pkNew2','prWord','paCode'].forEach(k=>$(k).value='');
   ['pcErr','puErr','pkErr','prErr','paErr'].forEach(k=>$(k).textContent='');
