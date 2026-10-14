@@ -55,8 +55,9 @@ Mis à jour le 14/10/2026.
   36 tests au vert (relancés après fusion), `py_compile` et `node --check` propres, contrôles dans Chrome sans écran en
   vue de téléphone. Choix de la session : bornes de validation (64 à 4096 px, 1 à 200 étapes), estimation de chaque
   entrée de la file, incognito compris ; la zone de résultat garde l'image finie et la suite se suit dans une rangée
-  de vignettes. Les 13 tickets Asana ont été créés par erreur aussi dans la section « Orange · Cockpit EAS » (paramètre
-  `default_project` avec `parent`) : à corriger.
+  de vignettes. Les 13 tickets Asana avaient été créés par erreur aussi dans la section « Orange · Cockpit EAS » (paramètre
+  `default_project` avec `parent`) : retirés du projet avec l'accord du porteur, ils restent sous-tâches de la tâche
+  mère.
 - Découpage du chantier en 13 tickets Asana (sous-tâches de la tâche mère de Claude), chacun avec sa ligne
   « Bloqué par », et une tâche assignée au porteur pour valider la liste des prompts types.
 - Suivi des tâches passé sur Asana (décision du porteur, revient sur le refus du 13/10/2026) : section « Qwen-Image

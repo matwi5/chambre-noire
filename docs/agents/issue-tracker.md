@@ -24,7 +24,8 @@ commentaire de résultat, cochage à la fin).
 ## Conventions
 
 - **Un ticket** = une sous-tâche de la tâche mère de Claude (`create_tasks` avec `parent`, sans section). Un seul
-  niveau de sous-tâches.
+  niveau de sous-tâches. Ne pas passer `default_project` (ni `project_id`) avec `parent` : la sous-tâche deviendrait
+  aussi membre du projet et tomberait dans sa première section, qui est celle d'un autre projet.
 - **Nom** : `[code] Verbe + objet concret`, dans le vocabulaire de `GLOSSARY.md`.
 - **Description** en texte brut, une information par ligne, sans puces ni Markdown, dans cet ordre :
 
