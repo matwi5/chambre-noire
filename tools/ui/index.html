@@ -1109,7 +1109,7 @@ $('queueList').addEventListener('click', async ev=>{
 function track(j, info){
   pageJobs.push({ id:j.id, j, incognito:!!j.incognito, lot:j.lot||null, prompt:info.prompt||'', tab:info.tab||'t2i', w:info.w, h:info.h, thumb:info.thumb||null,
     est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0 });
-  while(pageJobs.length>MAX_PAGE_JOBS){ const k=pageJobs.findIndex(p=>p.result && !p.result.blob && p!==shown); if(k<0) break; pageJobs.splice(k, 1); }
+  while(pageJobs.length>MAX_PAGE_JOBS){ const k=pageJobs.findIndex(p=>p.result && !p.result.blob && p!==shown && !sameLot(p, shown)); if(k<0) break; pageJobs.splice(k, 1); }
   if(shown && shown.incognito && shown.result) renderStrip();   // l'image incognito affichée le reste
   else show(oldestActive());
   renderIsland(); pollJobs(); }
@@ -1310,7 +1310,7 @@ async function dataUrlOf(name){ if(lastResult && lastResult.blob && lastResult.n
   const own=pageJobs.find(p=>p.result && p.result.blob && p.result.name===name); if(own) return await readFile(own.result.blob);   // image incognito d'un lot
   const b=await (await fetch(resultUrl(name))).blob(); return await readFile(b); }
 async function useAsEditInput(name=lastResult && lastResult.name){
-  if(!name) return; if(editImages.length>=10){ toast('10 images de référence au maximum', 'err'); return; }
+  if(!name) return; if(editImages.length>=MAX_REFS){ toast(MAX_REFS+' images de référence au maximum', 'err'); return; }
   editImages.push(await toEntry(name, await dataUrlOf(name))); renderEditThumbs(); goTab('edit'); suggestRatio(); toast('Ajoutée aux images de référence'); }
 async function useAsMaskInput(name=lastResult && lastResult.name){ if(!name) return; await setMaskImage(name, await dataUrlOf(name)); goTab('mask'); }
 // ------------------------------------------------------------ partager et copier (HTTPS ou Mac seulement : boutons masqués sinon)
@@ -1348,7 +1348,7 @@ async function inputAction(kind){             // repartir de cette image d'entr�
   closeInputs(); closeViewer();
   const dataUrl=await readFile(await (await fetch(url)).blob());
   if(kind==='mask'){ await setMaskImage(name, dataUrl); goTab('mask'); return; }
-  if(editImages.length>=10){ toast('10 images de référence au maximum', 'err'); return; }
+  if(editImages.length>=MAX_REFS){ toast(MAX_REFS+' images de référence au maximum', 'err'); return; }
   editImages.push(await toEntry(name, dataUrl)); renderEditThumbs(); goTab('edit'); suggestRatio(); toast('Ajoutée aux images de référence'); }
 (function inputSwipe(){        // glisser à gauche ou à droite : image d'entrée voisine ; vers le bas : fermer
   const st=$('ivStage'), img=$('ivImg'); let p=null;
@@ -1397,7 +1397,7 @@ async function downloadLot(){                     // « Tout télécharger » : 
   if(items.length) toast(items.length+' téléchargements lancés'); }
 async function keepThis(){                        // variantes : garder cette image, supprimer les autres images du lot
   const it=vList[vIndex]; if(!it || !it.lot) return;
-  const others=lotMembers(it).filter(x=>x!==it && !x.url);
+  const others=lotMembers(it).filter(x=>x.name!==it.name && !x.url);   // par nom : la galerie a pu être rechargée depuis l'ouverture
   if(!others.length) return;
   const n=others.length, s=n>1 ? 's' : '';
   if(!await ask('Garder celle-ci ?', `${n===1 ? "L'autre image" : 'Les '+n+' autres images'} du lot ser${n>1?'ont':'a'} supprimée${s} définitivement du Mac.`, 'Garder', true)) return;

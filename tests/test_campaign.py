@@ -52,6 +52,15 @@ class CampaignTest(bench.BenchCase):
         for j in jobs:
             wait_job(j["id"])
 
+    def test_campaign_notification_speaks_of_photos(self):
+        with bench.capture_push() as sent:
+            jobs = call("POST", "/api/generate", campaign_body([entry(png_bytes(), 512, 512)] * 2))[1]["jobs"]
+            for j in jobs:
+                wait_job(j["id"])
+            msg = sent.wait(1)[0]
+            self.assertEqual(msg["title"], "2 images prêtes")
+            self.assertTrue(msg["body"].startswith("Campagne de 2 photos terminée en "), msg["body"])
+
     def test_single_photo_campaign_is_a_single_generation(self):
         code, j = call("POST", "/api/generate", campaign_body([entry(png_bytes(), 512, 384)]))
         self.assertEqual(code, 202)

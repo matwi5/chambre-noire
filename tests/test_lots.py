@@ -126,6 +126,7 @@ class LotNotificationTest(bench.BenchCase):
             self.wait_lot(generate_lot("zq7marker lot", count=3)["jobs"])
             msg = self.only(sent)
             self.assertEqual(msg["title"], "3 images prêtes")
+            self.assertTrue(msg["body"].startswith("Lot de 3 images terminé en "))
             self.assertNotIn("zq7marker", str(msg))
 
     def test_notification_counts_the_failures(self):

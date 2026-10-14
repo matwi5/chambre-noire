@@ -247,7 +247,8 @@ def notify_lot(lot):
         s = "s" if done > 1 else ""
         title = f"{done} image{s}{' incognito' if lot['incognito'] else ''} prête{s}" + (f", {failed} en échec" if failed else "")
         span = max(j.get("finished") or 0 for j in jobs) - min(j["started"] for j in jobs if j.get("started"))
-        push_notify({"title": title, "body": f"Lot de {len(jobs)} images terminé en {duration_text(span)}"})
+        what = f"Campagne de {len(jobs)} photos terminée" if jobs[0].get("mode") == "edit" else f"Lot de {len(jobs)} images terminé"
+        push_notify({"title": title, "body": f"{what} en {duration_text(span)}"})
     else:
         push_notify({"title": "Échec du lot", "body": "Ouvrez l'application pour voir le détail."})
 
