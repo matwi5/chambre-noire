@@ -17,8 +17,9 @@ Mis à jour le 14/10/2026.
   prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), découpée en 13 tickets Asana (liste et ordre dans
   `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types validée par le porteur. Groupes A (banc, robustesse, file visible, incognito dans la file) et
   B (variantes, lots dans la galerie, campagne), C (prompts) et D (durcissement de l'incognito, espace privé) faits,
-  revus et fusionnés : les 14 tickets sont faits. Restent des décisions du porteur sur la revue de sécurité du groupe
-  D, les essais sur le téléphone et une vraie génération avec le nouveau code.
+  revus et fusionnés : les 14 tickets sont faits. Reste le ticket « Durcir l'espace privé après la revue de
+  sécurité » (`1219520417161822`, groupe E), puis les essais sur le téléphone et une vraie génération avec le nouveau
+  code.
 - **À vérifier par le porteur**, sur le téléphone par l'application installée (testé seulement dans Chrome sur le Mac,
   en vue de téléphone) :
   - télécharger, partager et copier une image, dont une image incognito (adresse `blob:`) ;
@@ -63,6 +64,10 @@ Mis à jour le 14/10/2026.
 
 ### 2026-10-14
 
+- Porteur, sur les notes de la revue de sécurité du groupe D : notification neutre pour le privé, onglets privés
+  vidés à « Sortir », suppression de l'espace sans code seulement depuis le Mac, espace privé ouvert seulement en HTTPS
+  ou sur le Mac, nouvelle paire de clés et rechiffrement au changement de code. Regroupé dans le ticket Asana
+  `1219520417161822` et dans la spécification (section 5).
 - Groupe D fait dans une session à part (worktree) et fusionné : durcissement de l'incognito (`df6896a` :
   identifiants de 128 bits, image non récupérée oubliée après 24 h, reprise limitée aux générations de l'appareil,
   jeton par page), espace privé (`429096e`), générations et galerie privées (`6421746`), lots privés et héritage

@@ -368,7 +368,15 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
 - **Time Machine** : au lancement du serveur sur Mac, le dossier de travail est exclu de Time Machine par
   `tmutil addexclusion` (sans droits administrateur) ; un échec est noté dans le journal du serveur sans bloquer le
   démarrage.
-- **Notifications** : « Image privée prête » ou, pour un lot, « N images privées prêtes ».
+- **Notifications** : « Image privée prête » ou, pour un lot, « N images privées prêtes ». Remplacé par le porteur le
+  14/10/2026 (ci-dessous) : notification neutre.
+- **Durcissement après la revue de sécurité** (décisions du porteur du 14/10/2026, ticket Asana `1219520417161822`) :
+  une génération ou un lot privé notifie comme une génération normale (« Image prête », « N images prêtes »), sans rien
+  qui trahisse l'espace ; « Sortir » vide de l'écran tout contenu privé des onglets marqués ; « Supprimer l'espace
+  privé » sans le code n'est possible que depuis le Mac lui-même ; l'espace ne s'ouvre (création, déverrouillage,
+  « Rendre privée ») qu'en HTTPS ou sur le Mac, jamais par `http://` sur le Wi-Fi, et l'interface le dit ; changer le
+  code tire une nouvelle paire de clés, rechiffre toutes les images privées sans risque de perte et ferme toutes les
+  sessions, pour qu'une ancienne copie de l'espace ne s'ouvre plus avec l'ancien code.
 
 ## Décisions de test
 

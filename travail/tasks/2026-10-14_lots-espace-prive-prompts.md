@@ -108,7 +108,8 @@ Lus le 14/10/2026 dans le code (`main` à `95f96de`). Les numéros de ligne boug
 - **En cours** : rien.
 - **À faire** : revue de groupe B ; ticket « [code] Durcir l'incognito et limiter la reprise à l'appareil »
   (`1219503935811144`, créé le 14/10/2026 après la revue de groupe A, avant le groupe D) ; étapes 4 (prompts,
-  groupe C, fait) et 5 (espace privé, groupe D, fait le 14/10/2026 : `df6896a` à `4bdd66f`). Pour le ticket « héritage et lots
+  groupe C, fait) et 5 (espace privé, groupe D, fait le 14/10/2026 : `df6896a` à `4bdd66f`). Puis le ticket « [code] Durcir l'espace privé
+  après la revue de sécurité » (`1219520417161822`, groupe E, créé le 14/10/2026). Pour le ticket « héritage et lots
   privés » : le lot n'a pas de genre (une campagne se reconnaît à `mode == "edit"`) ; trois endroits ne connaissent
   que l'incognito et devront traiter le privé : le masquage de l'identifiant de lot dans `queue_entry`, le libellé de
   `notify_lot` (« … incognito prêtes ») et la purge de `S.lots`.
