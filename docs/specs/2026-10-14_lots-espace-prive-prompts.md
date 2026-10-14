@@ -225,8 +225,11 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
   aperçu. `current_job` cesse d'exposer l'identifiant d'une génération incognito ou privée (piste ouverte du
   13/10/2026 réglée par la même occasion).
 - Une page suit les générations qu'elle a lancées par les identifiants reçus de `/api/generate` ; après un
-  rechargement, elle se rattache aux générations normales de la file par `queue`. Les générations incognito et privées
-  ne se rattachent pas (comportement actuel de l'incognito).
+  rechargement, elle se rattache aux seules générations normales qu'elle a lancées elle-même (identifiants gardés côté
+  page ; décision du porteur du 14/10/2026 après la revue de groupe A) : celles d'un autre appareil restent visibles
+  dans la feuille de la file sans être reprises. Les générations incognito et privées ne se rattachent pas
+  (comportement actuel de l'incognito). Une entrée incognito ou privée de `queue` porte un jeton opaque propre à la
+  page qui l'a lancée, pour que cette page reconnaisse ses lignes sans que la ligne identifie la génération.
 - **Interface** : « Générer » n'est plus désactivé pendant une génération ; un appui lance une nouvelle demande, avec
   les réglages du moment. La zone de résultat suit la plus ancienne génération non terminée lancée par cette page,
   puis passe à la suivante ; les résultats arrivent au fur et à mesure. La pastille affiche la génération en cours et
@@ -240,7 +243,10 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
   disparaître l'image incognito affichée ni celles pas encore vues ; elles restent dans la page (adresses `blob:`)
   jusqu'à ce que l'utilisateur les ait vues puis quittées. Côté serveur : la purge des générations incognito
   terminées à chaque nouvelle demande disparaît ; le serveur garde une image incognito en mémoire jusqu'à ce que la
-  page qui l'a lancée la récupère puis la fasse oublier, ou jusqu'à la fermeture de cette page, ou au redémarrage.
+  page qui l'a lancée la récupère puis la fasse oublier, ou jusqu'à la fermeture de cette page, ou au redémarrage, et
+  au plus 24 h après la fin de sa génération si elle n'a jamais été récupérée (page tuée sans prévenir ; décision du
+  porteur du 14/10/2026). L'identifiant d'une génération incognito (et privée) est long et tiré au hasard (au moins
+  128 bits), pour qu'un appareil connecté ne puisse pas le deviner.
   À la fermeture ou au rechargement, la page annule et fait oublier, en un seul envoi `keepalive`, toutes ses
   générations incognito (et privées) non terminées ou non récupérées.
 - L'estimation de la file additionne les estimations des générations qui précèdent ; l'interface la calcule avec ses

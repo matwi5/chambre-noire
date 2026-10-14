@@ -26,10 +26,10 @@ Mis à jour le 14/10/2026.
   - les variantes (grille, « Garder celle-ci »), les lots dans la galerie (badge, « Voir le lot », « Tout
     télécharger », qui peut demander d'autoriser plusieurs téléchargements) et la campagne.
 - **Pistes ouvertes** (aucune demandée) :
+  - `sd-cli.log` reste ouvert si la boucle de lecture de `run_job` lève une exception ; `queue_position` trie tout
+    `S.jobs`, qui ne fait que grossir, à chaque lecture (trouvés par la revue de groupe A) ;
   - course entre la route d'annulation et `worker()` sur le statut d'une génération (sans verrou), et `open(...).read()`
     sans fermeture dans `launch.py` et `estimate.py` (avertissements masqués dans le banc) (trouvés le 14/10/2026) ;
-  - l'interface rattache une ligne incognito de la file à sa page par la position : avec des interrogations à 1 s et
-    2 s, une ligne peut porter un instant « cet appareil » à tort (affichage seulement) ;
   - une génération reprise après un rechargement n'a ni dimensions ni coefficients propres : le cadre ne prend sa forme
     qu'à la fin ;
   - le faux moteur du banc n'a pas été essayé sous Windows (lanceur `sd-cli.cmd`) ;
@@ -41,7 +41,8 @@ Mis à jour le 14/10/2026.
     `tools/config.json` n'est lu nulle part ;
   - incognito et notification : si Android a fermé l'application en arrière-plan, toucher « Image incognito prête »
     rouvre une page qui ne se rattache pas au job incognito ; l'image reste en mémoire sans pouvoir être affichée, et
-    depuis le 14/10/2026 (plus de purge à chaque nouvelle demande) jusqu'au redémarrage du serveur. Piste : laisser la page reprendre une fois un job incognito terminé et jamais récupéré
+    depuis le 14/10/2026 (plus de purge à chaque nouvelle demande) jusqu'au redémarrage du serveur ; une expiration à
+    24 h est prévue par le ticket « Durcir l'incognito et limiter la reprise à l'appareil ». Piste : laisser la page reprendre une fois un job incognito terminé et jamais récupéré
     (option écartée par le porteur le 13/10/2026, à lui reproposer avec cette raison) ;
   - `tests/run_tests.py --only edit` cherche `outputs/test_t2i_512.png`, que plus rien ne produit, et retombe sur
     `tests/test_scene.png` ;
@@ -53,6 +54,13 @@ Mis à jour le 14/10/2026.
 
 ### 2026-10-14
 
+- Revue de groupe A (`/code-review --fix` puis `/security-review`, lancées par la session du groupe) : 8 constats,
+  3 corrigés (`c934b9f` : génération annulée pendant la préparation arrêtée aussitôt, génération incognito en échec
+  ou annulée oubliée par le serveur, lecture des dimensions unifiée), aucune faille de sécurité. Fusionné, 59 tests au
+  vert, service relancé. Décisions du porteur sur les constats restants, regroupées dans un nouveau ticket Asana
+  (`1219503935811144`) : expiration à 24 h d'une image incognito jamais récupérée, reprise après rechargement limitée
+  aux générations de l'appareil, identifiant long pour l'incognito et le privé, jeton par page dans la file. Laissés
+  en pistes : `sd-cli.log` resté ouvert si la lecture lève une exception, tri de `S.jobs` à chaque lecture.
 - Porteur : la notification d'un lot en partie annulé garde son texte (« N images prêtes ») ; un ticket coché garde
   la ligne « Statut : fait » (écrit dans `docs/agents/triage-labels.md`).
 - Groupe B fait dans une session à part (worktree), fusionné dans `main` (`abbd036`) et service relancé : variantes

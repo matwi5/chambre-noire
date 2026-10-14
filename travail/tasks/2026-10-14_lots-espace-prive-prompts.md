@@ -105,7 +105,9 @@ Lus le 14/10/2026 dans le code (`main` à `95f96de`). Les numéros de ligne boug
   (`ddbf2b5`), campagne (`8715316`), avec `tests/test_lots.py` et `tests/test_campaign.py` : étapes 2 et 3 livrées
   (groupe B, fusionné). Liste des prompts types validée par le porteur.
 - **En cours** : rien.
-- **À faire** : étapes 4 (prompts, groupe C) et 5 (espace privé, groupe D). Pour le ticket « héritage et lots
+- **À faire** : revue de groupe B ; ticket « [code] Durcir l'incognito et limiter la reprise à l'appareil »
+  (`1219503935811144`, créé le 14/10/2026 après la revue de groupe A, avant le groupe D) ; étapes 4 (prompts,
+  groupe C) et 5 (espace privé, groupe D). Pour le ticket « héritage et lots
   privés » : le lot n'a pas de genre (une campagne se reconnaît à `mode == "edit"`) ; trois endroits ne connaissent
   que l'incognito et devront traiter le privé : le masquage de l'identifiant de lot dans `queue_entry`, le libellé de
   `notify_lot` (« … incognito prêtes ») et la purge de `S.lots`.
