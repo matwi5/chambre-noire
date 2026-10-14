@@ -9,7 +9,7 @@ Mis à jour le 14/10/2026.
   galerie avec visionneuse (zoom au pincement, partage, copie, images d'entrée), estimations calibrées, mode incognito,
   notification de fin de génération (Web Push), file d'attente visible (« Générer » toujours actif), variantes (mode
   Créer) et campagnes (mode Éditer) avec lots dans la galerie. Banc de test permanent sans GPU :
-  `venv/bin/python -m unittest discover -s tests` (58 tests).
+  `venv/bin/python -m unittest discover -s tests` (60 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
 - **En cours** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
@@ -54,6 +54,12 @@ Mis à jour le 14/10/2026.
 
 ### 2026-10-14
 
+- Revue de groupe B (`/code-review --fix` puis `/security-review`, lancées par la session du groupe) : 4 corrections
+  (`f1a478f`) : « Garder celle-ci » supprimait aussi l'image gardée quand la galerie avait été rechargée pendant que la
+  visionneuse était ouverte (choix par nom de fichier désormais), la limite de suivi de la page épargne le lot affiché,
+  limite des 10 références dans `MAX_REFS`, corps de la notification d'une campagne (« Campagne de N photos
+  terminée »). Aucune faille de sécurité. Fusionné, 60 tests au vert, service relancé. Laissé : la page redessine N
+  fois au lancement d'un lot (coût sans bug).
 - Revue de groupe A (`/code-review --fix` puis `/security-review`, lancées par la session du groupe) : 8 constats,
   3 corrigés (`c934b9f` : génération annulée pendant la préparation arrêtée aussitôt, génération incognito en échec
   ou annulée oubliée par le serveur, lecture des dimensions unifiée), aucune faille de sécurité. Fusionné, 59 tests au
