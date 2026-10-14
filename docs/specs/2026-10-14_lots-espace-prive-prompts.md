@@ -333,7 +333,8 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
   expire après 15 minutes sans requête privée ; POST `/api/private/lock` la ferme, et l'interface l'envoie aussi à la
   fermeture de la page (`keepalive`). Un code faux attend 1 seconde, comme le code d'accès.
 - **Autres routes** : POST `/api/private/create` (seulement s'il n'existe pas d'espace) ; POST `/api/private/code`
-  (ancien et nouveau code : la clé privée est rechiffrée, les images ne sont pas touchées) ; POST
+  (ancien et nouveau code ; depuis le durcissement : nouvelle paire de clés, toutes les images rechiffrées par un ordre
+  d'écriture sûr, toutes les sessions fermées, voir `DECISIONS.md`) ; POST
   `/api/private/reset` (exige le texte `SUPPRIMER`, efface tout l'espace et ferme toutes les sessions ; depuis le Mac
   lui-même seulement, 403 ailleurs, décision du porteur du 14/10/2026) ;
   `GET /api/private/history` (liste déchiffrée, session exigée) ; lecture d'une image privée, de sa miniature et de ses

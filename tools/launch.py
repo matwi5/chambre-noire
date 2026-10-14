@@ -350,7 +350,8 @@ except ImportError:
 PRIVATE = P("private")                         # espace privé : space.json (clés), puis les images chiffrées
 PRIVATE_COOKIE = "qwen_private"                # session de l'espace privé, propre à chaque appareil
 PRIVATE_IDLE = 15 * 60                         # session fermée après 15 min sans requête privée
-PRIVATE_LOCK = threading.Lock()                # dérivations du code privé et écritures des clés : une à la fois
+PRIVATE_LOCK = threading.RLock()               # dérivations du code privé, écritures des clés et des images : une à la fois
+REKEY = ".rekey"                               # dossier de travail d'un changement de code, dans private/
 MIN_PRIVATE_CODE, MAX_PRIVATE_CODE = 8, 256
 SCRYPT_N = 2 ** 18                             # 256 Mio et ≈ 0,3 s par essai sur le Mac ; gardé dans space.json
 KEY_AAD = b"qwen-image-local private key v1"   # données associées du chiffrement de la clé privée
@@ -380,14 +381,14 @@ def code_key(code, kdf):
     return Scrypt(salt=base64.b64decode(kdf["salt"]), length=32, n=kdf["n"], r=kdf["r"], p=kdf["p"]).derive(code.encode("utf-8"))
 
 
-def write_space(public, private_key, code):
-    """Écrit space.json : clé publique en clair, clé privée chiffrée en AES-256-GCM par la clé du code (sel neuf à
-    chaque écriture). Fichier temporaire puis renommage : jamais à moitié écrit."""
+def write_space(public, private_key, code, fp=None):
+    """Écrit space.json (ou fp) : clé publique en clair, clé privée chiffrée en AES-256-GCM par la clé du code (sel
+    neuf à chaque écriture). Fichier temporaire puis renommage : jamais à moitié écrit."""
     kdf = {"alg": "scrypt", "n": SCRYPT_N, "r": 8, "p": 1, "salt": b64e(os.urandom(16))}
     nonce = os.urandom(12)
     sealed = AESGCM(code_key(code, kdf)).encrypt(nonce, private_key.private_bytes_raw(), KEY_AAD)
-    os.makedirs(PRIVATE, exist_ok=True)
-    fp = os.path.join(PRIVATE, "space.json")
+    fp = fp or os.path.join(PRIVATE, "space.json")
+    os.makedirs(os.path.dirname(fp), exist_ok=True)
     with open(fp + ".tmp", "w", encoding="utf-8") as f:
         json.dump({"v": 1, "public": public, "kdf": kdf, "key": b64e(nonce + sealed)}, f)
     os.chmod(fp + ".tmp", 0o600)
@@ -436,23 +437,91 @@ def unseal(blob, private_key, label):
 def store_private(public, meta, image, inputs):
     """Range une image dans l'espace privé : private/items/<128 bits au hasard>/ avec meta (réglages, en JSON), image,
     thumb (miniature fabriquée en mémoire) et input_<k> (images d'entrée), chacun scellé à part. Écrit dans un dossier
-    caché puis renommé : la galerie privée ne voit jamais une image à moitié rangée. Renvoie son identifiant."""
-    item = secrets.token_hex(16)
-    items = os.path.join(PRIVATE, "items")
-    tmp = os.path.join(items, "." + item)
-    os.makedirs(tmp)
+    caché puis renommé : la galerie privée ne voit jamais une image à moitié rangée. Renvoie son identifiant.
+    public : la clé publique notée au lancement de la génération (ou lue pour « Rendre privée ») ; si le code a changé
+    depuis, l'image est scellée avec la clé qui l'a remplacée ; si l'espace a été supprimé ou recréé entre-temps, elle
+    est abandonnée (RuntimeError) plutôt que rangée avec une clé disparue. Jamais pendant un changement de code."""
+    with PRIVATE_LOCK:
+        while public in S.rekeyed:
+            public = S.rekeyed[public]
+        if (read_space() or {}).get("public") != public:
+            raise RuntimeError("espace privé supprimé pendant la génération")
+        item = secrets.token_hex(16)
+        items = os.path.join(PRIVATE, "items")
+        tmp = os.path.join(items, "." + item)
+        os.makedirs(tmp)
+        try:
+            files = {"meta": json.dumps({**meta, "inputs": [n for n, _ in inputs]}, ensure_ascii=False).encode(),
+                     "image": image, "thumb": thumb_jpeg(io.BytesIO(image))}
+            files.update((f"input_{k}", raw) for k, (_, raw) in enumerate(inputs))
+            for role, data in files.items():
+                with open(os.path.join(tmp, role), "wb") as f:
+                    f.write(seal(data, public, f"{item}/{role}"))
+            os.rename(tmp, os.path.join(items, item))
+        except BaseException:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise
+        return item
+
+
+def rekey_space(old_key, code):
+    """Changement de code : nouvelle paire de clés et toutes les images rechiffrées, pour qu'une ancienne copie de
+    space.json ne lise plus rien avec l'ancien code. Ordre d'écriture sûr (DECISIONS.md) : tout est d'abord écrit à part,
+    dans private/.rekey/ (la nouvelle clé publique, chaque fichier rechiffré sous son nom, les nouvelles clés scellées
+    par le nouveau code) ; la bascule est le remplacement de space.json, atomique ; finish_rekey() range ensuite les
+    images rechiffrées à la place des anciennes. Une panne avant la bascule laisse l'ancien espace intact. Sous
+    PRIVATE_LOCK ; renvoie la nouvelle clé publique."""
+    finish_rekey()                              # reste d'un changement interrompu : terminé ou abandonné d'abord
+    staging = os.path.join(PRIVATE, REKEY)
+    key = X25519PrivateKey.generate()
+    public = b64e(key.public_key().public_bytes_raw())
     try:
-        files = {"meta": json.dumps({**meta, "inputs": [n for n, _ in inputs]}, ensure_ascii=False).encode(),
-                 "image": image, "thumb": thumb_jpeg(io.BytesIO(image))}
-        files.update((f"input_{k}", raw) for k, (_, raw) in enumerate(inputs))
-        for role, data in files.items():
-            with open(os.path.join(tmp, role), "wb") as f:
-                f.write(seal(data, public, f"{item}/{role}"))
-        os.rename(tmp, os.path.join(items, item))
+        os.makedirs(os.path.join(staging, "items"))
+        with open(os.path.join(staging, "public"), "w", encoding="utf-8") as f:
+            f.write(public)                     # marque la bascule : space.json porte-t-il déjà cette clé ?
+        for d in glob.glob(os.path.join(PRIVATE, "items", "*")):
+            item = os.path.basename(d)
+            if not ITEM_RE.fullmatch(item):
+                continue
+            os.makedirs(os.path.join(staging, "items", item))
+            for role in os.listdir(d):
+                with open(os.path.join(d, role), "rb") as f:
+                    blob = f.read()
+                try:
+                    blob = seal(unseal(blob, old_key, f"{item}/{role}"), public, f"{item}/{role}")
+                except (InvalidTag, ValueError):
+                    pass                        # déjà illisible avec l'ancienne clé : gardé tel quel, rien n'est perdu
+                with open(os.path.join(staging, "items", item, role), "wb") as f:
+                    f.write(blob)
+        write_space(public, key, code, os.path.join(staging, "space.json"))
+        os.replace(os.path.join(staging, "space.json"), os.path.join(PRIVATE, "space.json"))   # la bascule
     except BaseException:
-        shutil.rmtree(tmp, ignore_errors=True)
+        shutil.rmtree(staging, ignore_errors=True)
         raise
-    return item
+    return public
+
+
+def finish_rekey():
+    """Termine un changement de code interrompu après la bascule (les images rechiffrées remplacent les anciennes, une
+    à une), ou l'abandonne s'il s'est arrêté avant (l'ancien espace est intact : les copies sont jetées). Sans effet
+    sans private/.rekey/. Appelé sous PRIVATE_LOCK, au démarrage et avant toute ouverture ou écriture de l'espace."""
+    staging = os.path.join(PRIVATE, REKEY)
+    if not os.path.isdir(staging):
+        return
+    try:
+        with open(os.path.join(staging, "public"), encoding="utf-8") as f:
+            public = f.read()
+    except OSError:
+        public = None
+    if not public or public != (read_space() or {}).get("public"):
+        shutil.rmtree(staging)
+        return
+    for d in glob.glob(os.path.join(staging, "items", "*")):
+        dst = os.path.join(PRIVATE, "items", os.path.basename(d))
+        if os.path.exists(dst):
+            shutil.rmtree(dst)                  # l'ancienne version, illisible avec la nouvelle clé (la nouvelle est écrite)
+        os.rename(d, dst)
+    shutil.rmtree(staging)
 
 
 def read_private(private_key, item, role):
@@ -829,6 +898,8 @@ class State:
     lots = {}                # lots en cours par identifiant : {"jobs": [...], "incognito", "private"} ; garde les générations
                              # d'un lot même quand une génération incognito ou privée a quitté S.jobs, jusqu'à la fin du lot
     private_sessions = {}    # sessions de l'espace privé : {jeton du cookie : {"key": clé privée, "seen": dernière requête privée}}
+    rekeyed = {}             # clé publique remplacée par un changement de code → la suivante : une génération privée lancée
+                             # avant le changement est rangée avec la nouvelle clé (store_private)
     q = queue.Queue()
     enqueue = threading.Lock()   # les générations d'un lot entrent dans la file à la suite, sans autre demande entre elles
     current = None
@@ -1046,11 +1117,8 @@ def kind_of(job):
 
 def keep_private(job):
     """Fin d'une génération privée réussie : image, entrées et réglages chiffrés dans l'espace privé avec la clé publique
-    du lancement (aucun code ni session n'est nécessaire, l'espace peut avoir été verrouillé). Si l'espace a été
-    supprimé ou recréé entre-temps, l'image est abandonnée plutôt que rangée avec une clé disparue."""
-    space = read_space()
-    if not space or space["public"] != job["public"]:
-        raise RuntimeError("espace privé supprimé pendant la génération")
+    du lancement, ou celle qui l'a remplacée si le code a changé (aucun code ni session n'est nécessaire, l'espace peut
+    avoir été verrouillé). Si l'espace a été supprimé ou recréé entre-temps, l'image est abandonnée (store_private)."""
     r = job["req"]
     meta = {"mode": job["mode"], "prompt": r["prompt"], "width": r["width"], "height": r["height"], "steps": r["steps"],
             "seed": r.get("seed"), "seconds": job["seconds"], "model": S.model, "lot": job.get("lot"), "time": int(job["finished"]),
@@ -1492,9 +1560,10 @@ class H(BaseHTTPRequestHandler):
             if not self._private_session(touch=True):
                 return self._send(403, {"error": "espace privé verrouillé"})
             item = body.get("id")
-            if not (isinstance(item, str) and ITEM_RE.fullmatch(item) and os.path.isdir(os.path.join(PRIVATE, "items", item))):
-                return self._send(404, {"error": "image privée inconnue"})
-            shutil.rmtree(os.path.join(PRIVATE, "items", item))
+            with PRIVATE_LOCK:                  # jamais pendant un changement de code (l'image y serait recopiée)
+                if not (isinstance(item, str) and ITEM_RE.fullmatch(item) and os.path.isdir(os.path.join(PRIVATE, "items", item))):
+                    return self._send(404, {"error": "image privée inconnue"})
+                shutil.rmtree(os.path.join(PRIVATE, "items", item))
             return self._send(200, {"ok": True})
         if action == "lock":
             S.private_sessions.pop(self._private_token(), None)
@@ -1525,6 +1594,10 @@ class H(BaseHTTPRequestHandler):
         if error:
             return self._send(400, {"error": error})
         with PRIVATE_LOCK:                      # un essai à la fois : la dérivation coûte 256 Mio de mémoire
+            try:
+                finish_rekey()                  # changement de code interrompu : terminé ou abandonné avant tout
+            except OSError:
+                return self._send(500, {"error": "espace privé en cours de réparation : réessayez dans un instant"})
             space = read_space()
             if action == "create" and space:
                 return self._send(409, {"error": "l'espace privé existe déjà"})
@@ -1535,8 +1608,17 @@ class H(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "aucun espace privé"})
             else:
                 key = open_space(space, body.get("old" if action == "code" else "code"))
-                if key and action == "code":    # même paire de clés : les images restent lisibles
-                    write_space(space["public"], key, new)
+                if key and action == "code":    # nouvelle paire de clés, images rechiffrées, toutes les sessions fermées
+                    try:
+                        S.rekeyed[space["public"]] = rekey_space(key, new)
+                    except Exception:
+                        return self._send(500, {"error": "code privé inchangé : les images n'ont pas pu être rechiffrées"})
+                    S.private_sessions.clear()
+                    try:
+                        finish_rekey()
+                    except OSError:
+                        return self._send_private(500, {"error": "code privé changé, mais images pas encore toutes rangées : "
+                                                                 "elles le seront à la prochaine ouverture de l'espace"})
         if key and action == "adopt":           # le code prouvé, sans ouvrir de session : la clé publique suffit
             try:
                 item = adopt_output(fp, space["public"])
@@ -1546,7 +1628,7 @@ class H(BaseHTTPRequestHandler):
         if not key:
             time.sleep(1)                       # freine les essais en série (hors du verrou : n'en bloque pas d'autres)
             return self._send(403, {"error": "code privé incorrect"})
-        return self._send(200, {"ok": True}) if action == "code" else self._open_session(key)
+        return self._send_private(200, {"ok": True}) if action == "code" else self._open_session(key)
 
     def do_GET(self):
         if not self._host_ok():
@@ -1829,6 +1911,10 @@ def main():
     setup_state(cfg, a.backend, a.model)
     for d in ("outputs", "logs", "jobs"):
         os.makedirs(P(d), exist_ok=True)
+    try:                                               # changement de code privé interrompu par un arrêt brutal
+        finish_rekey()                                 # (rien n'est écrit au journal sur l'espace privé)
+    except OSError:
+        pass
     # restes d'un job incognito ou privé interrompu par un arrêt brutal, et d'une image privée à moitié rangée
     for old in glob.glob(P("jobs", "incognito_*")) + glob.glob(P("jobs", "private_*")) + glob.glob(os.path.join(PRIVATE, "items", ".*")):
         shutil.rmtree(old, ignore_errors=True)

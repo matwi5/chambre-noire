@@ -79,14 +79,15 @@ class PrivateSpaceTest(bench.BenchCase):
             self.assertFalse(private_status(session)["unlocked"])
             self.assertNotIn(session, bench.S.private_sessions)
 
-    def test_change_code_keeps_the_keys(self):
+    def test_change_code_draws_new_keys(self):
         bench.create_private(CODE)
         space = lambda: json.load(open(bench.launch.P("private", "space.json")))
         public = space()["public"]
         self.assertEqual(call("POST", "/api/private/code", {"old": "Mauvais-code", "new": "Nouveau-code"})[0], 403)
         self.assertEqual(call("POST", "/api/private/code", {"old": CODE, "new": "court"})[0], 400)
-        self.assertEqual(call("POST", "/api/private/code", {"old": CODE, "new": "Nouveau-code"})[0], 200)
         self.assertEqual(space()["public"], public)
+        self.assertEqual(call("POST", "/api/private/code", {"old": CODE, "new": "Nouveau-code"})[0], 200)
+        self.assertNotEqual(space()["public"], public)
         self.assertEqual(call("POST", "/api/private/unlock", {"code": CODE})[0], 403)
         self.assertTrue(private_status(bench.unlock_private("Nouveau-code"))["unlocked"])
 

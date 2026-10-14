@@ -21,16 +21,35 @@ les messages de commit.
     privée exigent une requête « sûre » (`_secure`) : adresse source 127.0.0.1 ou ::1 **et** nom d'hôte local ou nom
     HTTPS de « tailscale serve » (`S.https_hosts`, le relais arrivant de 127.0.0.1). Ailleurs 403 avec un message qui
     dit de passer par l'adresse HTTPS ; `secure` dans `/api/status` permet à l'interface de le dire avant toute saisie.
+  - **Changer le code change les clés** : une nouvelle paire X25519 est tirée, chaque fichier de chaque image est
+    déchiffré avec l'ancienne clé et rescellé avec la nouvelle (même identifiant d'image, mêmes rôles, même format),
+    toutes les sessions sont fermées. Ordre d'écriture sûr : tout s'écrit d'abord à part dans `private/.rekey/`
+    (fichier `public` avec la nouvelle clé publique, `items/<id>/<rôle>` rechiffrés, `space.json` scellé par le nouveau
+    code) ; **la bascule** est le remplacement atomique de `private/space.json` par le nouveau ; ensuite chaque image
+    rechiffrée remplace l'ancienne (ancienne supprimée, puis nouvelle renommée à sa place) et `.rekey/` est supprimé.
+    `finish_rekey`, appelé au démarrage et sous le verrou en tête de toute ouverture ou écriture de l'espace, répare
+    une interruption : si `space.json` porte la clé de `.rekey/public`, la bascule a eu lieu et le rangement se
+    termine ; sinon `.rekey/` est jeté et l'ancien espace est intact. À tout instant, exactement un des deux codes ouvre
+    toutes les images. Un fichier déjà illisible avec l'ancienne clé est recopié tel quel. Les écritures d'images
+    (`store_private`) et les suppressions passent sous le même verrou que le changement ; une génération privée lancée
+    avant le changement est rangée avec la nouvelle clé (`S.rekeyed`, en mémoire : les générations ne survivent pas à
+    un redémarrage).
 - **Écarté** : « Image privée prête » (le service de notification et l'écran verrouillé du téléphone apprennent qu'un
   espace privé existe) ; suppression depuis un autre appareil avec le code (non demandée : avec le code, on entre et
   on supprime les images) ; juger le HTTPS sur les en-têtes `X-Forwarded-*` ou `Tailscale-User-Login` (un appareil du
   Wi-Fi peut les envoyer en `http://`) ; admettre l'adresse Tailscale directe en `http://` (chiffrée par WireGuard,
-  mais la décision du porteur nomme le HTTPS et le Mac seulement).
+  mais la décision du porteur nomme le HTTPS et le Mac seulement) ; rechiffrer seulement la clé privée avec le nouveau
+  code (choix du groupe D : une copie de l'ancien `space.json` s'ouvre encore avec l'ancien code et lit toutes les
+  images) ; refuser le changement de code pendant une génération privée (inutile avec `S.rekeyed`) ; échanger le
+  dossier `items/` entier (une image rangée entre une panne et la réparation aurait été déplacée avec l'ancien dossier).
 - **Conséquences** : rien, dans une notification, ne distingue une image privée d'une image normale. Quelqu'un qui
   connaît le code d'accès du téléphone ne peut plus effacer l'espace privé à distance ; le porteur qui a oublié son
   code doit passer par le Mac. Le téléphone n'ouvre l'espace privé que par l'adresse HTTPS de Tailscale (« tailscale
   serve » actif) ; le Mac ouvert par son propre nom Wi-Fi (`http://<nom>.local:7860`) n'est pas « sûr » non plus : il
-  passe par `127.0.0.1` ou `localhost`.
+  passe par `127.0.0.1` ou `localhost`. Changer le code dure le temps de rechiffrer toutes les images (pendant ce
+  temps, entrer dans l'espace et ranger une image attendent) ; une copie de `space.json` d'avant le changement ne lit
+  plus les images d'après, mais une sauvegarde complète de `private/` d'avant le changement reste lisible avec l'ancien
+  code, par nature.
 
 ## 2026-10-14 · Espace privé discret : on y entre, on en sort
 
@@ -61,7 +80,9 @@ les messages de commit.
     brute, 32 octets)>}` ; clé AES = scrypt(code privé en UTF-8 tel que saisi, sel, n, r, p, 32 octets) ; données
     associées `qwen-image-local private key v1`. Paramètres à la création : n = 2¹⁸, r = 8, p = 1 (256 Mio et ≈ 0,3 s
     par essai sur le Mac) ; ils sont lus dans le fichier, donc modifiables pour un espace futur sans casser l'ancien.
-    Changer le code rechiffre la même clé privée avec un sel neuf : les images ne bougent pas.
+    ~~Changer le code rechiffre la même clé privée avec un sel neuf : les images ne bougent pas.~~ Remplacé le
+    15/10/2026 : changer le code tire une nouvelle paire et rechiffre les images (« Espace privé durci après la revue
+    de sécurité »).
   - Images : `private/items/<id>/`, `<id>` = 128 bits tirés au hasard (32 caractères hexadécimaux), sans date ni
     mode. Un fichier par rôle, chacun chiffré à part : `meta` (JSON : mode, prompt, dimensions, étapes, graine, durée,
     modèle, lot, heure, noms des images d'entrée), `image` (PNG), `thumb` (JPEG de 320 px, fabriqué en mémoire),

@@ -420,7 +420,12 @@ du Mac, ne suffit pas pour voir les images privées.
   pas de chemin inverse (on télécharge l'image depuis l'espace privé). Les copies déjà faites restent : sauvegardes
   Time Machine, téléchargements, partages, et, faites à sa génération, la ligne du journal du serveur (`logs\`, nom du
   fichier et durée, sans le prompt) et sa mesure de calibration (dimensions et durées).
-- **Changer le code** demande l'ancien : les images privées restent lisibles avec le nouveau.
+- **Changer le code** demande l'ancien. Le Mac tire alors de nouvelles clés et rechiffre toutes les images privées :
+  elles restent lisibles avec le nouveau code, et une ancienne copie de l'espace (sauvegarde Time Machine du dossier
+  `private/`) ne s'ouvre plus avec l'ancien code sur les images d'aujourd'hui ; une sauvegarde complète d'avant le
+  changement garde, elle, les images qu'elle contenait, lisibles avec l'ancien code. L'espace se ferme sur tous les
+  appareils. Une génération privée en cours est rangée avec les nouvelles clés. Une panne au milieu (arrêt du Mac) ne
+  perd aucune image : selon le moment, l'ancien ou le nouveau code ouvre l'espace, avec toutes ses images.
 - **Code oublié** : il ne peut pas être retrouvé, et les images privées sont perdues. **Supprimer l'espace privé**
   (après avoir tapé `SUPPRIMER`) efface tout l'espace sans demander le code, pour pouvoir en recréer un. Ce bouton
   n'agit que sur le Mac lui-même : depuis le téléphone ou un autre appareil, la feuille dit d'ouvrir l'application sur
@@ -674,7 +679,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `POST /api/private/create {"code"}` (409 s'il existe déjà), `POST /api/private/unlock {"code"}` (403 après une
   seconde si le code est faux), qui ouvrent une session pour l'appareil (cookie `qwen_private`, HttpOnly, sans durée
   de vie, fermée par le serveur après 15 minutes sans requête privée), `POST /api/private/lock`,
-  `POST /api/private/code {"old", "new"}`, `POST /api/private/reset {"confirm": "SUPPRIMER"}` (efface l'espace et
+  `POST /api/private/code {"old", "new"}` (nouvelles clés, images rechiffrées, toutes les sessions fermées et le cookie
+  de l'appareil effacé ; 500 si le rechiffrement échoue, sans perte : le message dit si le code a changé),
+  `POST /api/private/reset {"confirm": "SUPPRIMER"}` (efface l'espace et
   ferme toutes les sessions ; 403 hors du Mac lui-même) ; `/api/status` porte `private` : `available` (bibliothèque
   `cryptography` présente), `exists`, `unlocked` (pour cet appareil, sans prolonger la session), `secure` (l'espace
   peut s'ouvrir par cette adresse) et `local` (le Mac lui-même, seul à pouvoir supprimer l'espace sans le code) ; sans
