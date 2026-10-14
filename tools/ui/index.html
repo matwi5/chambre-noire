@@ -960,7 +960,7 @@ function paintedReference(w,h,opaque){ const a=document.createElement('canvas');
 // ------------------------------------------------------------ requête & loader
 function buildRequest(){
   const [w,h]=currentDims(); const steps=stepsSel().steps;
-  const body={ mode, prompt:'', width:w, height:h, steps, cfg:CFG, seed:-1, preview:$("previewChk").checked, preview_interval:PREVIEW_EVERY, ref_images:[], init_image:null, mask_image:null, strength:1.0, incognito:incogOn };
+  const body={ mode, prompt:'', width:w, height:h, steps, cfg:CFG, seed:-1, preview:$("previewChk").checked, preview_interval:PREVIEW_EVERY, ref_images:[], init_image:null, mask_image:null, strength:1.0, incognito:incogOn, page:PAGE_TOKEN };
   if(mode==='t2i'){ body.prompt=$('t2i_prompt').value.trim(); if(opt.count>1) body.count=opt.count; }   // variantes : un lot
   else if(mode==='edit'){ if(!editImages.length) throw new Error(campaignOn ? 'Ajoutez au moins une photo.' : 'Ajoutez au moins une image de référence.'); body.prompt=$('edit_prompt').value.trim();
     if(campaignOn){ body.campaign=campaignPlan().map(x=>({image:x.im.dataUrl, width:x.w, height:x.h})); body.width=body.campaign[0].width; body.height=body.campaign[0].height; }
@@ -988,6 +988,15 @@ function answer(v){ const r=askResolve; askResolve=null; closeSheet(); if(r) r(v
 // liste. Chaque génération garde les réglages de son lancement.
 const pageJobs=[], MAX_PAGE_JOBS=12;
 let shown=null, polling=false;
+// jeton opaque de cette page, envoyé avec chaque demande : les lignes incognito de la file le portent (et rien qui
+// identifie la génération), pour que la page reconnaisse les siennes ; il n'ouvre rien côté serveur
+const PAGE_TOKEN=[...crypto.getRandomValues(new Uint8Array(16))].map(b=>b.toString(16).padStart(2, '0')).join('');
+// générations normales lancées depuis ce navigateur (identifiants retenus) : seules reprises après un rechargement ;
+// celles des autres appareils restent dans la feuille de la file sans être suivies ici
+function ownIds(){ try{ const l=JSON.parse(localStorage.getItem('qwen-own')||'[]'); return Array.isArray(l) ? l : []; }catch(e){ return []; } }
+function saveOwn(){ const inQueue=new Set(queueState.map(e=>e.id).filter(Boolean));   // ceux d'un autre onglet encore en file restent
+  const ids=[...new Set([...ownIds().filter(id=>inQueue.has(id)), ...pageJobs.filter(p=>!p.incognito && isActive(p)).map(p=>p.id)])];
+  try{ localStorage.setItem('qwen-own', JSON.stringify(ids)); }catch(e){} }
 const isActive = p => ['queued','running'].includes(p.j.status);
 const oldestActive = () => pageJobs.find(isActive);
 // lot : générations de la page lancées d'une même demande (p.lot : id, rang, taille). Lot terminé avec au moins deux
@@ -1024,8 +1033,13 @@ function progress(p){
       remaining:(j.total-j.step)*spi + p.vaeSec*(1+previewsLeft) }; }
   return { frac:Math.min(0.12, elapsed/Math.max(p.est,1)), title:'Préparation', sub:(j.phase||'chargement')+'…', remaining:Math.max(0, p.est-elapsed) }; }
 // file commune : génération de cette page derrière une entrée (par identifiant ; une génération incognito, qui n'en
-// montre pas, par sa position), temps restant d'une entrée, attente devant une position
-function ownOf(e){ return e.id ? pageJobs.find(p=>p.id===e.id) : pageJobs.find(p=>p.incognito && isActive(p) && p.j.queue_position===e.position); }
+// montre pas, par le jeton de la page : ses lignes à ce jeton et ses générations incognito actives sont dans le même
+// ordre, celui du lancement ; comptées depuis la fin, car une génération que la page sait finie peut encore être en tête
+// d'une file reçue un peu plus tôt), temps restant d'une entrée, attente devant une position
+function ownOf(e){ if(e.id) return pageJobs.find(p=>p.id===e.id);
+  if(e.page!==PAGE_TOKEN) return undefined;
+  const rows=queueState.filter(x=>!x.id && x.page===PAGE_TOKEN), mine=pageJobs.filter(p=>p.incognito && isActive(p));
+  return mine[rows.indexOf(e)-(rows.length-mine.length)]; }
 function entryLeft(e){ const p=ownOf(e); if(p && p.j.status==='running') return progress(p).remaining;
   return e.status==='running' ? Math.max(0, e.estimate-(e.elapsed||0)-(Date.now()-queueAt)/1000) : e.estimate; }
 function waitBefore(n){ return queueState.filter(e=>e.position<n).reduce((t, e)=>t+entryLeft(e), 0); }
@@ -1138,6 +1152,7 @@ function track(j, info){
   pageJobs.push({ id:j.id, j, incognito:!!j.incognito, lot:j.lot||null, prompt:info.prompt||'', tab:info.tab||'t2i', w:info.w, h:info.h, thumb:info.thumb||null,
     est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0 });
   while(pageJobs.length>MAX_PAGE_JOBS){ const k=pageJobs.findIndex(p=>p.result && !p.result.blob && p!==shown && !sameLot(p, shown)); if(k<0) break; pageJobs.splice(k, 1); }
+  if(!j.incognito) saveOwn();
   if(shown && shown.incognito && shown.result) renderStrip();   // l'image incognito affichée le reste
   else show(oldestActive());
   renderIsland(); pollJobs(); }
@@ -1148,7 +1163,7 @@ async function pollJobs(){
         try{ r=await fetch('/api/job/'+p.id); }catch(e){ continue; }              // serveur injoignable : on réessaie
         p.j = r.ok ? await r.json() : {...p.j, status:'failed', error:'génération introuvable (serveur relancé ?)'};
         if(!isActive(p)){ await finish(p); ended=true; } }
-      if(ended) refreshStatus();                   // l'île et la file suivent tout de suite (la suivante a démarré)
+      if(ended){ saveOwn(); refreshStatus(); }     // l'île et la file suivent tout de suite (la suivante a démarré)
       renderProgress(); tickStrip(); renderIsland(); } }
   finally{ polling=false; syncButtons(); } }
 async function finish(p){                          // génération terminée : son image entre dans la page, ou elle en sort
@@ -1196,8 +1211,8 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   refreshStatus();
 };
 (async function resume(){                          // après un rechargement : se rattache aux générations normales de la file
-  try{ const s=await (await fetch('/api/status')).json();
-    for(const e of (s.queue||[]).filter(e=>e.id)){ const r=await fetch('/api/job/'+e.id); if(!r.ok) continue; const j=await r.json();
+  try{ const s=await (await fetch('/api/status')).json(), own=new Set(ownIds());   // lancées depuis ce navigateur seulement
+    for(const e of (s.queue||[]).filter(e=>e.id && own.has(e.id))){ const r=await fetch('/api/job/'+e.id); if(!r.ok) continue; const j=await r.json();
       if(!['queued','running'].includes(j.status)) continue;
       log('reprise de la génération '+j.id); track(j, {prompt:e.prompt, tab:tabOf(e.mode), est:e.estimate}); }
     const j=s.last_job;                              // sinon : la dernière image produite

@@ -1,5 +1,7 @@
-"""Incognito dans la file : rien qui le trahisse aux autres appareils, image gardée jusqu'à sa page, oubli groupé."""
-import unittest
+"""Incognito dans la file : rien qui le trahisse aux autres appareils, image gardée jusqu'à sa page, oubli groupé,
+identifiant impossible à deviner, image jamais récupérée oubliée après un délai."""
+import time, unittest
+from unittest import mock
 
 import bench
 from bench import call, files, generate, wait_job
@@ -52,6 +54,57 @@ class IncognitoQueueTest(bench.BenchCase):
     def test_forget_needs_a_list_of_ids(self):
         self.assertEqual(call("POST", "/api/forget", {"ids": "abc"})[0], 400)
         self.assertEqual(call("POST", "/api/forget", {})[0], 400)
+
+
+class IncognitoHardeningTest(bench.BenchCase):
+    def test_incognito_id_has_128_random_bits_and_normal_ids_keep_their_format(self):
+        incog = generate("secret", incognito=True)["id"]
+        normal = generate("visible")["id"]
+        self.assertRegex(incog, r"^[0-9a-f]{32}$")
+        self.assertRegex(normal, r"^\d{8}_\d{6}_[0-9a-f]{6}$")
+        wait_job(incog)
+        wait_job(normal)
+
+    def test_incognito_lot_id_is_long_too(self):
+        code, reply = call("POST", "/api/generate", bench.gen_body("secret lot", count=2, incognito=True))
+        self.assertEqual(code, 202)
+        self.assertRegex(reply["lot"]["id"], r"^[0-9a-f]{32}$")
+        for j in reply["jobs"]:
+            wait_job(j["id"])
+
+    def test_image_never_retrieved_is_forgotten_after_the_delay(self):
+        with mock.patch("launch.INCOGNITO_TTL", 0.4):
+            done = generate("never retrieved", incognito=True)["id"]
+            failed = generate("FAIL never seen", incognito=True)["id"]
+            wait_job(done)
+            wait_job(failed)
+            self.assertEqual(call("GET", f"/api/job/{done}/result")[0], 200)   # avant le délai : toujours là
+            time.sleep(0.6)
+            for jid in (done, failed):
+                self.assertEqual(call("GET", f"/api/job/{jid}")[0], 404)
+            self.assertEqual(call("GET", f"/api/job/{done}/result")[0], 404)
+            self.assertNotIn(done, bench.S.jobs)
+
+    def test_running_or_waiting_incognito_is_not_expired(self):
+        with mock.patch("launch.INCOGNITO_TTL", 0.1):
+            jid = generate("SLOW=0.1 long", incognito=True, steps=8)["id"]
+            time.sleep(0.4)
+            self.assertEqual(call("GET", f"/api/job/{jid}")[0], 200)
+            self.assertEqual(wait_job(jid)["status"], "done")
+
+    def test_queue_carries_the_page_token_and_nothing_that_identifies_the_generation(self):
+        a = generate("SLOW=0.2 visible", steps=6, page="pageA1")["id"]
+        b = generate("zq7marker secret", incognito=True, page="pageB2")["id"]
+        q = call("GET", "/api/status", remote=True)[1]["queue"]
+        self.assertEqual(q[1]["page"], "pageB2")
+        self.assertNotIn(b, str(q))
+        self.assertEqual(set(q[1]), {"status", "position", "lot", "kind", "page", "estimate", "elapsed"})
+        call("POST", f"/api/job/{a}/cancel")
+        call("POST", f"/api/job/{b}/cancel")
+
+    def test_page_token_must_be_a_short_text(self):
+        for page in (12, "x" * 65, ["a"]):
+            self.assertEqual(call("POST", "/api/generate", bench.gen_body("x", incognito=True, page=page))[0], 400)
 
 
 if __name__ == "__main__":

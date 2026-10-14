@@ -100,10 +100,12 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
 - **Interface** : un seul fichier `tools/ui/index.html` (HTML, CSS et JS sans dépendance ni build). Elle suit les
   générations qu'elle a lancées (`pageJobs`) en interrogeant chacune par `/api/job/<id>` chaque seconde, et la file
   commune (`queue` de `/api/status`, entrées produites par `queue_entry`) toutes les 2 s tant qu'elle n'est pas vide ;
-  après un rechargement, elle se rattache aux générations normales de `queue`. Un lot terminé s'affiche en grille
-  (`gridOf`) ; la visionneuse parcourt `vList` (la galerie, ou les images d'un lot de la page, incognito comprises par
-  leur adresse `blob:`), jamais `histItems` directement. Réglages et
-  brouillons dans `localStorage` (`qwen-opt`, `qwen-<onglet>_prompt`). `manifest.webmanifest`, `sw.js` et les icônes
+  après un rechargement, elle se rattache aux seules générations normales lancées depuis ce navigateur (identifiants
+  dans `localStorage`, `qwen-own`). Ses lignes incognito de `queue` se reconnaissent au jeton de la page
+  (`PAGE_TOKEN`, champ `page` de `/api/generate`), qui n'ouvre aucune route : ne jamais s'en servir comme droit. Un
+  lot terminé s'affiche en grille (`gridOf`) ; la visionneuse parcourt `vList` (la galerie, ou les images d'un lot de
+  la page, incognito comprises par leur adresse `blob:`), jamais `histItems` directement. Réglages, brouillons et
+  générations à reprendre dans `localStorage` (`qwen-opt`, `qwen-<onglet>_prompt`, `qwen-own`). `manifest.webmanifest`, `sw.js` et les icônes
   servent à l'installation sur le téléphone ; le service worker ne touche qu'à la navigation, jamais à `/api/*`.
 - **Contrôle d'accès** (dans cet ordre, dans `H`) : `_host_ok` (liste blanche de `Host` contre le rebinding DNS, noms du
   Wi-Fi et de Tailscale figés au démarrage), `_post_refused` (tout POST : `Sec-Fetch-Site`, `Origin` égal à l'origine du
@@ -113,8 +115,10 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
 - **Mode incognito** (`"incognito": true` dans `/api/generate`) : dossier `jobs/incognito_<id>/` supprimé en fin de job
   (et au démarrage), PNG gardé en mémoire (`job["png"]`) et servi une fois par `/api/job/<id>/result`, puis oublié par
   `/api/job/<id>/forget` (ou `/api/forget` avec toutes celles de la page, envoyé à sa fermeture) ; ni `outputs/`, ni
-  journal, ni calibration, ni détail dans `logs/`. Son identifiant n'est connu que de sa page : ni `queue`, ni
-  `current_job` ne le montrent. Toute nouvelle écriture sur le disque ou dans les journaux doit respecter ce mode.
+  journal, ni calibration, ni détail dans `logs/`. Son identifiant (et celui de son lot) fait 128 bits tirés au hasard
+  et n'est connu que de sa page : ni `queue`, ni `current_job` ne le montrent. Une génération incognito terminée que sa
+  page n'a jamais fait oublier l'est par `sweep()`, appelé en tête de chaque requête, `INCOGNITO_TTL` (24 h) après sa
+  fin. Toute nouvelle écriture sur le disque ou dans les journaux doit respecter ce mode.
 - **Estimation des durées** : modèle de coût dans `tools/estimate.py` (`predict`, priors par moteur, mesures par
   `"<moteur>/<modèle>"` dans `tools/calibration.json`, filtrées sur la release de sd.cpp installée lue dans
   `sdcpp/<moteur>/.installed`). Les coefficients partent vers l'interface par `/api/status`.

@@ -245,9 +245,10 @@ La pastille d'état en haut suit la génération en cours depuis n'importe quel 
 appui ouvre la **file d'attente** : pour chaque génération, sa place, le début de son prompt et le temps avant son
 image, avec un bouton pour l'annuler. Une génération normale s'annule depuis n'importe quel appareil ; une génération
 incognito n'apparaît ailleurs que comme « Génération incognito », sans prompt ni aperçu, et seule la page qui l'a
-lancée peut l'annuler. On peut recharger la page sans rien perdre : elle se rattache aux générations normales de la
-file (pas aux générations incognito). Le bouton Incognito se change à tout moment : chaque génération garde le mode
-choisi à son lancement. Chaque image est enregistrée en PNG dans
+lancée peut l'annuler. On peut recharger la page sans rien perdre : elle se rattache aux générations normales qu'elle
+avait lancées (retenues par le navigateur), pas à celles des autres appareils, qui restent visibles dans la file, ni
+aux générations incognito. Les lignes de l'appareil y sont marquées « cet appareil ». Le bouton Incognito se change à
+tout moment : chaque génération garde le mode choisi à son lancement. Chaque image est enregistrée en PNG dans
 **`outputs\`**, avec ses images d'entrée (références, image d'origine, zone peinte) dans `outputs\.inputs\`. Sous le
 résultat : **Télécharger**, **Partager** et **Copier** (dans le presse-papiers), puis **Éditer** et **Dessiner**, qui le
 réutilisent comme point de départ, et **Supprimer**. Partager et Copier ne sont proposés que là où le navigateur les
@@ -367,7 +368,10 @@ Ce que cela garantit, et ses limites :
 - sd-cli ne travaille que sur des fichiers : les images d'entrée, les aperçus et le PNG final passent par
   `jobs/incognito_<identifiant>/`, supprimé dès la fin de la génération (et au lancement suivant après un arrêt
   brutal). L'image finale n'existe ensuite que dans la mémoire du serveur, jusqu'à ce que la page la récupère, puis
-  dans celle de la page ;
+  dans celle de la page ; si la page n'est jamais revenue la chercher (application tuée sans prévenir), le serveur
+  l'oublie 24 h après la fin de sa génération ;
+- son identifiant est tiré au hasard (128 bits) et n'est connu que de sa page : un autre appareil connecté ne peut pas
+  le deviner pour suivre la génération ou récupérer l'image ;
 - un fichier supprimé n'est pas effacé physiquement du disque ; sur un SSD, il devient en pratique illisible peu après ;
 - le fichier **téléchargé** est enregistré par le navigateur dans ses Téléchargements, comme tout téléchargement.
 
@@ -572,7 +576,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   recalculé à chaque lecture ; `seed` : graine utilisée ; `lot`), `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel` (sans effet sur une génération
   déjà terminée, réussie, en échec ou annulée), `GET /api/status` (`queue` : la file, génération en cours d'abord ;
   chaque entrée porte `status`, `position`, `lot`, `estimate` et `elapsed` en secondes, `kind`, et pour une génération
-  normale seulement `id`, `mode` et le début du `prompt`) ; lots : `"count"` de 2 à 4 dans `/api/generate` (mode
+  normale seulement `id`, `mode` et le début du `prompt` ; une génération incognito porte à la place `page`, le jeton
+  opaque que sa page a envoyé dans `/api/generate` (`"page"`, 1 à 64 lettres, chiffres, `-` ou `_`), pour qu'elle y
+  reconnaisse ses lignes : il n'ouvre aucune route) ; lots : `"count"` de 2 à 4 dans `/api/generate` (mode
   Créer, `"mode": "t2i"` ; 1 : génération seule) crée autant de générations ; `"campaign": [{"image": <data URL>, "width",
   "height"}, …]` (1 à 10 photos, mode Éditer, `"mode": "edit"`, sans `ref_images`) crée une édition par photo, avec
   cette seule photo en référence et à ses dimensions (une seule photo : génération seule) ; les générations d'un lot
@@ -581,9 +587,10 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `outputs/journal.jsonl` (un lot incognito ne montre dans `queue` que `rank` et `size`) ; `POST /api/lot/<id>/cancel`
   annule toutes ses générations non terminées (404 une fois le lot fini). Graine `-1` : le serveur la tire lui-même (distincte pour chaque
   image d'un lot) et l'écrit au journal ; graine choisie avec `count` : graine, graine + 1… ; incognito
-  (`"incognito": true` dans `/api/generate`) : `GET /api/job/<id>/result` (image gardée en
-  mémoire), `POST /api/job/<id>/forget` (l'oublier, ou arrêter la génération), `POST /api/forget {"ids": […]}` (toutes
-  les générations incognito d'une page, à sa fermeture ; `current_job` de `/api/status` reste vide pendant une génération
+  (`"incognito": true` dans `/api/generate` ; identifiant de 32 caractères hexadécimaux tirés au hasard, comme celui
+  d'un lot incognito) : `GET /api/job/<id>/result` (image gardée en mémoire, oubliée 24 h après la fin de la
+  génération si elle n'est jamais récupérée), `POST /api/job/<id>/forget` (l'oublier, ou arrêter la génération),
+  `POST /api/forget {"ids": […]}` (toutes les générations incognito d'une page, à sa fermeture ; `current_job` de `/api/status` reste vide pendant une génération
   incognito) ; historique : `GET /api/history` (une entrée par image, avec ses réglages, sa `seed` et son `lot` :
   `id`, `rank`, `size`, ou `null` pour une image seule), `GET /api/thumb?name=…` (miniatures gardées dans
   `outputs/.thumbs/`), `GET /api/result?name=…&download=1`, `POST /api/delete` ; images d'entrée d'une image :

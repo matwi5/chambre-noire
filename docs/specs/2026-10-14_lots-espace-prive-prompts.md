@@ -229,7 +229,9 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
   page ; décision du porteur du 14/10/2026 après la revue de groupe A) : celles d'un autre appareil restent visibles
   dans la feuille de la file sans être reprises. Les générations incognito et privées ne se rattachent pas
   (comportement actuel de l'incognito). Une entrée incognito ou privée de `queue` porte un jeton opaque propre à la
-  page qui l'a lancée, pour que cette page reconnaisse ses lignes sans que la ligne identifie la génération.
+  page qui l'a lancée, pour que cette page reconnaisse ses lignes sans que la ligne identifie la génération
+  (implémenté : la page tire un jeton à son ouverture et l'envoie en `page` dans `/api/generate` ; l'entrée le porte en
+  `page` ; aucune route ne l'accepte comme droit).
 - **Interface** : « Générer » n'est plus désactivé pendant une génération ; un appui lance une nouvelle demande, avec
   les réglages du moment. La zone de résultat suit la plus ancienne génération non terminée lancée par cette page,
   puis passe à la suivante ; les résultats arrivent au fur et à mesure. La pastille affiche la génération en cours et

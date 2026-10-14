@@ -64,6 +64,8 @@ TAKING_RE = re.compile(r"taking ([\d.]+)\s*s")
 CALIB = P("tools", "calibration.json")
 MAX_VARIANTS = 4                          # images d'un lot de variantes (mode Créer)
 MAX_CAMPAIGN = 10                         # photos d'une campagne (mode Éditer), comme les références d'une édition
+INCOGNITO_TTL = 24 * 3600                 # image incognito jamais récupérée par sa page (page tuée) : oubliée après ce délai
+PAGE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")   # jeton opaque de la page qui lance une génération (voir queue_entry)
 # Répartition par backend. CUDA : tout sur la carte (l'encodeur int8 convrot a un chemin CUDA natif, RTX 20xx+) ;
 # --offload-to-cpu garde les poids en RAM et les copie à la demande, ce qui s'adapte à toute taille de VRAM.
 # --mmap : rechargement quasi instantané du modèle d'une génération à l'autre grâce au cache disque.
@@ -797,6 +799,8 @@ def cancel_job(job):
     """Annule une génération en file ou en cours (le moteur est arrêté) ; une génération terminée garde son statut et son
     image. worker() supprime ensuite ses fichiers."""
     if job.get("status") in ACTIVE:
+        if job["status"] == "queued":
+            job["finished"] = time.time()       # fin d'une génération qui n'a jamais tourné (run_job pose celle des autres)
         job["status"] = "cancelled"
         job["phase"] = "annulé"
         proc = job.get("proc")
@@ -810,6 +814,15 @@ def forget_job(job):
     cancel_job(job)
     S.jobs.pop(job["id"], None)
     job.pop("png", None)
+
+
+def sweep():
+    """Ménage fait à chaque requête : une génération incognito terminée (réussie, en échec ou annulée) que sa page n'a
+    jamais fait oublier (page tuée sans prévenir) est oubliée INCOGNITO_TTL secondes après sa fin."""
+    now = time.time()
+    for job in list(S.jobs.values()):
+        if job.get("incognito") and job.get("status") not in ACTIVE and now - (job.get("finished") or job["created"]) > INCOGNITO_TTL:
+            forget_job(job)
 
 
 def worker():
@@ -881,6 +894,8 @@ def request_error(req):
         return "ref_images : liste d'images (data URL) attendue"
     if not isinstance(req.get("mode", "img"), str):
         return "mode : texte attendu"
+    if req.get("page") is not None and not (isinstance(req["page"], str) and PAGE_TOKEN_RE.fullmatch(req["page"])):
+        return "page : jeton de 1 à 64 lettres, chiffres, - ou _ attendu"
     count = req.get("count")
     if count is not None:
         if not is_int(count) or not 1 <= count <= MAX_VARIANTS:
@@ -955,9 +970,9 @@ def request_inputs(req):
 
 
 def queue_entry(job, position, coefs):
-    """Entrée de la liste de la file (/api/status). Une génération incognito n'y montre que son genre : ni identifiant
-    (seule la page qui l'a lancée peut la suivre ou l'annuler), ni prompt, ni mode. None si la génération vient de
-    finir (forget_files a pu retirer sa demande)."""
+    """Entrée de la liste de la file (/api/status). Une génération incognito n'y montre que son genre et le jeton de sa
+    page : ni identifiant (seule la page qui l'a lancée peut la suivre ou l'annuler), ni prompt, ni mode. None si la
+    génération vient de finir (forget_files a pu retirer sa demande)."""
     r = job.get("req")
     if r is None:
         return None
@@ -970,7 +985,8 @@ def queue_entry(job, position, coefs):
          "estimate": round(estimate.predict(coefs, r["width"], r["height"], r["steps"], refs, init, previews), 1),
          "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None}
     if job.get("incognito"):
-        e["kind"] = "incognito"
+        # jeton de la page qui l'a lancée : elle y reconnaît ses lignes ; il n'ouvre aucune route (ni suivi, ni annulation)
+        e.update(kind="incognito", page=job.get("page"))
     else:
         prompt = " ".join(r["prompt"].split())
         e.update(kind="normal", id=job["id"], mode=job["mode"], prompt=prompt[:80] + ("…" if len(prompt) > 80 else ""))
@@ -978,16 +994,19 @@ def queue_entry(job, position, coefs):
 
 
 def new_job(req, inputs, lot=None):
-    """Génération en attente pour une demande validée (sa graine déjà fixée), avec son dossier de travail."""
-    jid = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
-    mode = re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
+    """Génération en attente pour une demande validée (sa graine déjà fixée), avec son dossier de travail. Identifiant
+    d'une génération incognito : 128 bits tirés au hasard, impossible à deviner pour un autre appareil (lui seul ouvre
+    son suivi, son image et son annulation) ; celui d'une génération normale dit sa date."""
     incognito = req.get("incognito") is True
+    jid = secrets.token_hex(16) if incognito else datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+    mode = re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
     d = P("jobs", ("incognito_" if incognito else "") + jid)
     os.makedirs(d, exist_ok=True)
     # en incognito, le PNG reste dans le dossier de travail (supprimé en fin de job) ; son nom sert au téléchargement
     out = os.path.join(d, f"{jid}_{mode}.png") if incognito else P("outputs", f"{jid}_{mode}.png")
     return {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
-            "incognito": incognito, "inputs": inputs, "seed": req["seed"], "lot": lot}
+            "incognito": incognito, "inputs": inputs, "seed": req["seed"], "lot": lot,
+            "page": req.get("page") if incognito else None}   # jeton de la page, montré dans queue à la place de l'id
 
 
 def public(job):
@@ -1077,6 +1096,7 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self._host_ok():
             return self._send(403, {"error": "nom d'hôte refusé"})
+        sweep()
         path, _, query = self.path.partition("?")
         if path in PUBLIC_FILES:   # manifeste, icônes, service worker : demandés par le navigateur sans le cookie d'accès
             name, ctype = PUBLIC_FILES[path]
@@ -1165,6 +1185,7 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._host_ok():
             return self._send(403, {"error": "nom d'hôte refusé"})
+        sweep()
         refused = self._post_refused()
         if refused:
             return self._send(refused[0], {"error": refused[1]})
@@ -1252,7 +1273,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(400, {"error": error})
             reqs = expand_request(req)
             n = len(reqs)
-            lot = {"id": uuid.uuid4().hex[:12], "size": n} if n > 1 else None
+            # identifiant d'un lot incognito : connu de sa seule page, aussi impossible à deviner que ses générations
+            lot = {"id": secrets.token_hex(16) if req.get("incognito") is True else uuid.uuid4().hex[:12], "size": n} if n > 1 else None
             jobs = [new_job(r, request_inputs(r), lot and {"id": lot["id"], "rank": k + 1, "size": n}) for k, r in enumerate(reqs)]
             if lot:
                 S.lots[lot["id"]] = {"jobs": jobs, "incognito": jobs[0]["incognito"]}
