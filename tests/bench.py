@@ -18,6 +18,8 @@ import estimate, launch   # noqa: E402
 
 S = launch.S
 ACCESS_CODE = "test-code"
+HTTPS_HOST = "qwen-banc.example.ts.net"             # nom fictif de « tailscale serve » (HTTPS, relayé depuis 127.0.0.1)
+WIFI_HOST = "mac-du-banc.local"                     # nom fictif du Mac sur le Wi-Fi (http:// direct)
 LOG = []                                            # sorties du serveur (print et journal des requêtes), hors de l'écran
 _server = None
 
@@ -60,6 +62,8 @@ def start():
     S.access_token = launch.access_token(ACCESS_CODE)
     _server = launch.Server(("127.0.0.1", 0), launch.H)
     S.ui_port = _server.server_address[1]
+    S.lan_hosts = {f"{WIFI_HOST}:{S.ui_port}", HTTPS_HOST}   # comme main() avec --lan et Tailscale
+    S.https_hosts = {HTTPS_HOST}
     threading.Thread(target=_server.serve_forever, daemon=True).start()
     threading.Thread(target=launch.worker, daemon=True).start()
     atexit.register(_server.shutdown)
@@ -82,21 +86,25 @@ def install_fake_engine():
     os.chmod(exe, 0o755)
 
 
-def call(method, path, body=None, remote=False, cookie=True, headers=None, private=None):
-    """Requête HTTP au serveur du banc : (code, réponse JSON ou octets). remote : venue d'un autre appareil (relayée par
-    Tailscale), avec le cookie d'accès si cookie est vrai ; private : valeur du cookie de session de l'espace privé.
+def call(method, path, body=None, remote=False, cookie=True, headers=None, private=None, wifi=False):
+    """Requête HTTP au serveur du banc : (code, réponse JSON ou octets). Trois origines : le Mac lui-même (par défaut) ;
+    remote, un autre appareil par l'adresse HTTPS de Tailscale (relayée par « tailscale serve » depuis 127.0.0.1) ;
+    wifi, un autre appareil en http:// direct sur le Wi-Fi (adresse source qui n'est pas celle du Mac). Les deux
+    dernières portent le cookie d'accès si cookie est vrai ; private : valeur du cookie de session de l'espace privé.
     Les POST portent Content-Type: application/json."""
-    return call_full(method, path, body, remote, cookie, headers, private)[:2]
+    return call_full(method, path, body, remote, cookie, headers, private, wifi)[:2]
 
 
-def call_full(method, path, body=None, remote=False, cookie=True, headers=None, private=None):
+def call_full(method, path, body=None, remote=False, cookie=True, headers=None, private=None, wifi=False):
     """Comme call(), avec en plus les en-têtes de la réponse : (code, réponse, en-têtes)."""
     h = {"Content-Type": "application/json"} if method == "POST" else {}
     cookies = []
     if remote:
-        h["X-Forwarded-For"] = "192.0.2.10"
-        if cookie:
-            cookies.append(f"{launch.ACCESS_COOKIE}={S.access_token}")
+        h["Host"], h["X-Forwarded-For"] = HTTPS_HOST, "192.0.2.10"
+    if wifi:
+        h["Host"] = f"{WIFI_HOST}:{S.ui_port}"
+    if (remote or wifi) and cookie:
+        cookies.append(f"{launch.ACCESS_COOKIE}={S.access_token}")
     if private:
         cookies.append(f"{launch.PRIVATE_COOKIE}={private}")
     if cookies:
@@ -104,11 +112,13 @@ def call_full(method, path, body=None, remote=False, cookie=True, headers=None, 
     h.update(headers or {})
     data = json.dumps(body if body is not None else {}).encode() if method == "POST" else None
     req = urllib.request.Request(f"http://127.0.0.1:{S.ui_port}{path}", data=data, method=method, headers=h)
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            code, raw, hdrs = r.status, r.read(), r.headers
-    except urllib.error.HTTPError as e:
-        code, raw, hdrs = e.code, e.read(), e.headers
+    # un appareil du Wi-Fi arrive d'une autre adresse que 127.0.0.1 : le serveur ne voit plus d'adresse locale
+    with mock.patch.object(launch, "LOCAL_CLIENTS", ()) if wifi else contextlib.nullcontext():
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                code, raw, hdrs = r.status, r.read(), r.headers
+        except urllib.error.HTTPError as e:
+            code, raw, hdrs = e.code, e.read(), e.headers
     return code, json.loads(raw) if hdrs.get("Content-Type", "").startswith("application/json") else raw, hdrs
 
 
@@ -134,9 +144,9 @@ def unlock_private(code, remote=False):
     return cookie_of(headers)
 
 
-def private_status(session=None, remote=False):
-    """État de l'espace privé vu par un client : {available, exists, unlocked}."""
-    return call("GET", "/api/status", remote=remote, private=session)[1]["private"]
+def private_status(session=None, remote=False, wifi=False):
+    """État de l'espace privé vu par un client : {available, exists, unlocked, secure, local}."""
+    return call("GET", "/api/status", remote=remote, private=session, wifi=wifi)[1]["private"]
 
 
 def gen_body(prompt="a red car", mode="t2i", **kw):

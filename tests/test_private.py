@@ -11,7 +11,7 @@ CODE = "Mot2passe!"
 
 class PrivateSpaceTest(bench.BenchCase):
     def test_status_says_available_without_space(self):
-        self.assertEqual(private_status(), {"available": True, "exists": False, "unlocked": False})
+        self.assertEqual(private_status(), {"available": True, "exists": False, "unlocked": False, "local": True})
 
     def test_code_shorter_than_8_characters_is_refused(self):
         for code in ("1234567", "", 12345678, None):
@@ -20,8 +20,8 @@ class PrivateSpaceTest(bench.BenchCase):
 
     def test_creation_unlocks_this_device_only(self):
         session = bench.create_private(CODE)
-        self.assertEqual(private_status(session), {"available": True, "exists": True, "unlocked": True})
-        self.assertEqual(private_status(), {"available": True, "exists": True, "unlocked": False})
+        self.assertEqual(private_status(session), {"available": True, "exists": True, "unlocked": True, "local": True})
+        self.assertEqual(private_status(), {"available": True, "exists": True, "unlocked": False, "local": True})
         self.assertEqual(call("POST", "/api/private/create", {"code": "Autre-code-1"})[0], 409)
 
     def test_unlocking_again_replaces_the_session_of_this_device(self):
@@ -95,15 +95,28 @@ class PrivateSpaceTest(bench.BenchCase):
         phone = bench.unlock_private(CODE, remote=True)
         for word in (None, "supprimer", "OUI"):
             self.assertEqual(call("POST", "/api/private/reset", {"confirm": word})[0], 400)
-        self.assertEqual(call("POST", "/api/private/reset", {"confirm": "SUPPRIMER"}, remote=True)[0], 200)
-        self.assertEqual(private_status(session), {"available": True, "exists": False, "unlocked": False})
+        self.assertEqual(call("POST", "/api/private/reset", {"confirm": "SUPPRIMER"})[0], 200)
+        self.assertEqual(private_status(session), {"available": True, "exists": False, "unlocked": False, "local": True})
         self.assertFalse(private_status(phone, remote=True)["unlocked"])
         self.assertEqual(glob.glob(bench.launch.P("private", "**", "*"), recursive=True), [])
         bench.create_private("Un-autre-code")       # puis un nouvel espace
 
+    def test_reset_without_the_code_only_from_the_mac_itself(self):
+        bench.create_private(CODE)
+        phone = bench.unlock_private(CODE, remote=True)
+        self.assertFalse(private_status(phone, remote=True)["local"])
+        self.assertFalse(private_status(wifi=True)["local"])
+        for origin in ({"remote": True}, {"wifi": True}, {"remote": True, "private": phone}):
+            code, reply = call("POST", "/api/private/reset", {"confirm": "SUPPRIMER"}, **origin)
+            self.assertEqual(code, 403, origin)
+            self.assertIn("Mac", reply["error"])
+        self.assertTrue(private_status(phone, remote=True)["unlocked"])   # rien n'a été effacé
+        self.assertTrue(private_status()["exists"])
+        self.assertEqual(call("POST", "/api/private/reset", {"confirm": "SUPPRIMER"})[0], 200)
+
     def test_unavailable_without_cryptography(self):
         with mock.patch("launch.HAVE_CRYPTO", False):
-            self.assertEqual(private_status(), {"available": False, "exists": False, "unlocked": False})
+            self.assertEqual(private_status(), {"available": False, "exists": False, "unlocked": False, "local": True})
             self.assertEqual(call("POST", "/api/private/create", {"code": CODE})[0], 503)
             self.assertEqual(call("POST", "/api/private/unlock", {"code": CODE})[0], 503)
 

@@ -489,6 +489,7 @@
   .privsheet .links button { border:0; background:none; color:var(--iris2); font:inherit; font-size:14px; font-weight:600; padding:6px 2px; cursor:pointer; }
   .privsheet .links .danger { color:var(--err); }
   .privsheet .err { color:var(--err); font-size:14px; min-height:20px; margin:8px 2px 0; }
+  .privsheet [hidden] { display:none !important; }
   .qlot { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 4px -2px; font-size:13px; font-weight:650; color:var(--ink2); }
 
   /* ------------------------------------------------------------ messages et confirmations */
@@ -763,9 +764,11 @@
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
   <div class="sheet-head"><h2 id="privResetTitle">Supprimer l'espace privé</h2></div>
   <p class="note">Toutes les images privées seront effacées définitivement, sans pouvoir être récupérées. Utile si le code est oublié ; un nouvel espace pourra être créé ensuite.</p>
-  <label for="prWord">Tapez SUPPRIMER pour confirmer</label><input class="field" id="prWord" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="done">
-  <p class="err" id="prErr" role="alert"></p>
-  <div class="ask-acts"><button class="btn secondary" onclick="openPrivSheet('privUnlockSheet')">Annuler</button><button class="btn danger-fill" id="prGo" onclick="privReset()">Supprimer</button></div>
+  <p class="note" id="prMac" hidden>Sans le code, l'espace privé ne se supprime que sur le Mac lui-même, pour qu'un autre appareil ne puisse pas l'effacer : ouvrez l'application sur le Mac.</p>
+  <div id="prForm"><label for="prWord">Tapez SUPPRIMER pour confirmer</label><input class="field" id="prWord" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="done">
+  <p class="err" id="prErr" role="alert"></p></div>
+  <div class="ask-acts" id="prActs"><button class="btn secondary" onclick="openPrivSheet('privUnlockSheet')">Annuler</button><button class="btn danger-fill" id="prGo" onclick="privReset()">Supprimer</button></div>
+  <button class="btn secondary" id="prBack" hidden onclick="openPrivSheet('privUnlockSheet')">Retour</button>
 </section>
 <section class="sheet glass" id="promptEditSheet" role="dialog" aria-modal="true" aria-labelledby="promptEditTitle">
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
@@ -1657,7 +1660,9 @@ function openPrivSheet(id, fromMark){
   $('puNote').hidden=!fromMark; if(!fromMark) pendingGo=false;
   ['pcCode','pcCode2','puCode','pkOld','pkNew','pkNew2','prWord','paCode'].forEach(k=>$(k).value='');
   ['pcErr','puErr','pkErr','prErr','paErr'].forEach(k=>$(k).textContent='');
-  openSheet(id); $(id).querySelector('input').focus(); }
+  // supprimer sans le code : sur le Mac lui-même seulement (décision du porteur) ; ailleurs, la feuille le dit
+  $('prMac').hidden=privState.local; $('prForm').hidden=$('prActs').hidden=!privState.local; $('prBack').hidden=privState.local;
+  openSheet(id); const inp=$(id).querySelector('input'); if(inp && inp.offsetParent) inp.focus(); }
 $('privEntry').onclick=()=>openPrivSheet(!privState.exists ? 'privCreateSheet' : 'privUnlockSheet');
 // envoi d'une feuille : bouton grisé pendant l'envoi (la dérivation du code prend un temps), message d'erreur sous les champs
 async function privPost(path, body, btn, err){

@@ -13,9 +13,15 @@ les messages de commit.
 - **Décision** (porteur, 14/10/2026 ; mise en œuvre, groupe E) :
   - **Notification neutre** : une génération ou un lot privé notifie exactement comme une génération normale
     (« Image prête », « N images prêtes », mêmes champs) ; l'incognito garde son mot.
+  - **Supprimer sans le code, sur le Mac seulement** : `/api/private/reset` exige une requête du Mac lui-même (au sens
+    du contrôle d'accès : adresse source et nom d'hôte locaux, non relayée par Tailscale) ; ailleurs 403, et la feuille
+    de l'interface dit d'ouvrir l'application sur le Mac (`local` dans `/api/status`).
 - **Écarté** : « Image privée prête » (le service de notification et l'écran verrouillé du téléphone apprennent qu'un
-  espace privé existe).
-- **Conséquences** : rien, dans une notification, ne distingue une image privée d'une image normale.
+  espace privé existe) ; suppression depuis un autre appareil avec le code (non demandée : avec le code, on entre et
+  on supprime les images).
+- **Conséquences** : rien, dans une notification, ne distingue une image privée d'une image normale. Quelqu'un qui
+  connaît le code d'accès du téléphone ne peut plus effacer l'espace privé à distance ; le porteur qui a oublié son
+  code doit passer par le Mac.
 
 ## 2026-10-14 · Espace privé discret : on y entre, on en sort
 

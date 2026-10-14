@@ -417,8 +417,9 @@ du Mac, ne suffit pas pour voir les images privées.
   fichier et durée, sans le prompt) et sa mesure de calibration (dimensions et durées).
 - **Changer le code** demande l'ancien : les images privées restent lisibles avec le nouveau.
 - **Code oublié** : il ne peut pas être retrouvé, et les images privées sont perdues. **Supprimer l'espace privé**
-  (après avoir tapé `SUPPRIMER`) efface tout l'espace sans demander le code, pour pouvoir en recréer un. N'importe
-  qui ayant accès à l'application peut donc effacer l'espace privé, sans pouvoir le lire.
+  (après avoir tapé `SUPPRIMER`) efface tout l'espace sans demander le code, pour pouvoir en recréer un. Ce bouton
+  n'agit que sur le Mac lui-même : depuis le téléphone ou un autre appareil, la feuille dit d'ouvrir l'application sur
+  le Mac. Quelqu'un qui a accès à la session du Mac peut donc effacer l'espace privé, sans pouvoir le lire.
 - Sans la bibliothèque `cryptography` (installée avec `requirements.txt`), l'espace privé n'apparaît pas.
 
 Ce que cela garantit, et ses limites :

@@ -334,11 +334,12 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
   fermeture de la page (`keepalive`). Un code faux attend 1 seconde, comme le code d'accès.
 - **Autres routes** : POST `/api/private/create` (seulement s'il n'existe pas d'espace) ; POST `/api/private/code`
   (ancien et nouveau code : la clé privée est rechiffrée, les images ne sont pas touchées) ; POST
-  `/api/private/reset` (exige le texte `SUPPRIMER`, efface tout l'espace et ferme toutes les sessions) ;
+  `/api/private/reset` (exige le texte `SUPPRIMER`, efface tout l'espace et ferme toutes les sessions ; depuis le Mac
+  lui-même seulement, 403 ailleurs, décision du porteur du 14/10/2026) ;
   `GET /api/private/history` (liste déchiffrée, session exigée) ; lecture d'une image privée, de sa miniature et de ses
   images d'entrée, avec téléchargement (session exigée) ; POST `/api/private/delete` ; POST `/api/private/adopt`
-  (« Rendre privée », session exigée). `/api/status` indique si l'espace existe et s'il est déverrouillé pour cet
-  appareil. Sans `cryptography`, ces routes répondent qu'elles ne sont pas disponibles et l'interface masque tout ce
+  (« Rendre privée », session exigée). `/api/status` indique si l'espace existe, s'il est déverrouillé pour cet
+  appareil et si cet appareil est le Mac lui-même (`local`, qui seul peut supprimer l'espace sans le code). Sans `cryptography`, ces routes répondent qu'elles ne sont pas disponibles et l'interface masque tout ce
   qui touche à l'espace privé.
 - **Génération privée** : `/api/generate` avec `private: true` exige une session privée valide au lancement
   (sinon 403). Le dossier de travail est un dossier de travail privé, supprimé en fin de génération et au démarrage,
@@ -436,7 +437,8 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
 - **Limite assumée** : sd-cli ne lit et n'écrit que des fichiers. Les entrées et l'image d'une génération privée ou
   incognito passent donc en clair dans le dossier de travail pendant le calcul (et ses aperçus), puis sont supprimées.
   Sur un SSD, un fichier supprimé n'est pas effacé de façon sûre. À écrire dans le README.
-- **Supprimer l'espace privé** ne demande pas le code (c'est son but quand on l'a oublié) : quiconque a l'application
+- **Supprimer l'espace privé** ne demande pas le code (c'est son but quand on l'a oublié) ; depuis le durcissement
+  (section 5), seulement sur le Mac lui-même. Avant lui : quiconque a l'application
   peut donc effacer l'espace privé, sans pouvoir le lire. Confirmation par la saisie de `SUPPRIMER`.
 - Un lot de N images dure N fois une image : une campagne de 10 photos à 720p et 40 étapes dure plus d'une heure et
   demie ; la confirmation au-delà d'une heure, qui existe déjà, s'applique à la durée totale du lot.

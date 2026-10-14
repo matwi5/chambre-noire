@@ -1487,6 +1487,8 @@ class H(BaseHTTPRequestHandler):
             S.private_sessions.pop(self._private_token(), None)
             return self._send_private(200, {"ok": True})
         if action == "reset":                   # sans le code (oublié) : tout l'espace est effacé, sessions comprises
+            if not self._local():               # depuis le Mac lui-même seulement (décision du porteur du 14/10/2026)
+                return self._send(403, {"error": "l'espace privé ne se supprime sans le code que sur le Mac lui-même"})
             if body.get("confirm") != "SUPPRIMER":
                 return self._send(400, {"error": "tapez SUPPRIMER pour confirmer"})
             with PRIVATE_LOCK:
@@ -1563,9 +1565,11 @@ class H(BaseHTTPRequestHandler):
                                     "estimates": coefs,
                                     # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
                                     "phone": {"urls": S.lan_urls, "code": S.access_code} if S.access_code and self._local() else None,
-                                    # espace privé : existe-t-il, et est-il déverrouillé pour cet appareil (sans prolonger la session)
+                                    # espace privé : existe-t-il, est-il déverrouillé pour cet appareil (sans prolonger la
+                                    # session), et peut-il y être supprimé sans le code (le Mac lui-même seulement)
                                     "private": {"available": HAVE_CRYPTO, "exists": HAVE_CRYPTO and os.path.exists(os.path.join(PRIVATE, "space.json")),
-                                                "unlocked": HAVE_CRYPTO and self._private_session() is not None}})
+                                                "unlocked": HAVE_CRYPTO and self._private_session() is not None,
+                                                "local": self._local()}})
         m = re.match(r"^/api/job/([\w-]+)(/preview|/result)?$", path)
         if m:
             job = S.jobs.get(m.group(1))
