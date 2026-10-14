@@ -11,8 +11,9 @@ Mis à jour le 14/10/2026.
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
 - **En cours** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
-  prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), liste des prompts types à valider par le porteur ;
-  implémentation pas commencée, en cinq étapes dans l'ordre de la spécification.
+  prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), découpée en 13 tickets Asana (liste et ordre dans
+  `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types à valider par le porteur
+  (tâche Asana qui lui est assignée) ; implémentation pas commencée.
 - **À vérifier par le porteur**, sur le téléphone par l'application installée (testé seulement dans Chrome sur le Mac,
   en vue de téléphone) :
   - télécharger, partager et copier une image, dont une image incognito (adresse `blob:`) ;
@@ -43,6 +44,8 @@ Mis à jour le 14/10/2026.
 
 ### 2026-10-14
 
+- Découpage du chantier en 13 tickets Asana (sous-tâches de la tâche mère de Claude), chacun avec sa ligne
+  « Bloqué par », et une tâche assignée au porteur pour valider la liste des prompts types.
 - Suivi des tâches passé sur Asana (décision du porteur, revient sur le refus du 13/10/2026) : section « Qwen-Image
   local » et tâche mère de Claude créées dans le Hub. Configuration des skills mattpocock dans `docs/agents/`
   (tickets Asana, rôles de tri traduits en ligne « Statut : », glossaire et `DECISIONS.md`) et bloc « Agent skills »

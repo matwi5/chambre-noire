@@ -4,8 +4,14 @@ Plan de travail écrit le 14/10/2026, à la fin de la séance de cadrage. Spéci
 `docs/specs/2026-10-14_lots-espace-prive-prompts.md` (elle fait foi pour le comportement attendu) ; vocabulaire :
 `GLOSSARY.md` ; décisions : `DECISIONS.md` (entrées du 14/10/2026).
 
-- **Tickets** : à créer par `/to-tickets`, en sous-tâches Asana de « [code] Qwen-Image local : prochaines sessions
-  Claude Code » (voir `docs/agents/issue-tracker.md`).
+- **Tickets** : 13 sous-tâches Asana de « [code] Qwen-Image local : prochaines sessions Claude Code » (créées le
+  14/10/2026 par `/to-tickets`, chacune avec sa ligne « Bloqué par »), plus « [code] Valider la liste des prompts
+  types » assignée au porteur. Dans l'ordre : banc de test (`1219493053066512`) ; erreur de préparation
+  (`1219494702898806`) ; file visible (`1219493052506248`) ; incognito dans la file (`1219496265944488`) ; variantes
+  (`1219494702948662`) ; lots dans la galerie (`1219497770338045`) ; campagne (`1219494702674188`) ; prompts
+  enregistrés (`1219495733173672`) ; prompts types (`1219496265944552`) ; espace privé, socle
+  (`1219497770273732`) ; générations et galerie privées (`1219494702948598`) ; héritage et lots privés
+  (`1219497770354663`) ; « Rendre privée » (`1219495733337725`).
 - **Objectif** : livrer les cinq étapes de la spécification, dans l'ordre, chacune utilisable et testée seule.
 - **Critère de fin d'une étape** : contrôles du banc de l'étape au vert, contrôles de l'interface dans Chrome sans écran
   aux dimensions du téléphone (captures regardées), `py_compile` et `node --check` propres, README et `CLAUDE.md` à
