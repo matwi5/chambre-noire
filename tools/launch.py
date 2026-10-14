@@ -332,6 +332,76 @@ def change_prompt(action, body):
     return result
 
 
+try:                                           # espace privé ; sans cryptography, il est indisponible
+    from cryptography.exceptions import InvalidTag
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+    HAVE_CRYPTO = True
+except ImportError:
+    HAVE_CRYPTO = False
+PRIVATE = P("private")                         # espace privé : space.json (clés), puis les images chiffrées
+PRIVATE_COOKIE = "qwen_private"                # session de l'espace privé, propre à chaque appareil
+PRIVATE_IDLE = 15 * 60                         # session fermée après 15 min sans requête privée
+PRIVATE_LOCK = threading.Lock()                # dérivations du code privé et écritures des clés : une à la fois
+MIN_PRIVATE_CODE, MAX_PRIVATE_CODE = 8, 256
+SCRYPT_N = 2 ** 18                             # 256 Mio et ≈ 0,3 s par essai sur le Mac ; gardé dans space.json
+KEY_AAD = b"qwen-image-local private key v1"   # données associées du chiffrement de la clé privée
+
+
+def b64e(raw):
+    return base64.b64encode(raw).decode()
+
+
+def read_space():
+    """Clés de l'espace privé (private/space.json), ou None s'il n'existe pas : {v, public, kdf, key}, voir
+    DECISIONS.md (« Espace privé : format des clés et sessions »)."""
+    try:
+        with open(os.path.join(PRIVATE, "space.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
+
+def code_key(code, kdf):
+    """Clé de 32 octets tirée du code privé, tel que saisi (UTF-8), par scrypt avec les paramètres de space.json."""
+    return Scrypt(salt=base64.b64decode(kdf["salt"]), length=32, n=kdf["n"], r=kdf["r"], p=kdf["p"]).derive(code.encode("utf-8"))
+
+
+def write_space(public, private_key, code):
+    """Écrit space.json : clé publique en clair, clé privée chiffrée en AES-256-GCM par la clé du code (sel neuf à
+    chaque écriture). Fichier temporaire puis renommage : jamais à moitié écrit."""
+    kdf = {"alg": "scrypt", "n": SCRYPT_N, "r": 8, "p": 1, "salt": b64e(os.urandom(16))}
+    nonce = os.urandom(12)
+    sealed = AESGCM(code_key(code, kdf)).encrypt(nonce, private_key.private_bytes_raw(), KEY_AAD)
+    os.makedirs(PRIVATE, exist_ok=True)
+    fp = os.path.join(PRIVATE, "space.json")
+    with open(fp + ".tmp", "w", encoding="utf-8") as f:
+        json.dump({"v": 1, "public": public, "kdf": kdf, "key": b64e(nonce + sealed)}, f)
+    os.chmod(fp + ".tmp", 0o600)
+    os.replace(fp + ".tmp", fp)
+
+
+def open_space(space, code):
+    """Clé privée de l'espace (X25519PrivateKey) si le code est le bon, sinon None."""
+    if not isinstance(code, str):
+        return None
+    blob = base64.b64decode(space["key"])
+    try:
+        raw = AESGCM(code_key(code, space["kdf"])).decrypt(blob[:12], blob[12:], KEY_AAD)
+    except InvalidTag:
+        return None
+    return X25519PrivateKey.from_private_bytes(raw)
+
+
+def private_code_error(code):
+    if not isinstance(code, str) or len(code) < MIN_PRIVATE_CODE:
+        return f"code privé : {MIN_PRIVATE_CODE} caractères au moins"
+    if len(code) > MAX_PRIVATE_CODE:
+        return f"code privé : {MAX_PRIVATE_CODE} caractères au plus"
+    return None
+
+
 def duration_text(secs):
     return f"{int(secs // 60)} min {int(secs % 60):02d} s" if secs >= 60 else f"{int(secs)} s"
 
@@ -553,6 +623,7 @@ class State:
     jobs = {}
     lots = {}                # lots en cours par identifiant : {"jobs": [...], "incognito"} ; garde les générations d'un
                              # lot même quand une génération incognito a quitté S.jobs, jusqu'à la fin du lot
+    private_sessions = {}    # sessions de l'espace privé : {jeton du cookie : {"key": clé privée, "seen": dernière requête privée}}
     q = queue.Queue()
     enqueue = threading.Lock()   # les générations d'un lot entrent dans la file à la suite, sans autre demande entre elles
     current = None
@@ -818,8 +889,12 @@ def forget_job(job):
 
 def sweep():
     """Ménage fait à chaque requête : une génération incognito terminée (réussie, en échec ou annulée) que sa page n'a
-    jamais fait oublier (page tuée sans prévenir) est oubliée INCOGNITO_TTL secondes après sa fin."""
+    jamais fait oublier (page tuée sans prévenir) est oubliée INCOGNITO_TTL secondes après sa fin ; une session de
+    l'espace privé sans requête privée depuis PRIVATE_IDLE secondes est fermée (clé privée oubliée)."""
     now = time.time()
+    for token, session in list(S.private_sessions.items()):
+        if now - session["seen"] > PRIVATE_IDLE:
+            S.private_sessions.pop(token, None)
     for job in list(S.jobs.values()):
         if job.get("incognito") and job.get("status") not in ACTIVE and now - (job.get("finished") or job["created"]) > INCOGNITO_TTL:
             forget_job(job)
@@ -1022,6 +1097,12 @@ def public(job):
     return d
 
 
+def quiet_request(msg):
+    """Requêtes tues dans le journal du serveur : interrogations répétées (état, suivi des générations) et tout ce qui
+    touche à l'espace privé (rien n'en va dans logs/)."""
+    return "/api/status" in msg or "/api/job/" in msg or "/api/private/" in msg
+
+
 class Server(ThreadingHTTPServer):
     daemon_threads = True
     # Python n'en garde que 5 par défaut : la galerie ouvre une connexion par miniature et, pendant que le processeur les
@@ -1032,9 +1113,8 @@ class Server(ThreadingHTTPServer):
 class H(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         msg = fmt % args
-        if "/api/status" in msg or "/api/job/" in msg:
-            return
-        sys.stderr.write("[ui] " + msg + "\n")
+        if not quiet_request(msg):
+            sys.stderr.write("[ui] " + msg + "\n")
 
     def _send(self, code, body, ctype="application/json; charset=utf-8", headers=None):
         if isinstance(body, (dict, list)):
@@ -1093,6 +1173,78 @@ class H(BaseHTTPRequestHandler):
         morsel = SimpleCookie(self.headers.get("Cookie", "")).get(ACCESS_COOKIE)
         return bool(morsel) and hmac.compare_digest(morsel.value, S.access_token)
 
+    def _private_token(self):
+        morsel = SimpleCookie(self.headers.get("Cookie", "")).get(PRIVATE_COOKIE)
+        return morsel.value if morsel else None
+
+    def _private_session(self, touch=False):
+        """Session de l'espace privé de cet appareil (cookie), ou None ; touch : requête privée, qui la prolonge."""
+        session = S.private_sessions.get(self._private_token())
+        if session and touch:
+            session["seen"] = time.time()
+        return session
+
+    def _send_private(self, code, reply, token=""):
+        """Réponse qui pose le cookie de session de l'espace privé (token), ou l'efface (token vide) : HttpOnly, sans
+        durée de vie (perdu à la fermeture du navigateur), distinct du cookie d'accès."""
+        self._send(code, reply, headers={"Set-Cookie": f"{PRIVATE_COOKIE}={token}; Path=/;{'' if token else ' Max-Age=0;'} HttpOnly; SameSite=Strict"})
+
+    def _open_session(self, key):
+        """Ouvre une session pour cet appareil : la clé privée reste en mémoire du serveur, l'appareil reçoit le jeton."""
+        token = secrets.token_urlsafe(32)
+        S.private_sessions[token] = {"key": key, "seen": time.time()}
+        self._send_private(200, {"ok": True}, token)
+
+    def _private_post(self, path, raw):
+        """Routes POST de l'espace privé : create, unlock, lock, code, reset. Rien n'en va dans les journaux."""
+        if not HAVE_CRYPTO:
+            return self._send(503, {"error": "espace privé indisponible : bibliothèque cryptography non installée"})
+        try:
+            body = json.loads(raw)
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            return self._send(400, {"error": "objet JSON attendu"})
+        action = path[len("/api/private/"):]
+        if action == "lock":
+            S.private_sessions.pop(self._private_token(), None)
+            return self._send_private(200, {"ok": True})
+        if action == "reset":                   # sans le code (oublié) : tout l'espace est effacé, sessions comprises
+            if body.get("confirm") != "SUPPRIMER":
+                return self._send(400, {"error": "tapez SUPPRIMER pour confirmer"})
+            with PRIVATE_LOCK:
+                S.private_sessions.clear()
+                try:
+                    shutil.rmtree(PRIVATE)
+                except FileNotFoundError:
+                    pass
+                except OSError as e:
+                    return self._send(500, {"error": f"espace privé non supprimé en entier : {e}"})
+            return self._send_private(200, {"ok": True})
+        if action not in ("create", "unlock", "code"):
+            return self._send(404, {"error": "not found"})
+        new = body.get("new" if action == "code" else "code")
+        error = private_code_error(new) if action != "unlock" else None
+        if error:
+            return self._send(400, {"error": error})
+        with PRIVATE_LOCK:                      # un essai à la fois : la dérivation coûte 256 Mio de mémoire
+            space = read_space()
+            if action == "create" and space:
+                return self._send(409, {"error": "l'espace privé existe déjà"})
+            if action == "create":
+                key = X25519PrivateKey.generate()
+                write_space(b64e(key.public_key().public_bytes_raw()), key, new)
+            elif not space:
+                return self._send(404, {"error": "aucun espace privé"})
+            else:
+                key = open_space(space, body.get("old" if action == "code" else "code"))
+                if key and action == "code":    # même paire de clés : les images restent lisibles
+                    write_space(space["public"], key, new)
+        if not key:
+            time.sleep(1)                       # freine les essais en série (hors du verrou : n'en bloque pas d'autres)
+            return self._send(403, {"error": "code privé incorrect"})
+        return self._send(200, {"ok": True}) if action == "code" else self._open_session(key)
+
     def do_GET(self):
         if not self._host_ok():
             return self._send(403, {"error": "nom d'hôte refusé"})
@@ -1122,7 +1274,10 @@ class H(BaseHTTPRequestHandler):
                                     "last_job": public(last) if last else None,
                                     "estimates": coefs,
                                     # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
-                                    "phone": {"urls": S.lan_urls, "code": S.access_code} if S.access_code and self._local() else None})
+                                    "phone": {"urls": S.lan_urls, "code": S.access_code} if S.access_code and self._local() else None,
+                                    # espace privé : existe-t-il, et est-il déverrouillé pour cet appareil (sans prolonger la session)
+                                    "private": {"available": HAVE_CRYPTO, "exists": HAVE_CRYPTO and os.path.exists(os.path.join(PRIVATE, "space.json")),
+                                                "unlocked": HAVE_CRYPTO and self._private_session() is not None}})
         m = re.match(r"^/api/job/([\w-]+)(/preview|/result)?$", path)
         if m:
             job = S.jobs.get(m.group(1))
@@ -1214,6 +1369,8 @@ class H(BaseHTTPRequestHandler):
             return
         if not self._allowed():
             return self._send(401, {"error": "code d'accès requis"})
+        if path.startswith("/api/private/"):
+            return self._private_post(path, raw)
         if path == "/api/delete":
             try:
                 fp = output_path(json.loads(raw).get("name"))

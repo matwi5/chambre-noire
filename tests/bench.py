@@ -3,9 +3,10 @@
   venv/bin/python -m unittest discover -s tests -v
 
 start() importe le serveur, repointe tous ses dossiers vers un dossier temporaire (rien n'est écrit dans le dépôt :
-ni outputs/, ni jobs/, ni journal, ni calibration, ni clé de notification), y installe le faux sd-cli, puis sert
-launch.H sur 127.0.0.1 avec son thread de calcul. Un seul serveur par processus : l'état du serveur (launch.S) est
-global ; BenchCase attend avant chaque test que la file soit vide et oublie les générations précédentes.
+ni outputs/, ni jobs/, ni journal, ni calibration, ni clé de notification, ni espace privé), y installe le faux sd-cli,
+puis sert launch.H sur 127.0.0.1 avec son thread de calcul. Un seul serveur par processus : l'état du serveur (launch.S)
+est global ; BenchCase attend avant chaque test que la file soit vide et oublie les générations précédentes, l'espace
+privé et ses sessions.
 """
 import atexit, base64, contextlib, glob, json, os, shutil, sys, tempfile, threading, time, unittest, warnings
 import urllib.error, urllib.request
@@ -34,6 +35,8 @@ def start():
     launch.PUSH_KEY, launch.PUSH_SUBS = launch.P("tools", "push_vapid.pem"), launch.P("tools", "push_subscriptions.json")
     launch.ACCESS_FILE = launch.P("tools", "access_code.txt")
     launch.PROMPTS_FILE = launch.P("tools", "saved_prompts.json")
+    launch.PRIVATE = launch.P("private")
+    launch.SCRYPT_N = 2 ** 10                       # dérivation du code privé rapide au banc (2**18 en vrai)
     # launch.PROMPT_TYPES_FILE reste le fichier du dépôt : le serveur le lit sans jamais l'écrire
     for d in ("tools", "outputs", "jobs", "logs", "models"):
         os.makedirs(launch.P(d))
@@ -51,7 +54,7 @@ def start():
     S.store = estimate.Store(launch.CALIB)
     install_fake_engine()
     launch.print = lambda *a, **kw: LOG.append(" ".join(str(x) for x in a))
-    launch.H.log_message = lambda self, fmt, *a: LOG.append(fmt % a)
+    launch.H.log_message = lambda self, fmt, *a: None if launch.quiet_request(fmt % a) else LOG.append(fmt % a)
     # code d'accès actif, comme avec --lan : le client local passe, un autre appareil doit présenter le cookie
     S.access_code = ACCESS_CODE
     S.access_token = launch.access_token(ACCESS_CODE)
@@ -79,23 +82,61 @@ def install_fake_engine():
     os.chmod(exe, 0o755)
 
 
-def call(method, path, body=None, remote=False, cookie=True, headers=None):
+def call(method, path, body=None, remote=False, cookie=True, headers=None, private=None):
     """Requête HTTP au serveur du banc : (code, réponse JSON ou octets). remote : venue d'un autre appareil (relayée par
-    Tailscale), avec le cookie d'accès si cookie est vrai. Les POST portent Content-Type: application/json."""
+    Tailscale), avec le cookie d'accès si cookie est vrai ; private : valeur du cookie de session de l'espace privé.
+    Les POST portent Content-Type: application/json."""
+    return call_full(method, path, body, remote, cookie, headers, private)[:2]
+
+
+def call_full(method, path, body=None, remote=False, cookie=True, headers=None, private=None):
+    """Comme call(), avec en plus les en-têtes de la réponse : (code, réponse, en-têtes)."""
     h = {"Content-Type": "application/json"} if method == "POST" else {}
+    cookies = []
     if remote:
         h["X-Forwarded-For"] = "192.0.2.10"
         if cookie:
-            h["Cookie"] = f"{launch.ACCESS_COOKIE}={S.access_token}"
+            cookies.append(f"{launch.ACCESS_COOKIE}={S.access_token}")
+    if private:
+        cookies.append(f"{launch.PRIVATE_COOKIE}={private}")
+    if cookies:
+        h["Cookie"] = "; ".join(cookies)
     h.update(headers or {})
     data = json.dumps(body if body is not None else {}).encode() if method == "POST" else None
     req = urllib.request.Request(f"http://127.0.0.1:{S.ui_port}{path}", data=data, method=method, headers=h)
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
-            code, raw, ctype = r.status, r.read(), r.headers.get("Content-Type", "")
+            code, raw, hdrs = r.status, r.read(), r.headers
     except urllib.error.HTTPError as e:
-        code, raw, ctype = e.code, e.read(), e.headers.get("Content-Type", "")
-    return code, json.loads(raw) if ctype.startswith("application/json") else raw
+        code, raw, hdrs = e.code, e.read(), e.headers
+    return code, json.loads(raw) if hdrs.get("Content-Type", "").startswith("application/json") else raw, hdrs
+
+
+def cookie_of(headers):
+    """Session de l'espace privé posée par une réponse (Set-Cookie), ou None."""
+    for v in headers.get_all("Set-Cookie") or []:
+        name, _, rest = v.partition("=")
+        if name == launch.PRIVATE_COOKIE and "Max-Age=0" not in rest:
+            return rest.split(";")[0]
+    return None
+
+
+def create_private(code, remote=False):
+    """Crée l'espace privé ; renvoie la session ouverte pour ce client."""
+    status, reply, headers = call_full("POST", "/api/private/create", {"code": code}, remote=remote)
+    assert status == 200, (status, reply)
+    return cookie_of(headers)
+
+
+def unlock_private(code, remote=False):
+    status, reply, headers = call_full("POST", "/api/private/unlock", {"code": code}, remote=remote)
+    assert status == 200, (status, reply)
+    return cookie_of(headers)
+
+
+def private_status(session=None, remote=False):
+    """État de l'espace privé vu par un client : {available, exists, unlocked}."""
+    return call("GET", "/api/status", remote=remote, private=session)[1]["private"]
 
 
 def gen_body(prompt="a red car", mode="t2i", **kw):
@@ -222,6 +263,8 @@ class BenchCase(unittest.TestCase):
         wait_idle()
         S.jobs.clear()
         S.lots.clear()
+        S.private_sessions.clear()
         for d in ("outputs", "jobs"):
             shutil.rmtree(launch.P(d))
             os.makedirs(launch.P(d))
+        shutil.rmtree(launch.P("private"), ignore_errors=True)

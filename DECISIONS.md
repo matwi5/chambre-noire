@@ -4,6 +4,45 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-14 · Espace privé discret : on y entre, on en sort
+
+- **Contexte** : la spécification prévoyait un bouton « Privé » à côté de « Générer » et un mode Privé à allumer.
+  En voyant l'interface, le porteur ne veut rien qui signale l'espace privé à l'arrivée sur l'application.
+- **Décision** (porteur, 14/10/2026) : l'entrée est un petit cadenas discret dans l'en-tête de la galerie (création ou
+  code). Déverrouiller fait **entrer dans l'espace privé** : toute l'application prend un thème propre (nuit sarcelle,
+  comme le graphite de l'incognito), le bouton Incognito disparaît, toute génération part en privé, la galerie montre
+  les images privées. Une seule sortie, un cadenas « Sortir » en haut à droite, qui verrouille. « Rendre privée », dans
+  la visionneuse normale, demande le code sans faire entrer dans l'espace privé. Fermer l'application n'annule pas les
+  générations privées.
+- **Écarté** : bouton « Privé » à côté de « Générer » (visible à l'arrivée) ; geste caché (appui long sur le logo) ;
+  mode Privé dans la feuille Réglages ; galerie normale visible depuis l'espace privé.
+- **Conséquences** : il n'y a plus de « mode Privé » distinct de l'état déverrouillé ; une génération privée est
+  simplement une génération lancée depuis l'intérieur de l'espace. Les tickets Asana du groupe D décrivent encore le
+  bouton « Privé » (à mettre à jour par le porteur).
+
+## 2026-10-14 · Espace privé : format des clés et sessions
+
+- **Contexte** : mise en œuvre de la décision « Espace privé chiffré à clé publique » (ci-dessous). Le format des clés
+  est coûteux à changer une fois un espace créé : il est fixé ici.
+- **Décision** (groupe D, choix techniques dans le cadre fixé par le porteur) :
+  - `private/space.json` : `{"v": 1, "public": <clé publique X25519, 32 octets, base64>, "kdf": {"alg": "scrypt",
+    "n", "r", "p", "salt": <16 octets, base64>}, "key": <base64 de nonce (12 octets) + AES-256-GCM(clé privée X25519
+    brute, 32 octets)>}` ; clé AES = scrypt(code privé en UTF-8 tel que saisi, sel, n, r, p, 32 octets) ; données
+    associées `qwen-image-local private key v1`. Paramètres à la création : n = 2¹⁸, r = 8, p = 1 (256 Mio et ≈ 0,3 s
+    par essai sur le Mac) ; ils sont lus dans le fichier, donc modifiables pour un espace futur sans casser l'ancien.
+    Changer le code rechiffre la même clé privée avec un sel neuf : les images ne bougent pas.
+  - Sessions : une par appareil, en mémoire du serveur (`S.private_sessions`), jeton aléatoire de 256 bits dans le
+    cookie `qwen_private` (HttpOnly, `SameSite=Strict`, sans `Max-Age`) ; fermée après 15 min sans requête privée
+    (`/api/status` et le suivi des générations ne la prolongent pas), par `/api/private/lock`, et par
+    `/api/private/reset` pour toutes. Les dérivations du code passent une à une (verrou) : un essai à la fois, et
+    jamais plusieurs fois 256 Mio en mémoire.
+- **Écarté** : `hashlib.scrypt` (plafond mémoire à régler à la main) ; PBKDF2 (moins coûteux à attaquer sur GPU) ;
+  garder la clé privée déchiffrée sur le disque ou dans le cookie ; `SameSite=Lax` (le cookie n'a pas à suivre une
+  ouverture de page venue d'un autre site : l'interface ne lit l'espace privé que par des `fetch` de même origine).
+- **Conséquences** : redémarrer le serveur ferme toutes les sessions. Verrouillage à la fermeture de la page par un
+  envoi `keepalive` dans `pagehide`, comme l'oubli des générations incognito ; l'expiration après 15 minutes reste le
+  filet si cet envoi se perd.
+
 ## 2026-10-14 · Espace privé chiffré à clé publique
 
 - **Contexte** : le porteur veut une galerie séparée, accessible seulement par un code, dont les images ne se lisent

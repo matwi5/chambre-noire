@@ -9,6 +9,8 @@ sdcpp/
 # productions et journaux personnels
 outputs/
 jobs/
+# espace privé : clés et images chiffrées
+/private/
 logs/
 tests/bench_*.png
 

@@ -2,3 +2,4 @@ pillow>=10
 numpy>=1.26
 pywin32>=306 ; sys_platform == "win32"
 pywebpush>=2.0
+cryptography>=42   # espace privé (X25519, AES-GCM, scrypt) ; déjà installée avec pywebpush

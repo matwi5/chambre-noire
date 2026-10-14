@@ -45,6 +45,14 @@
     --rim:rgba(255,255,255,.10); --spec:rgba(255,255,255,.22);
     --shadow:0 18px 50px -18px rgba(0,0,0,.85); --thick:rgba(30,30,34,.86);
     --veil:linear-gradient(180deg, rgba(17,17,19,.55), rgba(17,17,19,.85) 55%, rgba(17,17,19,.96)); }
+  /* espace privé : nuit sarcelle, quel que soit le thème du système, sans image en fond ; on sait où l'on est sans bouton */
+  html.priv { color-scheme: dark;
+    --void:#06110f; --ink:#e8f4f1; --ink2:rgba(222,240,236,.66); --ink3:rgba(222,240,236,.42);
+    --iris:#1f8f7a; --iris2:#5fcfb6; --on-iris:#fff;
+    --glass:rgba(160,255,230,.05); --glass-hi:rgba(160,255,230,.10); --field:rgba(0,0,0,.34);
+    --rim:rgba(160,255,230,.13); --spec:rgba(200,255,240,.28);
+    --shadow:0 18px 50px -18px rgba(0,0,0,.85); --thick:rgba(10,30,27,.88);
+    --veil:linear-gradient(180deg, rgba(6,17,15,.45), rgba(6,17,15,.80) 55%, rgba(6,17,15,.95)); }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { margin:0; }
   body { font:16px/1.45 system-ui, -apple-system, "SF Pro Text", "Segoe UI Variable", "Segoe UI", Roboto, sans-serif; color:var(--ink);
@@ -62,7 +70,13 @@
     filter:blur(60px) saturate(1.7); transform:scale(1.1); transition:opacity 1.4s ease; }
   .ambient img.on { opacity:.95; }
   .ambient .mesh, .ambient img.on { transition:opacity .5s ease; }
-  .incog .ambient .mesh, .incog .ambient img.on { opacity:0; }
+  .incog .ambient .mesh, .incog .ambient img.on, .priv .ambient img.on { opacity:0; }
+  .priv .ambient .mesh { filter:hue-rotate(-95deg) saturate(.7); opacity:.45; }
+  .priv .logo { background:radial-gradient(120% 120% at 25% 15%, #b8f5e6, var(--iris) 45%, #0f5a4c); box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 8px 22px -6px rgba(31,143,122,.7); }
+  #privExit { flex:none; margin-left:8px; color:var(--iris2); }
+  #privExit[hidden] { display:none; } #privExit svg, #privEntry svg { width:18px; height:18px; }
+  @media (max-width: 420px) { #privExit span, .priv .topbar h1 { display:none; } #privExit { padding:0 10px; } }
+  .priv #incog { display:none; }
   .incog .logo, .incog .orb, .incog .shimmer { filter:grayscale(1); }
   .incog .btn { box-shadow:inset 0 1px 0 rgba(255,255,255,.22), 0 10px 26px -10px rgba(0,0,0,.7); }
   .ambient::after { content:""; position:absolute; inset:0; background:var(--veil); }
@@ -292,6 +306,7 @@
   .hist-head span { color:var(--ink2); font-size:14px; margin-top:4px; font-variant-numeric:tabular-nums; }
   .hist-head .btn-icon { width:40px; height:40px; margin-left:auto; }
   .hist-head .btn-icon svg { width:19px; height:19px; }
+  .hist-head #privEntry { color:var(--ink2); opacity:.55; } .hist-head #privEntry:not([hidden]) + .btn-icon { margin-left:0; }   /* espace privé : entrée discrète */
   .hgrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; }
   @media (min-width: 700px) { .hgrid { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; } }
   .hgrid > button { position:relative; padding:0; border:0; border-radius:14px; overflow:hidden; aspect-ratio:1; background:var(--field); cursor:pointer;
@@ -461,6 +476,14 @@
   .ptxt span { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
   #peText { min-height:150px; }
   #promptEditSheet .ask-acts { margin-top:18px; }
+  /* ------------------------------------------------------------ espace privé */
+  .privsheet label { display:block; font-size:13px; font-weight:650; color:var(--ink2); margin:14px 2px 6px; }
+  .privsheet .btn { width:100%; margin-top:18px; }
+  .privsheet .ask-acts .btn { margin-top:0; }
+  .privsheet .links { display:flex; justify-content:space-between; gap:10px; margin-top:16px; }
+  .privsheet .links button { border:0; background:none; color:var(--iris2); font:inherit; font-size:14px; font-weight:600; padding:6px 2px; cursor:pointer; }
+  .privsheet .links .danger { color:var(--err); }
+  .privsheet .err { color:var(--err); font-size:14px; min-height:20px; margin:8px 2px 0; }
   .qlot { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 4px -2px; font-size:13px; font-weight:650; color:var(--ink2); }
 
   /* ------------------------------------------------------------ messages et confirmations */
@@ -498,6 +521,7 @@
   <div class="brand"><div class="logo" aria-hidden="true">Q</div><h1>Qwen-Image<small>2.1</small></h1></div>
   <button class="chipbtn glass" id="phoneBtn" hidden onclick="openSheet('engineSheet')" aria-label="Ouvrir depuis le téléphone"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="6.5" y="2.5" width="11" height="19" rx="3"/><path d="M10.5 18.5h3"/></svg><span>Téléphone</span></button>
   <button class="chipbtn glass island" id="island" onclick="onIsland()" aria-label="État du moteur"><span id="status">connexion…</span><span class="isl" aria-live="polite"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="15" pathLength="100"/><circle id="islRing" cx="20" cy="20" r="15" pathLength="100"/></svg><b id="islStep"></b><span id="islEta"></span><span class="isl-more" id="islMore"></span></span></button>
+  <button class="chipbtn glass" id="privExit" hidden onclick="privLock()" aria-label="Sortir de l'espace privé" title="Sortir de l'espace privé"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg><span>Sortir</span></button>
 </header>
 
 <main>
@@ -537,7 +561,7 @@
   </div>
 
   <div class="pane" id="pane-hist">
-    <div class="hist-head"><h2>Galerie</h2><span id="histCount"></span><button class="btn-icon glass" onclick="loadHistory()" aria-label="Actualiser la galerie"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg></button></div>
+    <div class="hist-head"><h2>Galerie</h2><span id="histCount"></span><button class="btn-icon glass" id="privEntry" hidden aria-label="Espace privé"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg></button><button class="btn-icon glass" onclick="loadHistory()" aria-label="Actualiser la galerie"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg></button></div>
     <div class="hgrid" id="histGrid"></div>
   </div>
 </section>
@@ -693,6 +717,41 @@
   <h3 id="typeHead">Prompts types</h3>
   <div class="qlist" id="typeList"></div>
 </section>
+<section class="sheet glass privsheet" id="privCreateSheet" role="dialog" aria-modal="true" aria-labelledby="privCreateTitle">
+  <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
+  <div class="sheet-head"><h2 id="privCreateTitle">Créer l'espace privé</h2></div>
+  <p class="note">Une galerie à part, chiffrée sur le Mac, qui ne s'ouvre qu'avec ce code, sur chaque appareil (le Mac compris). Code oublié : les images privées sont perdues.</p>
+  <label for="pcCode">Code privé (8 caractères au moins)</label><input class="field" id="pcCode" type="password" autocomplete="new-password" enterkeyhint="next">
+  <label for="pcCode2">Le même code, une seconde fois</label><input class="field" id="pcCode2" type="password" autocomplete="new-password" enterkeyhint="done">
+  <p class="err" id="pcErr" role="alert"></p>
+  <button class="btn" id="pcGo" onclick="privCreate()">Créer et entrer</button>
+</section>
+<section class="sheet glass privsheet" id="privUnlockSheet" role="dialog" aria-modal="true" aria-labelledby="privUnlockTitle">
+  <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
+  <div class="sheet-head"><h2 id="privUnlockTitle">Espace privé</h2></div>
+  <label for="puCode">Code privé</label><input class="field" id="puCode" type="password" autocomplete="current-password" enterkeyhint="go">
+  <p class="err" id="puErr" role="alert"></p>
+  <button class="btn" id="puGo" onclick="privUnlock()">Entrer</button>
+  <div class="links"><button onclick="openPrivSheet('privCodeSheet')">Changer le code</button><button class="danger" onclick="openPrivSheet('privResetSheet')">Supprimer l'espace privé</button></div>
+</section>
+<section class="sheet glass privsheet" id="privCodeSheet" role="dialog" aria-modal="true" aria-labelledby="privCodeTitle">
+  <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
+  <div class="sheet-head"><h2 id="privCodeTitle">Changer le code privé</h2></div>
+  <p class="note">Les images privées restent lisibles avec le nouveau code.</p>
+  <label for="pkOld">Code actuel</label><input class="field" id="pkOld" type="password" autocomplete="current-password" enterkeyhint="next">
+  <label for="pkNew">Nouveau code (8 caractères au moins)</label><input class="field" id="pkNew" type="password" autocomplete="new-password" enterkeyhint="next">
+  <label for="pkNew2">Le nouveau code, une seconde fois</label><input class="field" id="pkNew2" type="password" autocomplete="new-password" enterkeyhint="done">
+  <p class="err" id="pkErr" role="alert"></p>
+  <button class="btn" id="pkGo" onclick="privChangeCode()">Changer le code</button>
+</section>
+<section class="sheet glass privsheet" id="privResetSheet" role="alertdialog" aria-modal="true" aria-labelledby="privResetTitle">
+  <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
+  <div class="sheet-head"><h2 id="privResetTitle">Supprimer l'espace privé</h2></div>
+  <p class="note">Toutes les images privées seront effacées définitivement, sans pouvoir être récupérées. Utile si le code est oublié ; un nouvel espace pourra être créé ensuite.</p>
+  <label for="prWord">Tapez SUPPRIMER pour confirmer</label><input class="field" id="prWord" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="done">
+  <p class="err" id="prErr" role="alert"></p>
+  <div class="ask-acts"><button class="btn secondary" onclick="openPrivSheet('privUnlockSheet')">Annuler</button><button class="btn danger-fill" id="prGo" onclick="privReset()">Supprimer</button></div>
+</section>
 <section class="sheet glass" id="promptEditSheet" role="dialog" aria-modal="true" aria-labelledby="promptEditTitle">
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
   <div class="sheet-head"><h2 id="promptEditTitle">Enregistrer le prompt</h2></div>
@@ -719,6 +778,7 @@ function applyEstimates(est){
 
 const $ = id => document.getElementById(id);
 let mode='t2i', editImages=[], maskImage=null, paintMode='paint', lastResult=null, estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
+let privState={available:false, exists:false, unlocked:false};   // espace privé vu par cet appareil (/api/status)
 
 function log(m){ const l=$('log'); l.textContent += new Date().toLocaleTimeString()+'  '+m+'\n'; l.scrollTop=l.scrollHeight; }
 const round32 = v => Math.max(256, Math.round(v/32)*32);
@@ -814,7 +874,7 @@ function refreshChoices(){
     t.addEventListener('input', ()=>{ try{ if(incogOn) localStorage.removeItem('qwen-'+id); else localStorage.setItem('qwen-'+id, t.value); }catch(e){} }); });
 })();
 function setIncog(on){ incogOn=on; $('incog').classList.toggle('on', on); $('incog').setAttribute('aria-pressed', on);
-  document.documentElement.classList.toggle('incog', on); setTimeout(syncThemeColor); }   // après le chargement du script (variables lues)   // thème graphite sombre, barre d'état comprise
+  document.documentElement.classList.toggle('incog', on && !inPrivate()); setTimeout(syncThemeColor); }   // après le chargement du script (variables lues)   // thème graphite sombre, barre d'état comprise
 // barre d'état de l'application installée : Chrome la peint de la couleur theme-color (il ne laisse pas encore une
 // application installée dessiner dessous). Pour que l'application semble continuer jusqu'en haut, on lui donne la
 // couleur du haut de l'écran : moyenne du haut de l'image floutée en fond, avec les mêmes voiles que dans le CSS
@@ -831,7 +891,7 @@ let tintSeq=0;
 async function syncThemeColor(){
   const seq=++tintSeq, m=getComputedStyle(document.documentElement).getPropertyValue('--void').trim().match(/^#(..)(..)(..)$/);
   const voidRgb=m ? m.slice(1).map(h=>parseInt(h, 16)) : [11, 10, 22]; let c=voidRgb;
-  if(!incogOn && ivIndex<0){
+  if(!incogOn && !inPrivate() && ivIndex<0){
     if(vIndex>=0){ const it=vList[vIndex], t=it && await tintOf(thumbOf(it));          // visionneuse : image floutée assombrie (.v-bg img)
       c=t ? saturate(t, 1.6).map(v=>v*.5) : [5, 4, 12]; }
     else if(ambName){ const t=await tintOf('/api/thumb?name='+encodeURIComponent(ambName));   // page : dégradé de la barre du haut sur le fond
@@ -896,6 +956,7 @@ async function refreshStatus(){
     $('phone').hidden=$('phoneBtn').hidden=!s.phone; if(s.phone) facts('phoneFacts', [['Adresse', s.phone.urls[0]], ...s.phone.urls.slice(1).map(u=>['ou', u]), ['Code', s.phone.code, 'code']]);
     const ver = s.model_version ? s.model_version.toUpperCase() : '';
     if(s.sd_ready){ applyEstimates(s.estimates); el.textContent=(s.busy?'En cours':'Prêt')+(ver?' · '+ver:''); el.className='ok'; } else { el.textContent='Non prêt'; el.className='err'; }
+    applyPrivate(s.private);
     facts('engineFacts', [['État', s.sd_ready ? (s.busy ? 'génération en cours' : 'prêt') : (s.detail||'non prêt')], ['Moteur', s.backend], ['Modèle', s.model],
       ['File d\'attente', s.queued ? s.queued+' en attente' : ''], ['Estimations', !s.estimates ? '' : calibrated ? 'calibrées sur '+s.estimates.samples+' mesure'+(s.estimates.samples>1?'s':'') : 'non calibrées']]); }
   catch(e){ $('status').textContent='Hors ligne'; $('status').className='err'; facts('engineFacts', [['État', 'serveur injoignable']]); }
@@ -1525,6 +1586,51 @@ async function deleteCurrent(){
   log('supprimé : '+name); forgetResult(name); toast('Image supprimée');
   loadHistory();
 }
+// ------------------------------------------------------------ espace privé : galerie chiffrée sur le Mac, ouverte par un
+// code privé propre à chaque appareil (session du serveur, cookie HttpOnly). Entrée discrète, un cadenas dans l'en-tête
+// de la galerie (rien à côté de Générer à l'arrivée : décision du porteur) ; masquée si le serveur ne le propose pas.
+// Déverrouillé sur cet appareil, on est « dans l'espace privé » (décision du porteur du 14/10/2026) : thème propre,
+// plus de bouton Incognito, une seule sortie (le cadenas en haut à droite, qui verrouille). Entrée : le cadenas discret
+// de l'en-tête de la galerie.
+function inPrivate(){ return privState.unlocked; }
+function applyPrivate(p){ if(!p) return; const was=inPrivate(); privState=p;
+  $('privEntry').hidden=!p.available || p.unlocked; $('privEntry').title=p.exists ? 'Espace privé' : 'Créer l\'espace privé';
+  $('privExit').hidden=!p.unlocked;
+  document.documentElement.classList.toggle('priv', p.unlocked); document.documentElement.classList.toggle('incog', incogOn && !p.unlocked);
+  if(was!==p.unlocked) syncThemeColor(); }
+function openPrivSheet(id){
+  ['pcCode','pcCode2','puCode','pkOld','pkNew','pkNew2','prWord'].forEach(k=>$(k).value='');
+  ['pcErr','puErr','pkErr','prErr'].forEach(k=>$(k).textContent='');
+  openSheet(id); $(id).querySelector('input').focus(); }
+$('privEntry').onclick=()=>openPrivSheet(!privState.exists ? 'privCreateSheet' : 'privUnlockSheet');
+// envoi d'une feuille : bouton grisé pendant l'envoi (la dérivation du code prend un temps), message d'erreur sous les champs
+async function privPost(path, body, btn, err){
+  btn.disabled=true; $(err).textContent='';
+  try{ const r=await postJson(path, body), j=await r.json().catch(()=>({}));
+    if(!r.ok){ $(err).textContent=j.error ? j.error.charAt(0).toUpperCase()+j.error.slice(1)+'.' : 'Erreur '+r.status; return false; }
+    return true; }
+  catch(e){ $(err).textContent='Serveur injoignable.'; return false; }
+  finally{ btn.disabled=false; await refreshStatus(); } }
+async function privCreate(){ const c=$('pcCode').value;
+  if(c.length<8) return $('pcErr').textContent='8 caractères au moins.';
+  if(c!==$('pcCode2').value) return $('pcErr').textContent='Les deux codes diffèrent.';
+  if(await privPost('/api/private/create', {code:c}, $('pcGo'), 'pcErr')){ closeSheet(); toast('Espace privé créé'); } }
+async function privUnlock(){ if(!$('puCode').value) return;
+  if(await privPost('/api/private/unlock', {code:$('puCode').value}, $('puGo'), 'puErr')){ closeSheet(); toast('Espace privé ouvert'); }
+  else { $('puCode').select(); } }
+async function privLock(){ await postJson('/api/private/lock', {}).catch(()=>{}); await refreshStatus(); toast('Sorti de l\'espace privé'); }
+async function privChangeCode(){ const n=$('pkNew').value;
+  if(n.length<8) return $('pkErr').textContent='Nouveau code : 8 caractères au moins.';
+  if(n!==$('pkNew2').value) return $('pkErr').textContent='Les deux nouveaux codes diffèrent.';
+  if(await privPost('/api/private/code', {old:$('pkOld').value, new:n}, $('pkGo'), 'pkErr')){ closeSheet(); toast('Code privé changé'); } }
+async function privReset(){ if($('prWord').value.trim()!=='SUPPRIMER') return $('prErr').textContent='Tapez SUPPRIMER en majuscules.';
+  if(await privPost('/api/private/reset', {confirm:'SUPPRIMER'}, $('prGo'), 'prErr')){ closeSheet(); toast('Espace privé supprimé'); } }
+// Entrée : passe au champ suivant, ou envoie depuis le dernier
+document.querySelectorAll('.privsheet input').forEach(inp=>inp.addEventListener('keydown', e=>{ if(e.key!=='Enter' || e.isComposing) return; e.preventDefault();
+  const all=[...inp.closest('.privsheet').querySelectorAll('input')].filter(x=>x.offsetParent), k=all.indexOf(inp);
+  if(k<all.length-1) all[k+1].focus(); else inp.closest('.privsheet').querySelector('.btn:not(.secondary)').click(); }));
+// page fermée ou rechargée : l'espace se verrouille (la session de cet appareil est fermée sur le Mac)
+addEventListener('pagehide', ()=>{ if(privState.unlocked) fetch('/api/private/lock', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}', keepalive:true}).catch(()=>{}); });
 // application installable sur le téléphone (le navigateur n'accepte le service worker qu'en HTTPS ou sur le Mac)
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 </script>

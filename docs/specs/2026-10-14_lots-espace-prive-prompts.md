@@ -228,7 +228,8 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
   rechargement, elle se rattache aux seules générations normales qu'elle a lancées elle-même (identifiants gardés côté
   page ; décision du porteur du 14/10/2026 après la revue de groupe A) : celles d'un autre appareil restent visibles
   dans la feuille de la file sans être reprises. Les générations incognito et privées ne se rattachent pas
-  (comportement actuel de l'incognito). Une entrée incognito ou privée de `queue` porte un jeton opaque propre à la
+  (comportement actuel de l'incognito ; une génération privée n'est pas annulée pour autant à la fermeture, voir
+  plus bas). Une entrée incognito ou privée de `queue` porte un jeton opaque propre à la
   page qui l'a lancée, pour que cette page reconnaisse ses lignes sans que la ligne identifie la génération
   (implémenté : la page tire un jeton à son ouverture et l'envoie en `page` dans `/api/generate` ; l'entrée le porte en
   `page` ; aucune route ne l'accepte comme droit).
@@ -250,7 +251,8 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
   porteur du 14/10/2026). L'identifiant d'une génération incognito (et privée) est long et tiré au hasard (au moins
   128 bits), pour qu'un appareil connecté ne puisse pas le deviner.
   À la fermeture ou au rechargement, la page annule et fait oublier, en un seul envoi `keepalive`, toutes ses
-  générations incognito (et privées) non terminées ou non récupérées.
+  générations incognito non terminées ou non récupérées. Les générations privées, elles, continuent et finissent
+  chiffrées dans la galerie privée (récit 55 ; confirmé par le porteur le 14/10/2026).
 - L'estimation de la file additionne les estimations des générations qui précèdent ; l'interface la calcule avec ses
   coefficients habituels à partir des réglages de chaque entrée, renvoyés par `queue`.
 
@@ -346,16 +348,23 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
 - **Héritage** : quand Éditer, Dessiner ou Reprendre part d'une image privée, l'onglet est marqué « privé » jusqu'à la
   génération suivante, qui part forcément en privé ; si l'espace s'est verrouillé entre-temps, l'interface demande de
   le déverrouiller au lieu de lancer en clair.
-- **Rendre privée** : l'image, ses images d'entrée et ses métadonnées (tirées de sa ligne du journal) sont chiffrées
+- **Rendre privée** (précisé par le porteur le 14/10/2026 : le bouton de la visionneuse normale demande le code privé,
+  vérifié par le serveur, sans faire entrer dans l'espace privé ; le chiffrement n'a besoin que de la clé publique) :
+  l'image, ses images d'entrée et ses métadonnées (tirées de sa ligne du journal) sont chiffrées
   dans l'espace privé, puis le PNG, ses miniatures, ses images d'entrée et **sa ligne du journal** sont supprimés (le
   journal est réécrit sans elle). L'interface avertit avant que les copies déjà faites (Time Machine, téléchargements)
   restent. Pas de chemin inverse.
-- **Interface** : un bouton « Privé » à côté de « Générer » (avec « Incognito »), exclusif de lui. Touché quand
-  l'espace n'existe pas : feuille de création (code deux fois) ; quand il est verrouillé : feuille de déverrouillage,
-  avec « Supprimer l'espace privé » (saisie de `SUPPRIMER`) et « Changer le code ». Mode Privé actif : bouton allumé et
-  cadenas dans la pastille. La galerie a une entrée « Privé » (cadenas) qui ouvre la galerie privée après
-  déverrouillage, avec un bouton « Verrouiller ». Brouillon du prompt non gardé en mode Privé. Le mode Privé
-  n'est pas retenu d'une visite à l'autre (il exige de toute façon un déverrouillage).
+- **Interface** (remplacée le 14/10/2026 par le porteur, pendant l'implémentation : l'espace privé reste discret, rien
+  ne le montre à l'arrivée sur l'application) : pas de bouton « Privé » à côté de « Générer ». L'entrée est un petit
+  cadenas dans l'en-tête de la galerie. Touché quand l'espace n'existe pas : feuille de création (code deux fois) ;
+  quand il est verrouillé : feuille d'entrée (code), avec « Supprimer l'espace privé » (saisie de `SUPPRIMER`) et
+  « Changer le code ». Déverrouiller, c'est **entrer dans l'espace privé** : toute l'application prend un thème propre
+  (comme l'incognito, on sait où l'on est sans bouton), le bouton Incognito disparaît, toute génération part en privé
+  et la galerie montre les images privées. Une seule sortie, un cadenas « Sortir » en haut à droite, qui verrouille et
+  ramène à l'application normale (verrouillage aussi après 15 minutes sans activité et à la fermeture). Brouillon du
+  prompt non gardé dans l'espace privé. L'état n'est pas retenu d'une visite à l'autre (il exige de toute façon le
+  code). Récits 45 (« la première fois que je touche « Privé » » : le cadenas de la galerie), 51 à 54 (bouton « Privé »)
+  et 56 (galerie privée séparée) se lisent avec cette interface.
 - **Time Machine** : au lancement du serveur sur Mac, le dossier de travail est exclu de Time Machine par
   `tmutil addexclusion` (sans droits administrateur) ; un échec est noté dans le journal du serveur sans bloquer le
   démarrage.

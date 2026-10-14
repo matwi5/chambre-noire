@@ -375,6 +375,33 @@ Ce que cela garantit, et ses limites :
 - un fichier supprimé n'est pas effacé physiquement du disque ; sur un SSD, il devient en pratique illisible peu après ;
 - le fichier **téléchargé** est enregistré par le navigateur dans ses Téléchargements, comme tout téléchargement.
 
+### Espace privé
+
+Une galerie à part, chiffrée sur le Mac, qui ne s'ouvre qu'avec un **code privé**. Ce code est distinct du code
+d'accès du téléphone et demandé sur chaque appareil, le Mac compris : connaître le code d'accès, ou ouvrir les dossiers
+du Mac, ne suffit pas pour voir les images privées.
+
+- Rien ne le signale à l'arrivée sur l'application. Son entrée est le petit **cadenas** de l'en-tête de la
+  **Galerie** : la première fois, il crée l'espace (code de 8 caractères au moins, lettres, chiffres, signes ;
+  majuscules et minuscules comptent ; saisi deux fois).
+- Ensuite, le cadenas demande le code pour **entrer** dans l'espace privé, sur l'appareil où on le touche et seulement
+  sur lui. Un code faux est suivi d'une attente d'une seconde. Dans l'espace privé, toute l'application passe en
+  teintes sarcelle sombres (comme le graphite de l'incognito : on sait où l'on est), et le bouton Incognito
+  disparaît.
+- Le cadenas **Sortir**, en haut à droite, ramène à l'application normale en verrouillant l'espace. Il se verrouille
+  aussi seul après 15 minutes sans activité privée sur cet appareil, et à la fermeture ou au rechargement de
+  l'application.
+- **Changer le code** demande l'ancien : les images privées restent lisibles avec le nouveau.
+- **Code oublié** : il ne peut pas être retrouvé, et les images privées sont perdues. **Supprimer l'espace privé**
+  (après avoir tapé `SUPPRIMER`) efface tout l'espace sans demander le code, pour pouvoir en recréer un. N'importe
+  qui ayant accès à l'application peut donc effacer l'espace privé, sans pouvoir le lire.
+- Sans la bibliothèque `cryptography` (installée avec `requirements.txt`), l'espace privé n'apparaît pas.
+
+Ce que cela garantit : le dossier `private/` ne contient que la clé publique de l'espace et sa clé privée chiffrée par
+une clé tirée du code (dérivation volontairement lente : chaque essai coûte du temps et de la mémoire, même sur une
+copie du disque). Le code n'est écrit nulle part ; la clé privée déchiffrée ne reste qu'en mémoire du serveur, le temps
+de la session de l'appareil.
+
 ## Le modèle
 
 Le modèle n'est pas inclus dans ce dépôt : GitHub refuse les fichiers de plus de 100 Mo et le modèle pèse près de 15 Go.
@@ -600,7 +627,13 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `types` : les prompts types de `tools/prompt_types.json`, sans `used`, qu'aucune route ne modifie),
   `POST /api/prompts {"title", "text", "usage"}` (création) ou `{"id", "title", "text"}` (modification du titre et du
   texte), `POST /api/prompts/delete {"id"}`, `POST /api/prompts/used {"id"}` (le met en tête) ; 404 pour un `id`
-  inconnu ; avec `--lan`, `POST /api/login`.
+  inconnu ; avec `--lan`, `POST /api/login` ; espace privé (`private/`, voir `DECISIONS.md` pour le format) :
+  `POST /api/private/create {"code"}` (409 s'il existe déjà), `POST /api/private/unlock {"code"}` (403 après une
+  seconde si le code est faux), qui ouvrent une session pour l'appareil (cookie `qwen_private`, HttpOnly, sans durée
+  de vie, fermée par le serveur après 15 minutes sans requête privée), `POST /api/private/lock`,
+  `POST /api/private/code {"old", "new"}`, `POST /api/private/reset {"confirm": "SUPPRIMER"}` (efface l'espace et
+  ferme toutes les sessions) ; `/api/status` porte `private` : `available` (bibliothèque `cryptography` présente),
+  `exists`, `unlocked` (pour cet appareil, sans prolonger la session) ; sans `cryptography`, ces routes répondent 503.
 - `POST /api/prompts` refuse (400) un titre ou un texte vide ou qui n'est pas un texte, un titre de plus de 80
   caractères, un texte de plus de 4 000, un `usage` inconnu à la création, et une création au-delà de 500 prompts.
   `tools/saved_prompts.json` est écrit dans un fichier temporaire renommé ensuite : il n'est jamais à moitié écrit. Un
@@ -622,7 +655,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 .
 ├── LICENSE               licence MIT (code du dépôt)
 ├── setup.py              installation : moteur (Vulkan, CPU, CUDA en option ; Metal sur Mac), modèle, correctif, raccourci
-├── requirements.txt      Pillow, NumPy, pywebpush (notifications), pywin32
+├── requirements.txt      Pillow, NumPy, pywebpush (notifications), cryptography (espace privé), pywin32
 ├── start.cmd             lancement alternatif (postes sans restriction de scripts)
 ├── start-ui-sdcpp.cmd    variante : interface web intégrée de sd-server, sans outil de dessin
 ├── tools/

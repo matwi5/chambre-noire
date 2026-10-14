@@ -64,7 +64,7 @@ navigateur ──HTTP──▶ tools/launch.py ──lance une fois par généra
 tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pas de sd-server persistant)
 ```
 
-- **Un seul fichier serveur** (`tools/launch.py`, bibliothèque standard + Pillow ; `Server` garde une file de 128 connexions, la galerie en ouvre une par miniature) : état global `S` (moteur, modèle,
+- **Un seul fichier serveur** (`tools/launch.py`, bibliothèque standard + Pillow, et `cryptography` pour l'espace privé ; `Server` garde une file de 128 connexions, la galerie en ouvre une par miniature) : état global `S` (moteur, modèle,
   jobs en mémoire dans `S.jobs`, file `S.q`), un thread `worker()` qui exécute les jobs un par un via `run_job()`. Celui-ci
   construit la ligne de commande (`build_cmd`), lit la sortie de sd-cli ligne à ligne et en tire l'étape, la phase et les
   durées (`PROGRESS_RE`, lignes « … completed, taking x s ») qui alimentent la calibration. Les jobs ne survivent pas à un
@@ -112,6 +112,14 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
   `Host`, `Content-Type: application/json` exigé, sinon 403/415), puis `_allowed` (le Mac lui-même passe ; les autres
   appareils, et toute requête relayée par `tailscale serve`, présentent le cookie dérivé du code d'accès). Toute
   nouvelle route POST passe par ces contrôles : l'interface doit envoyer `Content-Type: application/json`, même sans corps.
+- **Espace privé** (`private/`, format dans `DECISIONS.md`) : `space.json` garde la clé publique X25519 en clair et la
+  clé privée chiffrée par scrypt + AES-GCM ; `/api/private/unlock` ouvre une session par appareil (`S.private_sessions`,
+  cookie `qwen_private`, en plus du cookie d'accès, demandée même sur le Mac), fermée par `sweep()` après
+  `PRIVATE_IDLE` sans requête privée : seules les requêtes privées appellent `_private_session(touch=True)`, jamais
+  `/api/status`. Sans `cryptography` (`HAVE_CRYPTO`), routes en 503 et interface masquée. `log_message` tait
+  `/api/private/` et aucun `print` ne parle de l'espace privé ; le banc repointe `PRIVATE` et abaisse `SCRYPT_N`.
+  Côté interface, déverrouillé = « dans l'espace privé » (`inPrivate()`, classe `html.priv`) : aucun bouton ne le
+  signale à l'arrivée (entrée : cadenas `#privEntry` de la galerie ; sortie : `#privExit`), décision du porteur.
 - **Mode incognito** (`"incognito": true` dans `/api/generate`) : dossier `jobs/incognito_<id>/` supprimé en fin de job
   (et au démarrage), PNG gardé en mémoire (`job["png"]`) et servi une fois par `/api/job/<id>/result`, puis oublié par
   `/api/job/<id>/forget` (ou `/api/forget` avec toutes celles de la page, envoyé à sa fermeture) ; ni `outputs/`, ni
@@ -128,6 +136,7 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
 - **Formule dupliquée en JavaScript** : `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()` et
   `ref_px()` de `estimate.py` (jetons de 16×16 px, arrondi à 32). Une modification de la formule ou d'un coefficient se
   fait des deux côtés. `PREVIEW_EVERY = 5` côté interface doit égaler le défaut `preview_interval` de `build_cmd`.
+  La longueur minimale du code privé (`MIN_PRIVATE_CODE`, 8) est aussi vérifiée dans `index.html` (feuilles privées).
   L'estimation de chaque entrée de la file (`queue_entry`) appelle `estimate.predict` : pas de troisième copie.
 - **Noms des modèles** : ceux de `setup.py` doivent correspondre à `MODELS` et `DIFFUSION` en tête de `tools/launch.py`.
 - **Release de sd.cpp** : `.installed` doit garder le format `master-NNN-hash` ; `estimate.prefix_cache` en lit le numéro
