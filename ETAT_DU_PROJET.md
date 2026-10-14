@@ -7,32 +7,37 @@ Mis à jour le 14/10/2026.
 - **Fonctionnel** sur Windows (Vulkan, CPU, CUDA en option ; sd.cpp `master-890`) et sur Mac Apple Silicon (Metal ;
   sd.cpp `master-959`, encodeur GGUF). Modèles Q4_K_M et Q8_0. Trois usages (texte → image, édition, dessin guidé),
   galerie avec visionneuse (zoom au pincement, partage, copie, images d'entrée), estimations calibrées, mode incognito,
-  notification de fin de génération (Web Push).
+  notification de fin de génération (Web Push), file d'attente visible (« Générer » toujours actif). Banc de test
+  permanent sans GPU : `venv/bin/python -m unittest discover -s tests` (36 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
 - **En cours** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
   prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), découpée en 13 tickets Asana (liste et ordre dans
   `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types à valider par le porteur
-  (tâche Asana qui lui est assignée) ; implémentation pas commencée.
+  (tâche Asana qui lui est assignée). Groupe A (banc, robustesse, file visible, incognito dans la file) fait et
+  fusionné ; restent les groupes B (lots), C (prompts) et D (espace privé).
 - **À vérifier par le porteur**, sur le téléphone par l'application installée (testé seulement dans Chrome sur le Mac,
   en vue de téléphone) :
   - télécharger, partager et copier une image, dont une image incognito (adresse `blob:`) ;
   - la notification : autorisation à la première génération, réception application fermée, toucher pour la rouvrir ;
-  - la barre d'état qui prend la couleur du haut de l'écran dans la visionneuse (un bug Chromium pourrait l'empêcher).
+  - la barre d'état qui prend la couleur du haut de l'écran dans la visionneuse (un bug Chromium pourrait l'empêcher) ;
+  - la file d'attente (pastille « +N en attente », feuille de la file, rangée de vignettes sous l'image) et l'incognito
+    dans la file (deux images incognito gardées jusqu'à être vues puis quittées).
 - **Pistes ouvertes** (aucune demandée) :
-  - une exception dans `build_cmd` (prompt non textuel, image de référence illisible) tue le thread `worker()` et bloque
-    la file jusqu'au redémarrage (réglé par l'étape 1 de la spécification du 14/10/2026) ;
-  - un autre appareil connecté peut suivre les aperçus d'une génération incognito en cours (`current_job` est exposé
-    par `/api/status`) (réglé par l'étape 1 de la même spécification) ;
-  - annuler une génération déjà terminée la repasse en `cancelled` sans supprimer son image, et la position dans la
-    file est figée à la création (trouvés le 14/10/2026 en lisant le code, non reproduits ; réglés par l'étape 1) ;
+  - course entre la route d'annulation et `worker()` sur le statut d'une génération (sans verrou), et `open(...).read()`
+    sans fermeture dans `launch.py` et `estimate.py` (avertissements masqués dans le banc) (trouvés le 14/10/2026) ;
+  - l'interface rattache une ligne incognito de la file à sa page par la position : avec des interrogations à 1 s et
+    2 s, une ligne peut porter un instant « cet appareil » à tort (affichage seulement) ;
+  - une génération reprise après un rechargement n'a ni dimensions ni coefficients propres : le cadre ne prend sa forme
+    qu'à la fin ;
+  - le faux moteur du banc n'a pas été essayé sous Windows (lanceur `sd-cli.cmd`) ;
   - accepter toute adresse IP littérale dans la liste blanche de `Host`, pour qu'un changement d'IP du Mac ne coupe plus
     l'accès par IP (décision au porteur) ;
   - `start-ui-sdcpp.cmd` et `workflows/*.json` sont périmés (à mettre à jour ou à retirer) ; `sd_port` de
     `tools/config.json` n'est lu nulle part ;
   - incognito et notification : si Android a fermé l'application en arrière-plan, toucher « Image incognito prête »
-    rouvre une page qui ne se rattache pas au job incognito ; l'image reste en mémoire jusqu'à la génération suivante
-    sans pouvoir être affichée. Piste : laisser la page reprendre une fois un job incognito terminé et jamais récupéré
+    rouvre une page qui ne se rattache pas au job incognito ; l'image reste en mémoire sans pouvoir être affichée, et
+    depuis le 14/10/2026 (plus de purge à chaque nouvelle demande) jusqu'au redémarrage du serveur. Piste : laisser la page reprendre une fois un job incognito terminé et jamais récupéré
     (option écartée par le porteur le 13/10/2026, à lui reproposer avec cette raison) ;
   - `tests/run_tests.py --only edit` cherche `outputs/test_t2i_512.png`, que plus rien ne produit, et retombe sur
     `tests/test_scene.png` ;
@@ -44,6 +49,14 @@ Mis à jour le 14/10/2026.
 
 ### 2026-10-14
 
+- Groupe A fait dans une session à part (worktree), fusionné dans `main` et service relancé : banc de test permanent
+  à faux moteur (`5072ad5`), une erreur de préparation n'arrête plus la file et `/api/generate` valide la demande
+  (`cf4f825`), file d'attente visible avec « Générer » toujours actif (`b9d58ca`), incognito dans la file (`db6342d`).
+  36 tests au vert (relancés après fusion), `py_compile` et `node --check` propres, contrôles dans Chrome sans écran en
+  vue de téléphone. Choix de la session : bornes de validation (64 à 4096 px, 1 à 200 étapes), estimation de chaque
+  entrée de la file, incognito compris ; la zone de résultat garde l'image finie et la suite se suit dans une rangée
+  de vignettes. Les 13 tickets Asana ont été créés par erreur aussi dans la section « Orange · Cockpit EAS » (paramètre
+  `default_project` avec `parent`) : à corriger.
 - Découpage du chantier en 13 tickets Asana (sous-tâches de la tâche mère de Claude), chacun avec sa ligne
   « Bloqué par », et une tâche assignée au porteur pour valider la liste des prompts types.
 - Suivi des tâches passé sur Asana (décision du porteur, revient sur le refus du 13/10/2026) : section « Qwen-Image
