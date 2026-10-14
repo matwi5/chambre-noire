@@ -122,8 +122,26 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
 - Documentation, commentaires et interface en français ; messages de commit en anglais, une phrase à l'impératif sans
   préfixe (« Add an incognito mode that keeps generated images off the disk »), corps qui explique le pourquoi.
 - Le README décrit chaque comportement visible et l'API locale : le mettre à jour dans le même commit que le code.
-- Suivi des tâches : **pas d'Asana pour ce projet** (refusé par le porteur le 13/10/2026). Le travail restant et les
-  pistes vivent dans `ETAT_DU_PROJET.md` ; les gros travaux ont leur plan dans `travail/tasks/`.
+- Suivi des tâches : Asana « Hub · Suivi des tâches », section « Qwen-Image local » (GID `1219496223389136`), tâche
+  mère de Claude « [code] Qwen-Image local : prochaines sessions Claude Code » (GID `1219493010479174`), tenus par
+  `asana-board:suivi-asana` (adopté le 14/10/2026). Specs dans `docs/specs/`, plans des gros travaux dans
+  `travail/tasks/` ; l'état et les pistes restent dans `ETAT_DU_PROJET.md`.
 - Au démarrage d'une session : lire la section « État » et les 5 premières entrées du « Journal » de
   `ETAT_DU_PROJET.md`. Avant de proposer un changement de conception, vérifier qu'il n'est pas déjà tranché dans
   `DECISIONS.md`.
+
+## Agent skills
+
+### Issue tracker
+
+Tickets dans Asana (« Hub · Suivi des tâches », section « Qwen-Image local »), un ticket par sous-tâche de la tâche
+mère de Claude. Voir `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Rôles de tri traduits en ligne « Statut : » et assignation (plan gratuit, pas d'étiquettes). Voir
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Un seul contexte : `GLOSSARY.md` à la racine, décisions dans `DECISIONS.md`. Voir `docs/agents/domain.md`.

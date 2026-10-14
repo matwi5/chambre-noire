@@ -4,8 +4,8 @@ Plan de travail écrit le 14/10/2026, à la fin de la séance de cadrage. Spéci
 `docs/specs/2026-10-14_lots-espace-prive-prompts.md` (elle fait foi pour le comportement attendu) ; vocabulaire :
 `GLOSSARY.md` ; décisions : `DECISIONS.md` (entrées du 14/10/2026).
 
-- **Tickets** : aucun (pas d'Asana pour ce projet, refusé le 13/10/2026). Le suivi vit ici et dans
-  `ETAT_DU_PROJET.md`.
+- **Tickets** : à créer par `/to-tickets`, en sous-tâches Asana de « [code] Qwen-Image local : prochaines sessions
+  Claude Code » (voir `docs/agents/issue-tracker.md`).
 - **Objectif** : livrer les cinq étapes de la spécification, dans l'ordre, chacune utilisable et testée seule.
 - **Critère de fin d'une étape** : contrôles du banc de l'étape au vert, contrôles de l'interface dans Chrome sans écran
   aux dimensions du téléphone (captures regardées), `py_compile` et `node --check` propres, README et `CLAUDE.md` à

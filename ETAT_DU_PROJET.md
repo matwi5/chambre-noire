@@ -43,6 +43,10 @@ Mis à jour le 14/10/2026.
 
 ### 2026-10-14
 
+- Suivi des tâches passé sur Asana (décision du porteur, revient sur le refus du 13/10/2026) : section « Qwen-Image
+  local » et tâche mère de Claude créées dans le Hub. Configuration des skills mattpocock dans `docs/agents/`
+  (tickets Asana, rôles de tri traduits en ligne « Statut : », glossaire et `DECISIONS.md`) et bloc « Agent skills »
+  de `CLAUDE.md`.
 - Cadrage (séance de questions, toutes les réponses validées par le porteur) de quatre fonctions : file d'attente
   visible avec « Générer » toujours actif, lots (variantes 1 à 4 en mode Créer, campagne de 10 photos au plus en mode
   Éditer), prompts enregistrés et prompts types, espace privé chiffré. Pas de calcul simultané : d'après les mesures de
