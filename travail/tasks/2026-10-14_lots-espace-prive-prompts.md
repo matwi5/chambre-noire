@@ -121,3 +121,20 @@ Lus le 14/10/2026 dans le code (`main` à `95f96de`). Les numéros de ligne boug
   visionneuse généralisée à `vList` ; lot incognito : la grille compte comme vue ; badge et boutons de lot tant qu'il
   reste au moins 2 images du lot ; `campaign` refusée avec `ref_images` ; « Garder celle-ci » réservé aux variantes ;
   `refreshStatus()` après chaque fin de génération ; surcoût des aperçus × N.
+
+## Compte rendu
+
+Rédigé le 14/10/2026 par `/flow-board:compte-rendu`, groupes A, B et C faits, groupe D restant.
+
+- **En bref** : file d'attente, lots (variantes, campagne), prompts enregistrés et types livrés, revus (code et
+  sécurité), fusionnés dans `main` et en service sur le Mac ; 75 tests au vert. Reste le groupe D (durcissement de
+  l'incognito, espace privé, 5 tickets). Non encore poussé ; jamais essayé avec une vraie génération GPU ni sur le
+  téléphone.
+- **Fait** : groupe A (`5072ad5`, `cf4f825`, `b9d58ca`, `db6342d`, revue `c934b9f`), groupe B (`65b9cac`,
+  `ddbf2b5`, `8715316`, revue `f1a478f`), groupe C (`8e33bf1`, `cf8a254`, revue `52466e1`) ; revues de sécurité des
+  trois groupes sans faille.
+- **Mal passé** : tickets Asana créés aussi dans une section d'un autre projet (corrigé) ; `/mattpocock-skills:implement`
+  refusé aux sessions de fond ; groupes A et B rendus sans revue de groupe, revues faites après coup (dont
+  « Garder celle-ci » qui pouvait supprimer l'image gardée) ; parcours bloqué en « Version et push » (corrigé).
+- **Attend le porteur** : `/project:push`, essais sur le téléphone et une vraie génération courte, groupe D, portée de
+  la règle « Statut : fait ».
