@@ -8,14 +8,15 @@ Mis à jour le 14/10/2026.
   sd.cpp `master-959`, encodeur GGUF). Modèles Q4_K_M et Q8_0. Trois usages (texte → image, édition, dessin guidé),
   galerie avec visionneuse (zoom au pincement, partage, copie, images d'entrée), estimations calibrées, mode incognito,
   notification de fin de génération (Web Push), file d'attente visible (« Générer » toujours actif), variantes (mode
-  Créer) et campagnes (mode Éditer) avec lots dans la galerie. Banc de test permanent sans GPU :
-  `venv/bin/python -m unittest discover -s tests` (60 tests).
+  Créer) et campagnes (mode Éditer) avec lots dans la galerie, prompts enregistrés et prompts types. Banc de test
+  permanent sans GPU : `venv/bin/python -m unittest discover -s tests` (75 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
 - **En cours** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
   prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), découpée en 13 tickets Asana (liste et ordre dans
   `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types validée par le porteur. Groupes A (banc, robustesse, file visible, incognito dans la file) et
-  B (variantes, lots dans la galerie, campagne) faits et fusionnés ; restent C (prompts) et D (espace privé).
+  B (variantes, lots dans la galerie, campagne), revus, et C (prompts enregistrés et types) faits et fusionnés ;
+  reste D (durcissement de l'incognito, puis espace privé).
 - **À vérifier par le porteur**, sur le téléphone par l'application installée (testé seulement dans Chrome sur le Mac,
   en vue de téléphone) :
   - télécharger, partager et copier une image, dont une image incognito (adresse `blob:`) ;
@@ -24,7 +25,8 @@ Mis à jour le 14/10/2026.
   - la file d'attente (pastille « +N en attente », feuille de la file, rangée de vignettes sous l'image) et l'incognito
     dans la file (deux images incognito gardées jusqu'à être vues puis quittées) ;
   - les variantes (grille, « Garder celle-ci »), les lots dans la galerie (badge, « Voir le lot », « Tout
-    télécharger », qui peut demander d'autoriser plusieurs téléchargements) et la campagne.
+    télécharger », qui peut demander d'autoriser plusieurs téléchargements) et la campagne ;
+  - la feuille des prompts (bouton « Prompts » sous le champ de texte).
 - **Pistes ouvertes** (aucune demandée) :
   - `sd-cli.log` reste ouvert si la boucle de lecture de `run_job` lève une exception ; `queue_position` trie tout
     `S.jobs`, qui ne fait que grossir, à chaque lecture (trouvés par la revue de groupe A) ;
@@ -35,6 +37,8 @@ Mis à jour le 14/10/2026.
   - le faux moteur du banc n'a pas été essayé sous Windows (lanceur `sd-cli.cmd`) ;
   - la galerie trie par `st_mtime` en secondes entières : les images d'un même lot peuvent ressortir dans le désordre ;
   - `do_POST` lit `Content-Length` sans plafond (une campagne de 10 photos en data URL pèse lourd) ;
+  - `push_subscriptions()` écrit `tools/push_subscriptions.json` en place, de façon non atomique ; les messages 500
+    des routes de prompts citent le texte de l'exception (chemin local possible, visible des seuls appareils admis) ;
   - accepter toute adresse IP littérale dans la liste blanche de `Host`, pour qu'un changement d'IP du Mac ne coupe plus
     l'accès par IP (décision au porteur) ;
   - `start-ui-sdcpp.cmd` et `workflows/*.json` sont périmés (à mettre à jour ou à retirer) ; `sd_port` de
@@ -54,6 +58,14 @@ Mis à jour le 14/10/2026.
 
 ### 2026-10-14
 
+- Groupe C fait dans une session à part (worktree), avec la nouvelle démarche par ticket (`/mattpocock-skills:tdd`,
+  contrôles, `/mattpocock-skills:code-review`) : prompts enregistrés (`8e33bf1`, `tools/saved_prompts.json` non suivi,
+  en 0o600) et prompts types (`cf8a254`, `tools/prompt_types.json`, les 11 validés, comparés mot pour mot à la
+  spec). Revue de groupe (`/code-review --fix`) : 9 constats, 6 corrigés (`52466e1`). Revue de sécurité : aucune
+  faille. Fusionné, 75 tests au vert, service relancé (11 prompts types servis). Choix de la session : titre de 80
+  caractères, texte de 4 000, 500 prompts au plus ; choisir un prompt en incognito ne met pas à jour sa dernière
+  utilisation (à valider par le porteur) ; Dupliquer crée la copie sans ouvrir l'éditeur ; le filtre par usage
+  s'applique aussi aux prompts types.
 - Revue de groupe B (`/code-review --fix` puis `/security-review`, lancées par la session du groupe) : 4 corrections
   (`f1a478f`) : « Garder celle-ci » supprimait aussi l'image gardée quand la galerie avait été rechargée pendant que la
   visionneuse était ouverte (choix par nom de fichier désormais), la limite de suivi de la page épargne le lot affiché,
