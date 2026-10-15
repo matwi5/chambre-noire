@@ -92,6 +92,9 @@ l'espace privé).
     leur prompt et leur progression dans la zone de résultat, pour reprendre où j'en étais.
 20. Je veux les retrouver aussi après avoir rechargé la page ou en entrant depuis un autre appareil, pour que le
     rechargement ne me fasse plus perdre le suivi (aujourd'hui : « Génération incognito », sans suivi ni annulation).
+20 bis. Quand une page reprend une génération qu'elle n'a pas lancée (après un rechargement, depuis un autre appareil),
+   publique ou privée, je veux qu'elle en ait le prompt complet, pour que « Reprendre le texte » depuis la zone de
+   résultat ne me rende pas un texte coupé à 80 caractères (ajouté le 15/10/2026 après la revue du groupe B).
 21. En entrant dans l'espace privé, je veux que les générations publiques lancées depuis cette page quittent l'écran
     et y reviennent quand je sors, pour retrouver l'espace public tel que je l'ai laissé.
 22. Après un rechargement de la page dans l'espace privé, je ne veux pas voir la dernière image de l'espace public
@@ -218,6 +221,10 @@ l'espace privé).
 - Reprise après un rechargement : dans l'espace public, comme aujourd'hui (identifiants des générations normales
   gardés par le navigateur) ; dans l'espace privé, toutes les générations privées actives de la file, sans afficher
   la dernière image publique.
+- Prompt complet d'une génération reprise : `/api/job/<id>` renvoie le prompt complet d'une génération normale ou
+  privée tant que sa demande est en mémoire, aux seuls appareils qui ont le droit de la suivre (ceux de son espace ;
+  jamais pour une incognito, que sa seule page connaît déjà) ; la page qui reprend une génération l'utilise à la place
+  de l'extrait de 80 caractères de la file.
 
 ### 3. Prompts enregistrés privés
 
