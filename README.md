@@ -773,7 +773,8 @@ Sur Mac : `venv/bin/python -m unittest discover -s tests`. Le faux moteur n'a é
 Tous les contrôles en une commande : `venv/bin/python tests/check.py` compile les fichiers Python, vérifie la syntaxe
 du JavaScript de l'interface avec Node.js (`node --check`), lance le banc et affiche son résultat (`--no-bench` pour
 le sauter). Il échoue aussi si un fichier du dépôt contient un repère propre à une machine (chemin de dossier
-personnel, adresse IP privée, nom Tailscale) : le dépôt est public.
+personnel, adresse IP privée, nom Tailscale) : le dépôt est public. Sur GitHub, la même commande tourne sur chaque
+pull request vers `main` et chaque envoi sur `dev` (`.github/workflows/checks.yml`, sur macOS).
 
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui`. Ils ouvrent
 l'interface servie par le banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur

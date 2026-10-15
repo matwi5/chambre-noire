@@ -1,0 +1,37 @@
+# Contrôles du projet sur chaque pull request vers main et chaque push sur dev : la même commande qu'en local
+# (tests/check.py : compilation, JavaScript de l'interface, banc de test sans GPU). Les tests d'interface (--ui)
+# demandent Chrome et restent en local. macOS, comme le poste du porteur : le banc y suit les mêmes branches
+# (moteur Metal, écritures F_FULLFSYNC) ; minutes gratuites pour un dépôt public.
+name: Contrôles
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: checks
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Dépendances Python
+        run: python -m pip install -r requirements.txt
+      - name: Contrôles (tests/check.py)
+        run: python tests/check.py
