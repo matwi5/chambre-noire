@@ -1300,17 +1300,18 @@ function inputThumb(){ return mode==='edit' && editImages.length ? editImages[0]
 $('go').onclick=async()=>{                         // toujours actif : la demande rejoint la file avec les réglages du moment
   if(privTabs.has(mode) && !inPrivate()){ pendingGo=true; return openPrivSheet('privUnlockSheet', true); }   // jamais en clair
   let body; try{ body=buildRequest(); }catch(e){ toast(e.message, 'err'); return; }
+  const tab=mode, thumb=inputThumb();               // pris avant l'envoi : l'onglet peut changer pendant l'attente
   askNotifications();                              // première génération : autorisation demandée une fois (appui en cours)
   if(estSeconds>3600 && !await ask('Génération longue', 'Temps estimé : '+fmt(estSeconds)+'. La lancer quand même ?', 'Lancer')) return;
-  if(body.incognito || body.private) try{ localStorage.removeItem('qwen-'+mode+'_prompt'); }catch(e){}
   log(`${body.mode} ${body.width}x${body.height} ${body.steps} étapes refs=${body.ref_images.length}${body.campaign ? ' campagne='+body.campaign.length : ''} mask=${body.mask_image?'oui':'non'} aperçus=${body.preview?'oui':'non'} estimation=${fmt(estSeconds)}`);
   let r, j; try{ r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=await r.json(); }
   catch(e){ toast('Serveur injoignable', 'err'); return; }
   if(!r.ok){ toast('Erreur : '+(j.error||('HTTP '+r.status)), 'err'); return; }
   const jobs=j.jobs || [j];                         // un lot : une génération par image, suivies une à une
   const camp=body.campaign;                         // campagne : chaque génération a sa photo, ses dimensions et son estimation
-  jobs.forEach((x, k)=>track(x, {prompt:body.prompt, tab:mode, w:camp ? camp[k].width : body.width, h:camp ? camp[k].height : body.height,
-    thumb:camp ? camp[k].image : inputThumb(), est:camp ? campaignEst[k]||estOne : estOne, stepSec:stepSeconds, vaeSec:vaeSeconds}));
+  jobs.forEach((x, k)=>track(x, {prompt:body.prompt, tab, w:camp ? camp[k].width : body.width, h:camp ? camp[k].height : body.height,
+    thumb:camp ? camp[k].image : thumb, est:camp ? campaignEst[k]||estOne : estOne, stepSec:stepSeconds, vaeSec:vaeSeconds}));
+  clearTab(tab);                                    // demande acceptée : l'onglet est prêt pour la suivante (refus : rien n'est vidé)
   if(jobs[0].queue_position) toast((!j.lot ? 'Ajoutée' : camp ? `Campagne de ${jobs.length} photos ajoutée` : `Lot de ${jobs.length} images ajouté`)+' à la file · '+ordinal(jobs[0].queue_position)+' en attente');
   document.activeElement.blur(); requestAnimationFrame(()=>$('stage').scrollIntoView({behavior:'smooth', block:'center'}));
   refreshStatus();
@@ -1663,10 +1664,12 @@ function changedSpace(inside){
 // en clair et demande d'y entrer. La marque tombe quand l'onglet est vidé hors de l'espace.
 function tabEmpty(tab){ return !$(tab+'_prompt').value.trim() && (tab!=='edit' || !editImages.length) && (tab!=='mask' || !maskImage); }
 function markTab(tab){ if(inPrivate()) privTabs.add(tab); else if(tabEmpty(tab)) privTabs.delete(tab); renderMarks(); }
+// vide un onglet : texte et brouillon, images (Éditer), image à retoucher et masque (Dessiner) ; l'estimation suit
 function clearTab(tab){ privTabs.delete(tab); $(tab+'_prompt').value='';
+  try{ localStorage.removeItem('qwen-'+tab+'_prompt'); }catch(e){}
   if(tab==='edit'){ editImages=[]; renderEditThumbs(); }
   if(tab==='mask' && maskImage){ maskImage=null; clearMask(); $('paintWrap').style.display='none'; $('pane-mask').classList.remove('has-img'); }
-  renderMarks(); }
+  renderMarks(); refreshChoices(); }
 function renderMarks(){ TABS.forEach(b=>{ const on=privTabs.has(b.dataset.pane) && !inPrivate(); b.classList.toggle('privmark', on);
   if(on) b.title='Contenu de l\'espace privé'; else b.removeAttribute('title'); }); }
 let pendingGo=false;   // Générer touché sur un onglet marqué : relancé une fois entré dans l'espace

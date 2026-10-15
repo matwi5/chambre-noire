@@ -236,7 +236,10 @@ Conseil : **540p + 12 étapes** pour chercher la bonne formulation, puis montez 
 Les descriptions en **anglais, longues et précises** donnent les meilleurs résultats.
 
 **Générer** reste actif pendant une génération : chaque appui ajoute une demande à la **file d'attente**, avec les
-réglages du moment. Le Mac calcule les générations une à une, dans l'ordre d'arrivée, qu'elles viennent de
+réglages du moment. Dès que le Mac accepte la demande, l'onglet est vidé pour la suivante : texte et son brouillon,
+images (Éditer, campagne comprise : l'interrupteur **Campagne** reste tel quel), image à retoucher et masque
+(Dessiner) ; les Réglages ne bougent pas (seul le format « Image », qui suit l'image, part avec elle). Si la demande est refusée (erreur du Mac, Mac injoignable, génération longue
+non confirmée), rien n'est vidé. Le Mac calcule les générations une à une, dans l'ordre d'arrivée, qu'elles viennent de
 l'ordinateur ou du téléphone. Pendant le calcul, l'image en cours affiche l'étape, le temps restant et un bouton
 d'annulation (une génération annulée ne laisse aucun fichier : ni image, ni images d'entrée, ni aperçus, ni journal du
 moteur) ; une génération qui attend affiche sa place dans la file et le temps avant son image. La zone de résultat

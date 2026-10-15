@@ -126,7 +126,7 @@ async function connect(wsUrl) {
   await Promise.all([send('Runtime.enable'), send('Log.enable'), send('Page.enable')]);
 
   const page = {
-    send, errors,
+    send, on, errors,
     // évalue une expression dans la page (promesse attendue) et renvoie sa valeur (JSON)
     async eval(expression) {
       const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture: true });
