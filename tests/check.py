@@ -9,7 +9,7 @@
 2. passe à « node --check » chaque bloc <script> de tools/ui/index.html (un bloc sur une seule ligne compris) et chaque
    fichier .js ou .mjs suivi ; échoue si un bloc ouvert n'a pas été extrait ;
 3. lance le banc (unittest discover -s tests) et recopie telles quelles sa ligne « Ran N tests … » et son verdict ;
-4. avec --ui : node --test tests/ui/ (pilote Chrome, voir tests/ui/driver.mjs).
+4. avec --ui : les tests d'interface tests/ui/*.test.mjs (pilote Chrome, voir tests/ui/driver.mjs).
 
 Le Python des contrôles est celui du venv du dépôt (venv/ à la racine, sinon celui du dossier principal quand on est
 dans un worktree), sinon l'interpréteur qui lance ce script (cas de la CI) : check.py se relance de lui-même avec le
@@ -140,7 +140,8 @@ def check_bench():
 def check_ui():
     env = dict(os.environ, PYTHON=sys.executable)
     try:
-        r = subprocess.run(["node", "--test", "--test-reporter=spec", "tests/ui/"], cwd=ROOT, env=env,
+        r = subprocess.run(["node", "--test", "--test-concurrency=1", "--test-reporter=spec", "tests/ui/*.test.mjs"],
+                           cwd=ROOT, env=env,
                            capture_output=True, text=True)
     except OSError:
         print("Interface : node introuvable")

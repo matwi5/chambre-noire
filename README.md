@@ -752,7 +752,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── bench.py          banc de test du serveur, sans GPU : serveur sur un port libre, dossier temporaire
 │   ├── fake_sdcli.py     faux moteur du banc
 │   ├── check.py          tous les contrôles en une commande (compilation, JavaScript, banc, interface)
-│   └── test_*.py         tests du banc
+│   ├── test_*.py         tests du banc
+│   └── ui/               tests de l'interface dans Chrome sans écran (pilote driver.mjs, tests *.test.mjs)
 └── workflows/            paramètres de référence des trois usages (JSON)
 ```
 
@@ -773,6 +774,10 @@ Tous les contrôles en une commande : `venv/bin/python tests/check.py` compile l
 du JavaScript de l'interface avec Node.js (`node --check`), lance le banc et affiche son résultat (`--no-bench` pour
 le sauter). Il échoue aussi si un fichier du dépôt contient un repère propre à une machine (chemin de dossier
 personnel, adresse IP privée, nom Tailscale) : le dépôt est public.
+
+Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui`. Ils ouvrent
+l'interface servie par le banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur
+de la console du navigateur (écrans principaux, et « Garder celle-ci » après un rechargement de la galerie).
 
 Tests de bout en bout, interface lancée :
 

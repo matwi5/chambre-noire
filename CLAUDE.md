@@ -48,11 +48,14 @@ contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net`
   requête : `call()` = le Mac, `remote=True` = HTTPS relayé par `tailscale serve` (`bench.HTTPS_HOST`), `wifi=True` =
   `http://` direct d'un autre appareil (`bench.WIFI_HOST`, `LOCAL_CLIENTS` vidé pendant l'appel). Un nouveau chemin
   calculé à l'import de `launch.py` doit être repointé dans `bench.start()`, sinon le banc écrit dans le dépôt. Les
-  aperçus de moins de 1000 octets sont ignorés par `latest_preview`. Pour l'interface : servir le banc (`bench.start()`
-  dans un script) et le piloter dans Chrome sans écran par le protocole DevTools depuis Node (WebSocket natif), sans
-  installer Playwright. Tester dans les dimensions du téléphone du porteur (Android, application installée) :
-  `Emulation.setDeviceMetricsOverride` 367×760 à une densité de 2,5, `mobile: true`, tactile activé ; l'interface
-  y passe en mode allégé (`html.lite`). Une vue plus grande cache des débordements, et regarder les captures ;
+  aperçus de moins de 1000 octets sont ignorés par `latest_preview` ;
+- interface : `venv/bin/python tests/check.py --ui` (ou `node --test "tests/ui/*.test.mjs"`), en local seulement
+  (Chrome installé ; pas en CI). `tests/ui/driver.mjs` lance le banc (`tests/ui/serve.py`) et Chrome sans écran
+  (profil temporaire supprimé à la fin), piloté par le protocole DevTools depuis Node (WebSocket natif, sans
+  Playwright), dans la vue du téléphone du porteur (367×760, densité 2,5, mobile, tactile : l'interface y passe en
+  `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `smoke` (écrans principaux) et
+  `keep` (régression « Garder celle-ci »). Un nouveau test d'interface y prend place plutôt qu'un script jetable.
+  Une vue plus grande cache des débordements : regarder aussi les captures (`page.screenshot`) ;
 - `tests/run_tests.py --steps 8 [--only t2i|edit|mask|annot]` : bout en bout, serveur lancé sur 127.0.0.1:7860. Il
   lance de **vraies générations GPU** (plusieurs minutes), écrit dans `outputs/`, le journal et `tools/calibration.json` :
   ne le lancer que si l'utilisateur le demande.
