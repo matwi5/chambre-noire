@@ -92,7 +92,9 @@ class IncognitoHardeningTest(bench.BenchCase):
             bench.wait_until(lambda: started().get("status") == "running" and time.time() - started()["created"] > 0.2,
                              what="génération en cours depuis plus que le délai")
             self.assertEqual(call("GET", f"/api/job/{jid}")[0], 200)
-            self.assertEqual(wait_job(jid)["status"], "done")
+        # délai rendu avant d'attendre la fin : avec 0,1 s, la génération finie serait oubliée entre deux
+        # interrogations sur une machine lente (CI), et wait_job ne la trouverait plus
+        self.assertEqual(wait_job(jid)["status"], "done")
 
     def test_queue_carries_the_page_token_and_nothing_that_identifies_the_generation(self):
         a = generate("SLOW=0.2 visible", steps=6, page="pageA1")["id"]
