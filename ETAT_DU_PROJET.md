@@ -59,14 +59,16 @@ Mis à jour le 15/10/2026.
     (option écartée par le porteur le 13/10/2026, à lui reproposer avec cette raison) ;
   - `tests/run_tests.py --only edit` cherche `outputs/test_t2i_512.png`, que plus rien ne produit, et retombe sur
     `tests/test_scene.png` ;
-- **Ménage local** (sur le poste, hors dépôt) : la branche `fix/server-host-origin` et les worktrees de
-  `.claude/worktrees/` sont des restes de sessions passées, déjà intégrés à `main`. La branche contient des informations
-  propres au réseau du porteur : la supprimer plutôt que la pousser.
+- **Ménage local** : fait le 15/10/2026. Il ne reste que le dossier principal (`main`) et le worktree
+  `.claude/worktrees/dev`.
 
 ## Journal
 
 ### 2026-10-15
 
+- Ménage : worktrees et branches des groupes A à E supprimés (contenu vérifié identique à `main`), ainsi que
+  `securite-serveur` (branche `fix/server-host-origin`, un commit de notes du 13/10/2026 jamais poussé, avec des
+  informations propres au réseau du porteur) et `youthful-bell-35c6b0` (déjà dans `main`).
 - Branches : `dev` créée (depuis `36d3a70`) avec son worktree `.claude/worktrees/dev`, où l'on code désormais ;
   `main` protégée sur GitHub (PR obligatoire, ni push direct ni forcé) et ne reçoit plus que des PR depuis `dev` ; le
   dossier principal reste sur `main` pour le service (décisions du porteur, règle dans `CLAUDE.md`).
