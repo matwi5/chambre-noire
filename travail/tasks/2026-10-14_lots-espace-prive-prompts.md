@@ -101,16 +101,16 @@ Lus le 14/10/2026 dans le code (`main` à `95f96de`). Les numéros de ligne boug
 - **Fait** : cadrage, spécification, glossaire, décisions (`77c38c5`) ; banc de test permanent (`tests/bench.py`,
   `tests/fake_sdcli.py`, `tests/test_api.py`) ; erreur de préparation qui ne bloque plus la file (`tests/test_robustness.py`) ;
   file d'attente visible et Générer toujours actif (`tests/test_queue.py`) ; incognito dans la file
-  (`tests/test_incognito.py`). Étape 1 livrée (groupe A, fusionné). Variantes (`65b9cac`), lots dans la galerie
-  (`ddbf2b5`), campagne (`8715316`), avec `tests/test_lots.py` et `tests/test_campaign.py` : étapes 2 et 3 livrées
-  (groupe B, fusionné). Liste des prompts types validée par le porteur. Prompts enregistrés (`8e33bf1`) et prompts
-  types (`cf8a254`), revue de groupe `52466e1`, avec `tests/test_prompts.py` : étape 4 livrée (groupe C, fusionné).
+  (`tests/test_incognito.py`). Étape 1 livrée (groupe A, fusionné). Variantes (`63c3c99`), lots dans la galerie
+  (`71713cd`), campagne (`2598994`), avec `tests/test_lots.py` et `tests/test_campaign.py` : étapes 2 et 3 livrées
+  (groupe B, fusionné). Liste des prompts types validée par le porteur. Prompts enregistrés (`c80b875`) et prompts
+  types (`19a832c`), revue de groupe `511269e`, avec `tests/test_prompts.py` : étape 4 livrée (groupe C, fusionné).
 - **En cours** : rien.
 - **À faire** : revue de groupe B ; ticket « [code] Durcir l'incognito et limiter la reprise à l'appareil »
   (`1219503935811144`, créé le 14/10/2026 après la revue de groupe A, avant le groupe D) ; étapes 4 (prompts,
-  groupe C, fait) et 5 (espace privé, groupe D, fait le 14/10/2026 : `df6896a` à `4bdd66f`). Puis le ticket « [code] Durcir l'espace privé
-  après la revue de sécurité » (`1219520417161822`, groupe E, créé le 14/10/2026, fait le 15/10/2026 : `e30c75b` à
-  `8178d8d`). Pour le ticket « héritage et lots
+  groupe C, fait) et 5 (espace privé, groupe D, fait le 14/10/2026 : `fed5f40` à `39ebad8`). Puis le ticket « [code] Durcir l'espace privé
+  après la revue de sécurité » (`1219520417161822`, groupe E, créé le 14/10/2026, fait le 15/10/2026 : `2d08157` à
+  `0129251`). Pour le ticket « héritage et lots
   privés » : le lot n'a pas de genre (une campagne se reconnaît à `mode == "edit"`) ; trois endroits ne connaissent
   que l'incognito et devront traiter le privé : le masquage de l'identifiant de lot dans `queue_entry`, le libellé de
   `notify_lot` (« … incognito prêtes ») et la purge de `S.lots`.
@@ -133,9 +133,9 @@ correction de fuite).
   discret, durci après sa revue de sécurité : tout est fait, revu (code et sécurité, sans faille), fusionné dans
   `main` et en service. 129 tests au vert. Jamais essayé avec une vraie génération GPU ni sur le téléphone ; 39 commits
   à pousser.
-- **Groupes** : A (`5072ad5`..`db6342d`, revue `c934b9f`), B (`65b9cac`..`8715316`, revue `f1a478f`), C (`8e33bf1`,
-  `cf8a254`, revue `52466e1`), D (`df6896a`..`9f4673f`, revue `4bdd66f`), E (`e30c75b`..`8178d8d`), fuite de la file
-  (`c6e968a`).
+- **Groupes** : A (`5072ad5`..`db6342d`, revue `8693a60`), B (`63c3c99`..`2598994`, revue `8ce12d4`), C (`c80b875`,
+  `19a832c`, revue `511269e`), D (`fed5f40`..`864aef1`, revue `39ebad8`), E (`2d08157`..`0129251`), fuite de la file
+  (`c813e52`).
 - **Mal passé** : tickets Asana d'abord rangés dans la section d'un autre projet ; `/mattpocock-skills:implement`
   refusé aux sessions de fond ; groupes A et B revus après coup (dont un bug de « Garder celle-ci ») ; parcours bloqué
   deux fois au tableau de bord ; compte rendu écrit une première fois trop tôt, avant les groupes D et E.

@@ -67,13 +67,18 @@ Mis à jour le 15/10/2026.
 
 ### 2026-10-15
 
-- Version 0.2.0 (`a895086`, tag `v0.2.0`) : `CHANGELOG.md` créé, la version du 23/09/2026 comptée comme 0.1.0.
+- Push de la version 0.2.0 : le `git pull --rebase` de `/project:push` a aplati l'historique local (deux commits de
+  fusion du groupe B) alors que le dépôt distant n'avait rien de nouveau, et 39 commits ont changé de hash. Le porteur
+  a choisi de garder l'historique aplati : hash corrigés dans ce fichier et dans le plan, tag `v0.2.0` déplacé sur le
+  nouveau commit de version, correspondance ancien → nouveau notée dans Asana (tâche mère). Les commentaires Asana des
+  tickets et les branches `worktree-groupe-*` gardent les anciens hash.
+- Version 0.2.0 (`059c342`, tag `v0.2.0`) : `CHANGELOG.md` créé, la version du 23/09/2026 comptée comme 0.1.0.
   Rapport du parcours validé par le porteur.
 - Une génération privée apparaît dans la file des autres appareils exactement comme une génération incognito, et les
-  messages d'échec de `logs/` disent « incognito » (`c6e968a`, ticket Asana `1219532320923400`, décision du porteur).
-  CLAUDE.md complété avec la règle `_secure`, le rechiffrement et les trois origines du banc (`54a00d0`, validé par le
+  messages d'échec de `logs/` disent « incognito » (`c813e52`, ticket Asana `1219532320923400`, décision du porteur).
+  CLAUDE.md complété avec la règle `_secure`, le rechiffrement et les trois origines du banc (`c516a64`, validé par le
   porteur). 129 tests au vert, service relancé.
-- Groupe E fait dans une session à part (worktree) et fusionné (`e30c75b` à `8178d8d`) : notification neutre pour le
+- Groupe E fait dans une session à part (worktree) et fusionné (`2d08157` à `0129251`) : notification neutre pour le
   privé, « Sortir » vide l'écran, suppression de l'espace sans code seulement depuis le Mac, espace privé seulement en
   HTTPS ou sur le Mac (`_secure` : adresse source locale et nom d'hôte local ou HTTPS de `tailscale serve`, jamais les
   en-têtes de relais), nouvelle paire de clés et rechiffrement au changement de code par `private/.rekey/` et bascule
@@ -85,30 +90,30 @@ Mis à jour le 15/10/2026.
   vidés à « Sortir », suppression de l'espace sans code seulement depuis le Mac, espace privé ouvert seulement en HTTPS
   ou sur le Mac, nouvelle paire de clés et rechiffrement au changement de code. Regroupé dans le ticket Asana
   `1219520417161822` et dans la spécification (section 5).
-- Groupe D fait dans une session à part (worktree) et fusionné : durcissement de l'incognito (`df6896a` :
+- Groupe D fait dans une session à part (worktree) et fusionné : durcissement de l'incognito (`fed5f40` :
   identifiants de 128 bits, image non récupérée oubliée après 24 h, reprise limitée aux générations de l'appareil,
-  jeton par page), espace privé (`429096e`), générations et galerie privées (`6421746`), lots privés et héritage
-  (`f91e980`), « Rendre privée » (`9f4673f`), revue de groupe (`4bdd66f`, 9 constats, 8 corrigés dont un échec de
+  jeton par page), espace privé (`28a6bc0`), générations et galerie privées (`5e1a504`), lots privés et héritage
+  (`d5ce057`), « Rendre privée » (`864aef1`), revue de groupe (`39ebad8`, 9 constats, 8 corrigés dont un échec de
   « Rendre privée » qui pouvait perdre l'image). Revue de sécurité : aucune faille au seuil, quatre notes de
   conception soumises au porteur. Le porteur a revu l'interface en cours de route : espace discret, on y entre par le
   cadenas de la Galerie et on en sort par « Sortir » (DECISIONS.md) ; les trois tickets Asana concernés sont mis à
   jour. 117 tests au vert après fusion, service relancé, `jobs/` exclu de Time Machine (vérifié par `tmutil`).
 - Groupe C fait dans une session à part (worktree), avec la nouvelle démarche par ticket (`/mattpocock-skills:tdd`,
-  contrôles, `/mattpocock-skills:code-review`) : prompts enregistrés (`8e33bf1`, `tools/saved_prompts.json` non suivi,
-  en 0o600) et prompts types (`cf8a254`, `tools/prompt_types.json`, les 11 validés, comparés mot pour mot à la
-  spec). Revue de groupe (`/code-review --fix`) : 9 constats, 6 corrigés (`52466e1`). Revue de sécurité : aucune
+  contrôles, `/mattpocock-skills:code-review`) : prompts enregistrés (`c80b875`, `tools/saved_prompts.json` non suivi,
+  en 0o600) et prompts types (`19a832c`, `tools/prompt_types.json`, les 11 validés, comparés mot pour mot à la
+  spec). Revue de groupe (`/code-review --fix`) : 9 constats, 6 corrigés (`511269e`). Revue de sécurité : aucune
   faille. Fusionné, 75 tests au vert, service relancé (11 prompts types servis). Choix de la session : titre de 80
   caractères, texte de 4 000, 500 prompts au plus ; choisir un prompt en incognito ne met pas à jour sa dernière
   utilisation (validé par le porteur) ; Dupliquer crée la copie sans ouvrir l'éditeur ; le filtre par usage
   s'applique aussi aux prompts types.
 - Revue de groupe B (`/code-review --fix` puis `/security-review`, lancées par la session du groupe) : 4 corrections
-  (`f1a478f`) : « Garder celle-ci » supprimait aussi l'image gardée quand la galerie avait été rechargée pendant que la
+  (`8ce12d4`) : « Garder celle-ci » supprimait aussi l'image gardée quand la galerie avait été rechargée pendant que la
   visionneuse était ouverte (choix par nom de fichier désormais), la limite de suivi de la page épargne le lot affiché,
   limite des 10 références dans `MAX_REFS`, corps de la notification d'une campagne (« Campagne de N photos
   terminée »). Aucune faille de sécurité. Fusionné, 60 tests au vert, service relancé. Laissé : la page redessine N
   fois au lancement d'un lot (coût sans bug).
 - Revue de groupe A (`/code-review --fix` puis `/security-review`, lancées par la session du groupe) : 8 constats,
-  3 corrigés (`c934b9f` : génération annulée pendant la préparation arrêtée aussitôt, génération incognito en échec
+  3 corrigés (`8693a60` : génération annulée pendant la préparation arrêtée aussitôt, génération incognito en échec
   ou annulée oubliée par le serveur, lecture des dimensions unifiée), aucune faille de sécurité. Fusionné, 59 tests au
   vert, service relancé. Décisions du porteur sur les constats restants, regroupées dans un nouveau ticket Asana
   (`1219503935811144`) : expiration à 24 h d'une image incognito jamais récupérée, reprise après rechargement limitée
@@ -116,8 +121,8 @@ Mis à jour le 15/10/2026.
   en pistes : `sd-cli.log` resté ouvert si la lecture lève une exception, tri de `S.jobs` à chaque lecture.
 - Porteur : la notification d'un lot en partie annulé garde son texte (« N images prêtes ») ; un ticket coché garde
   la ligne « Statut : fait » (écrit dans `docs/agents/triage-labels.md`).
-- Groupe B fait dans une session à part (worktree), fusionné dans `main` (`abbd036`) et service relancé : variantes
-  en mode Créer (`65b9cac`), lots dans la galerie (`ddbf2b5`), campagne en mode Éditer (`8715316`). 58 tests au vert
+- Groupe B fait dans une session à part (worktree), fusionné dans `main` (`2598994`) et service relancé : variantes
+  en mode Créer (`63c3c99`), lots dans la galerie (`71713cd`), campagne en mode Éditer (`2598994`). 58 tests au vert
   après fusion, `py_compile` et `node --check` propres, contrôles dans Chrome sans écran en vue de téléphone.
 - Liste des prompts types validée par le porteur (tâche Asana cochée) ; le ticket des prompts types est débloqué.
 - Groupe A fait dans une session à part (worktree), fusionné dans `main` et service relancé : banc de test permanent
