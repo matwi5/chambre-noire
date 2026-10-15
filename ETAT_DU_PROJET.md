@@ -79,6 +79,8 @@ Mis à jour le 15/10/2026.
 
 ### 2026-10-15
 
+- Version 0.3.0 (`94ac860`, tag `v0.3.0`) : espaces public et privé étanches, prompts privés chiffrés, retouches de
+  la saisie ; compte rendu du parcours validé par le porteur. Reste la livraison (`/project:push`, `/project:pr`).
 - Groupe C (prompts privés et prompt repris) fait par une session liée et fusionné dans `dev` (`1a712d0` à
   `eeca134`) : prompts enregistrés de l'espace privé chiffrés dans `private/prompts` (routes `/api/private/prompts`,
   rechiffrés au changement de code, format noté dans `DECISIONS.md`) ; prompt complet donné à la page qui reprend une
