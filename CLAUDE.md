@@ -27,11 +27,13 @@ Vérifications : aucun lint ni typage n'est déclaré. Après un changement :
 
 - Python : `venv/bin/python -m py_compile tools/launch.py` (et les fichiers touchés) ;
 - JavaScript de `tools/ui/index.html` : extraire les blocs `<script>` et lancer `node --check` dessus ;
-- comportement du serveur sans GPU : banc de test `venv/bin/python -m unittest discover -s tests` (quelques secondes).
+- comportement du serveur sans GPU : banc de test `venv/bin/python -m unittest discover -s tests` (≈ 1 min).
   `tests/bench.py` sert `tools/launch.py` sur un port libre, tous ses dossiers repointés vers un dossier temporaire,
   avec le faux moteur `tests/fake_sdcli.py` (`FAIL` ou `SLOW[=s]` dans le prompt le font échouer ou ralentir,
   `FAILSEED=<n>` échouer pour la seule graine n, une image d'un lot) ;
-  `bench.capture_push()` intercepte les notifications, `bench.LOG` reçoit les sorties du serveur. Un nouveau chemin
+  `bench.capture_push()` intercepte les notifications, `bench.LOG` reçoit les sorties du serveur. Trois origines de
+  requête : `call()` = le Mac, `remote=True` = HTTPS relayé par `tailscale serve` (`bench.HTTPS_HOST`), `wifi=True` =
+  `http://` direct d'un autre appareil (`bench.WIFI_HOST`, `LOCAL_CLIENTS` vidé pendant l'appel). Un nouveau chemin
   calculé à l'import de `launch.py` doit être repointé dans `bench.start()`, sinon le banc écrit dans le dépôt. Les
   aperçus de moins de 1000 octets sont ignorés par `latest_preview`. Pour l'interface : servir le banc (`bench.start()`
   dans un script) et le piloter dans Chrome sans écran par le protocole DevTools depuis Node (WebSocket natif), sans
@@ -114,12 +116,18 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
   `Host`, `Content-Type: application/json` exigé, sinon 403/415), puis `_allowed` (le Mac lui-même passe ; les autres
   appareils, et toute requête relayée par `tailscale serve`, présentent le cookie dérivé du code d'accès). Toute
   nouvelle route POST passe par ces contrôles : l'interface doit envoyer `Content-Type: application/json`, même sans corps.
+  L'espace privé ajoute `_secure` (toutes ses routes sauf `lock`, la génération privée et l'aperçu d'une génération
+  privée) : adresse source 127.0.0.1/::1 et `Host` local ou nom HTTPS de `tailscale serve` (`S.https_hosts`), jamais
+  les en-têtes de relais, qu'un appareil du Wi-Fi peut envoyer en `http://` ; `/api/private/reset` exige `_local`.
 - **Espace privé** (`private/`, format dans `DECISIONS.md`) : `space.json` garde la clé publique X25519 en clair et la
   clé privée chiffrée par scrypt + AES-GCM ; `/api/private/unlock` ouvre une session par appareil (`S.private_sessions`,
   cookie `qwen_private`, en plus du cookie d'accès, demandée même sur le Mac), fermée par `sweep()` après
   `PRIVATE_IDLE` sans requête privée : seules les requêtes privées appellent `_private_session(touch=True)`, jamais
   `/api/status`. Sans `cryptography` (`HAVE_CRYPTO`), routes en 503 et interface masquée. `log_message` tait
   `/api/private/` et aucun `print` ne parle de l'espace privé ; le banc repointe `PRIVATE` et abaisse `SCRYPT_N`.
+  Changer le code rechiffre tout dans `private/.rekey/` ; la bascule est le `os.replace` de `space.json`, et
+  `finish_rekey()` termine ou abandonne un changement interrompu, au démarrage et sous `PRIVATE_LOCK` (un `RLock`)
+  avant toute ouverture ou écriture : toute écriture ou suppression d'une image privée passe sous ce verrou.
   Côté interface, déverrouillé = « dans l'espace privé » (`inPrivate()`, classe `html.priv`) : aucun bouton ne le
   signale à l'arrivée (entrée : cadenas `#privEntry` de la galerie ; sortie : `#privExit`), décision du porteur.
 - **Mode incognito** (`"incognito": true` dans `/api/generate`) : dossier `jobs/incognito_<id>/` supprimé en fin de job
