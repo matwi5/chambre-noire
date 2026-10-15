@@ -41,6 +41,9 @@ Mis à jour le 15/10/2026.
   - une génération reprise après un rechargement n'a ni dimensions ni coefficients propres : le cadre ne prend sa forme
     qu'à la fin ;
   - le faux moteur du banc n'a pas été essayé sous Windows (lanceur `sd-cli.cmd`) ;
+  - un passage du banc a échoué une fois pendant la session des pistes, sans que la sortie ait été gardée, puis plus
+    jamais en 13 passages (test instable possible, à surveiller) ; `tests/test_private_rekey.py` garde un compteur en
+    liste à un élément, contraire à `CODING_STANDARDS.md` ;
   - la galerie trie par `st_mtime` en secondes entières : les images d'un même lot peuvent ressortir dans le désordre ;
   - le résultat d'une génération incognito reste servi en `http://` sur le Wi-Fi (laissé tel quel par le porteur le
     15/10/2026 : l'incognito vise le disque, pas le réseau) ; `/api/status` dit à tout appareil connecté si un espace
@@ -59,14 +62,25 @@ Mis à jour le 15/10/2026.
     (option écartée par le porteur le 13/10/2026, à lui reproposer avec cette raison) ;
   - `tests/run_tests.py --only edit` cherche `outputs/test_t2i_512.png`, que plus rien ne produit, et retombe sur
     `tests/test_scene.png` ;
-- **Ménage local** (sur le poste, hors dépôt) : la branche `fix/server-host-origin` et les worktrees de
-  `.claude/worktrees/` sont des restes de sessions passées, déjà intégrés à `main`. La branche contient des informations
-  propres au réseau du porteur : la supprimer plutôt que la pousser.
+- **Ménage local** : fait le 15/10/2026. Il ne reste que le dossier principal (`main`) et le worktree
+  `.claude/worktrees/dev`.
 
 ## Journal
 
 ### 2026-10-15
 
+- Rétrospective du parcours (session principale et 5 sessions de groupe, d'après leurs journaux) : 16 pistes. Les 11
+  propres au dépôt, faites par une session liée et fusionnées dans `dev` (`e8e3e1c` à `04140c0`) : `tests/check.py`
+  (tous les contrôles en une commande, `--link-venv` pour un worktree, `--ui`), test « dépôt public », banc plus sûr
+  (messages courts, SIGTERM, plus de `sleep` de synchronisation), pilote d'interface et tests dans `tests/ui/`, CI
+  « Contrôles » (job `checks`) sur les PR vers `main` et les push sur `dev`, `CODING_STANDARDS.md`,
+  `docs/agents/carte-du-code.md`, `docs/agents/session-deleguee.md`, `CLAUDE.md` allégé (18,8 → 12,9 Ko), tickets
+  qui renvoient à la spec. Vérifié après fusion : `tests/check.py --ui` → Ran 131 tests OK, interface 5/5 OK. Les 5
+  pistes communes (règles de revue, `/project:push`, `suivi-asana`, flow-board en mode délégué) faites dans
+  mathis-plugins. Reste : exiger la vérification `checks` dans la protection de `main` après son premier passage.
+- Ménage : worktrees et branches des groupes A à E supprimés (contenu vérifié identique à `main`), ainsi que
+  `securite-serveur` (branche `fix/server-host-origin`, un commit de notes du 13/10/2026 jamais poussé, avec des
+  informations propres au réseau du porteur) et `youthful-bell-35c6b0` (déjà dans `main`).
 - Branches : `dev` créée (depuis `36d3a70`) avec son worktree `.claude/worktrees/dev`, où l'on code désormais ;
   `main` protégée sur GitHub (PR obligatoire, ni push direct ni forcé) et ne reçoit plus que des PR depuis `dev` ; le
   dossier principal reste sur `main` pour le service (décisions du porteur, règle dans `CLAUDE.md`).

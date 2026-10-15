@@ -10,6 +10,22 @@ from bench import call, files, journal, wait_job
 CODE = "Mot2passe!"
 
 
+class WatchedLock:
+    """Verrou qui signale (waited) qu'un thread a dû l'attendre : le test sait que la fin de génération est bloquée
+    sur le journal sans attendre au jugé."""
+    def __init__(self):
+        self.lock, self.waited = threading.Lock(), threading.Event()
+
+    def __enter__(self):
+        if not self.lock.acquire(blocking=False):
+            self.waited.set()
+            self.lock.acquire()
+        return self
+
+    def __exit__(self, *exc):
+        self.lock.release()
+
+
 class AdoptTest(bench.BenchCase):
     def setUp(self):
         super().setUp()
@@ -86,14 +102,15 @@ class AdoptTest(bench.BenchCase):
 
     def test_generation_ending_during_the_journal_rewrite_keeps_its_line(self):
         name, _ = self.make_image()
-        real, finished = bench.launch.write_journal, {}
+        real, finished, lock = bench.launch.write_journal, {}, WatchedLock()
 
         def slow_write(lines):                       # une génération se termine entre la lecture et l'écriture
             j = bench.generate("zq9 finishing meanwhile")
             finished.update(wait_job(j["id"]))
-            time.sleep(0.4)                          # sans verrou commun, sa ligne serait ajoutée puis écrasée
+            # sans verrou commun, sa ligne serait ajoutée maintenant puis écrasée par l'écriture
+            bench.wait_until(lock.waited.is_set, what="la fin de génération attend le verrou du journal")
             real(lines)
-        with mock.patch("launch.write_journal", slow_write):
+        with mock.patch("launch.write_journal", slow_write), mock.patch("launch.JOURNAL_LOCK", lock):
             self.assertEqual(call("POST", "/api/private/adopt", {"name": name, "code": CODE})[0], 200)
         bench.wait_idle()
         self.assertEqual([os.path.basename(m["file"]) for m in journal()], [finished["name"]])

@@ -3,18 +3,30 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 Interface web locale pour générer et modifier des images avec Qwen-Image 2.1, sur PC Windows (Vulkan, CUDA, CPU) ou Mac
-Apple Silicon (Metal), sans droits administrateur. Le README est la documentation utilisateur et technique de référence ;
-cadrage dans `BRIEF.md`, décisions dans `DECISIONS.md`, état et journal dans `ETAT_DU_PROJET.md`.
+Apple Silicon (Metal), sans droits administrateur. Un serveur Python en un seul fichier (`tools/launch.py`) lance
+`sd-cli` une fois par génération ; l'interface est un seul fichier (`tools/ui/index.html`, sans dépendance ni build).
 
-Le dépôt GitHub est **public** : rien de propre à la machine du porteur dans les fichiers suivis (nom réseau du Mac,
-adresses IP, noms Tailscale, chemins `/Users/…`, contenu de `tools/access_code.txt`), y compris dans `travail/tasks/`.
+À lire selon le besoin :
+
+- `README.md` : documentation utilisateur et technique de référence (comportements visibles, API locale) ;
+- `docs/agents/carte-du-code.md` : où trouver quoi dans `launch.py` et `index.html`, et comment les mécanismes
+  s'enchaînent (fichiers, lots, notifications, accès, incognito, espace privé) : à lire avant d'ouvrir ces fichiers ;
+- `CODING_STANDARDS.md` : règles de code lues à la revue ;
+- `docs/agents/session-deleguee.md` : ce qu'une session de groupe doit savoir dans ce dépôt ;
+- `BRIEF.md` (cadrage), `DECISIONS.md` (décisions), `GLOSSARY.md` (vocabulaire), `ETAT_DU_PROJET.md` (état, journal).
+
+Le dépôt GitHub est **public** : rien de propre à la machine du porteur dans les fichiers suivis ni dans les messages
+de commit (nom réseau du Mac, adresses IP, noms Tailscale, chemins `/Users/…`, contenu de `tools/access_code.txt`),
+y compris dans `travail/tasks/`.
 
 ## Commandes
 
 Python du projet : `venv/bin/python` (Mac), `venv\Scripts\python.exe` (Windows). Exemples ci-dessous en version Mac.
+Dans un worktree (pas de `venv/`, non suivi) : `python3 tests/check.py --link-venv` crée un lien relatif `venv` vers
+le venv du dossier principal ; ensuite les commandes `venv/bin/python …` marchent telles quelles.
 
 ```bash
-venv/bin/python -m pip install -r requirements.txt   # Pillow, NumPy (+ pywin32 sous Windows)
+venv/bin/python -m pip install -r requirements.txt   # Pillow, NumPy, pywebpush, cryptography (+ pywin32 sous Windows)
 venv/bin/python setup.py            # moteur sd.cpp + modèles (épinglés, SHA256), raccourci, calibration
 venv/bin/python setup.py --check    # vérifie l'installation sans rien télécharger
 # options de setup.py : --q8 (modèle Q8_0), --cuda / --no-cpu (Windows), --no-calibrate
@@ -23,26 +35,41 @@ venv/bin/python tools/calibrate.py [--if-needed]   # 3 générations de calibrat
 venv/bin/python tools/make_service.py [--remove]   # Mac : LaunchAgent qui lance launch.py --no-browser --lan
 ```
 
-Vérifications : aucun lint ni typage n'est déclaré. Après un changement :
+## Vérifications
 
-- Python : `venv/bin/python -m py_compile tools/launch.py` (et les fichiers touchés) ;
-- JavaScript de `tools/ui/index.html` : extraire les blocs `<script>` et lancer `node --check` dessus ;
-- comportement du serveur sans GPU : banc de test `venv/bin/python -m unittest discover -s tests` (≈ 1 min).
-  `tests/bench.py` sert `tools/launch.py` sur un port libre, tous ses dossiers repointés vers un dossier temporaire,
-  avec le faux moteur `tests/fake_sdcli.py` (`FAIL` ou `SLOW[=s]` dans le prompt le font échouer ou ralentir,
-  `FAILSEED=<n>` échouer pour la seule graine n, une image d'un lot) ;
-  `bench.capture_push()` intercepte les notifications, `bench.LOG` reçoit les sorties du serveur. Trois origines de
-  requête : `call()` = le Mac, `remote=True` = HTTPS relayé par `tailscale serve` (`bench.HTTPS_HOST`), `wifi=True` =
-  `http://` direct d'un autre appareil (`bench.WIFI_HOST`, `LOCAL_CLIENTS` vidé pendant l'appel). Un nouveau chemin
-  calculé à l'import de `launch.py` doit être repointé dans `bench.start()`, sinon le banc écrit dans le dépôt. Les
-  aperçus de moins de 1000 octets sont ignorés par `latest_preview`. Pour l'interface : servir le banc (`bench.start()`
-  dans un script) et le piloter dans Chrome sans écran par le protocole DevTools depuis Node (WebSocket natif), sans
-  installer Playwright. Tester dans les dimensions du téléphone du porteur (Android, application installée) :
-  `Emulation.setDeviceMetricsOverride` 367×760 à une densité de 2,5, `mobile: true`, tactile activé ; l'interface
-  y passe en mode allégé (`html.lite`). Une vue plus grande cache des débordements, et regarder les captures ;
+Aucun lint ni typage n'est déclaré. Après un changement, une seule commande (c'est aussi celle de la CI GitHub,
+`.github/workflows/checks.yml`, sur chaque pull request vers `main` et chaque envoi sur `dev`) :
+
+```bash
+venv/bin/python tests/check.py [--no-bench] [--ui]
+```
+
+Elle compile chaque `.py` suivi, passe chaque bloc `<script>` de `tools/ui/index.html` et chaque `.js`/`.mjs` suivi à
+`node --check`, lance le banc et recopie sa ligne « Ran N tests … » et son verdict (c'est elle qu'on cite, jamais un
+compte de tête) ; code de sortie non nul au moindre échec. `tests/test_public_repo.py` y échoue si un fichier suivi
+contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net` autre que ceux du banc.
+
+- **Banc** (sans GPU, ≈ 1 min) : `venv/bin/python -m unittest discover -s tests` ; un seul fichier :
+  `venv/bin/python -m unittest discover -s tests -p test_x.py`. `tests/bench.py` sert `tools/launch.py` sur un port
+  libre, tous ses dossiers repointés vers un dossier temporaire, avec le faux moteur `tests/fake_sdcli.py` (`FAIL` ou
+  `SLOW[=s]` dans le prompt le font échouer ou ralentir, `FAILSEED=<n>` échouer pour la seule graine n, une image
+  d'un lot). Trois origines de requête : `call()` = le Mac, `remote=True` = HTTPS relayé par `tailscale serve`
+  (`bench.HTTPS_HOST`), `wifi=True` = `http://` direct d'un autre appareil (`bench.WIFI_HOST`, `LOCAL_CLIENTS` vidé
+  pendant l'appel). `bench.capture_push()` intercepte les notifications (`sent.decided` : celles que le serveur a
+  décidées, complètes après `bench.wait_idle()`), `bench.wait_until(cond)` attend une condition observable,
+  `bench.LOG` reçoit les sorties du serveur.
+- **Interface** : `venv/bin/python tests/check.py --ui` (ou `node --test "tests/ui/*.test.mjs"`), en local seulement
+  (Chrome installé ; pas en CI). `tests/ui/driver.mjs` lance le banc (`tests/ui/serve.py`) et Chrome sans écran
+  (profil temporaire supprimé à la fin), piloté par le protocole DevTools depuis Node (WebSocket natif, sans
+  Playwright), dans la vue du téléphone du porteur (367×760, densité 2,5, mobile, tactile : l'interface y passe en
+  `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `smoke` (écrans principaux) et
+  `keep` (régression « Garder celle-ci »). Une vérification d'interface nouvelle y devient un test plutôt qu'un
+  script jetable. Une vue plus grande cache des débordements : regarder aussi les captures (`page.screenshot`).
+- La fermeture de la page (`pagehide`, envoi `keepalive`) se valide sur le téléphone : Chrome sans écran ne la rejoue
+  pas de façon constante.
 - `tests/run_tests.py --steps 8 [--only t2i|edit|mask|annot]` : bout en bout, serveur lancé sur 127.0.0.1:7860. Il
-  lance de **vraies générations GPU** (plusieurs minutes), écrit dans `outputs/`, le journal et `tools/calibration.json` :
-  ne le lancer que si l'utilisateur le demande.
+  lance de **vraies générations GPU** (plusieurs minutes), écrit dans `outputs/`, le journal et
+  `tools/calibration.json` : ne le lancer que si l'utilisateur le demande.
 
 ## Service macOS sur le poste du porteur
 
@@ -58,106 +85,30 @@ venv/bin/python -c "import json,urllib.request as u; print(json.load(u.urlopen('
 launchctl kickstart -k gui/$(id -u)/com.matwi5.qwen-image-local   # si False
 ```
 
-Ne jamais afficher la réponse complète de `/api/status` venant de 127.0.0.1 ni `tools/access_code.txt` : ils contiennent
-le code d'accès du téléphone. Ne lancer aucune génération réelle et ne supprimer aucune image de `outputs/` sans accord.
-
-## Architecture
-
-```text
-navigateur ──HTTP──▶ tools/launch.py ──lance une fois par génération──▶ sdcpp/<moteur>/sd-cli ──▶ PNG
-tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pas de sd-server persistant)
-```
-
-- **Un seul fichier serveur** (`tools/launch.py`, bibliothèque standard + Pillow, et `cryptography` pour l'espace privé ; `Server` garde une file de 128 connexions, la galerie en ouvre une par miniature) : état global `S` (moteur, modèle,
-  jobs en mémoire dans `S.jobs`, file `S.q`), un thread `worker()` qui exécute les jobs un par un via `run_job()`. Celui-ci
-  construit la ligne de commande (`build_cmd`), lit la sortie de sd-cli ligne à ligne et en tire l'étape, la phase et les
-  durées (`PROGRESS_RE`, lignes « … completed, taking x s ») qui alimentent la calibration. Les jobs ne survivent pas à un
-  redémarrage.
-- **Fichiers** : dossier de travail `jobs/<id>/` (images d'entrée, aperçus, `sd-cli.log`, 20 derniers gardés au
-  lancement), image finale `outputs/<id>_<mode>.png`, une ligne par image dans `outputs/journal.jsonl`. La galerie
-  (`/api/history`) est la liste des PNG de `outputs/` croisée avec le journal ; miniatures dans `outputs/.thumbs/`.
-  Les images d'entrée (`init.png`, `ref_N.png`) sont copiées du dossier de travail vers `outputs/.inputs/<image>/` en
-  fin de job (`save_inputs`, et au démarrage pour les dossiers encore présents) ; `/api/delete` les supprime avec l'image
-  (`delete_output`). Toute écriture de `outputs/journal.jsonl` passe sous `JOURNAL_LOCK` : l'ajout de fin de
-  génération et la réécriture de « Rendre privée » (`drop_from_journal`, qui retire la ligne d'une image).
-  Une génération annulée (en cours ou en file) ne laisse rien : `discard_cancelled` supprime son dossier de travail et
-  une image finale déjà écrite. Le statut `cancelled` est posé avant que le moteur soit arrêté : un test doit attendre
-  que `S.current` ait changé avant de regarder le disque.
-- **Lots** (variantes : `count` de 2 à 4, mode Créer ; campagne : `campaign`, 2 à 10 photos avec leurs dimensions,
-  mode Éditer) : `expand_request` en tire une demande par image, `/api/generate` une génération par demande
-  (`new_job`), reliées par `job["lot"]` (`id`, `rank`, `size`) et gardées dans `S.lots` même quand une génération incognito quitte `S.jobs`. Les
-  graines à -1 sont tirées par le serveur (`draw_seeds`) pour être écrites au journal. Une seule notification par lot
-  (`notify_lot`), envoyée par `end_of_lot` depuis le `finally` de `worker()` quand plus aucune génération du lot n'est
-  active ; le lot quitte alors `S.lots`, ce qui empêche un doublon quand une génération annulée en file passe ensuite.
-- **Notifications** (Web Push, `pywebpush`) : `notify_job` envoie depuis `worker()`, dans un thread, à la fin d'un job
-  hors lot terminé ou en échec, à chaque abonnement de `tools/push_subscriptions.json` ; clé VAPID `tools/push_vapid.pem` créée au
-  premier usage. Le service worker (`tools/ui/sw.js`) affiche la notification seulement si aucune fenêtre de
-  l'application n'est visible. Le message ne contient jamais le prompt. Sans `pywebpush`, le serveur tourne, sans
-  notifications. Tester sans réseau : intercepter `requests.post` et déchiffrer avec `http_ece`.
-- **Prompts enregistrés** : `tools/saved_prompts.json` (non suivi), lu et écrit sous `PROMPTS_LOCK` par
-  `saved_prompts()` (fichier temporaire puis `os.replace` ; un fichier illisible lève une erreur et n'est jamais
-  écrasé), modifié par `change_prompt` après `prompt_error` (400). Titre et texte seulement, jamais de réglages ;
-  `used` (secondes) ordonne la liste. Ni le titre ni le texte ne vont dans les journaux du serveur. Seule exception au
-  mode incognito : enregistrer un prompt est un geste explicite, permis aussi en incognito (décision de la spec) ;
-  choisir un prompt en incognito ne met pas à jour `used`.
-  Prompts types : `tools/prompt_types.json` (suivi, liste validée par le porteur, à changer seulement avec son accord),
-  relu à chaque `GET /api/prompts`, jamais écrit ; leurs `id` (`type-…`) ne croisent jamais ceux des prompts enregistrés,
-  si bien que les routes d'écriture répondent 404 pour eux. Le banc lit le fichier du dépôt (pas de repointage).
-- **Interface** : un seul fichier `tools/ui/index.html` (HTML, CSS et JS sans dépendance ni build). Elle suit les
-  générations qu'elle a lancées (`pageJobs`) en interrogeant chacune par `/api/job/<id>` chaque seconde, et la file
-  commune (`queue` de `/api/status`, entrées produites par `queue_entry`) toutes les 2 s tant qu'elle n'est pas vide ;
-  après un rechargement, elle se rattache aux seules générations normales lancées depuis ce navigateur (identifiants
-  dans `localStorage`, `qwen-own`). Ses lignes incognito de `queue` se reconnaissent au jeton de la page
-  (`PAGE_TOKEN`, champ `page` de `/api/generate`), qui n'ouvre aucune route : ne jamais s'en servir comme droit. Un
-  lot terminé s'affiche en grille (`gridOf`) ; la visionneuse parcourt `vList` (la galerie, ou les images d'un lot de
-  la page, incognito comprises par leur adresse `blob:`), jamais `histItems` directement. Réglages, brouillons et
-  générations à reprendre dans `localStorage` (`qwen-opt`, `qwen-<onglet>_prompt`, `qwen-own`). `manifest.webmanifest`, `sw.js` et les icônes
-  servent à l'installation sur le téléphone ; le service worker ne touche qu'à la navigation, jamais à `/api/*`.
-- **Contrôle d'accès** (dans cet ordre, dans `H`) : `_host_ok` (liste blanche de `Host` contre le rebinding DNS, noms du
-  Wi-Fi et de Tailscale figés au démarrage), `_post_refused` (tout POST : `Sec-Fetch-Site`, `Origin` égal à l'origine du
-  `Host`, `Content-Type: application/json` exigé, sinon 403/415), puis `_allowed` (le Mac lui-même passe ; les autres
-  appareils, et toute requête relayée par `tailscale serve`, présentent le cookie dérivé du code d'accès). Toute
-  nouvelle route POST passe par ces contrôles : l'interface doit envoyer `Content-Type: application/json`, même sans corps.
-  L'espace privé ajoute `_secure` (toutes ses routes sauf `lock`, la génération privée et l'aperçu d'une génération
-  privée) : adresse source 127.0.0.1/::1 et `Host` local ou nom HTTPS de `tailscale serve` (`S.https_hosts`), jamais
-  les en-têtes de relais, qu'un appareil du Wi-Fi peut envoyer en `http://` ; `/api/private/reset` exige `_local`.
-- **Espace privé** (`private/`, format dans `DECISIONS.md`) : `space.json` garde la clé publique X25519 en clair et la
-  clé privée chiffrée par scrypt + AES-GCM ; `/api/private/unlock` ouvre une session par appareil (`S.private_sessions`,
-  cookie `qwen_private`, en plus du cookie d'accès, demandée même sur le Mac), fermée par `sweep()` après
-  `PRIVATE_IDLE` sans requête privée : seules les requêtes privées appellent `_private_session(touch=True)`, jamais
-  `/api/status`. Sans `cryptography` (`HAVE_CRYPTO`), routes en 503 et interface masquée. `log_message` tait
-  `/api/private/` et aucun `print` ne parle de l'espace privé ; le banc repointe `PRIVATE` et abaisse `SCRYPT_N`.
-  Changer le code rechiffre tout dans `private/.rekey/` ; la bascule est le `os.replace` de `space.json`, et
-  `finish_rekey()` termine ou abandonne un changement interrompu, au démarrage et sous `PRIVATE_LOCK` (un `RLock`)
-  avant toute ouverture ou écriture : toute écriture ou suppression d'une image privée passe sous ce verrou.
-  Côté interface, déverrouillé = « dans l'espace privé » (`inPrivate()`, classe `html.priv`) : aucun bouton ne le
-  signale à l'arrivée (entrée : cadenas `#privEntry` de la galerie ; sortie : `#privExit`), décision du porteur.
-- **Mode incognito** (`"incognito": true` dans `/api/generate`) : dossier `jobs/incognito_<id>/` supprimé en fin de job
-  (et au démarrage), PNG gardé en mémoire (`job["png"]`) et servi une fois par `/api/job/<id>/result`, puis oublié par
-  `/api/job/<id>/forget` (ou `/api/forget` avec toutes celles de la page, envoyé à sa fermeture) ; ni `outputs/`, ni
-  journal, ni calibration, ni détail dans `logs/`. Son identifiant (et celui de son lot) fait 128 bits tirés au hasard
-  et n'est connu que de sa page : ni `queue`, ni `current_job` ne le montrent. Une génération incognito terminée que sa
-  page n'a jamais fait oublier l'est par `sweep()`, appelé en tête de chaque requête, `INCOGNITO_TTL` (24 h) après sa
-  fin.
-- **Génération privée** (`"private": true`, session exigée) : même chemin que l'incognito pendant le calcul
-  (`jobs/private_<id>/`, `sd-cli.log` vers `os.devnull`, identifiant de 128 bits, rien dans `queue` ni les journaux),
-  puis `keep_private` chiffre image, miniature (en mémoire), entrées et réglages avec la clé publique notée au
-  lancement (`store_private`, format dans `DECISIONS.md`). `secret(job)` désigne l'un ou l'autre mode : chaque
-  `print`, écriture de journal, de calibration ou de fichier hors du dossier de travail passe par lui. **Toute nouvelle
-  écriture sur le disque ou dans les journaux doit respecter ces deux modes.** Une génération privée ne s'arrête pas
-  à la fermeture de la page (`/api/forget` ne vise que l'incognito, décision du porteur). Au lancement sur Mac,
-  `exclude_from_backup` exclut `jobs/` de Time Machine (jamais appelé par le banc, qui n'exécute pas `main()`).
-- **Estimation des durées** : modèle de coût dans `tools/estimate.py` (`predict`, priors par moteur, mesures par
-  `"<moteur>/<modèle>"` dans `tools/calibration.json`, filtrées sur la release de sd.cpp installée lue dans
-  `sdcpp/<moteur>/.installed`). Les coefficients partent vers l'interface par `/api/status`.
+Ne jamais afficher la réponse complète de `/api/status` venant de 127.0.0.1 ni `tools/access_code.txt` : ils
+contiennent le code d'accès du téléphone. Ne jamais afficher `logs/service.log` : il contient les adresses du Mac.
+Ne lancer aucune génération réelle et ne supprimer aucune image de `outputs/` sans accord.
 
 ## Pièges et invariants
 
+- **Incognito et espace privé** : `secret(job)` désigne l'un ou l'autre mode ; chaque `print`, écriture de journal,
+  de calibration ou de fichier hors du dossier de travail passe par lui. **Toute nouvelle écriture sur le disque ou
+  dans les journaux doit respecter ces deux modes.** `log_message` tait `/api/private/` et aucun `print` ne parle de
+  l'espace privé ; ni le titre ni le texte d'un prompt enregistré ne vont dans les journaux du serveur.
+- **Verrous** : toute écriture de `outputs/journal.jsonl` passe sous `JOURNAL_LOCK` ; toute écriture ou suppression
+  d'une image privée passe sous `PRIVATE_LOCK`, après `finish_rekey()`.
+- **Contrôle d'accès** (dans cet ordre, dans `H`) : `_host_ok`, `_post_refused`, `_allowed`, et `_secure` pour
+  l'espace privé (jamais les en-têtes de relais). Toute nouvelle route POST passe par ces contrôles : l'interface doit
+  envoyer `Content-Type: application/json`, même sans corps. Seules les requêtes privées prolongent une session
+  (`_private_session(touch=True)`), jamais `/api/status`. Le jeton de page (`PAGE_TOKEN`, champ `page`) n'ouvre
+  aucune route : ne jamais s'en servir comme droit.
 - **Formule dupliquée en JavaScript** : `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()` et
   `ref_px()` de `estimate.py` (jetons de 16×16 px, arrondi à 32). Une modification de la formule ou d'un coefficient se
   fait des deux côtés. `PREVIEW_EVERY = 5` côté interface doit égaler le défaut `preview_interval` de `build_cmd`.
   La longueur minimale du code privé (`MIN_PRIVATE_CODE`, 8) est aussi vérifiée dans `index.html` (feuilles privées).
   L'estimation de chaque entrée de la file (`queue_entry`) appelle `estimate.predict` : pas de troisième copie.
+- **Interface** : la visionneuse parcourt `vList`, jamais `histItems` directement (la galerie peut être rechargée
+  pendant qu'elle est ouverte).
 - **Noms des modèles** : ceux de `setup.py` doivent correspondre à `MODELS` et `DIFFUSION` en tête de `tools/launch.py`.
 - **Release de sd.cpp** : `.installed` doit garder le format `master-NNN-hash` ; `estimate.prefix_cache` en lit le numéro
   (cache de préfixe à partir de 903). Si sd-cli change le texte de ses lignes « completed », `make_sample` renvoie
@@ -168,6 +119,11 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
 - **Une génération qui lève une exception échoue seule** : `worker()` la passe en `failed` par `fail_job` et prend la
   suivante. Un champ que `build_cmd` utilise tel quel se valide d'abord dans `request_error` (400), pour qu'une demande
   invalide soit refusée tout de suite plutôt que d'échouer dans la file.
+- **Banc** : un nouveau chemin calculé à l'import de `launch.py` doit être repointé dans `bench.start()`, sinon le banc
+  écrit dans le dépôt. Le statut `cancelled` est posé avant que le moteur soit arrêté : un test attend
+  `bench.wait_idle()` (`S.current` rendu, en dernier, par `worker()`) avant de regarder le disque. Les aperçus de
+  moins de 1000 octets sont ignorés par `latest_preview`. Le banc n'exécute pas `main()`.
+- **`tools/prompt_types.json`** (prompts types) : liste validée par le porteur, à changer seulement avec son accord.
 - **`tools/config.json` est suivi par git** et contient les préférences du porteur (`"model": "q8"`) ; `setup.py` réécrit
   `backend` sous Windows. `sd_port` n'est lu nulle part.
 - **Fichiers périmés** : `start-ui-sdcpp.cmd` (nom de modèle sans `UC-`, sd-server) et `workflows/*.json` (lus par
@@ -179,7 +135,8 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
 
 - Documentation, commentaires et interface en français ; messages de commit en anglais, une phrase à l'impératif sans
   préfixe (« Add an incognito mode that keeps generated images off the disk »), corps qui explique le pourquoi.
-- Le README décrit chaque comportement visible et l'API locale : le mettre à jour dans le même commit que le code.
+- Le README décrit chaque comportement visible et l'API locale : le mettre à jour dans le même commit que le code ;
+  la carte du code suit un renommage ou un déplacement de fonction.
 - Branches (décision du porteur du 15/10/2026) : on code toujours sur `dev`, dans le worktree `.claude/worktrees/dev`
   (le dossier principal reste sur `main` pour le service) ; les sessions de groupe se lancent depuis ce worktree, pour
   partir de `dev`, et leurs branches s'y fusionnent. `main` ne reçoit que des pull requests depuis `dev` (`/project:pr`)

@@ -1,5 +1,6 @@
 # environnement et données lourdes (téléchargées par setup.py)
-venv/
+# venv : dossier, ou lien vers celui du dossier principal dans un worktree (tests/check.py --link-venv)
+/venv
 models/
 sdcpp/
 *.part

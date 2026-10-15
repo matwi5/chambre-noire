@@ -38,6 +38,10 @@ commentaire de résultat, cochage à la fin).
   ```
 
   La ligne « Statut : » est toujours la première (le panneau Asana range les tâches d'après elle).
+- **Renvoyer à la spec, ne pas la recopier** : un ticket dit ce qu'il livre et ses critères vérifiables ; le détail
+  d'interface (écran, place d'un bouton, libellé) reste dans la section de la spec que nomme la ligne « Origine »
+  (`docs/specs/<spec>.md`, section « … »), qui fait foi quand elle change. Recopié, il périme le ticket : au groupe D,
+  un changement d'interface du porteur a rendu trois tickets faux, et l'un a été coché sur un critère périmé.
 - **Spécifications** : elles restent dans `docs/specs/` ; chaque ticket y renvoie par sa ligne « Origine ». Les plans
   de travail restent dans `travail/tasks/`.
 - **Blocages** : les dépendances Asana sont payantes (plan gratuit) : un ticket écrit ses bloqueurs dans la ligne

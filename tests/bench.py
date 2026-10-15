@@ -8,7 +8,7 @@ puis sert launch.H sur 127.0.0.1 avec son thread de calcul. Un seul serveur par 
 est global ; BenchCase attend avant chaque test que la file soit vide et oublie les générations précédentes, l'espace
 privé et ses sessions.
 """
-import atexit, base64, contextlib, glob, json, os, shutil, sys, tempfile, threading, time, unittest, warnings
+import atexit, base64, contextlib, glob, json, os, shutil, signal, sys, tempfile, threading, time, unittest, warnings
 import urllib.error, urllib.request
 from unittest import mock
 
@@ -21,7 +21,34 @@ ACCESS_CODE = "test-code"
 HTTPS_HOST = "qwen-banc.example.ts.net"             # nom fictif de « tailscale serve » (HTTPS, relayé depuis 127.0.0.1)
 WIFI_HOST = "mac-du-banc.local"                     # nom fictif du Mac sur le Wi-Fi (http:// direct)
 LOG = []                                            # sorties du serveur (print et journal des requêtes), hors de l'écran
+SHOWN = 200                                         # caractères au plus d'une réponse recopiée dans un message d'échec
 _server = None
+
+
+def short(value, limit=SHOWN):
+    """Texte d'une valeur pour un message d'échec, coupé à limit caractères (une réponse peut être une image)."""
+    text = value if isinstance(value, str) else repr(value)
+    return text if len(text) <= limit else text[:limit] + f"… [{len(text)} caractères]"
+
+
+class Raw(bytes):
+    """Réponse non JSON (image, page) : se montre en quelques octets dans un message d'échec, jamais en entier."""
+    def __repr__(self):
+        return f"<{len(self)} octets : {bytes(self[:40])!r}…>" if len(self) > 40 else bytes.__repr__(self)
+    __str__ = __repr__
+
+
+def _cleanup_on_sigterm(root):
+    """Un banc tué (SIGTERM : fin de session, kill) supprime aussi son dossier temporaire, comme à la sortie normale."""
+    if threading.current_thread() is not threading.main_thread():
+        return                                      # signal.signal n'est permis que dans le thread principal
+    previous = signal.getsignal(signal.SIGTERM)
+
+    def on_term(signum, frame):
+        shutil.rmtree(root, True)
+        signal.signal(signal.SIGTERM, previous if callable(previous) else signal.SIG_DFL)
+        os.kill(os.getpid(), signal.SIGTERM)        # puis la fin habituelle (code de sortie d'un processus tué)
+    signal.signal(signal.SIGTERM, on_term)
 
 
 def start():
@@ -31,6 +58,7 @@ def start():
         return f"http://127.0.0.1:{S.ui_port}"
     root = tempfile.mkdtemp(prefix="qwen-banc-")
     atexit.register(shutil.rmtree, root, True)
+    _cleanup_on_sigterm(root)
     launch.ROOT = root                              # P() lit ROOT à chaque appel ; les chemins figés à l'import suivent
     launch.CONFIG, launch.CALIB = launch.P("tools", "config.json"), launch.P("tools", "calibration.json")
     launch.THUMBS, launch.INPUTS = launch.P("outputs", ".thumbs"), launch.P("outputs", ".inputs")
@@ -119,7 +147,7 @@ def call_full(method, path, body=None, remote=False, cookie=True, headers=None, 
                 code, raw, hdrs = r.status, r.read(), r.headers
         except urllib.error.HTTPError as e:
             code, raw, hdrs = e.code, e.read(), e.headers
-    return code, json.loads(raw) if hdrs.get("Content-Type", "").startswith("application/json") else raw, hdrs
+    return code, json.loads(raw) if hdrs.get("Content-Type", "").startswith("application/json") else Raw(raw), hdrs
 
 
 def cookie_of(headers):
@@ -134,13 +162,13 @@ def cookie_of(headers):
 def create_private(code, remote=False):
     """Crée l'espace privé ; renvoie la session ouverte pour ce client."""
     status, reply, headers = call_full("POST", "/api/private/create", {"code": code}, remote=remote)
-    assert status == 200, (status, reply)
+    assert status == 200, short((status, reply))
     return cookie_of(headers)
 
 
 def unlock_private(code, remote=False):
     status, reply, headers = call_full("POST", "/api/private/unlock", {"code": code}, remote=remote)
-    assert status == 200, (status, reply)
+    assert status == 200, short((status, reply))
     return cookie_of(headers)
 
 
@@ -160,7 +188,7 @@ def gen_body(prompt="a red car", mode="t2i", **kw):
 
 def generate(prompt="a red car", **kw):
     code, job = call("POST", "/api/generate", gen_body(prompt, **kw))
-    assert code == 202, (code, job)
+    assert code == 202, short((code, job))
     return job
 
 
@@ -179,9 +207,20 @@ def wait_job(jid, until=("done", "failed", "cancelled"), timeout=30, check=None)
     raise AssertionError(f"génération {jid} : toujours {j.get('status')} après {timeout} s")
 
 
+def wait_until(cond, timeout=10, what="la condition"):
+    """Attend que cond() soit vraie (interrogée toutes les 20 ms) ; échoue après timeout secondes. Un test se
+    synchronise ainsi sur ce qu'il observe, jamais sur un time.sleep au jugé."""
+    end = time.time() + timeout
+    while not cond():
+        if time.time() > end:
+            raise AssertionError(f"{what} : toujours fausse après {timeout} s")
+        time.sleep(0.02)
+
+
 def idle():
-    """Thread de calcul au repos : file vide, aucune génération en cours, et dossiers de travail des générations annulées
-    ou incognito déjà supprimés (worker() les supprime après avoir rendu S.current)."""
+    """Thread de calcul au repos : file vide, aucune génération en cours (worker() ne rend S.current qu'après avoir
+    rangé les fichiers et décidé la notification d'un lot), et dossiers de travail des générations annulées ou
+    incognito déjà supprimés."""
     jobs = list(S.jobs.values())
     return (S.current is None and S.q.empty() and not any(j.get("status") in ("queued", "running") for j in jobs)
             and not any(os.path.exists(j["dir"]) for j in jobs if j.get("status") == "cancelled" or j.get("incognito")))
@@ -224,7 +263,9 @@ def journal():
 @contextlib.contextmanager
 def capture_push():
     """Intercepte les notifications Web Push sans réseau : un appareil abonné fictif et pywebpush.webpush remplacé.
-    Donne la liste des messages envoyés (dictionnaires décodés) ; sent.wait(n) attend le n-ième."""
+    Donne la liste des messages envoyés (dictionnaires décodés) ; sent.wait(n) attend le n-ième. sent.decided reçoit
+    chaque notification au moment où le serveur décide de l'envoyer (avant le thread d'envoi) : après wait_idle(),
+    elle est complète, ce qui permet d'affirmer qu'aucune autre ne partira."""
     try:
         import pywebpush  # noqa: F401
     except ImportError:
@@ -232,8 +273,14 @@ def capture_push():
     sent = Sent()
     with open(launch.PUSH_SUBS, "w", encoding="utf-8") as f:
         json.dump([{"endpoint": "https://push.example.invalid/abonnement", "keys": {"p256dh": "x", "auth": "y"}}], f)
+    real = launch.push_notify
+
+    def decide(payload):
+        sent.decided.append(dict(payload))
+        real(payload)
     try:
-        with mock.patch("pywebpush.webpush", side_effect=lambda sub, data, **kw: sent.add(json.loads(data))):
+        with mock.patch("pywebpush.webpush", side_effect=lambda sub, data, **kw: sent.add(json.loads(data))), \
+                mock.patch.object(launch, "push_notify", decide):
             yield sent
     finally:
         os.remove(launch.PUSH_SUBS)
@@ -243,6 +290,7 @@ class Sent(list):
     def __init__(self):
         super().__init__()
         self.cond = threading.Condition()
+        self.decided = []
 
     def add(self, msg):
         with self.cond:
@@ -259,6 +307,11 @@ class Sent(list):
 class BenchCase(unittest.TestCase):
     """Test sur le serveur du banc : au début de chaque test, file vide, générations précédentes oubliées, outputs/ et
     jobs/ vidés."""
+
+    def _formatMessage(self, msg, standardMsg):
+        # le message passé par un test (msg=reply…) peut porter une réponse entière : coupé comme les réponses (Raw) ;
+        # _formatMessage est la méthode d'unittest qui assemble ce message (interne, mais stable depuis Python 3.1)
+        return super()._formatMessage(None if msg is None else short(msg), standardMsg)
 
     @classmethod
     def setUpClass(cls):

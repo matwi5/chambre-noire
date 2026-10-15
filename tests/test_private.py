@@ -73,9 +73,10 @@ class PrivateSpaceTest(bench.BenchCase):
     def test_session_expires_after_inactivity_and_status_does_not_keep_it_alive(self):
         with mock.patch("launch.PRIVATE_IDLE", 0.5):
             session = bench.create_private(CODE)
-            for _ in range(8):                       # l'interface interroge /api/status sans cesse
-                self.assertEqual(call("GET", "/api/status", private=session)[0], 200)
-                time.sleep(0.1)
+            # l'interface interroge /api/status sans cesse : la session se ferme quand même, PRIVATE_IDLE après la
+            # dernière requête privée (si /api/status la prolongeait, l'attente échouerait)
+            bench.wait_until(lambda: call("GET", "/api/status", private=session)[0] == 200
+                             and session not in bench.S.private_sessions, timeout=5, what="session fermée")
             self.assertFalse(private_status(session)["unlocked"])
             self.assertNotIn(session, bench.S.private_sessions)
 

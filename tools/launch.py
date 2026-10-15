@@ -1272,12 +1272,16 @@ def worker():
         except Exception as e:
             print("[job] erreur du thread de calcul" + ("" if secret(job) else f" : {e}"), flush=True)
         finally:
-            S.current = None
-            job.pop("proc", None)
-            if secret(job):
-                forget_files(job)
-            if job.get("lot"):
-                end_of_lot(job)
+            # S.current rendu en dernier : « plus de génération en cours » veut dire fichiers rangés et notification
+            # du lot décidée (le banc s'y synchronise au lieu d'attendre au hasard)
+            try:
+                job.pop("proc", None)
+                if secret(job):
+                    forget_files(job)
+                if job.get("lot"):
+                    end_of_lot(job)
+            finally:
+                S.current = None
 
 
 def end_of_lot(job):

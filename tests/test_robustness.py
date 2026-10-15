@@ -78,16 +78,17 @@ class PreparationFailureTest(bench.BenchCase):
 
 class CancelDuringPreparationTest(bench.BenchCase):
     def test_cancel_while_inputs_are_prepared_stops_the_engine_at_once(self):
-        preparing, real = threading.Event(), bench.launch.build_cmd
+        preparing, cancelled, real = threading.Event(), threading.Event(), bench.launch.build_cmd
 
-        def slow_build(job):                    # préparation longue (grosses images d'entrée) : le temps d'annuler
+        def slow_build(job):                    # préparation longue (grosses images d'entrée), jusqu'à l'annulation
             preparing.set()
-            time.sleep(0.5)
+            cancelled.wait(5)
             return real(job)
         with mock.patch.object(bench.launch, "build_cmd", slow_build):
             jid = generate("SLOW=1 long one", steps=20)["id"]
             self.assertTrue(preparing.wait(5))
             self.assertEqual(call("POST", f"/api/job/{jid}/cancel")[1]["status"], "cancelled")
+            cancelled.set()
             t0 = time.time()
             bench.wait_idle()
         self.assertLess(time.time() - t0, 5)       # le moteur n'a pas tourné ses 20 s

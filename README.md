@@ -751,7 +751,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── run_tests.py      tests de bout en bout des trois usages (interface lancée, vraies générations)
 │   ├── bench.py          banc de test du serveur, sans GPU : serveur sur un port libre, dossier temporaire
 │   ├── fake_sdcli.py     faux moteur du banc
-│   └── test_*.py         tests du banc
+│   ├── check.py          tous les contrôles en une commande (compilation, JavaScript, banc, interface)
+│   ├── test_*.py         tests du banc
+│   └── ui/               tests de l'interface dans Chrome sans écran (pilote driver.mjs, tests *.test.mjs)
 └── workflows/            paramètres de référence des trois usages (JSON)
 ```
 
@@ -767,6 +769,16 @@ venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
 Sur Mac : `venv/bin/python -m unittest discover -s tests`. Le faux moteur n'a été vérifié que sur Mac.
+
+Tous les contrôles en une commande : `venv/bin/python tests/check.py` compile les fichiers Python, vérifie la syntaxe
+du JavaScript de l'interface avec Node.js (`node --check`), lance le banc et affiche son résultat (`--no-bench` pour
+le sauter). Il échoue aussi si un fichier du dépôt contient un repère propre à une machine (chemin de dossier
+personnel, adresse IP privée, nom Tailscale) : le dépôt est public. Sur GitHub, la même commande tourne sur chaque
+pull request vers `main` et chaque envoi sur `dev` (`.github/workflows/checks.yml`, sur macOS).
+
+Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui`. Ils ouvrent
+l'interface servie par le banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur
+de la console du navigateur (écrans principaux, et « Garder celle-ci » après un rechargement de la galerie).
 
 Tests de bout en bout, interface lancée :
 
