@@ -1001,9 +1001,11 @@ async function toEntry(name, dataUrl){ let im=await loadImg(dataUrl); let w=im.n
   if(Math.max(w,h)>MAX_INPUT_SIDE){ const s=MAX_INPUT_SIDE/Math.max(w,h); const nw=Math.round(w*s), nh=Math.round(h*s);
     dataUrl=resizeDataUrl(im, nw, nh); im=await loadImg(dataUrl); log(`${name} : ${w}×${h} réduite à ${nw}×${nh}`); w=nw; h=nh; }
   return {name, dataUrl, w, h, img:im}; }
+// la liste des fichiers est copiée avant la remise à zéro du champ : celle-ci vide la liste du champ elle-même, que le
+// traitement (asynchrone) lit encore après sa première image
 function wireDrop(dropId, inputId, handler){ const d=$(dropId), inp=$(inputId); d.addEventListener('click',()=>inp.click());
   d.addEventListener('dragover',e=>{e.preventDefault(); d.classList.add('over');}); d.addEventListener('dragleave',()=>d.classList.remove('over'));
-  d.addEventListener('drop',e=>{e.preventDefault(); d.classList.remove('over'); handler(e.dataTransfer.files);}); inp.addEventListener('change',e=>{ handler(e.target.files); e.target.value=''; }); }
+  d.addEventListener('drop',e=>{e.preventDefault(); d.classList.remove('over'); handler([...e.dataTransfer.files]);}); inp.addEventListener('change',e=>{ handler([...e.target.files]); e.target.value=''; }); }
 wireDrop('edit_drop','edit_files', async files=>{ let skipped=0;
   for(const f of files){ if(editImages.length>=MAX_REFS){ skipped++; continue; } editImages.push(await toEntry(f.name, await readFile(f))); }
   renderEditThumbs(); suggestRatio();

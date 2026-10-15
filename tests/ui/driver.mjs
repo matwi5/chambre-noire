@@ -146,6 +146,14 @@ async function connect(wsUrl) {
         if (!el || el.hidden || el.disabled || !el.getClientRects().length) return false; el.click(); return true; })()`);
       if (!ok) throw new Error(`élément absent, masqué ou désactivé : ${selector}`);
     },
+    // fichiers choisis d'un coup dans un champ <input type=file> (comme le sélecteur du téléphone) : événements input et
+    // change envoyés par Chrome
+    async setFiles(selector, files) {
+      const r = await send('Runtime.evaluate', { expression: `document.querySelector(${JSON.stringify(selector)})` });
+      if (!r.result.objectId) throw new Error(`champ de fichiers absent : ${selector}`);
+      await send('DOM.enable');
+      await send('DOM.setFileInputFiles', { objectId: r.result.objectId, files });
+    },
     async screenshot(file) {
       const r = await send('Page.captureScreenshot', { format: 'png' });
       fs.writeFileSync(file, Buffer.from(r.data, 'base64'));

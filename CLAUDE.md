@@ -62,9 +62,10 @@ contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net`
   (Chrome installé ; pas en CI). `tests/ui/driver.mjs` lance le banc (`tests/ui/serve.py`) et Chrome sans écran
   (profil temporaire supprimé à la fin), piloté par le protocole DevTools depuis Node (WebSocket natif, sans
   Playwright), dans la vue du téléphone du porteur (367×760, densité 2,5, mobile, tactile : l'interface y passe en
-  `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `smoke` (écrans principaux) et
-  `keep` (régression « Garder celle-ci »). Une vérification d'interface nouvelle y devient un test plutôt qu'un
-  script jetable. Une vue plus grande cache des débordements : regarder aussi les captures (`page.screenshot`).
+  `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `smoke` (écrans principaux),
+  `keep` (régression « Garder celle-ci ») et `saisie` (photos choisies d'un coup : `page.setFiles` remplit un champ de
+  fichiers). Une vérification d'interface nouvelle y devient un test plutôt qu'un script jetable. Une vue plus grande
+  cache des débordements : regarder aussi les captures (`page.screenshot`).
 - La fermeture de la page (`pagehide`, envoi `keepalive`) se valide sur le téléphone : Chrome sans écran ne la rejoue
   pas de façon constante.
 - `tests/run_tests.py --steps 8 [--only t2i|edit|mask|annot]` : bout en bout, serveur lancé sur 127.0.0.1:7860. Il

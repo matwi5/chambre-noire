@@ -273,7 +273,8 @@ pas **Garder celle-ci** : chaque image a son bouton de téléchargement, et elle
 
 ### Éditer
 
-Ajouter 1 à 10 images (elles sont numérotées 1, 2, 3…), puis écrire une **instruction** :
+Ajouter 1 à 10 images (elles sont numérotées 1, 2, 3…), une à une ou plusieurs d'un coup dans le sélecteur (elles
+sont ajoutées dans l'ordre de sélection), puis écrire une **instruction** :
 
 - « Replace the sky with a dramatic orange sunset, keep everything else unchanged »
 - « The woman in image 1 wears the jacket from image 2 »
