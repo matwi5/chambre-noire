@@ -2,7 +2,7 @@
 
 ## État
 
-Mis à jour le 14/10/2026.
+Mis à jour le 15/10/2026.
 
 - **Fonctionnel** sur Windows (Vulkan, CPU, CUDA en option ; sd.cpp `master-890`) et sur Mac Apple Silicon (Metal ;
   sd.cpp `master-959`, encodeur GGUF). Modèles Q4_K_M et Q8_0. Trois usages (texte → image, édition, dessin guidé),
@@ -67,6 +67,8 @@ Mis à jour le 14/10/2026.
 
 ### 2026-10-15
 
+- Version 0.2.0 (`a895086`, tag `v0.2.0`) : `CHANGELOG.md` créé, la version du 23/09/2026 comptée comme 0.1.0.
+  Rapport du parcours validé par le porteur.
 - Une génération privée apparaît dans la file des autres appareils exactement comme une génération incognito, et les
   messages d'échec de `logs/` disent « incognito » (`c6e968a`, ticket Asana `1219532320923400`, décision du porteur).
   CLAUDE.md complété avec la règle `_secure`, le rechiffrement et les trois origines du banc (`54a00d0`, validé par le
