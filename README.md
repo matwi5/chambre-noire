@@ -731,7 +731,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `POST /api/job/<id>/forget` l'oublie (l'image reste dans l'espace) ; suivi (`GET /api/job/<id>`, `…/preview`),
   annulation et oubli (`POST /api/job/<id>/cancel`, `…/forget`) d'une génération privée, et `POST /api/lot/<id>/cancel`
   d'un lot privé : requête sûre et session exigées, sinon 404 (« job inconnu », « lot inconnu »), comme un identifiant
-  inconnu ; l'annulation et l'oubli prolongent la session, pas le suivi ;
+  inconnu ; l'annulation prolonge la session, ni le suivi ni l'oubli ;
   `/api/forget` (fermeture de la page) ne l'arrête
   pas. Galerie privée, session exigée (403 sinon), chaque requête prolongeant la session : `GET /api/private/history`
   (réglages déchiffrés de chaque image, avec `id`), `GET /api/private/image?id=…[&download=1]`,

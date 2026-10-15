@@ -1980,7 +1980,9 @@ class H(BaseHTTPRequestHandler):
         m = re.match(r"^/api/job/([\w-]+)/(cancel|forget)$", path)
         if m:
             job = S.jobs.get(m.group(1))
-            if not job or self._hidden(job, touch=True):
+            # l'annulation est un geste dans l'espace (session prolongée) ; l'oubli, envoyé seul par la page à la fin
+            # d'une génération, ne la prolonge pas
+            if not job or self._hidden(job, touch=m.group(2) == "cancel"):
                 return self._send(404, {"error": "job inconnu"})
             if m.group(2) == "forget" and not secret(job):
                 return self._send(400, {"error": "seul un job incognito ou privé peut être oublié"})

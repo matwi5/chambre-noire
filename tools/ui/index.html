@@ -1130,7 +1130,7 @@ const forgetJob = id => fetch('/api/job/'+id+'/forget', {method:'POST', headers:
 // progression d'une génération de la page : part faite (0 à 1), titre, détail, temps restant avant son image
 function progress(p){
   const j=p.j, elapsed=j.elapsed||0;
-  if(j.status==='queued'){ const n=j.queue_position||0, e=queueState.find(x=>ownOf(x)===p);   // son entrée : son ahead
+  if(j.status==='queued'){ const n=j.queue_position||0, e=queueState.find(x=>x.id ? x.id===p.id : ownOf(x)===p);   // son entrée : son ahead
     return { frac:.02, title:'En attente', sub:n ? ordinal(n)+' dans la file' : 'démarre…', remaining:waitBefore(n)+(e && e.ahead || 0)+p.est }; }
   if(j.phase==='décodage VAE') return { frac:.97, title:'Décodage', sub:'dernière touche', remaining:p.vaeSec };
   if(j.step){ const spi=j.sec_per_it_recent||j.sec_per_it||p.stepSec;   // moyenne des derniers pas mesurés
@@ -1266,16 +1266,18 @@ $('queueList').addEventListener('click', async ev=>{
   if(p){ closeSheet(); if(mode==='hist') goTab(p.tab); pick(p); $('stage').scrollIntoView({behavior:'smooth', block:'center'}); } });
 // suivi des générations de la page : une interrogation par seconde de chacune tant qu'elle n'est pas terminée
 function track(j, info){
-  const had=pageJobs.find(p=>p.id===j.id);         // déjà suivie (générations privées de la file) : complétée par info
-  if(had){ ['prompt','tab','w','h','thumb','est'].forEach(k=>{ if(info[k]) had[k]=info[k]; }); had.adopted=had.adopted && !!info.adopted;
-    return renderStrip(); }
-  pageJobs.push({ id:j.id, j, incognito:!!j.incognito, private:!!j.private, lot:j.lot||null, prompt:info.prompt||'', tab:info.tab||'t2i', w:info.w, h:info.h, thumb:info.thumb||null,
-    est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0,
-    adopted:!!info.adopted });                      // adopted : reprise de la file (espace privé), pas lancée ici
-  while(pageJobs.length>MAX_PAGE_JOBS){ const k=pageJobs.findIndex(p=>p.result && !p.result.blob && p!==shown && !sameLot(p, shown)); if(k<0) break; pageJobs.splice(k, 1); }
-  if(!j.incognito && !j.private) saveOwn();
-  // l'image incognito affichée le reste ; une génération reprise de la file (adopted) ne remplace pas ce qui est montré
-  if((shown && shown.incognito && shown.result) || (info.adopted && shown)) renderStrip();
+  // déjà suivie (génération privée reprise de la file pendant l'envoi de sa demande) : complétée par info, et lancée
+  // ici si info le dit (elle passe alors dans la zone de résultat comme une génération qui vient d'être lancée)
+  let p=pageJobs.find(q=>q.id===j.id);
+  if(p){ ['prompt','tab','w','h','thumb','est'].forEach(k=>{ if(info[k]) p[k]=info[k]; }); p.adopted=p.adopted && !!info.adopted; }
+  else { pageJobs.push(p={ id:j.id, j, incognito:!!j.incognito, private:!!j.private, lot:j.lot||null, prompt:info.prompt||'', tab:info.tab||'t2i', w:info.w, h:info.h, thumb:info.thumb||null,
+      est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0,
+      adopted:!!info.adopted });                    // adopted : reprise de la file (espace privé), pas lancée ici
+    while(pageJobs.length>MAX_PAGE_JOBS){ const k=pageJobs.findIndex(q=>q.result && !q.result.blob && q!==shown && !sameLot(q, shown)); if(k<0) break; pageJobs.splice(k, 1); }
+    if(!j.incognito && !j.private) saveOwn(); }
+  // l'image incognito affichée le reste ; une génération reprise de la file (adopted) ne remplace pas ce qui est montré,
+  // ni une génération de l'autre espace (demande publique acceptée après l'entrée dans l'espace privé : hors de l'écran)
+  if((shown && shown.incognito && shown.result) || (info.adopted && shown) || !ofSpace(p)) renderStrip();
   else show(oldestActive());
   renderIsland(); pollJobs(); }
 async function pollJobs(){
@@ -1703,9 +1705,8 @@ function applyPrivate(p){ if(!p) return; const was=inPrivate(); privState=p;
   document.documentElement.classList.toggle('priv', p.unlocked); document.documentElement.classList.toggle('incog', incogOn && !p.unlocked);
   if(was!==p.unlocked) changedSpace(p.unlocked);
   // sortie que l'appareil n'a pas demandée (fermeture par le Mac après 15 minutes, espace supprimé ou code changé
-  // ailleurs) : le
-  // champ perd le curseur et un message le dit, pour que les touches suivantes ne partent pas dans la saisie publique
-  // sans qu'on le voie ; rien de tel après « Sortir »
+  // ailleurs) : le champ perd le curseur et un message le dit, pour que les touches suivantes ne partent pas dans la
+  // saisie publique sans qu'on le voie ; rien de tel après « Sortir »
   if(was && !p.unlocked && !erasePrivate){ document.activeElement?.blur(); toast('Espace privé fermé : retour dans l\'espace public'); }
   // hors de l'espace, asideInput est la saisie privée : effacée après « Sortir » (même vue à une interrogation suivante)
   // ou avec l'espace supprimé ; sinon (fermeture par le Mac) gardée pour le retour
