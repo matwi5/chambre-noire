@@ -297,3 +297,21 @@ test('espaces : une demande privée acceptée après la fermeture par le Mac ne 
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   page.assertNoErrors();
 });
+
+test('Créer : un texte tapé pendant l\'envoi reste quand la demande est acceptée', async () => {
+  await fresh('t2i');
+  await type('t2i', 'premier texte');
+  refusal = 'hold'; held = Promise.withResolvers();
+  await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/generate', requestStage: 'Response' }] });
+  const jobsBefore = await page.eval(`pageJobs.length`);
+  await page.click('#go');
+  const requestId = await held.promise;            // le Mac a accepté, la page n'a pas encore sa réponse
+  await type('t2i', 'texte suivant');
+  await page.send('Fetch.continueRequest', { requestId });
+  await page.send('Fetch.disable');
+  refusal = null;
+  await page.waitFor(`pageJobs.length > ${jobsBefore}`, { what: 'demande acceptée' });
+  assert.equal(await value('t2i'), 'texte suivant');
+  assert.equal(await draft('t2i'), 'texte suivant');
+  page.assertNoErrors();
+});

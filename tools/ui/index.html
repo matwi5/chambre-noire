@@ -1308,8 +1308,10 @@ function inputThumb(){ return mode==='edit' && editImages.length ? editImages[0]
 $('go').onclick=async()=>{                         // toujours actif : la demande rejoint la file avec les réglages du moment
   let body; try{ body=buildRequest(); }catch(e){ toast(e.message, 'err'); return; }
   const tab=mode, thumb=inputThumb(), priv=inPrivate();   // pris avant l'envoi : onglet et espace peuvent changer pendant l'attente
+  const sent={ text:$(tab+'_prompt').value, images:editImages.slice(), mask:maskImage };   // saisie qui part (voir emptyTab)
   askNotifications();                              // première génération : autorisation demandée une fois (appui en cours)
   if(estSeconds>3600 && !await ask('Génération longue', 'Temps estimé : '+fmt(estSeconds)+'. La lancer quand même ?', 'Lancer')) return;
+  if(body.incognito) try{ localStorage.removeItem('qwen-'+tab+'_prompt'); }catch(e){}   // texte incognito : jamais retenu, même refusé
   log(`${body.mode} ${body.width}x${body.height} ${body.steps} étapes refs=${body.ref_images.length}${body.campaign ? ' campagne='+body.campaign.length : ''} mask=${body.mask_image?'oui':'non'} aperçus=${body.preview?'oui':'non'} estimation=${fmt(estSeconds)}`);
   let r, j; try{ r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=await r.json(); }
   catch(e){ toast('Serveur injoignable', 'err'); return; }
@@ -1318,7 +1320,7 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   const camp=body.campaign;                         // campagne : chaque génération a sa photo, ses dimensions et son estimation
   jobs.forEach((x, k)=>track(x, {prompt:body.prompt, tab, w:camp ? camp[k].width : body.width, h:camp ? camp[k].height : body.height,
     thumb:camp ? camp[k].image : thumb, est:camp ? campaignEst[k]||estOne : estOne, stepSec:stepSeconds, vaeSec:vaeSeconds}));
-  emptyTab(tab, priv);                              // demande acceptée : l'onglet est prêt pour la suivante (refus : rien n'est vidé)
+  emptyTab(tab, priv, sent);                        // demande acceptée : l'onglet est prêt pour la suivante (refus : rien n'est vidé)
   if(jobs[0].queue_position) toast((!j.lot ? 'Ajoutée' : camp ? `Campagne de ${jobs.length} photos ajoutée` : `Lot de ${jobs.length} images ajouté`)+' à la file · '+ordinal(jobs[0].queue_position)+' en attente');
   document.activeElement.blur(); requestAnimationFrame(()=>$('stage').scrollIntoView({behavior:'smooth', block:'center'}));
   refreshStatus();
@@ -1688,16 +1690,20 @@ function putInput(s){                              // s : saisie mise de côté,
   if(s && s.mask){ maskImage=s.mask.image; showMaskImage(s.mask.pixels); } else dropMaskImage();
   forceImageRatio=!!(s && s.imageRatio); refreshChoices(); }
 function swapInput(){ const here=readInput(); putInput(asideInput); asideInput=here; }
-// vide un onglet de la saisie d'un espace (priv : celui d'où la demande est partie) : texte, images (Éditer), image à
-// retoucher et masque (Dessiner), et le brouillon s'il est public ; si l'espace a changé entre-temps, c'est sa saisie
-// mise de côté qui est vidée. L'estimation suit.
-function emptyTab(tab, priv=inPrivate()){
-  if(!priv) try{ localStorage.removeItem('qwen-'+tab+'_prompt'); }catch(e){}
-  if(priv!==inPrivate()){ const s=asideInput; if(s){ s.text[tab]=''; if(tab==='edit') s.editImages=[]; if(tab==='mask') s.mask=null; } return; }
-  $(tab+'_prompt').value='';
-  if(tab==='edit'){ editImages=[]; renderEditThumbs(); }
-  if(tab==='mask' && maskImage) dropMaskImage();
-  refreshChoices(); }
+// vide un onglet de la saisie d'un espace (priv : celui d'où la demande est partie) de ce qui est parti avec la demande
+// (sent : texte, images d'Éditer, image à retoucher et son masque), et le brouillon s'il est public ; ce qui a été tapé
+// ou ajouté pendant l'envoi reste. Les images sont retirées de la liste elle-même, qu'un ajout en cours remplit encore.
+// Si l'espace a changé entre-temps, c'est sa saisie mise de côté qui est vidée. L'estimation suit.
+function emptyTab(tab, priv, sent){
+  const here=priv===inPrivate(), s=here ? null : asideInput; if(!here && !s) return;
+  const field=$(tab+'_prompt'), text=here ? field.value : s.text[tab];
+  if(text===sent.text){ if(here) field.value=''; else s.text[tab]='';
+    if(!priv) try{ localStorage.removeItem('qwen-'+tab+'_prompt'); }catch(e){} }
+  if(tab==='edit'){ const list=here ? editImages : s.editImages;
+    sent.images.forEach(e=>{ const i=list.indexOf(e); if(i>=0) list.splice(i, 1); }); }
+  if(tab==='mask'){ const m=here ? maskImage : s.mask && s.mask.image;
+    if(m && m===sent.mask){ if(here) dropMaskImage(); else s.mask=null; } }
+  if(here){ if(tab==='edit') renderEditThumbs(); refreshChoices(); } }
 function openPrivSheet(id){
   // en http:// sur le Wi-Fi, l'espace ne s'ouvre pas (le code passerait en clair) : la feuille le dit, sans champ de code.
   // secure ou local absent (serveur pas encore relancé après une mise à jour de cette page) : rien n'est masqué, le
@@ -1729,8 +1735,9 @@ async function privUnlock(){ if(!$('puCode').value) return;
 // effacée (applyPrivate, à la sortie), en plus de ce que changedSpace retire à toute sortie (résultats, grille,
 // visionneuse, aperçus)
 async function privLock(){ erasePrivate=true;
-  const ok=await postJson('/api/private/lock', {}).then(r=>r.ok, ()=>false);
-  if(!ok){ erasePrivate=false; return toast('Sortie impossible : Mac injoignable', 'err'); }   // rien n'est effacé
+  const r=await postJson('/api/private/lock', {}).catch(()=>null);
+  if(!r || !r.ok){ erasePrivate=false;                // rien n'est effacé
+    return toast('Sortie impossible : '+(r ? 'erreur '+r.status : 'Mac injoignable'), 'err'); }
   await refreshStatus(); toast('Sorti de l\'espace privé'); }
 async function privChangeCode(){ const n=$('pkNew').value;
   if(n.length<8) return $('pkErr').textContent='Nouveau code : 8 caractères au moins.';

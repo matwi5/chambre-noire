@@ -238,9 +238,10 @@ Les descriptions en **anglais, longues et précises** donnent les meilleurs rés
 **Générer** reste actif pendant une génération : chaque appui ajoute une demande à la **file d'attente**, avec les
 réglages du moment. Dès que le Mac accepte la demande, l'onglet est vidé pour la suivante : texte et son brouillon,
 images (Éditer, campagne comprise : l'interrupteur **Campagne** reste tel quel), image à retoucher et masque
-(Dessiner) ; les Réglages ne bougent pas (seul le format « Image », qui suit l'image, part avec elle). Si la demande est refusée (erreur du Mac, Mac injoignable, génération longue
-non confirmée), rien n'est vidé. Le Mac calcule les générations une à une, dans l'ordre d'arrivée, qu'elles viennent de
-l'ordinateur ou du téléphone. Pendant le calcul, l'image en cours affiche l'étape, le temps restant et un bouton
+(Dessiner) ; ce qui a été tapé ou ajouté pendant l'envoi reste ; les Réglages ne bougent pas (seul le format
+« Image », qui suit l'image, part avec elle). Si la demande est refusée (erreur du Mac, Mac injoignable, génération
+longue non confirmée), rien n'est vidé. Le Mac calcule les générations une à une, dans l'ordre d'arrivée, qu'elles
+viennent de l'ordinateur ou du téléphone. Pendant le calcul, l'image en cours affiche l'étape, le temps restant et un bouton
 d'annulation (une génération annulée ne laisse aucun fichier : ni image, ni images d'entrée, ni aperçus, ni journal du
 moteur) ; une génération qui attend affiche sa place dans la file et le temps avant son image. La zone de résultat
 suit la plus ancienne génération de la page qui n'est pas terminée, puis montre son image ; quand la page en a lancé
