@@ -153,6 +153,10 @@ _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par �
     avec la clé privée d'une session (refusé si elle n'est plus celle de l'espace). Le changement de code le
     rechiffre dans `private/.rekey/prompts` avant la bascule, puis `finish_rekey()` le met à la place de l'ancien ; un
     fichier déjà illisible est recopié tel quel.
+  - Droits (ajouté le 15/10/2026) : tout fichier écrit dans `private/` (images, prompts, `space.json`, copies de
+    `.rekey/`, fichiers temporaires) est créé en 600 et tout dossier en 700 (`open_private`, `private_dir`), contrôlé
+    par le banc à la fin des tests de l'espace privé ; les fichiers d'un espace créé avant gardent leurs droits
+    jusqu'au prochain changement de code.
   - Sessions : une par appareil, en mémoire du serveur (`S.private_sessions`), jeton aléatoire de 256 bits dans le
     cookie `qwen_private` (HttpOnly, `SameSite=Strict`, sans `Max-Age`) ; fermée après 15 min sans requête privée
     (`/api/status` et le suivi des générations ne la prolongent pas), par `/api/private/lock`, et par

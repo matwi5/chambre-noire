@@ -35,7 +35,7 @@ Dans l'ordre du fichier :
   jamais l'écrire (ids `type-…`, que les routes d'écriture ne trouvent pas : 404).
 - **Espace privé** (`private/`) : constantes `PRIVATE`, `PRIVATE_COOKIE`, `PRIVATE_IDLE`, `PRIVATE_LOCK` (un `RLock`),
   `REKEY`, `SCRYPT_N`, `HAVE_CRYPTO` ; clés : `read_space`, `code_key`, `write_space`, `open_space` ; mise sur disque :
-  `sync_fd`, `write_synced`, `sync_dir` ; chiffrement par fichier : `file_key`, `seal`, `unseal` ; images :
+  `sync_fd`, `write_synced`, `sync_dir`, avec les droits 600 et 700 de `open_private` et `private_dir` ; chiffrement par fichier : `file_key`, `seal`, `unseal` ; images :
   `store_private`, `read_private`, `private_history` ; prompts privés : `private_prompts` (`private/prompts`, scellé
   à l'étiquette `prompts`) ; changement de code : `rekey_space` (tout dans
   `private/.rekey/`, bascule par `os.replace` de `space.json`) et `finish_rekey` (termine ou abandonne un changement

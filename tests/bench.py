@@ -187,6 +187,77 @@ def private_status(session=None, remote=False, wifi=False):
     return call("GET", "/api/status", remote=remote, private=session, wifi=wifi)[1]["private"]
 
 
+def private_entries():
+    """Fichiers et dossiers de private/ (dossier temporaire du banc) : deux listes de chemins relatifs à private/."""
+    root, files, dirs = launch.P("private"), [], []
+    for here, subdirs, names in os.walk(root):
+        dirs += [os.path.relpath(os.path.join(here, d), root) for d in subdirs]
+        files += [os.path.relpath(os.path.join(here, n), root) for n in names]
+    return files, (["."] + dirs if os.path.isdir(root) else [])
+
+
+def assert_private_owner_only(test):
+    """Contrôle à la fin d'un test de l'espace privé : tout fichier de private/ (restes et fichiers temporaires compris)
+    est lisible par son seul propriétaire (0o600), tout dossier en 0o700. Renvoie le nombre de fichiers examinés.
+    Sans objet sous Windows (droits POSIX)."""
+    if os.name != "posix":
+        return 0
+    files, dirs = private_entries()
+    root = launch.P("private")
+    for rel, mode in [(f, 0o600) for f in files] + [(d, 0o700) for d in dirs]:
+        test.assertEqual(oct(os.stat(os.path.join(root, rel)).st_mode & 0o777), oct(mode), f"private/{rel}")
+    return len(files)
+
+
+def sealed_label(rel):
+    """Étiquette de seal() d'un fichier de private/ (relatif) : « <id>/<rôle> » pour une image (dans items/ ou
+    .rekey/items/, dossier caché .<id> compris), « prompts » pour les prompts (et leur .tmp) ; None si non scellé."""
+    parts = rel.split(os.sep)
+    if parts[0] == launch.REKEY:
+        parts = parts[1:]
+    if len(parts) == 3 and parts[0] == "items":
+        return f"{parts[1].lstrip('.')}/{parts[2]}"
+    if parts in (["prompts"], ["prompts.tmp"]):
+        return "prompts"
+    return None
+
+
+def assert_old_key_opens_nothing(test, old_key, new_key=None):
+    """Après un changement de code : aucun fichier scellé de private/ (restes .tmp et .rekey/ compris) ne s'ouvre avec
+    old_key, la clé privée d'avant ; chacun s'ouvre avec new_key si elle est donnée (contrôle que l'étiquette est la
+    bonne : avec une mauvaise, unseal échouerait pour toute clé). Renvoie le nombre de fichiers scellés examinés."""
+    from cryptography.exceptions import InvalidTag
+    root, n = launch.P("private"), 0
+    for rel in private_entries()[0]:
+        label = sealed_label(rel)
+        if label is None:
+            continue
+        n += 1
+        with open(os.path.join(root, rel), "rb") as f:
+            blob = f.read()
+        with test.assertRaises((InvalidTag, ValueError), msg=f"private/{rel} s'ouvre avec l'ancienne clé"):
+            launch.unseal(blob, old_key, label)
+        if new_key is not None:
+            launch.unseal(blob, new_key, label)
+    return n
+
+
+class PrivateFilesCheck:
+    """À mettre avant BenchCase dans les tests de l'espace privé : assert_private_owner_only() à la fin de chaque test,
+    et au moins un fichier examiné sur toute la classe (sinon le contrôle ne vérifiait rien)."""
+    checked = 0
+
+    def tearDown(self):
+        type(self).checked += assert_private_owner_only(self)
+        super().tearDown()
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        if os.name == "posix" and not cls.checked:
+            raise AssertionError(f"{cls.__name__} : aucun fichier de private/ examiné à la fin des tests")
+
+
 def gen_body(prompt="a red car", mode="t2i", **kw):
     """Corps de /api/generate tel que l'envoie l'interface (512×512, 4 étapes, sans aperçu)."""
     body = {"mode": mode, "prompt": prompt, "width": 512, "height": 512, "steps": 4, "cfg": 1, "seed": -1,
