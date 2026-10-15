@@ -46,7 +46,9 @@ Vérifications : aucun lint ni typage n'est déclaré. Après un changement :
 
 ## Service macOS sur le poste du porteur
 
-L'interface tourne en LaunchAgent `com.matwi5.qwen-image-local` (journal `logs/service.log`), avec `--lan`.
+L'interface tourne en LaunchAgent `com.matwi5.qwen-image-local` (journal `logs/service.log`), avec `--lan`, depuis le
+dossier principal du dépôt, qui reste sur la branche `main` : le service ne fait tourner que ce qui est fusionné.
+Après la fusion d'une PR, mettre ce dossier à jour (`git pull --ff-only` sur `main`) avant de relancer le service.
 `tools/ui/index.html` est relu à chaque requête : un changement d'interface est en ligne dès l'enregistrement, donc
 avant que le serveur qui va avec soit relancé. Un changement de `tools/launch.py` demande de relancer le service, et
 seulement si aucune génération ne tourne :
@@ -178,6 +180,11 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
 - Documentation, commentaires et interface en français ; messages de commit en anglais, une phrase à l'impératif sans
   préfixe (« Add an incognito mode that keeps generated images off the disk »), corps qui explique le pourquoi.
 - Le README décrit chaque comportement visible et l'API locale : le mettre à jour dans le même commit que le code.
+- Branches (décision du porteur du 15/10/2026) : on code toujours sur `dev`, dans le worktree `.claude/worktrees/dev`
+  (le dossier principal reste sur `main` pour le service) ; les sessions de groupe se lancent depuis ce worktree, pour
+  partir de `dev`, et leurs branches s'y fusionnent. `main` ne reçoit que des pull requests depuis `dev` (`/project:pr`)
+  et est protégée sur GitHub (PR obligatoire, ni push direct ni forcé, administrateur compris). `/project:push` se lance
+  sur `dev` ; après la fusion d'une PR, `/project:sync main` remet `dev` à jour.
 - Suivi des tâches : Asana « Hub · Suivi des tâches », section « Qwen-Image local » (GID `1219496223389136`), tâche
   mère de Claude « [code] Qwen-Image local : prochaines sessions Claude Code » (GID `1219493010479174`), tenus par
   `asana-board:suivi-asana` (adopté le 14/10/2026). Specs dans `docs/specs/`, plans des gros travaux dans
