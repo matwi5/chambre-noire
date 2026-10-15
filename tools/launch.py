@@ -1768,12 +1768,12 @@ class H(BaseHTTPRequestHandler):
             session = self._private_session(touch=True)
             if not session:
                 return self._send(403, {"error": "espace privé verrouillé"})
-            error = prompt_error(m.group(1) or "save", body)
+            verb = m.group(1) or "save"            # save, delete ou used
+            error = prompt_error(verb, body)
             if error:
                 return self._send(400, {"error": error})
             try:
-                return self._send(*change_prompt(m.group(1) or "save", body,
-                                                 lambda update: private_prompts(session["key"], update)))
+                return self._send(*change_prompt(verb, body, lambda update: private_prompts(session["key"], update)))
             except StaleKey:
                 return self._send(403, {"error": "espace privé verrouillé"})
             except (OSError, InvalidTag, ValueError):

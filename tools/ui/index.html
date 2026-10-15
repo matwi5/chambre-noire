@@ -1460,9 +1460,9 @@ async function savePrompt(){ const p=editingPrompt, body={title:$('peTitle').val
     toast(p.id ? 'Prompt modifié' : 'Prompt enregistré'); openPrompts(); }
   catch(e){ if(priv===inPrivate()) toast('Enregistrement impossible : '+e.message, 'err'); }
   finally{ $('peSave').disabled=false; } }
-async function deletePrompt(p){ const priv=inPrivate();
+async function deletePrompt(p){ const priv=inPrivate(), url=promptsApi('/delete');   // route notée avant l'attente
   if(!await ask('Supprimer ce prompt ?', p.title, 'Supprimer', true)) return priv===inPrivate() && openPrompts();
-  try{ const r=await postJson(promptsApi('/delete'), {id:p.id}); if(!r.ok) throw new Error((await r.json()).error);
+  try{ const r=await postJson(url, {id:p.id}); if(!r.ok) throw new Error((await r.json()).error);
     if(priv===inPrivate()) toast('Prompt supprimé'); }
   catch(e){ if(priv===inPrivate()) toast('Suppression impossible : '+e.message, 'err'); }
   if(priv===inPrivate()) openPrompts(); }
