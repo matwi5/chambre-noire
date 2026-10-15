@@ -1568,6 +1568,10 @@ def public(job):
     d["incognito"], d["private"] = bool(job.get("incognito")), bool(job.get("private"))
     d["item"] = job.get("item")                   # image privée rangée : identifiant dans la galerie privée
     d["lot"], d["seed"] = job.get("lot"), job.get("seed")
+    # prompt complet, pour la page qui reprend une génération (la file n'en montre que le début) : tant que la demande
+    # est en mémoire (une privée l'oublie à sa fin), jamais pour une incognito (sa seule page le connaît déjà) ; une
+    # privée n'est suivie que dans l'espace privé (_hidden)
+    d["prompt"] = None if job.get("incognito") else (job.get("req") or {}).get("prompt")
     d["path"] = job["out"] if job.get("status") == "done" and not secret(job) else None
     d["name"] = os.path.basename(job["out"])
     return d

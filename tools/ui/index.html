@@ -1360,7 +1360,8 @@ async function followQueue(entries, info){
     try{ const r=await fetch('/api/job/'+e.id); if(!r.ok) continue; const j=await r.json();
       if(!isActive({j}) || !!j.private!==inPrivate() || pageJobs.some(p=>p.id===j.id)) continue;
       if(!j.private) log('reprise de la génération '+j.id);
-      track(j, {prompt:e.prompt, tab:tabOf(e.mode), est:e.estimate, ...info}); }
+      // prompt complet du suivi (la file n'en a que le début ; serveur pas encore relancé : l'extrait)
+      track(j, {prompt:j.prompt||e.prompt, tab:tabOf(e.mode), est:e.estimate, ...info}); }
     catch(err){}
     finally{ following.delete(e.id); } } }
 // générations normales de la file (espace public) lancées depuis ce navigateur : après un rechargement, et au retour

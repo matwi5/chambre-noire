@@ -170,7 +170,8 @@ invariants ».
   `queue_view`) toutes les 2 s tant qu'elle n'est pas vide ; la file et l'île ne parlent que des générations de
   l'espace affiché (`ofSpace`, `spaceActive`), le temps d'attente ajoute `ahead` ; après un rechargement, elle se
   rattache aux seules générations normales lancées depuis ce navigateur (identifiants dans `localStorage`,
-  `qwen-own`), et dans l'espace privé à toutes les générations privées actives (`adoptPrivate`). À la sortie de
+  `qwen-own`), et dans l'espace privé à toutes les générations privées actives (`adoptPrivate`), avec le prompt
+  complet que donne leur suivi (`followQueue` ; `public(job)` le tait pour l'incognito). À la sortie de
   l'espace privé, `changedSpace` retire de la page ses générations privées ; dans l'espace privé, les publiques restent
   suivies hors de l'écran. Ses lignes
   incognito de `queue` se reconnaissent au jeton de la page (`PAGE_TOKEN`, champ `page` de `/api/generate`). Un lot

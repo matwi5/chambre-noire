@@ -258,11 +258,12 @@ l'espace ne tourne, la pastille dit « En attente » et le temps avant le début
 en file, elle reste éteinte même quand le Mac calcule pour l'autre espace. On peut recharger la page sans rien
 perdre : elle se rattache aux générations normales qu'elle avait lancées (retenues par le navigateur), pas à celles
 des autres appareils, qui restent visibles dans la file, ni aux générations incognito ; dans l'espace privé, à toutes
-les générations privées en cours (voir « Espace privé »). Les lignes lancées par l'appareil y sont marquées « cet
-appareil ». Le bouton Incognito se change à
-tout moment : chaque génération garde le mode choisi à son lancement. Chaque image est enregistrée en PNG dans
-**`outputs\`**, avec ses images d'entrée (références, image d'origine, zone peinte) dans `outputs\.inputs\`. Sous le
-résultat : **Télécharger**, **Partager** et **Copier** (dans le presse-papiers), puis **Éditer** et **Dessiner**, qui le
+les générations privées en cours (voir « Espace privé »). Une génération ainsi reprise garde son prompt complet
+(sous l'image, et pour **Reprendre** depuis la visionneuse), pas seulement le début qu'en montre la file. Les lignes
+lancées par l'appareil y sont marquées « cet appareil ». Le bouton Incognito se change à tout moment : chaque
+génération garde le mode choisi à son lancement. Chaque image est enregistrée en PNG dans **`outputs\`**, avec ses
+images d'entrée (références, image d'origine, zone peinte) dans `outputs\.inputs\`. Sous le résultat :
+**Télécharger**, **Partager** et **Copier** (dans le presse-papiers), puis **Éditer** et **Dessiner**, qui le
 réutilisent comme point de départ, et **Supprimer**. Partager et Copier ne sont proposés que là où le navigateur les
 permet : sur l'ordinateur lui-même, ou sur le téléphone par l'adresse HTTPS de Tailscale (pas par l'adresse `http://`
 du Wi-Fi).
@@ -683,7 +684,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     image en bruit).
 - API locale : `POST /api/generate`, `GET /api/job/<id>` (`queue_position` : rang parmi les générations de son
   espace, public ou privé, 0 pour celle qui tourne, sinon les générations de l'espace en attente devant elle, plus une
-  si une génération tourne ; recalculé à chaque lecture ; `seed` : graine utilisée ; `lot`),
+  si une génération tourne ; recalculé à chaque lecture ; `seed` : graine utilisée ; `lot` ; `prompt` : le prompt
+  complet, tant que la demande est en mémoire, `null` pour une génération incognito et pour une privée une fois
+  finie, rangée, en échec ou annulée),
   `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel` (sans effet sur une génération déjà terminée, réussie, en échec ou annulée), `GET /api/status` (`queue` : la file de l'espace de
   l'appareil, génération en cours d'abord : dans l'espace privé, ses seules générations privées ; ailleurs, les
   générations normales et incognito ; l'appareil est dans l'espace privé quand sa session est ouverte et que la

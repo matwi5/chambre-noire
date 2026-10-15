@@ -65,10 +65,10 @@ contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net`
   `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `smoke` (écrans principaux),
   `keep` (régression « Garder celle-ci »), `saisie` (photos choisies d'un coup, vidage après « Générer », saisie
   propre à chaque espace ; `page.setFiles` remplit un champ de fichiers), `file` (file et pastille propres à chaque
-  espace), `entete` (cadenas de la galerie, pastille qui tient dans sa bulle) et `prompts` (prompts enregistrés
-  propres à chaque espace). Une vérification d'interface nouvelle
-  y devient un test plutôt qu'un script jetable. Une vue plus grande cache des débordements : regarder aussi les
-  captures (`page.screenshot`).
+  espace), `entete` (cadenas de la galerie, pastille qui tient dans sa bulle), `prompts` (prompts enregistrés
+  propres à chaque espace) et `reprise` (prompt complet d'une génération reprise, publique ou privée). Une
+  vérification d'interface nouvelle y devient un test plutôt qu'un script jetable. Une vue plus grande cache des
+  débordements : regarder aussi les captures (`page.screenshot`).
 - La fermeture de la page (`pagehide`, envoi `keepalive`) se valide sur le téléphone : Chrome sans écran ne la rejoue
   pas de façon constante.
 - `tests/run_tests.py --steps 8 [--only t2i|edit|mask|annot]` : bout en bout, serveur lancé sur 127.0.0.1:7860. Il
