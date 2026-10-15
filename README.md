@@ -230,29 +230,40 @@ Sous le texte, trois pastilles résument le format, la résolution et les étape
 Le bouton **Générer** affiche le temps estimé ; à sa droite, le bouton **Incognito** (icône de chapeau et lunettes)
 active le [mode incognito](#mode-incognito) : l'interface passe alors en thème graphite sombre, sans couleurs ni image
 en fond, comme la navigation privée des navigateurs. Le navigateur retient les réglages choisis,
-le mode incognito et le texte en cours de chaque onglet (sauf en incognito).
+le mode incognito et le texte en cours de chaque onglet de l'espace public (sauf en incognito).
 
 Conseil : **540p + 12 étapes** pour chercher la bonne formulation, puis montez la résolution et les étapes pour la version finale.
 Les descriptions en **anglais, longues et précises** donnent les meilleurs résultats.
 
 **Générer** reste actif pendant une génération : chaque appui ajoute une demande à la **file d'attente**, avec les
-réglages du moment. Le Mac calcule les générations une à une, dans l'ordre d'arrivée, qu'elles viennent de
-l'ordinateur ou du téléphone. Pendant le calcul, l'image en cours affiche l'étape, le temps restant et un bouton
+réglages du moment. Dès que le Mac accepte la demande, l'onglet est vidé pour la suivante : texte et son brouillon,
+images (Éditer, campagne comprise : l'interrupteur **Campagne** reste tel quel), image à retoucher et masque
+(Dessiner) ; ce qui a été tapé ou ajouté pendant l'envoi reste ; les Réglages ne bougent pas (seul le format
+« Image », qui suit l'image, part avec elle). Si la demande est refusée (erreur du Mac, Mac injoignable, génération
+longue non confirmée), rien n'est vidé. Le Mac calcule les générations une à une, dans l'ordre d'arrivée, qu'elles
+viennent de l'ordinateur ou du téléphone. Pendant le calcul, l'image en cours affiche l'étape, le temps restant et un bouton
 d'annulation (une génération annulée ne laisse aucun fichier : ni image, ni images d'entrée, ni aperçus, ni journal du
 moteur) ; une génération qui attend affiche sa place dans la file et le temps avant son image. La zone de résultat
 suit la plus ancienne génération de la page qui n'est pas terminée, puis montre son image ; quand la page en a lancé
 plusieurs, une rangée de vignettes sous l'image passe de l'une à l'autre.
 
-La pastille d'état en haut suit la génération en cours depuis n'importe quel onglet et affiche « +N en attente ». Un
-appui ouvre la **file d'attente** : pour chaque génération, sa place, le début de son prompt et le temps avant son
-image, avec un bouton pour l'annuler. Une génération normale s'annule depuis n'importe quel appareil ; une génération
+La pastille d'état en haut suit la génération en cours depuis n'importe quel onglet et affiche « +N en attente »
+(« +N » seul quand l'écran est trop étroit pour tout contenir). Un appui ouvre la **file d'attente** : pour chaque
+génération, sa place, le début de son prompt et le temps avant son image, avec un bouton pour l'annuler. Une génération normale s'annule depuis n'importe quel appareil ; une génération
 incognito n'apparaît ailleurs que comme « Génération incognito », sans prompt ni aperçu, et seule la page qui l'a
-lancée peut l'annuler. On peut recharger la page sans rien perdre : elle se rattache aux générations normales qu'elle
-avait lancées (retenues par le navigateur), pas à celles des autres appareils, qui restent visibles dans la file, ni
-aux générations incognito. Les lignes de l'appareil y sont marquées « cet appareil ». Le bouton Incognito se change à
-tout moment : chaque génération garde le mode choisi à son lancement. Chaque image est enregistrée en PNG dans
-**`outputs\`**, avec ses images d'entrée (références, image d'origine, zone peinte) dans `outputs\.inputs\`. Sous le
-résultat : **Télécharger**, **Partager** et **Copier** (dans le presse-papiers), puis **Éditer** et **Dessiner**, qui le
+lancée peut l'annuler. La file et la pastille ne montrent que les générations de l'espace où l'on est (public, ou
+espace privé) : rang et « +N en attente » ne comptent qu'elles. Une génération qui attend derrière une génération
+de l'autre espace affiche « en attente » et un temps qui compte ce travail caché, sans ligne pour lui ; si rien de
+l'espace ne tourne, la pastille dit « En attente » et le temps avant le début de la première, et si l'espace n'a rien
+en file, elle reste éteinte même quand le Mac calcule pour l'autre espace. On peut recharger la page sans rien
+perdre : elle se rattache aux générations normales qu'elle avait lancées (retenues par le navigateur), pas à celles
+des autres appareils, qui restent visibles dans la file, ni aux générations incognito ; dans l'espace privé, à toutes
+les générations privées en cours (voir « Espace privé »). Une génération ainsi reprise garde son prompt complet
+(sous l'image, et pour **Reprendre** depuis la visionneuse), pas seulement le début qu'en montre la file. Les lignes
+lancées par l'appareil y sont marquées « cet appareil ». Le bouton Incognito se change à tout moment : chaque
+génération garde le mode choisi à son lancement. Chaque image est enregistrée en PNG dans **`outputs\`**, avec ses
+images d'entrée (références, image d'origine, zone peinte) dans `outputs\.inputs\`. Sous le résultat :
+**Télécharger**, **Partager** et **Copier** (dans le presse-papiers), puis **Éditer** et **Dessiner**, qui le
 réutilisent comme point de départ, et **Supprimer**. Partager et Copier ne sont proposés que là où le navigateur les
 permet : sur l'ordinateur lui-même, ou sur le téléphone par l'adresse HTTPS de Tailscale (pas par l'adresse `http://`
 du Wi-Fi).
@@ -273,7 +284,8 @@ pas **Garder celle-ci** : chaque image a son bouton de téléchargement, et elle
 
 ### Éditer
 
-Ajouter 1 à 10 images (elles sont numérotées 1, 2, 3…), puis écrire une **instruction** :
+Ajouter 1 à 10 images (elles sont numérotées 1, 2, 3…), une à une ou plusieurs d'un coup dans le sélecteur (elles
+sont ajoutées dans l'ordre de sélection), puis écrire une **instruction** :
 
 - « Replace the sky with a dramatic orange sunset, keep everything else unchanged »
 - « The woman in image 1 wears the jacket from image 2 »
@@ -334,7 +346,8 @@ existait encore (les 20 derniers).
 
 Le bouton **Prompts**, sous le champ de texte de **Créer**, **Éditer** et **Dessiner**, ouvre la liste des prompts
 enregistrés, le dernier utilisé en tête. Elle est gardée sur le Mac (`tools/saved_prompts.json`) : on retrouve sur le
-téléphone ce qui a été enregistré depuis le Mac, et inversement.
+téléphone ce qui a été enregistré depuis le Mac, et inversement. Dans l'espace privé, la liste est celle des prompts
+privés, chiffrés avec l'espace (voir [Espace privé](#espace-privé)) ; les prompts types restent les mêmes.
 
 - **Enregistrer le texte actuel** demande un titre (80 caractères au plus) et garde le texte du champ (4 000
   caractères au plus), modifiable avant d'enregistrer. Seuls le titre et le texte sont gardés, pas les réglages
@@ -383,8 +396,8 @@ Une galerie à part, chiffrée sur le Mac, qui ne s'ouvre qu'avec un **code priv
 d'accès du téléphone et demandé sur chaque appareil, le Mac compris : connaître le code d'accès, ou ouvrir les dossiers
 du Mac, ne suffit pas pour voir les images privées.
 
-- Rien ne le signale à l'arrivée sur l'application. Son entrée est le petit **cadenas** de l'en-tête de la
-  **Galerie** : la première fois, il crée l'espace (code de 8 caractères au moins, lettres, chiffres, signes ;
+- Rien ne le signale à l'arrivée sur l'application. Son entrée est le **cadenas** de l'en-tête de la **Galerie**,
+  à côté du bouton Rafraîchir et aussi visible que lui : la première fois, il crée l'espace (code de 8 caractères au moins, lettres, chiffres, signes ;
   majuscules et minuscules comptent ; saisi deux fois).
 - **En HTTPS ou sur le Mac seulement** : l'espace privé ne s'ouvre (création, entrée, galerie privée, Changer le
   code, Rendre privée) que sur le Mac lui-même ou par l'adresse HTTPS de Tailscale (celle en `https://` du panneau
@@ -402,31 +415,49 @@ du Mac, ne suffit pas pour voir les images privées.
   miniature, son prompt et ses réglages sont chiffrés sur le Mac. Le texte tapé n'est pas retenu par le navigateur.
   Une génération privée lancée va jusqu'au bout et est rangée chiffrée même si l'espace se verrouille avant la fin, ou
   si l'application est fermée ; sa notification est celle d'une image normale (« Image prête »), sans rien qui
-  trahisse l'espace privé. Les autres appareils ne voient
-  d'elle, dans la file, que « Génération privée », sans prompt ni aperçu.
+  trahisse l'espace privé. Hors de l'espace privé, la file n'en montre rien ; dedans, chaque génération privée y a
+  sa ligne complète (début du prompt, mode, rang dans son lot, temps restant), annulable, ainsi que son lot, quel que
+  soit l'appareil qui l'a lancée.
 - Les **variantes** et les **campagnes** marchent aussi dans l'espace privé : chaque image du lot est chiffrée, la
   grille et « Garder celle-ci » restent, et la notification est celle d'un lot normal (« N images prêtes »).
 - La **Galerie** de l'espace privé ne montre que les images privées, avec la même visionneuse : télécharger,
   partager, copier, images d'entrée, Éditer, Dessiner, Reprendre, Supprimer. En sortant, elles quittent l'écran.
-- **Sortir vide l'écran** : le texte et les images saisis dans l'espace (Créer, Éditer, Dessiner, Reprendre depuis
-  une image privée) sont effacés des onglets, comme les images privées de la zone de résultat, de la grille et de la
-  visionneuse. Une génération privée en cours continue, mais l'écran n'en montre plus que la progression, sans
-  aperçu ni prompt.
-- **Ce qui part de l'espace privé y reste** : si l'espace se ferme seul (15 minutes sans activité privée), un onglet
-  dont le texte ou les images ont été saisis dans l'espace garde son contenu et une pastille sarcelle. **Générer** y
-  demande alors le code et ne lance la génération, privée, qu'une fois dans l'espace : rien ne
-  repart en clair, pas même en incognito. La pastille disparaît quand l'onglet est entièrement vidé (texte et images)
-  hors de l'espace ; son texte n'est jamais retenu par le navigateur. Si l'espace privé est supprimé, ces onglets sont
-  vidés.
+- **Chaque espace a sa propre saisie**, onglet par onglet : texte, images d'Éditer, image à retoucher et son masque
+  de Dessiner. En entrant dans l'espace privé, la saisie publique est mise de côté et la saisie privée revient (vide
+  la première fois) ; en sortant, la saisie publique revient intacte. La saisie privée n'est jamais retenue par le
+  navigateur, brouillons compris : elle ne survit pas à la fermeture de l'application. L'interrupteur **Campagne** et
+  les Réglages sont communs aux deux espaces.
+- **Sortir vide l'écran** : la saisie privée est effacée, comme les images privées de la zone de résultat, de la grille
+  et de la visionneuse (si le Mac est injoignable, un message le dit et l'on reste dans l'espace). Les générations
+  privées en file ou en cours quittent aussi l'écran et la page (progression, aperçu, prompt, vignette, ligne de la
+  file) : elles continuent sur le Mac et sont rangées dans l'espace, mais une page sortie ne peut plus ni les suivre,
+  ni les prévisualiser, ni les annuler. Les générations publiques de la page, cachées pendant qu'on était dans l'espace
+  privé (elles y restent suivies, hors de l'écran), reviennent, avec leur image si elles ont fini entre-temps.
+- **Retour dans l'espace privé** : la page suit toutes les générations privées encore en file ou en cours, avec leur
+  prompt et leur progression, qu'elle les ait lancées ou non, aussi après un rechargement ou depuis un autre appareil
+  (aucun identifiant privé n'est gardé par le navigateur) ; la dernière image de l'espace public n'y est pas montrée.
+- **Fermeture automatique** : si l'espace se ferme seul (15 minutes sans activité privée), la saisie privée quitte
+  l'écran comme à la sortie, mais la page la garde en mémoire : elle revient si l'on rentre sans avoir fermé
+  l'application (un long texte en cours n'est pas perdu). Si l'espace privé est supprimé, elle est effacée. Quand
+  l'espace se ferme sans que l'appareil l'ait demandé (15 minutes sans activité privée, espace supprimé ou code changé
+  depuis un autre appareil), le champ en cours de saisie perd le curseur et un message dit « Espace privé fermé :
+  retour dans l'espace public », pour que la suite de la frappe ne parte pas dans la saisie publique sans qu'on le
+  voie ; rien de tel après « Sortir ».
 - **Rendre privée** : dans la visionneuse de la galerie normale, une fois l'espace créé, ce petit bouton demande le
   code privé, chiffre l'image, ses images d'entrée et ses réglages dans l'espace privé, puis l'efface de la galerie,
   de ses miniatures, du journal des générations et du dossier de travail, sans faire entrer dans l'espace. Il n'y a
   pas de chemin inverse (on télécharge l'image depuis l'espace privé). Les copies déjà faites restent : sauvegardes
   Time Machine, téléchargements, partages, et, faites à sa génération, la ligne du journal du serveur (`logs\`, nom du
   fichier et durée, sans le prompt) et sa mesure de calibration (dimensions et durées).
-- **Changer le code** demande l'ancien. Le Mac tire alors de nouvelles clés et rechiffre toutes les images privées :
-  elles restent lisibles avec le nouveau code, et une ancienne copie de l'espace (sauvegarde Time Machine du dossier
-  `private/`) ne s'ouvre plus avec l'ancien code sur les images d'aujourd'hui ; une sauvegarde complète d'avant le
+- **Prompts enregistrés privés** : dans l'espace privé, le bouton **Prompts** montre les prompts enregistrés de
+  l'espace privé et les prompts types, jamais ceux de l'espace public (et inversement). Ils se créent, s'utilisent, se
+  modifient, se suppriment et se filtrent comme les autres, et **Dupliquer** un prompt type en fait un prompt privé.
+  Ils sont chiffrés sur le Mac comme les images (`private/prompts`), rechiffrés au changement de code et effacés
+  avec l'espace. Les prompts enregistrés depuis l'espace privé avant le 15/10/2026 sont restés dans la liste publique :
+  les supprimer à la main.
+- **Changer le code** demande l'ancien. Le Mac tire alors de nouvelles clés et rechiffre toutes les images privées
+  et les prompts privés : elles restent lisibles avec le nouveau code, et une ancienne copie de l'espace
+  (sauvegarde Time Machine du dossier `private/`) ne s'ouvre plus avec l'ancien code sur les images d'aujourd'hui ; une sauvegarde complète d'avant le
   changement garde, elle, les images qu'elle contenait, lisibles avec l'ancien code. L'espace se ferme sur tous les
   appareils. Une génération privée en cours est rangée avec les nouvelles clés. Une panne au milieu (arrêt du Mac) ne
   perd aucune image : selon le moment, l'ancien ou le nouveau code ouvre l'espace, avec toutes ses images.
@@ -440,9 +471,9 @@ Ce que cela garantit, et ses limites :
 
 - le dossier `private/` ne contient que la clé publique de l'espace, sa clé privée chiffrée par une clé tirée du code
   (dérivation volontairement lente : chaque essai coûte du temps et de la mémoire, même sur une copie du disque), et
-  les images chiffrées, sous des noms tirés au hasard qui ne disent ni la date ni le mode (la date de modification
-  des fichiers, elle, reste visible, comme leur taille et leur nombre). Le code n'est écrit nulle
-  part ; la clé privée déchiffrée ne reste qu'en mémoire du serveur, le temps de la session de l'appareil. Le Mac
+  les images et les prompts privés chiffrés, les images sous des noms tirés au hasard qui ne disent ni la date ni le
+  mode (la date de modification des fichiers, elle, reste visible, comme leur taille et leur nombre). Le code n'est
+  écrit nulle part ; la clé privée déchiffrée ne reste qu'en mémoire du serveur, le temps de la session de l'appareil. Le Mac
   chiffre une image privée sans le code, avec la seule clé publique : c'est ce qui permet de la ranger même espace
   verrouillé ;
 - rien d'une image privée ne va dans `outputs\`, dans le journal des générations, dans les mesures de calibration ni
@@ -651,13 +682,23 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     `--params-backend te=disk` libère les poids de l'encodeur après l'encodage, ce qui laisse la place au cache de
     préfixe en très grande résolution ; `--mmap` fonctionne depuis `master-959` (les versions antérieures sortaient une
     image en bruit).
-- API locale : `POST /api/generate`, `GET /api/job/<id>` (`queue_position` : nombre de générations devant elle,
-  recalculé à chaque lecture ; `seed` : graine utilisée ; `lot`), `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel` (sans effet sur une génération
-  déjà terminée, réussie, en échec ou annulée), `GET /api/status` (`queue` : la file, génération en cours d'abord ;
-  chaque entrée porte `status`, `position`, `lot`, `estimate` et `elapsed` en secondes, `kind`, et pour une génération
-  normale seulement `id`, `mode` et le début du `prompt` ; une génération incognito porte à la place `page`, le jeton
-  opaque que sa page a envoyé dans `/api/generate` (`"page"`, 1 à 64 lettres, chiffres, `-` ou `_`), pour qu'elle y
-  reconnaisse ses lignes : il n'ouvre aucune route) ; lots : `"count"` de 2 à 4 dans `/api/generate` (mode
+- API locale : `POST /api/generate`, `GET /api/job/<id>` (`queue_position` : rang parmi les générations de son
+  espace, public ou privé, 0 pour celle qui tourne, sinon les générations de l'espace en attente devant elle, plus une
+  si une génération tourne ; recalculé à chaque lecture ; `seed` : graine utilisée ; `lot` ; `prompt` : le prompt
+  complet, tant que la demande est en mémoire, `null` pour une génération incognito et pour une privée une fois
+  finie, rangée, en échec ou annulée),
+  `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel` (sans effet sur une génération déjà terminée, réussie, en échec ou annulée), `GET /api/status` (`queue` : la file de l'espace de
+  l'appareil, génération en cours d'abord : dans l'espace privé, ses seules générations privées ; ailleurs, les
+  générations normales et incognito ; l'appareil est dans l'espace privé quand sa session est ouverte et que la
+  requête est sûre, comme pour `private.unlocked` ; chaque entrée porte `status`, `position` (rang dans l'espace, comme
+  `queue_position`), `ahead` (durée restante estimée, en secondes, des générations de l'autre espace placées devant
+  elle : ce qui reste de celle en cours, l'estimation des autres ; 0 sans travail caché), `lot`, `estimate` et
+  `elapsed` en secondes, `kind` (`normal`, `incognito` ou `private`), et pour une génération normale ou privée `id`,
+  `mode` et le début du `prompt` ; une génération incognito porte à la place `page`, le jeton opaque que sa page a
+  envoyé dans `/api/generate` (`"page"`, 1 à 64 lettres, chiffres, `-` ou `_`), pour qu'elle y reconnaisse ses
+  lignes : il n'ouvre aucune route ; `queued` : générations en attente de l'espace ; `current_job` : la génération en
+  cours si elle est de l'espace et n'est pas incognito, sinon `null` ; `last_job` : dernière génération normale,
+  `null` dans l'espace privé ; `busy` : le Mac calcule, quel que soit l'espace) ; lots : `"count"` de 2 à 4 dans `/api/generate` (mode
   Créer, `"mode": "t2i"` ; 1 : génération seule) crée autant de générations ; `"campaign": [{"image": <data URL>, "width",
   "height"}, …]` (1 à 10 photos, mode Éditer, `"mode": "edit"`, sans `ref_images`) crée une édition par photo, avec
   cette seule photo en référence et à ses dimensions (une seule photo : génération seule) ; les générations d'un lot
@@ -683,26 +724,33 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `POST /api/private/create {"code"}` (409 s'il existe déjà), `POST /api/private/unlock {"code"}` (403 après une
   seconde si le code est faux), qui ouvrent une session pour l'appareil (cookie `qwen_private`, HttpOnly, sans durée
   de vie, fermée par le serveur après 15 minutes sans requête privée), `POST /api/private/lock`,
-  `POST /api/private/code {"old", "new"}` (nouvelles clés, images rechiffrées, toutes les sessions fermées et le cookie
-  de l'appareil effacé ; 500 si le rechiffrement échoue, sans perte : le message dit si le code a changé),
+  `POST /api/private/code {"old", "new"}` (nouvelles clés, images et prompts privés rechiffrés, toutes les sessions
+  fermées et le cookie de l'appareil effacé ; 500 si le rechiffrement échoue, sans perte : le message dit si le code a changé),
   `POST /api/private/reset {"confirm": "SUPPRIMER"}` (efface l'espace et
   ferme toutes les sessions ; 403 hors du Mac lui-même) ; `/api/status` porte `private` : `available` (bibliothèque
   `cryptography` présente), `exists`, `unlocked` (pour cet appareil, sans prolonger la session), `secure` (l'espace
   peut s'ouvrir par cette adresse) et `local` (le Mac lui-même, seul à pouvoir supprimer l'espace sans le code) ; sans
-  `cryptography`, ces routes répondent 503. Toutes les routes de l'espace privé sauf `lock`, la génération privée et
-  l'aperçu d'une génération privée (`/api/job/<id>/preview`) répondent 403 hors du Mac lui-même et de l'adresse HTTPS de « tailscale serve » (jugé sur l'adresse source
+  `cryptography`, ces routes répondent 503. Toutes les routes de l'espace privé sauf `lock` et la génération privée
+  répondent 403 hors du Mac lui-même et de l'adresse HTTPS de « tailscale serve » (jugé sur l'adresse source
   127.0.0.1 et le nom d'hôte, jamais sur les en-têtes de relais) ;
   génération privée : `"private": true` dans `/api/generate` (403 sans session, 400 avec `incognito` ou si `private`
   n'est pas un booléen, 503 sans `cryptography`), identifiant de
-  32 caractères hexadécimaux, même entrée qu'une génération incognito dans `queue` (`kind` `incognito`, jeton
-  `page`, ni `id` ni prompt : rien n'y trahit l'espace privé aux autres appareils) ;
+  32 caractères hexadécimaux, absente de `queue` hors de l'espace privé (rien n'y trahit l'espace privé aux autres
+  appareils), entrée complète dedans (`kind` `private`, `id`, `mode`, `prompt`, `lot` avec son `id`) ;
   `GET /api/job/<id>` porte `private` et, une fois l'image rangée, `item` (son identifiant dans l'espace privé) ;
-  `POST /api/job/<id>/forget` l'oublie (l'image reste dans l'espace) ; `/api/forget` (fermeture de la page) ne l'arrête
+  `POST /api/job/<id>/forget` l'oublie (l'image reste dans l'espace) ; suivi (`GET /api/job/<id>`, `…/preview`),
+  annulation et oubli (`POST /api/job/<id>/cancel`, `…/forget`) d'une génération privée, et `POST /api/lot/<id>/cancel`
+  d'un lot privé : requête sûre et session exigées, sinon 404 (« job inconnu », « lot inconnu »), comme un identifiant
+  inconnu ; l'annulation prolonge la session, ni le suivi ni l'oubli ;
+  `/api/forget` (fermeture de la page) ne l'arrête
   pas. Galerie privée, session exigée (403 sinon), chaque requête prolongeant la session : `GET /api/private/history`
   (réglages déchiffrés de chaque image, avec `id`), `GET /api/private/image?id=…[&download=1]`,
   `GET /api/private/thumb?id=…`, `GET /api/private/input?id=…&file=init.png|ref_N.png[&thumb=1][&download=1]`,
-  `POST /api/private/delete {"id"}` ; « Rendre privée » : `POST /api/private/adopt {"name": <png de outputs/>, "code"}`
-  (sans session : le code est vérifié, 403 après une seconde s'il est faux, 404 pour une image ou un espace inconnu,
+  `POST /api/private/delete {"id"}` ; prompts enregistrés de l'espace privé, session exigée (403 sinon) et
+  prolongée, mêmes champs, mêmes limites et mêmes réponses que `/api/prompts` : `GET /api/private/prompts` (avec les
+  mêmes `types`), `POST /api/private/prompts`, `POST /api/private/prompts/delete`, `POST /api/private/prompts/used`
+  (500 si `private/prompts` est illisible, sans l'écraser) ; « Rendre privée » :
+  `POST /api/private/adopt {"name": <png de outputs/>, "code"}` (sans session : le code est vérifié, 403 après une seconde s'il est faux, 404 pour une image ou un espace inconnu,
   409 pendant la fin de sa génération ; en cas d'échec, l'original reste entier et rien n'est rangé),
   qui répond l'`id` de l'image dans l'espace privé et retire l'image, ses miniatures, ses entrées et sa ligne de
   `outputs/journal.jsonl` (réécrit sous le verrou de l'écriture de fin de génération).
@@ -778,7 +826,9 @@ pull request vers `main` et chaque envoi sur `dev` (`.github/workflows/checks.ym
 
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui`. Ils ouvrent
 l'interface servie par le banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur
-de la console du navigateur (écrans principaux, et « Garder celle-ci » après un rechargement de la galerie).
+de la console du navigateur. Ils couvrent les écrans principaux, « Garder celle-ci » après un rechargement de la
+galerie, la saisie (plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque espace), l'en-tête
+(cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés et la reprise d'une génération.
 
 Tests de bout en bout, interface lancée :
 

@@ -192,15 +192,17 @@ def generate(prompt="a red car", **kw):
     return job
 
 
-def job(jid):
-    return call("GET", f"/api/job/{jid}")[1]
+def job(jid, private=None):
+    """Suivi d'une génération ; private : session de l'espace privé, exigée pour une génération privée."""
+    return call("GET", f"/api/job/{jid}", private=private)[1]
 
 
-def wait_job(jid, until=("done", "failed", "cancelled"), timeout=30, check=None):
-    """Attend qu'une génération atteigne un des statuts until (et que check(job) soit vrai) ; renvoie la génération."""
+def wait_job(jid, until=("done", "failed", "cancelled"), timeout=30, check=None, private=None):
+    """Attend qu'une génération atteigne un des statuts until (et que check(job) soit vrai) ; renvoie la génération.
+    private : session de l'espace privé, pour suivre une génération privée."""
     end = time.time() + timeout
     while time.time() < end:
-        j = job(jid)
+        j = job(jid, private)
         if j.get("status") in until and (check is None or check(j)):
             return j
         time.sleep(0.05)

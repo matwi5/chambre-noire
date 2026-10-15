@@ -4,6 +4,46 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-15 · Espaces public et privé étanches
+
+- **Contexte** : en essayant l'espace privé sur le téléphone, le porteur voit passer d'un espace à l'autre ce qui
+  devrait rester d'un seul côté : un prompt enregistré dans l'espace privé apparaît dans l'espace public (la spec du
+  14/10/2026 laissait les prompts enregistrés hors de l'espace privé), la file d'attente montre à chaque espace les
+  générations de l'autre (une génération privée y passe pour « Génération incognito », même pour la page qui l'a
+  lancée après un rechargement), la progression d'une génération privée reste à l'écran après la sortie, et le texte
+  et les images saisis sont communs aux deux espaces.
+- **Décision** (porteur, 15/10/2026) : l'espace public et l'espace privé sont deux espaces étanches. Chacun a sa
+  galerie, sa file d'attente, ses générations en cours, sa saisie (texte et images, onglet par onglet) et ses prompts
+  enregistrés ; seuls les prompts types, les Réglages et l'autorisation des notifications sont communs.
+  - **File** : chaque espace ne voit que ses générations (ni ligne, ni aperçu, ni vignette de l'autre ; « +N en
+    attente » ne compte que l'espace courant). Une génération qui attend derrière une génération cachée de l'autre
+    espace affiche « en attente » et une durée estimée qui compte ce travail, sans son rang. Les générations
+    incognito, lancées depuis l'espace public, y restent visibles des autres appareils comme « Génération incognito ».
+  - **Sortie et retour** : à la sortie (« Sortir » ou fermeture après 15 minutes), une génération privée quitte
+    l'écran tout de suite et continue ; tout appareil déverrouillé la retrouve, même après un rechargement, avec son
+    prompt et sa progression, et peut l'annuler.
+  - **Prompts enregistrés privés** : chiffrés comme les images privées, visibles seulement dans l'espace privé,
+    rechiffrés au changement de code, supprimés avec l'espace ; l'espace privé ne montre pas les prompts enregistrés
+    publics. Les prompts enregistrés depuis l'espace privé avant ce changement restent en clair dans la liste
+    publique : le porteur les supprime à la main.
+  - **Saisie** : la saisie privée n'est jamais écrite dans le navigateur ; « Sortir » l'efface, la fermeture après
+    15 minutes la garde en mémoire de la page jusqu'au retour. Les onglets marqués disparaissent.
+  - **Cadenas** : aussi visible que le bouton Rafraîchir de l'en-tête de la galerie (même taille d'icône, même
+    couleur, pleine opacité), au même endroit.
+- **Écarté** : montrer les générations de l'autre espace sous un libellé neutre (le porteur ne veut rien voir de
+  l'autre espace) ; cacher aussi le travail de l'autre espace dans la durée estimée (estimation fausse, sans rien
+  cacher de plus : une attente sans ligne devant se remarque de toute façon) ; montrer les prompts enregistrés publics
+  dans l'espace privé.
+- **Conséquences** : la file d'attente et les prompts enregistrés dépendent désormais de l'espace de l'appareil qui
+  les lit. Quelqu'un d'attentif devine, à une attente sans ligne devant, qu'une génération de l'autre espace tourne,
+  comme il le devine déjà pour l'incognito des autres appareils. Remplace, dans « Espace privé discret », le cadenas
+  « petit et discret » et l'héritage des onglets marqués, et, dans « Espace privé durci après la revue de sécurité »,
+  les onglets marqués gardés à la fermeture de l'espace.
+- **Mise en œuvre** (groupe B, sans le porteur) : pour le serveur, un appareil est « dans l'espace privé » s'il a une
+  session **et** que sa requête est sûre (`_secure`, comme les routes privées) : le cookie de session n'a pas le
+  drapeau `Secure` et pourrait suivre une adresse `http://` du même nom, qui recevrait sinon les prompts privés de la
+  file en clair.
+
 ## 2026-10-15 · Espace privé durci après la revue de sécurité
 
 - **Contexte** : la revue de sécurité du groupe D a relevé ce qui trahit ou expose l'espace privé hors du chiffrement
@@ -62,6 +102,8 @@ les messages de commit.
 
 ## 2026-10-14 · Espace privé discret : on y entre, on en sort
 
+_Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par « Espaces public et privé étanches »._
+
 - **Contexte** : la spécification prévoyait un bouton « Privé » à côté de « Générer » et un mode Privé à allumer.
   En voyant l'interface, le porteur ne veut rien qui signale l'espace privé à l'arrivée sur l'application.
 - **Décision** (porteur, 14/10/2026) : l'entrée est un petit cadenas discret dans l'en-tête de la galerie (création ou
@@ -102,6 +144,15 @@ les messages de commit.
     serveur range une image avec la seule clé publique, notée au lancement de la génération (si l'espace a été
     supprimé ou recréé entre-temps, l'image est abandonnée). L'image est écrite dans `private/items/.<id>/` puis le
     dossier est renommé : la galerie privée ne voit jamais une image à moitié rangée.
+  - Prompts enregistrés privés (ajouté le 15/10/2026, spécification « Espaces public et privé étanches ») : un seul
+    fichier `private/prompts`, même format qu'un fichier d'image (`QPV1`, clé éphémère, nonce, AES-256-GCM), données
+    associées = les 48 premiers octets + `prompts` (aucun nom d'image ne peut le valoir) ; contenu : JSON en UTF-8,
+    la liste des prompts privés, même format qu'un prompt public (`id`, `title`, `text`, `usage`, `used`). Absent tant
+    qu'aucun prompt privé n'existe. Écrit sous `PRIVATE_LOCK` après `finish_rekey()`, scellé avec la clé publique de
+    `space.json`, dans `private/prompts.tmp` mis sur le disque puis remplacé d'un coup, droits 600 ; lu et modifié
+    avec la clé privée d'une session (refusé si elle n'est plus celle de l'espace). Le changement de code le
+    rechiffre dans `private/.rekey/prompts` avant la bascule, puis `finish_rekey()` le met à la place de l'ancien ; un
+    fichier déjà illisible est recopié tel quel.
   - Sessions : une par appareil, en mémoire du serveur (`S.private_sessions`), jeton aléatoire de 256 bits dans le
     cookie `qwen_private` (HttpOnly, `SameSite=Strict`, sans `Max-Age`) ; fermée après 15 min sans requête privée
     (`/api/status` et le suivi des générations ne la prolongent pas), par `/api/private/lock`, et par

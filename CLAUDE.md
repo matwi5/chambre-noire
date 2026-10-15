@@ -62,9 +62,13 @@ contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net`
   (Chrome installé ; pas en CI). `tests/ui/driver.mjs` lance le banc (`tests/ui/serve.py`) et Chrome sans écran
   (profil temporaire supprimé à la fin), piloté par le protocole DevTools depuis Node (WebSocket natif, sans
   Playwright), dans la vue du téléphone du porteur (367×760, densité 2,5, mobile, tactile : l'interface y passe en
-  `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `smoke` (écrans principaux) et
-  `keep` (régression « Garder celle-ci »). Une vérification d'interface nouvelle y devient un test plutôt qu'un
-  script jetable. Une vue plus grande cache des débordements : regarder aussi les captures (`page.screenshot`).
+  `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `smoke` (écrans principaux),
+  `keep` (régression « Garder celle-ci »), `saisie` (photos choisies d'un coup, vidage après « Générer », saisie
+  propre à chaque espace ; `page.setFiles` remplit un champ de fichiers), `file` (file et pastille propres à chaque
+  espace), `entete` (cadenas de la galerie, pastille qui tient dans sa bulle), `prompts` (prompts enregistrés
+  propres à chaque espace) et `reprise` (prompt complet d'une génération reprise, publique ou privée). Une
+  vérification d'interface nouvelle y devient un test plutôt qu'un script jetable. Une vue plus grande cache des
+  débordements : regarder aussi les captures (`page.screenshot`).
 - La fermeture de la page (`pagehide`, envoi `keepalive`) se valide sur le téléphone : Chrome sans écran ne la rejoue
   pas de façon constante.
 - `tests/run_tests.py --steps 8 [--only t2i|edit|mask|annot]` : bout en bout, serveur lancé sur 127.0.0.1:7860. Il
@@ -96,19 +100,25 @@ Ne lancer aucune génération réelle et ne supprimer aucune image de `outputs/`
   dans les journaux doit respecter ces deux modes.** `log_message` tait `/api/private/` et aucun `print` ne parle de
   l'espace privé ; ni le titre ni le texte d'un prompt enregistré ne vont dans les journaux du serveur.
 - **Verrous** : toute écriture de `outputs/journal.jsonl` passe sous `JOURNAL_LOCK` ; toute écriture ou suppression
-  d'une image privée passe sous `PRIVATE_LOCK`, après `finish_rekey()`.
+  d'une image privée ou des prompts privés (`private/prompts`) passe sous `PRIVATE_LOCK`, après `finish_rekey()` ; un
+  nouveau fichier de `private/` est aussi rechiffré par `rekey_space` et rangé par `finish_rekey`.
 - **Contrôle d'accès** (dans cet ordre, dans `H`) : `_host_ok`, `_post_refused`, `_allowed`, et `_secure` pour
   l'espace privé (jamais les en-têtes de relais). Toute nouvelle route POST passe par ces contrôles : l'interface doit
   envoyer `Content-Type: application/json`, même sans corps. Seules les requêtes privées prolongent une session
-  (`_private_session(touch=True)`), jamais `/api/status`. Le jeton de page (`PAGE_TOKEN`, champ `page`) n'ouvre
-  aucune route : ne jamais s'en servir comme droit.
+  (`_private_session(touch=True)`), jamais `/api/status`. Toute route qui suit, prévisualise ou annule une génération
+  ou un lot passe par `_hidden` : une génération privée y est « inconnue » (404) hors de l'espace privé. Le jeton de
+  page (`PAGE_TOKEN`, champ `page`) n'ouvre aucune route : ne jamais s'en servir comme droit.
 - **Formule dupliquée en JavaScript** : `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()` et
   `ref_px()` de `estimate.py` (jetons de 16×16 px, arrondi à 32). Une modification de la formule ou d'un coefficient se
   fait des deux côtés. `PREVIEW_EVERY = 5` côté interface doit égaler le défaut `preview_interval` de `build_cmd`.
   La longueur minimale du code privé (`MIN_PRIVATE_CODE`, 8) est aussi vérifiée dans `index.html` (feuilles privées).
-  L'estimation de chaque entrée de la file (`queue_entry`) appelle `estimate.predict` : pas de troisième copie.
+  L'estimation de chaque génération de la file (`job_estimate`, pour `queue_entry` et le travail caché `ahead`)
+  appelle `estimate.predict` : pas de troisième copie.
 - **Interface** : la visionneuse parcourt `vList`, jamais `histItems` directement (la galerie peut être rechargée
   pendant qu'elle est ouverte).
+- **Saisie par espace** : tout ajout à la saisie qui attend (lecture d'image, envoi d'une demande) note son espace ou
+  sa liste avant la première attente, sinon un changement d'espace pendant l'attente le fait tomber dans la saisie de
+  l'autre espace (une image privée dans la saisie publique).
 - **Noms des modèles** : ceux de `setup.py` doivent correspondre à `MODELS` et `DIFFUSION` en tête de `tools/launch.py`.
 - **Release de sd.cpp** : `.installed` doit garder le format `master-NNN-hash` ; `estimate.prefix_cache` en lit le numéro
   (cache de préfixe à partir de 903). Si sd-cli change le texte de ses lignes « completed », `make_sample` renvoie
@@ -140,7 +150,8 @@ Ne lancer aucune génération réelle et ne supprimer aucune image de `outputs/`
 - Branches (décision du porteur du 15/10/2026) : on code toujours sur `dev`, dans le worktree `.claude/worktrees/dev`
   (le dossier principal reste sur `main` pour le service) ; les sessions de groupe se lancent depuis ce worktree, pour
   partir de `dev`, et leurs branches s'y fusionnent. `main` ne reçoit que des pull requests depuis `dev` (`/project:pr`)
-  et est protégée sur GitHub (PR obligatoire, ni push direct ni forcé, administrateur compris). `/project:push` se lance
+  et est protégée sur GitHub (PR obligatoire, CI `checks` au vert exigée, ni push direct ni forcé, administrateur
+  compris). `/project:push` se lance
   sur `dev` ; après la fusion d'une PR, `/project:sync main` remet `dev` à jour.
 - Suivi des tâches : Asana « Hub · Suivi des tâches », section « Qwen-Image local » (GID `1219496223389136`), tâche
   mère de Claude « [code] Qwen-Image local : prochaines sessions Claude Code » (GID `1219493010479174`), tenus par

@@ -41,7 +41,7 @@ class PrivateOverHttpsOnlyTest(bench.BenchCase):
         code, job = call("POST", "/api/generate", bench.gen_body("zq9 over wifi", private=True), private=session, wifi=True)
         self.assertEqual(code, 403, job)
         code, job = call("POST", "/api/generate", bench.gen_body("zq9 on the mac", private=True), private=session)
-        wait_job(job["id"])
+        wait_job(job["id"], private=session)
         [item] = call("GET", "/api/private/history", private=session)[1]
         for path in ("/api/private/history", f"/api/private/image?id={item['id']}", f"/api/private/thumb?id={item['id']}",
                      f"/api/private/input?id={item['id']}&file=init.png"):
@@ -55,12 +55,12 @@ class PrivateOverHttpsOnlyTest(bench.BenchCase):
         session = bench.create_private(CODE)
         code, job = call("POST", "/api/generate", bench.gen_body("SLOW=0.05 zq9 preview", private=True, preview=True, steps=10),
                          private=session)
-        wait_job(job["id"], ("running",), check=lambda j: j.get("preview_version"))
+        wait_job(job["id"], ("running",), check=lambda j: j.get("preview_version"), private=session)
         path = f"/api/job/{job['id']}/preview"
-        self.assert_refused("GET", path, wifi=True)
-        self.assertEqual(call("GET", path, remote=True)[0], 200)
-        self.assertEqual(call("GET", path)[0], 200)
-        wait_job(job["id"])
+        self.assertEqual(call("GET", path, wifi=True, private=session), (404, {"error": "job inconnu"}))
+        self.assertEqual(call("GET", path, remote=True, private=bench.unlock_private(CODE, remote=True))[0], 200)
+        self.assertEqual(call("GET", path, private=session)[0], 200)
+        wait_job(job["id"], private=session)
 
     def test_change_code_and_make_private_over_wifi_are_refused(self):
         bench.create_private(CODE)

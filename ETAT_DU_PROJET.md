@@ -9,11 +9,17 @@ Mis à jour le 15/10/2026.
   galerie avec visionneuse (zoom au pincement, partage, copie, images d'entrée), estimations calibrées, mode incognito,
   notification de fin de génération (Web Push), file d'attente visible (« Générer » toujours actif), variantes (mode
   Créer) et campagnes (mode Éditer) avec lots dans la galerie, prompts enregistrés et prompts types, espace privé
-  chiffré (entrée discrète par le cadenas de la Galerie). Banc de test permanent sans GPU :
-  `venv/bin/python -m unittest discover -s tests` (129 tests, ≈ 1 min).
+  chiffré (entrée par le cadenas de la Galerie), étanche à l'espace public (galerie, file, saisie et prompts
+  enregistrés propres à chaque espace). Banc de test permanent sans GPU :
+  `venv/bin/python -m unittest discover -s tests` (162 tests, ≈ 1 min 20) ; tests d'interface `tests/check.py --ui`
+  (26 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
-- **En cours** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
+- **En cours** : parcours « Cloisonnement espace privé, file et saisie » (spécification
+  `docs/specs/2026-10-15_espaces-etanches.md`) : les 9 tickets des groupes A, B et C sont faits, revus et fusionnés
+  dans `dev` ; reste la livraison (push, PR vers `main`, mise à jour du dossier principal), après validation du compte
+  rendu.
+- **Fait avant** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
   prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), découpée en 13 tickets Asana (liste et ordre dans
   `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types validée par le porteur. Groupes A (banc, robustesse, file visible, incognito dans la file) et
   B (variantes, lots dans la galerie, campagne), C (prompts) et D (durcissement de l'incognito, espace privé) faits,
@@ -32,7 +38,11 @@ Mis à jour le 15/10/2026.
   - la feuille des prompts (bouton « Prompts » sous le champ de texte) ;
   - l'espace privé : entrée par le cadenas de la Galerie, thème, sortie, verrouillage à la fermeture (inconstant dans
     Chrome sans écran ; l'expiration après 15 min reste le filet), cookie `SameSite=Strict` avec l'application
-    installée, « Rendre privée ».
+    installée, « Rendre privée » ;
+  - après la livraison du parcours des espaces étanches : plusieurs photos d'un coup avec le sélecteur Google Photos,
+    vidage après « Générer », saisie propre à chaque espace, message quand l'espace se ferme seul, file sans les
+    générations de l'autre espace, génération privée retrouvée après un rechargement (cas « page rechargée espace
+    encore ouvert », lié à `pagehide`), prompts privés, cadenas et pastille.
 - **Pistes ouvertes** (aucune demandée) :
   - `sd-cli.log` reste ouvert si la boucle de lecture de `run_job` lève une exception ; `queue_position` trie tout
     `S.jobs`, qui ne fait que grossir, à chaque lecture (trouvés par la revue de groupe A) ;
@@ -69,6 +79,44 @@ Mis à jour le 15/10/2026.
 
 ### 2026-10-15
 
+- Version 0.3.0 (`94ac860`, tag `v0.3.0`) : espaces public et privé étanches, prompts privés chiffrés, retouches de
+  la saisie ; compte rendu du parcours validé par le porteur. Reste la livraison (`/project:push`, `/project:pr`).
+- Groupe C (prompts privés et prompt repris) fait par une session liée et fusionné dans `dev` (`1a712d0` à
+  `eeca134`) : prompts enregistrés de l'espace privé chiffrés dans `private/prompts` (routes `/api/private/prompts`,
+  rechiffrés au changement de code, format noté dans `DECISIONS.md`) ; prompt complet donné à la page qui reprend une
+  génération de son espace. Revue du groupe (2 constats corrigés, 4 laissés), revue de sécurité sans constat. Vérifié
+  après fusion : `tests/check.py --ui` → Ran 162 tests OK, interface 26/26 OK. Trouvé : les fichiers de
+  `private/items/` n'ont pas les droits 600 (antérieur) ; le README dit encore que les tests d'interface ne couvrent
+  que les écrans principaux et « Garder celle-ci ». Question au porteur : un `private/prompts` illisible bloque toute
+  la liste privée (gardé ainsi, ou mis de côté en `.corrompu`).
+- Groupe B (file cloisonnée) fait par une session liée et fusionné dans `dev` (`190ce1c` à `c9a452b`) : curseur
+  retiré et message quand l'espace privé se ferme seul ; file, pastille, génération en cours et dernière image
+  propres à l'espace de l'appareil (durée `ahead` pour le travail caché) ; suivi, aperçu et annulation d'une
+  génération privée refusés hors de l'espace (404) ; génération privée retirée de l'écran à la sortie et suivie de
+  nouveau au retour. « Dans l'espace privé » exige aussi une requête sûre. Revue du groupe (4 constats corrigés, 4
+  laissés), revue de sécurité sans constat. Vérifié après fusion : `tests/check.py --ui` → Ran 139 tests OK,
+  interface 23/23 OK. Points ouverts remontés au porteur : oubli d'une génération privée par sa seule page, génération
+  privée finie après la sortie gardée 24 h en mémoire, génération publique annulée pendant l'espace privé retirée sans
+  message, prompt d'une génération privée reprise limité à 80 caractères.
+- Groupe A (saisie et en-tête) fait par une session liée et fusionné dans `dev` (`d1d42b3` à `4a5a55c`) : photos
+  choisies d'un coup toutes ajoutées (cause confirmée par le test), onglet vidé après une demande acceptée, saisie
+  propre à chaque espace (onglets marqués retirés), cadenas aussi visible que Rafraîchir, pastille dans sa bulle.
+  Revue du groupe faite (3 constats corrigés, 4 laissés), revue de sécurité sans constat au-dessus du seuil.
+  Vérifié après fusion : `tests/check.py --ui` → Ran 131 tests OK, interface 18/18 OK. Restent au porteur : le vrai
+  sélecteur de photos sur le téléphone, et une remarque de sécurité à trancher (fermeture automatique de l'espace
+  pendant une frappe : les touches suivantes vont dans la saisie publique).
+- Demandes du porteur après essai sur le téléphone, cadrées par un grilling (décision « Espaces public et privé
+  étanches » dans `DECISIONS.md`, termes « Espace public » et « Espace privé » dans `GLOSSARY.md`) : prompts
+  enregistrés privés chiffrés et cloisonnés ; file d'attente et générations en cours cloisonnées par espace (dont le
+  faux « Génération incognito » d'une génération privée, et la progression privée visible après la sortie jusqu'au
+  rechargement) ; saisie propre à chaque espace ; texte et images vidés après « Générer » ; cadenas aussi visible que
+  Rafraîchir ; pastille « +N en attente » qui dépasse de l'île. Bug trouvé : en Éditer, une sélection de plusieurs
+  photos n'en ajoute que la première (le gestionnaire `change` vide le champ avant d'avoir lu tous les fichiers ;
+  cause lue dans le code, à confirmer par un test). Spécification `docs/specs/2026-10-15_espaces-etanches.md`, découpée en 7 tickets Asana (groupes A saisie et en-tête, B file cloisonnée, C prompts privés).
+- PR #2 (`dev` → `main`, suites de la rétrospective) fusionnée (`72f19ad`) après un premier passage rouge de la CI :
+  `test_running_or_waiting_incognito_is_not_expired` était instable sur la machine GitHub, plus lente (délai d'oubli
+  de 0,1 s gardé pendant l'attente de la fin), corrigé par `14b031b`. La vérification `checks` est désormais exigée
+  par la protection de `main`. Service relancé sur `main`.
 - Rétrospective du parcours (session principale et 5 sessions de groupe, d'après leurs journaux) : 16 pistes. Les 11
   propres au dépôt, faites par une session liée et fusionnées dans `dev` (`e8e3e1c` à `04140c0`) : `tests/check.py`
   (tous les contrôles en une commande, `--link-venv` pour un worktree, `--ui`), test « dépôt public », banc plus sûr
@@ -77,7 +125,7 @@ Mis à jour le 15/10/2026.
   `docs/agents/carte-du-code.md`, `docs/agents/session-deleguee.md`, `CLAUDE.md` allégé (18,8 → 12,9 Ko), tickets
   qui renvoient à la spec. Vérifié après fusion : `tests/check.py --ui` → Ran 131 tests OK, interface 5/5 OK. Les 5
   pistes communes (règles de revue, `/project:push`, `suivi-asana`, flow-board en mode délégué) faites dans
-  mathis-plugins. Reste : exiger la vérification `checks` dans la protection de `main` après son premier passage.
+  mathis-plugins.
 - Ménage : worktrees et branches des groupes A à E supprimés (contenu vérifié identique à `main`), ainsi que
   `securite-serveur` (branche `fix/server-host-origin`, un commit de notes du 13/10/2026 jamais poussé, avec des
   informations propres au réseau du porteur) et `youthful-bell-35c6b0` (déjà dans `main`).

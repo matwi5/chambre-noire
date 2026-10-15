@@ -24,6 +24,8 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
         GET /api/job/<id>/result et POST /api/job/<id>/forget (incognito ; forget aussi pour une génération privée),
         espace privé : POST /api/private/create|unlock|lock|code|reset|delete, GET /api/private/history,
         GET /api/private/image|thumb?id=<id>, GET /api/private/input?id=<id>&file=<init.png|ref_N.png>,
+        prompts enregistrés de l'espace privé (private/prompts, chiffré) : GET /api/private/prompts,
+        POST /api/private/prompts, POST /api/private/prompts/delete, POST /api/private/prompts/used,
         GET /api/result?name=<png>[&download=1], GET /api/status,
         historique : GET /api/history, GET /api/thumb?name=<png>, POST /api/delete {"name": <png>},
         images d'entrée d'une image : GET /api/input?name=<png>&file=<init.png|ref_N.png>[&thumb=1][&download=1],
@@ -255,6 +257,15 @@ def prompt_types():
         return []
 
 
+def prompt_list(prompts):
+    """La liste de prompts lue d'un fichier, si elle a la forme attendue ; sinon ValueError (fichier modifié à la
+    main)."""
+    if not (isinstance(prompts, list) and all(isinstance(p, dict) and isinstance(p.get("id"), str)
+                                              and isinstance(p.get("used"), (int, float)) for p in prompts)):
+        raise ValueError("liste de prompts attendue")
+    return prompts
+
+
 def saved_prompts(update=None):
     """Prompts enregistrés : [{id, title, text, usage, used}], used = dernière utilisation (secondes). update(liste)
     renvoie la liste modifiée, ou None pour ne rien écrire ; l'écriture passe par un fichier temporaire renommé
@@ -262,12 +273,9 @@ def saved_prompts(update=None):
     with PROMPTS_LOCK:
         try:
             with open(PROMPTS_FILE, encoding="utf-8") as f:
-                prompts = json.load(f)
+                prompts = prompt_list(json.load(f))
         except FileNotFoundError:
             prompts = []
-        if not (isinstance(prompts, list) and all(isinstance(p, dict) and isinstance(p.get("id"), str)
-                                                  and isinstance(p.get("used"), (int, float)) for p in prompts)):
-            raise ValueError("liste de prompts attendue")
         changed = update(prompts) if update else None
         if changed is None:
             return prompts
@@ -305,9 +313,10 @@ def prompt_error(action, body):
     return None
 
 
-def change_prompt(action, body):
+def change_prompt(action, body, store=saved_prompts):
     """Crée (« save » sans id), modifie (« save » avec id), supprime (« delete ») ou marque comme utilisé (« used ») un
-    prompt enregistré ; renvoie (code HTTP, réponse). Seuls le titre et le texte sont gardés, jamais les réglages."""
+    prompt enregistré ; renvoie (code HTTP, réponse). Seuls le titre et le texte sont gardés, jamais les réglages.
+    store : la liste à modifier, saved_prompts (espace public) ou celle de l'espace privé (private_prompts)."""
     result = (404, {"error": "prompt inconnu"})
 
     def stamp(prompts):
@@ -337,7 +346,7 @@ def change_prompt(action, body):
             p.update(title=body["title"].strip(), text=body["text"].strip())
         result = (200, p)
         return prompts
-    saved_prompts(change)
+    store(change)
     return result
 
 
@@ -504,16 +513,34 @@ def store_private(public, meta, image, inputs):
 
 
 def rekey_space(old_key, code):
-    """Changement de code : nouvelle paire de clés et toutes les images rechiffrées, pour qu'une ancienne copie de
-    space.json ne lise plus rien avec l'ancien code. Ordre d'écriture sûr (DECISIONS.md) : tout est d'abord écrit à part,
-    dans private/.rekey/ (la nouvelle clé publique, chaque fichier rechiffré sous son nom, les nouvelles clés scellées
-    par le nouveau code) ; la bascule est le remplacement de space.json, atomique ; finish_rekey() range ensuite les
-    images rechiffrées à la place des anciennes. Une panne avant la bascule laisse l'ancien espace intact. Sous
-    PRIVATE_LOCK, après finish_rekey() (aucun reste d'un changement interrompu) ; renvoie la nouvelle clé publique."""
+    """Changement de code : nouvelle paire de clés, toutes les images et les prompts privés rechiffrés, pour qu'une
+    ancienne copie de space.json ne lise plus rien avec l'ancien code. Ordre d'écriture sûr (DECISIONS.md) : tout est
+    d'abord écrit à part, dans private/.rekey/ (la nouvelle clé publique, chaque fichier rechiffré sous son nom, les
+    nouvelles clés scellées par le nouveau code) ; la bascule est le remplacement de space.json, atomique ;
+    finish_rekey() range ensuite les fichiers rechiffrés à la place des anciens. Une panne avant la bascule laisse
+    l'ancien espace intact. Sous PRIVATE_LOCK, après finish_rekey() (aucun reste d'un changement interrompu) ; renvoie
+    la nouvelle clé publique."""
     staging = os.path.join(PRIVATE, REKEY)
     key = X25519PrivateKey.generate()
     public = b64e(key.public_key().public_bytes_raw())
+
+    def reseal(src, dst, label):
+        """Copie src rechiffré avec la nouvelle clé ; un fichier déjà illisible avec l'ancienne est gardé tel quel, rien
+        n'est perdu. fsync seul (voir plus bas)."""
+        with open(src, "rb") as f:
+            blob = f.read()
+        try:
+            blob = seal(unseal(blob, old_key, label), public, label)
+        except (InvalidTag, ValueError):
+            pass
+        write_synced(dst, blob, full=False)
     try:
+        # reste d'un enregistrement des prompts privés coupé par une panne : scellé avec l'ancienne clé, il partirait
+        # lisible par l'ancien code
+        try:
+            os.remove(os.path.join(PRIVATE, "prompts.tmp"))
+        except FileNotFoundError:
+            pass
         os.makedirs(os.path.join(staging, "items"))
         # fichiers et dossiers copiés : fsync seul ; le F_FULLFSYNC de write_space, avant la bascule, les met tous sur
         # le disque d'un coup (un F_FULLFSYNC par fichier viderait le cache du disque autant de fois)
@@ -524,15 +551,12 @@ def rekey_space(old_key, code):
                 continue
             os.makedirs(os.path.join(staging, "items", item))
             for role in os.listdir(d):
-                with open(os.path.join(d, role), "rb") as f:
-                    blob = f.read()
-                try:
-                    blob = seal(unseal(blob, old_key, f"{item}/{role}"), public, f"{item}/{role}")
-                except (InvalidTag, ValueError):
-                    pass                        # déjà illisible avec l'ancienne clé : gardé tel quel, rien n'est perdu
-                write_synced(os.path.join(staging, "items", item, role), blob, full=False)
+                reseal(os.path.join(d, role), os.path.join(staging, "items", item, role), f"{item}/{role}")
             sync_dir(os.path.join(staging, "items", item), full=False)
         sync_dir(os.path.join(staging, "items"), full=False)
+        if os.path.exists(os.path.join(PRIVATE, "prompts")):   # prompts enregistrés de l'espace
+            reseal(os.path.join(PRIVATE, "prompts"), os.path.join(staging, "prompts"), "prompts")
+            os.chmod(os.path.join(staging, "prompts"), 0o600)
         write_space(public, key, code, os.path.join(staging, "space.json"))   # copies sur le disque avant la bascule
         sync_dir(PRIVATE)                       # l'entrée de .rekey/ elle-même, avant la bascule qui la rend nécessaire
         # la bascule, dernière instruction du try : si elle échoue, rien n'a changé et les copies sont jetées ; si elle
@@ -547,8 +571,9 @@ def rekey_space(old_key, code):
 
 def finish_rekey():
     """Termine un changement de code interrompu après la bascule (les images rechiffrées remplacent les anciennes, une
-    à une), ou l'abandonne s'il s'est arrêté avant (l'ancien espace est intact : les copies sont jetées). Sans effet
-    sans private/.rekey/. Appelé sous PRIVATE_LOCK, au démarrage et avant toute ouverture ou écriture de l'espace."""
+    à une, puis les prompts privés), ou l'abandonne s'il s'est arrêté avant (l'ancien espace est intact : les copies
+    sont jetées). Sans effet sans private/.rekey/. Appelé sous PRIVATE_LOCK, au démarrage et avant toute ouverture ou
+    écriture de l'espace."""
     staging = os.path.join(PRIVATE, REKEY)
     if not os.path.isdir(staging):
         return
@@ -566,6 +591,9 @@ def finish_rekey():
             shutil.rmtree(dst)                  # l'ancienne version, illisible avec la nouvelle clé (la nouvelle est écrite)
         os.rename(d, dst)
     sync_dir(os.path.join(PRIVATE, "items"))
+    if os.path.exists(os.path.join(staging, "prompts")):   # prompts rechiffrés : remplacent les anciens d'un coup
+        os.replace(os.path.join(staging, "prompts"), os.path.join(PRIVATE, "prompts"))
+        sync_dir(PRIVATE)
     shutil.rmtree(staging)
 
 
@@ -594,6 +622,44 @@ def private_history(private_key):
         if isinstance(meta, dict):
             items.append({**meta, "id": item, "private": True})
     return sorted(items, key=lambda x: x.get("time") or 0, reverse=True)
+
+
+class StaleKey(Exception):
+    """Clé privée d'une session qui n'est plus celle de l'espace : traitée comme un espace verrouillé (403)."""
+
+
+def private_prompts(private_key, update=None):
+    """Prompts enregistrés de l'espace privé, comme saved_prompts (même format, même update), lus et écrits avec la clé
+    d'une session : private/prompts, scellé par seal() avec l'étiquette « prompts », absent tant qu'aucun prompt privé
+    n'existe (DECISIONS.md). Sous PRIVATE_LOCK, après finish_rekey() ; écriture mise sur le disque dans un fichier
+    temporaire, puis remplacement atomique, droits 600. Un fichier illisible lève ValueError (ou InvalidTag) sans être
+    écrasé ; StaleKey si la clé n'est plus celle de l'espace (code changé ou espace supprimé pendant la requête)."""
+    fp = os.path.join(PRIVATE, "prompts")
+    with PRIVATE_LOCK:
+        finish_rekey()
+        public = (read_space() or {}).get("public")
+        if public != b64e(private_key.public_key().public_bytes_raw()):
+            raise StaleKey("espace privé verrouillé")
+        try:
+            with open(fp, "rb") as f:
+                prompts = prompt_list(json.loads(unseal(f.read(), private_key, "prompts")))
+        except FileNotFoundError:
+            prompts = []
+        changed = update(prompts) if update else None
+        if changed is None:
+            return prompts
+        try:
+            write_synced(fp + ".tmp", seal(json.dumps(changed, ensure_ascii=False).encode(), public, "prompts"))
+            os.chmod(fp + ".tmp", 0o600)
+            os.replace(fp + ".tmp", fp)
+        except BaseException:
+            try:
+                os.remove(fp + ".tmp")
+            except OSError:
+                pass
+            raise
+        sync_dir(PRIVATE)
+        return changed
 
 
 def private_code_error(code):
@@ -1160,7 +1226,7 @@ def secret(job):
 
 def kind_of(job):
     """Genre d'une génération secrète, pour un message de journal qui n'en dit pas plus : « incognito » aussi pour une
-    génération privée, comme dans la file, pour que logs/ ne révèle pas l'espace privé."""
+    génération privée, pour que logs/ ne révèle pas l'espace privé."""
     return "incognito"
 
 
@@ -1386,10 +1452,30 @@ def active_jobs():
     return sorted((j for j in list(S.jobs.values()) if j.get("status") in ACTIVE), key=lambda j: j.get("status") != "running")
 
 
+def in_space(job, private):
+    """La génération est-elle de cet espace : privée pour l'espace privé, normale ou incognito pour l'espace public."""
+    return bool(job.get("private")) == private
+
+
+def queue_ranks(active, private):
+    """Rang de chaque génération d'un espace dans la file (active : active_jobs()), par identifiant : 0 pour celle qui
+    tourne, sinon le nombre de générations de l'espace en attente devant elle, plus une si une génération tourne,
+    de quelque espace qu'elle soit (« 1re en attente » derrière une génération cachée, sans compter celles-ci)."""
+    running = any(j["status"] == "running" for j in active)
+    ranks, waiting = {}, 0
+    for j in active:
+        if in_space(j, private):
+            ranks[j["id"]] = 0 if j["status"] == "running" else waiting + running
+            waiting += j["status"] == "queued"
+    return ranks
+
+
 def queue_position(job):
-    """Nombre de générations devant celle-ci dans la file (0 : en cours ou la prochaine), None si elle n'y est plus.
-    Calculée à chaque lecture : elle avance à mesure que la file se vide."""
-    return next((k for k, j in enumerate(active_jobs()) if j is job), None)
+    """Rang de la génération parmi celles de son espace (queue_ranks), None si elle n'est plus dans la file. Calculé à
+    chaque lecture : il avance à mesure que la file se vide."""
+    if job.get("status") not in ACTIVE:
+        return None
+    return queue_ranks(active_jobs(), bool(job.get("private"))).get(job["id"])
 
 
 def request_inputs(req):
@@ -1405,30 +1491,55 @@ def request_inputs(req):
     return refs, (w * h if req.get("init_image") else 0)
 
 
-def queue_entry(job, position, coefs):
-    """Entrée de la liste de la file (/api/status). Une génération incognito n'y montre que son genre et le jeton de sa
-    page : ni identifiant (seule la page qui l'a lancée peut la suivre ou l'annuler), ni prompt, ni mode. Une génération
-    privée y a exactement la même entrée, genre « incognito » compris : rien n'y trahit l'espace privé aux autres
-    appareils (décision du porteur) ; sa page la reconnaît par son jeton. None si la génération vient de finir
-    (forget_files a pu retirer sa demande)."""
+def job_estimate(job, r, coefs):
+    """Durée estimée d'une génération de la file (estimate.predict, seule source de l'estimation) ; r : sa demande, lue
+    une seule fois par l'appelant (forget_files la retire à la fin d'une génération secrète, à tout moment)."""
+    refs, init = job["inputs"]
+    previews = r["steps"] // (r.get("preview_interval") or 5) if r.get("preview") else 0
+    return estimate.predict(coefs, r["width"], r["height"], r["steps"], refs, init, previews)
+
+
+def queue_entry(job, position, ahead, coefs):
+    """Entrée de la liste de la file (/api/status), vue depuis l'espace de la génération. Une génération incognito
+    (espace public) n'y montre que son genre et le jeton de sa page : ni identifiant (seule la page qui l'a lancée peut
+    la suivre ou l'annuler), ni prompt, ni mode. Une génération privée n'est vue que depuis l'espace privé, où elle a
+    une entrée complète comme une génération normale, genre « private ». ahead : durée restante estimée des générations
+    de l'autre espace placées devant elle. None si la génération vient de finir."""
     r = job.get("req")
     if r is None:
         return None
-    refs, init = job["inputs"]
-    previews = r["steps"] // (r.get("preview_interval") or 5) if r.get("preview") else 0
-    lot = job.get("lot")
-    e = {"status": job["status"], "position": position,
+    est, lot = job_estimate(job, r, coefs), job.get("lot")
+    e = {"status": job["status"], "position": position, "ahead": round(ahead, 1),
          # identifiant d'un lot incognito : connu de sa seule page, comme celui de ses générations
-         "lot": lot and ({"rank": lot["rank"], "size": lot["size"]} if secret(job) else dict(lot)),
-         "estimate": round(estimate.predict(coefs, r["width"], r["height"], r["steps"], refs, init, previews), 1),
+         "lot": lot and ({"rank": lot["rank"], "size": lot["size"]} if job.get("incognito") else dict(lot)),
+         "estimate": round(est, 1),
          "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None}
-    if secret(job):
+    if job.get("incognito"):
         # jeton de la page qui l'a lancée : elle y reconnaît ses lignes ; il n'ouvre aucune route (ni suivi, ni annulation)
         e.update(kind="incognito", page=job.get("page"))
     else:
         prompt = " ".join(r["prompt"].split())
-        e.update(kind="normal", id=job["id"], mode=job["mode"], prompt=prompt[:80] + ("…" if len(prompt) > 80 else ""))
+        e.update(kind="private" if job.get("private") else "normal", id=job["id"], mode=job["mode"],
+                 prompt=prompt[:80] + ("…" if len(prompt) > 80 else ""))
     return e
+
+
+def queue_view(private, coefs):
+    """Liste de la file vue depuis un espace : les entrées de ses seules générations, rangs propres à l'espace
+    (queue_ranks) ; le travail de l'autre espace placé devant une entrée compte dans son ahead (la génération en cours
+    pour ce qui lui reste, les autres pour leur estimation)."""
+    active, now = active_jobs(), time.time()
+    ranks, entries, hidden = queue_ranks(active, private), [], 0.0
+    for j in active:
+        if in_space(j, private):
+            e = queue_entry(j, ranks[j["id"]], hidden, coefs)
+            if e:
+                entries.append(e)
+        else:
+            r = j.get("req")
+            est = job_estimate(j, r, coefs) if r else 0.0
+            hidden += max(0.0, est - (now - j["started"])) if j["status"] == "running" and j.get("started") else est
+    return entries
 
 
 def new_job(req, inputs, lot=None):
@@ -1444,7 +1555,7 @@ def new_job(req, inputs, lot=None):
     out = os.path.join(d, f"{jid}_{mode}.png") if incognito or private else P("outputs", f"{jid}_{mode}.png")
     return {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
             "incognito": incognito, "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot,
-            "page": req.get("page") if incognito or private else None,   # jeton de la page, montré dans queue à la place de l'id
+            "page": req.get("page") if incognito else None,   # jeton de la page, montré dans queue à la place de l'id
             "public": private and (read_space() or {}).get("public")}    # clé publique de l'espace au lancement
 
 
@@ -1457,6 +1568,10 @@ def public(job):
     d["incognito"], d["private"] = bool(job.get("incognito")), bool(job.get("private"))
     d["item"] = job.get("item")                   # image privée rangée : identifiant dans la galerie privée
     d["lot"], d["seed"] = job.get("lot"), job.get("seed")
+    # prompt complet, pour la page qui reprend une génération (la file n'en montre que le début) : tant que la demande
+    # est en mémoire (une privée l'oublie à sa fin), jamais pour une incognito (sa seule page le connaît déjà) ; une
+    # privée n'est suivie que dans l'espace privé (_hidden)
+    d["prompt"] = None if job.get("incognito") else (job.get("req") or {}).get("prompt")
     d["path"] = job["out"] if job.get("status") == "done" and not secret(job) else None
     d["name"] = os.path.basename(job["out"])
     return d
@@ -1464,8 +1579,8 @@ def public(job):
 
 def quiet_request(msg):
     """Requêtes tues dans le journal du serveur : interrogations répétées (état, suivi des générations) et tout ce qui
-    touche à l'espace privé (rien n'en va dans logs/)."""
-    return "/api/status" in msg or "/api/job/" in msg or "/api/private/" in msg
+    peut toucher à l'espace privé (rien n'en va dans logs/), annulation d'un lot comprise (son identifiant)."""
+    return "/api/status" in msg or "/api/job/" in msg or "/api/private/" in msg or "/api/lot/" in msg
 
 
 class Server(ThreadingHTTPServer):
@@ -1555,6 +1670,23 @@ class H(BaseHTTPRequestHandler):
             session["seen"] = time.time()
         return session
 
+    def _in_private(self):
+        """Cet appareil est-il dans l'espace privé : session ouverte (sans la prolonger) et requête sûre, pour que rien
+        de privé ne parte en clair même si le cookie de session suit une adresse http:// du même nom."""
+        return HAVE_CRYPTO and self._secure() and self._private_session() is not None
+
+    def _hidden(self, job, touch=False):
+        """Génération privée que cet appareil ne peut ni suivre, ni prévisualiser, ni annuler : hors de l'espace privé
+        (_in_private), elle est traitée comme un identifiant inconnu. touch : geste dans l'espace (annulation), qui
+        prolonge la session ; le suivi, répété chaque seconde, ne la prolonge pas."""
+        if not job.get("private"):
+            return False
+        if not self._in_private():
+            return True
+        if touch:
+            self._private_session(touch=True)
+        return False
+
     def _send_private(self, code, reply, token=""):
         """Réponse qui pose le cookie de session de l'espace privé (token), ou l'efface (token vide) : HttpOnly, sans
         durée de vie (perdu à la fermeture du navigateur), distinct du cookie d'accès."""
@@ -1580,6 +1712,16 @@ class H(BaseHTTPRequestHandler):
         key, item, action = session["key"], q.get("id"), path[len("/api/private/"):]
         if action == "history":
             return self._send(200, private_history(key))
+        if action == "prompts":                   # prompts enregistrés de l'espace, le dernier utilisé d'abord
+            try:
+                saved = sorted(private_prompts(key), key=lambda p: -p["used"])
+            except StaleKey:
+                return self._send(403, {"error": "espace privé verrouillé"})
+            except OSError:                       # changement de code en cours de réparation, disque
+                return self._send(500, {"error": "prompts privés indisponibles : réessayez dans un instant"})
+            except (InvalidTag, ValueError):
+                return self._send(500, {"error": "prompts privés illisibles"})
+            return self._send(200, {"saved": saved, "types": prompt_types()})
         try:
             if action == "input":                 # images d'entrée : par leur nom dans meta (init.png, ref_N.png)
                 meta = json.loads(read_private(key, item, "meta") or b"{}")
@@ -1621,6 +1763,21 @@ class H(BaseHTTPRequestHandler):
                     return self._send(404, {"error": "image privée inconnue"})
                 shutil.rmtree(os.path.join(PRIVATE, "items", item))
             return self._send(200, {"ok": True})
+        m = re.fullmatch(r"prompts(?:/(delete|used))?", action)
+        if m:                                   # prompts enregistrés de l'espace, session exigée
+            session = self._private_session(touch=True)
+            if not session:
+                return self._send(403, {"error": "espace privé verrouillé"})
+            verb = m.group(1) or "save"            # save, delete ou used
+            error = prompt_error(verb, body)
+            if error:
+                return self._send(400, {"error": error})
+            try:
+                return self._send(*change_prompt(verb, body, lambda update: private_prompts(session["key"], update)))
+            except StaleKey:
+                return self._send(403, {"error": "espace privé verrouillé"})
+            except (OSError, InvalidTag, ValueError):
+                return self._send(500, {"error": "prompts privés non modifiés"})
         if action == "lock":
             S.private_sessions.pop(self._private_token(), None)
             return self._send_private(200, {"ok": True})
@@ -1705,39 +1862,41 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, open(P("tools", "ui", "index.html"), "rb").read(), "text/html; charset=utf-8")
         if path == "/api/status":
             missing = [k for k, v in MODELS.items() if not os.path.exists(v)]
+            # espace de l'appareil : la file, la génération en cours et la dernière image ne montrent que les siennes
+            inside = self._in_private()
             # un job incognito n'est jamais repris après un rechargement de la page : il est perdu avec elle
-            last = max((j for j in list(S.jobs.values()) if not secret(j)), key=lambda j: j["created"], default=None)
-            coefs, active = S.store.coefficients(S.backend, S.model, S.engine), active_jobs()
+            last = None if inside else max((j for j in list(S.jobs.values()) if not secret(j)), key=lambda j: j["created"],
+                                           default=None)
+            coefs, current = S.store.coefficients(S.backend, S.model, S.engine), S.jobs.get(S.current) or {}
+            queue = queue_view(inside, coefs)
             return self._send(200, {"sd_ready": not missing, "backend": S.backend, "busy": S.current is not None,
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model,
-                                    "queued": sum(j["status"] == "queued" for j in active),
-                                    "queue": [e for e in (queue_entry(j, k, coefs) for k, j in enumerate(active)) if e],
-                                    # identifiant d'une génération incognito ou privée : connu de sa seule page
-                                    "current_job": None if secret(S.jobs.get(S.current) or {}) else S.current,
+                                    "queued": sum(e["status"] == "queued" for e in queue),
+                                    "queue": queue,
+                                    # identifiant d'une génération incognito : connu de sa seule page
+                                    "current_job": S.current if current and in_space(current, inside)
+                                                   and not current.get("incognito") else None,
                                     "last_job": public(last) if last else None,
                                     "estimates": coefs,
                                     # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
                                     "phone": {"urls": S.lan_urls, "code": S.access_code} if S.access_code and self._local() else None,
-                                    # espace privé : existe-t-il, est-il déverrouillé pour cet appareil (sans prolonger la
-                                    # session), peut-il s'ouvrir par cette adresse (HTTPS ou le Mac) et y être supprimé
-                                    # sans le code (le Mac lui-même seulement)
+                                    # espace privé : existe-t-il, est-on dedans sur cet appareil (sans prolonger la session),
+                                    # peut-il s'ouvrir par cette adresse (HTTPS ou le Mac) et y être supprimé sans le code
+                                    # (le Mac lui-même seulement)
                                     "private": {"available": HAVE_CRYPTO, "exists": HAVE_CRYPTO and os.path.exists(os.path.join(PRIVATE, "space.json")),
-                                                "unlocked": HAVE_CRYPTO and self._private_session() is not None,
-                                                "secure": self._secure(), "local": self._local()}})
+                                                "unlocked": inside, "secure": self._secure(), "local": self._local()}})
         m = re.match(r"^/api/job/([\w-]+)(/preview|/result)?$", path)
         if m:
             job = S.jobs.get(m.group(1))
-            if not job:
+            if not job or self._hidden(job):
                 return self._send(404, {"error": "job inconnu"})
             if m.group(2) == "/result":           # image d'un job incognito, gardée en mémoire seulement
                 png = job.get("png")
                 if not png:
                     return self._send(404, {"error": "image incognito indisponible"})
                 return self._send(200, png, "image/png")
-            if m.group(2):
-                if job.get("private") and not self._secure():   # aperçu privé, en clair : jamais par http:// sur le Wi-Fi
-                    return self._send(403, {"error": PRIVATE_HTTPS_ONLY})
+            if m.group(2):                        # aperçu (privé : par une requête sûre seulement, _hidden)
                 if not job.get("preview"):
                     return self._send(404, {"error": "pas d'aperçu"})
                 try:
@@ -1907,7 +2066,7 @@ class H(BaseHTTPRequestHandler):
         m = re.match(r"^/api/lot/([\w-]+)/cancel$", path)
         if m:                                    # toutes les générations non terminées du lot
             lot = S.lots.get(m.group(1))
-            if not lot:
+            if not lot or self._hidden(lot["jobs"][0], touch=True):
                 return self._send(404, {"error": "lot inconnu"})
             active = [j for j in lot["jobs"] if j.get("status") in ACTIVE]
             for job in active:
@@ -1916,7 +2075,9 @@ class H(BaseHTTPRequestHandler):
         m = re.match(r"^/api/job/([\w-]+)/(cancel|forget)$", path)
         if m:
             job = S.jobs.get(m.group(1))
-            if not job:
+            # l'annulation est un geste dans l'espace (session prolongée) ; l'oubli, envoyé seul par la page à la fin
+            # d'une génération, ne la prolonge pas
+            if not job or self._hidden(job, touch=m.group(2) == "cancel"):
                 return self._send(404, {"error": "job inconnu"})
             if m.group(2) == "forget" and not secret(job):
                 return self._send(400, {"error": "seul un job incognito ou privé peut être oublié"})

@@ -126,7 +126,7 @@ async function connect(wsUrl) {
   await Promise.all([send('Runtime.enable'), send('Log.enable'), send('Page.enable')]);
 
   const page = {
-    send, errors,
+    send, on, errors,
     // évalue une expression dans la page (promesse attendue) et renvoie sa valeur (JSON)
     async eval(expression) {
       const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture: true });
@@ -145,6 +145,14 @@ async function connect(wsUrl) {
       const ok = await page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
         if (!el || el.hidden || el.disabled || !el.getClientRects().length) return false; el.click(); return true; })()`);
       if (!ok) throw new Error(`élément absent, masqué ou désactivé : ${selector}`);
+    },
+    // fichiers choisis d'un coup dans un champ <input type=file> (comme le sélecteur du téléphone) : événements input et
+    // change envoyés par Chrome
+    async setFiles(selector, files) {
+      const r = await send('Runtime.evaluate', { expression: `document.querySelector(${JSON.stringify(selector)})` });
+      if (!r.result.objectId) throw new Error(`champ de fichiers absent : ${selector}`);
+      await send('DOM.enable');
+      await send('DOM.setFileInputFiles', { objectId: r.result.objectId, files });
     },
     async screenshot(file) {
       const r = await send('Page.captureScreenshot', { format: 'png' });
