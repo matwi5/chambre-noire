@@ -65,7 +65,8 @@ contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net`
   `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `smoke` (écrans principaux),
   `keep` (régression « Garder celle-ci »), `saisie` (photos choisies d'un coup, vidage après « Générer », saisie
   propre à chaque espace ; `page.setFiles` remplit un champ de fichiers), `file` (file et pastille propres à chaque
-  espace) et `entete` (cadenas de la galerie, pastille qui tient dans sa bulle). Une vérification d'interface nouvelle
+  espace), `entete` (cadenas de la galerie, pastille qui tient dans sa bulle) et `prompts` (prompts enregistrés
+  propres à chaque espace). Une vérification d'interface nouvelle
   y devient un test plutôt qu'un script jetable. Une vue plus grande cache des débordements : regarder aussi les
   captures (`page.screenshot`).
 - La fermeture de la page (`pagehide`, envoi `keepalive`) se valide sur le téléphone : Chrome sans écran ne la rejoue
@@ -99,7 +100,8 @@ Ne lancer aucune génération réelle et ne supprimer aucune image de `outputs/`
   dans les journaux doit respecter ces deux modes.** `log_message` tait `/api/private/` et aucun `print` ne parle de
   l'espace privé ; ni le titre ni le texte d'un prompt enregistré ne vont dans les journaux du serveur.
 - **Verrous** : toute écriture de `outputs/journal.jsonl` passe sous `JOURNAL_LOCK` ; toute écriture ou suppression
-  d'une image privée passe sous `PRIVATE_LOCK`, après `finish_rekey()`.
+  d'une image privée ou des prompts privés (`private/prompts`) passe sous `PRIVATE_LOCK`, après `finish_rekey()` ; un
+  nouveau fichier de `private/` est aussi rechiffré par `rekey_space` et rangé par `finish_rekey`.
 - **Contrôle d'accès** (dans cet ordre, dans `H`) : `_host_ok`, `_post_refused`, `_allowed`, et `_secure` pour
   l'espace privé (jamais les en-têtes de relais). Toute nouvelle route POST passe par ces contrôles : l'interface doit
   envoyer `Content-Type: application/json`, même sans corps. Seules les requêtes privées prolongent une session

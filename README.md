@@ -345,7 +345,8 @@ existait encore (les 20 derniers).
 
 Le bouton **Prompts**, sous le champ de texte de **Créer**, **Éditer** et **Dessiner**, ouvre la liste des prompts
 enregistrés, le dernier utilisé en tête. Elle est gardée sur le Mac (`tools/saved_prompts.json`) : on retrouve sur le
-téléphone ce qui a été enregistré depuis le Mac, et inversement.
+téléphone ce qui a été enregistré depuis le Mac, et inversement. Dans l'espace privé, la liste est celle des prompts
+privés, chiffrés avec l'espace (voir [Espace privé](#espace-privé)) ; les prompts types restent les mêmes.
 
 - **Enregistrer le texte actuel** demande un titre (80 caractères au plus) et garde le texte du champ (4 000
   caractères au plus), modifiable avant d'enregistrer. Seuls le titre et le texte sont gardés, pas les réglages
@@ -447,9 +448,15 @@ du Mac, ne suffit pas pour voir les images privées.
   pas de chemin inverse (on télécharge l'image depuis l'espace privé). Les copies déjà faites restent : sauvegardes
   Time Machine, téléchargements, partages, et, faites à sa génération, la ligne du journal du serveur (`logs\`, nom du
   fichier et durée, sans le prompt) et sa mesure de calibration (dimensions et durées).
-- **Changer le code** demande l'ancien. Le Mac tire alors de nouvelles clés et rechiffre toutes les images privées :
-  elles restent lisibles avec le nouveau code, et une ancienne copie de l'espace (sauvegarde Time Machine du dossier
-  `private/`) ne s'ouvre plus avec l'ancien code sur les images d'aujourd'hui ; une sauvegarde complète d'avant le
+- **Prompts enregistrés privés** : dans l'espace privé, le bouton **Prompts** montre les prompts enregistrés de
+  l'espace privé et les prompts types, jamais ceux de l'espace public (et inversement). Ils se créent, s'utilisent, se
+  modifient, se suppriment et se filtrent comme les autres, et **Dupliquer** un prompt type en fait un prompt privé.
+  Ils sont chiffrés sur le Mac comme les images (`private/prompts`), rechiffrés au changement de code et effacés
+  avec l'espace. Les prompts enregistrés depuis l'espace privé avant le 15/10/2026 sont restés dans la liste publique :
+  les supprimer à la main.
+- **Changer le code** demande l'ancien. Le Mac tire alors de nouvelles clés et rechiffre toutes les images privées
+  et les prompts privés : elles restent lisibles avec le nouveau code, et une ancienne copie de l'espace
+  (sauvegarde Time Machine du dossier `private/`) ne s'ouvre plus avec l'ancien code sur les images d'aujourd'hui ; une sauvegarde complète d'avant le
   changement garde, elle, les images qu'elle contenait, lisibles avec l'ancien code. L'espace se ferme sur tous les
   appareils. Une génération privée en cours est rangée avec les nouvelles clés. Une panne au milieu (arrêt du Mac) ne
   perd aucune image : selon le moment, l'ancien ou le nouveau code ouvre l'espace, avec toutes ses images.
@@ -463,9 +470,9 @@ Ce que cela garantit, et ses limites :
 
 - le dossier `private/` ne contient que la clé publique de l'espace, sa clé privée chiffrée par une clé tirée du code
   (dérivation volontairement lente : chaque essai coûte du temps et de la mémoire, même sur une copie du disque), et
-  les images chiffrées, sous des noms tirés au hasard qui ne disent ni la date ni le mode (la date de modification
-  des fichiers, elle, reste visible, comme leur taille et leur nombre). Le code n'est écrit nulle
-  part ; la clé privée déchiffrée ne reste qu'en mémoire du serveur, le temps de la session de l'appareil. Le Mac
+  les images et les prompts privés chiffrés, les images sous des noms tirés au hasard qui ne disent ni la date ni le
+  mode (la date de modification des fichiers, elle, reste visible, comme leur taille et leur nombre). Le code n'est
+  écrit nulle part ; la clé privée déchiffrée ne reste qu'en mémoire du serveur, le temps de la session de l'appareil. Le Mac
   chiffre une image privée sans le code, avec la seule clé publique : c'est ce qui permet de la ranger même espace
   verrouillé ;
 - rien d'une image privée ne va dans `outputs\`, dans le journal des générations, dans les mesures de calibration ni
@@ -714,8 +721,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `POST /api/private/create {"code"}` (409 s'il existe déjà), `POST /api/private/unlock {"code"}` (403 après une
   seconde si le code est faux), qui ouvrent une session pour l'appareil (cookie `qwen_private`, HttpOnly, sans durée
   de vie, fermée par le serveur après 15 minutes sans requête privée), `POST /api/private/lock`,
-  `POST /api/private/code {"old", "new"}` (nouvelles clés, images rechiffrées, toutes les sessions fermées et le cookie
-  de l'appareil effacé ; 500 si le rechiffrement échoue, sans perte : le message dit si le code a changé),
+  `POST /api/private/code {"old", "new"}` (nouvelles clés, images et prompts privés rechiffrés, toutes les sessions
+  fermées et le cookie de l'appareil effacé ; 500 si le rechiffrement échoue, sans perte : le message dit si le code a changé),
   `POST /api/private/reset {"confirm": "SUPPRIMER"}` (efface l'espace et
   ferme toutes les sessions ; 403 hors du Mac lui-même) ; `/api/status` porte `private` : `available` (bibliothèque
   `cryptography` présente), `exists`, `unlocked` (pour cet appareil, sans prolonger la session), `secure` (l'espace
@@ -736,8 +743,11 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   pas. Galerie privée, session exigée (403 sinon), chaque requête prolongeant la session : `GET /api/private/history`
   (réglages déchiffrés de chaque image, avec `id`), `GET /api/private/image?id=…[&download=1]`,
   `GET /api/private/thumb?id=…`, `GET /api/private/input?id=…&file=init.png|ref_N.png[&thumb=1][&download=1]`,
-  `POST /api/private/delete {"id"}` ; « Rendre privée » : `POST /api/private/adopt {"name": <png de outputs/>, "code"}`
-  (sans session : le code est vérifié, 403 après une seconde s'il est faux, 404 pour une image ou un espace inconnu,
+  `POST /api/private/delete {"id"}` ; prompts enregistrés de l'espace privé, session exigée (403 sinon) et
+  prolongée, mêmes champs, mêmes limites et mêmes réponses que `/api/prompts` : `GET /api/private/prompts` (avec les
+  mêmes `types`), `POST /api/private/prompts`, `POST /api/private/prompts/delete`, `POST /api/private/prompts/used`
+  (500 si `private/prompts` est illisible, sans l'écraser) ; « Rendre privée » :
+  `POST /api/private/adopt {"name": <png de outputs/>, "code"}` (sans session : le code est vérifié, 403 après une seconde s'il est faux, 404 pour une image ou un espace inconnu,
   409 pendant la fin de sa génération ; en cas d'échec, l'original reste entier et rien n'est rangé),
   qui répond l'`id` de l'image dans l'espace privé et retire l'image, ses miniatures, ses entrées et sa ligne de
   `outputs/journal.jsonl` (réécrit sous le verrou de l'écriture de fin de génération).

@@ -140,6 +140,15 @@ _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par �
     serveur range une image avec la seule clé publique, notée au lancement de la génération (si l'espace a été
     supprimé ou recréé entre-temps, l'image est abandonnée). L'image est écrite dans `private/items/.<id>/` puis le
     dossier est renommé : la galerie privée ne voit jamais une image à moitié rangée.
+  - Prompts enregistrés privés (ajouté le 15/10/2026, spécification « Espaces public et privé étanches ») : un seul
+    fichier `private/prompts`, même format qu'un fichier d'image (`QPV1`, clé éphémère, nonce, AES-256-GCM), données
+    associées = les 48 premiers octets + `prompts` (aucun nom d'image ne peut le valoir) ; contenu : JSON en UTF-8,
+    la liste des prompts privés, même format qu'un prompt public (`id`, `title`, `text`, `usage`, `used`). Absent tant
+    qu'aucun prompt privé n'existe. Écrit sous `PRIVATE_LOCK` après `finish_rekey()`, scellé avec la clé publique de
+    `space.json`, dans `private/prompts.tmp` mis sur le disque puis remplacé d'un coup, droits 600 ; lu et modifié
+    avec la clé privée d'une session (refusé si elle n'est plus celle de l'espace). Le changement de code le
+    rechiffre dans `private/.rekey/prompts` avant la bascule, puis `finish_rekey()` le met à la place de l'ancien ; un
+    fichier déjà illisible est recopié tel quel.
   - Sessions : une par appareil, en mémoire du serveur (`S.private_sessions`), jeton aléatoire de 256 bits dans le
     cookie `qwen_private` (HttpOnly, `SameSite=Strict`, sans `Max-Age`) ; fermée après 15 min sans requête privée
     (`/api/status` et le suivi des générations ne la prolongent pas), par `/api/private/lock`, et par

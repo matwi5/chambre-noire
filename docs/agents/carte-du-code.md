@@ -28,14 +28,16 @@ Dans l'ordre du fichier :
   terminée ou en échec), `notify_lot` (une seule par lot) et `push_notify` (envoi dans un thread, à chaque abonnement ;
   appareil désabonné retiré). Jamais le prompt dans le message ; une génération privée notifie comme une normale.
   Sans `pywebpush`, le serveur tourne sans notifications.
-- **Prompts enregistrés** : `saved_prompts()` (lecture et écriture de `tools/saved_prompts.json` sous `PROMPTS_LOCK`,
-  fichier temporaire puis `os.replace` ; un fichier illisible lève une erreur et n'est jamais écrasé),
-  `prompt_error` (400), `change_prompt` ; `prompt_types()` relit `tools/prompt_types.json` à chaque appel, sans
+- **Prompts enregistrés** : `prompt_list` (forme d'une liste lue), `saved_prompts()` (lecture et écriture de
+  `tools/saved_prompts.json` sous `PROMPTS_LOCK`, fichier temporaire puis `os.replace` ; un fichier illisible lève une
+  erreur et n'est jamais écrasé), `prompt_error` (400), `change_prompt` (sur `saved_prompts` ou, passée en `store`,
+  la liste de l'espace privé `private_prompts`) ; `prompt_types()` relit `tools/prompt_types.json` à chaque appel, sans
   jamais l'écrire (ids `type-…`, que les routes d'écriture ne trouvent pas : 404).
 - **Espace privé** (`private/`) : constantes `PRIVATE`, `PRIVATE_COOKIE`, `PRIVATE_IDLE`, `PRIVATE_LOCK` (un `RLock`),
   `REKEY`, `SCRYPT_N`, `HAVE_CRYPTO` ; clés : `read_space`, `code_key`, `write_space`, `open_space` ; mise sur disque :
   `sync_fd`, `write_synced`, `sync_dir` ; chiffrement par fichier : `file_key`, `seal`, `unseal` ; images :
-  `store_private`, `read_private`, `private_history` ; changement de code : `rekey_space` (tout dans
+  `store_private`, `read_private`, `private_history` ; prompts privés : `private_prompts` (`private/prompts`, scellé
+  à l'étiquette `prompts`) ; changement de code : `rekey_space` (tout dans
   `private/.rekey/`, bascule par `os.replace` de `space.json`) et `finish_rekey` (termine ou abandonne un changement
   interrompu, au démarrage et sous `PRIVATE_LOCK` avant toute ouverture ou écriture) ; `private_code_error`.
 - **Galerie et journal** : `input_files`, `save_inputs` (entrées copiées vers `outputs/.inputs/<image>/`),
@@ -112,7 +114,8 @@ dernier bloc, après le HTML.
     rechargement et au retour dans l'espace public), `resume`, `adoptPrivate` (dans l'espace privé, toutes les
     générations privées actives de la file, `adopted` : pas lancées par la page, qui ne les fait pas oublier).
   - « notifications » : `pushSubscribe`, `askNotifications`.
-  - « prompts enregistrés » : `prompts`, `openPrompts`, `renderPrompts`, `usePrompt`, `savePrompt`.
+  - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts`, `renderPrompts`,
+    `usePrompt`, `savePrompt`.
   - « galerie et visionneuse » : `histItems`, `vList` (ce que parcourt la visionneuse : la galerie ou les images d'un
     lot de la page), `loadHistory`, `renderGallery`, `openViewer`, `stepViewer`, `closeViewer`, gestes (`resetZoom`).
   - « partager et copier » ; « images d'entrée » : `openInputs`, `inputAction`, `addEditImage` ; actions de la
@@ -157,7 +160,11 @@ invariants ».
   intercepter `requests.post` et déchiffrer avec `http_ece`.
 - **Prompts enregistrés** : titre et texte seulement, jamais de réglages ; `used` (secondes) ordonne la liste.
   Enregistrer un prompt est un geste explicite, permis aussi en incognito (décision de la spec) ; choisir un prompt en
-  incognito ne met pas à jour `used`. Le banc lit `tools/prompt_types.json` du dépôt (pas de repointage).
+  incognito (espace public) ne met pas à jour `used`, dans l'espace privé
+  si. Le banc lit `tools/prompt_types.json` du dépôt (pas de repointage). Chaque
+  espace a sa liste : dans l'espace privé, la feuille passe par `/api/private/prompts` (`private_prompts`, chiffrée) ;
+  `changedSpace` ferme ses feuilles (confirmation comprise) et vide la liste de l'espace quitté ; une réponse reçue
+  après un changement d'espace est ignorée.
 - **Interface et serveur** : l'interface suit les générations qu'elle a lancées (`pageJobs`) en interrogeant chacune
   par `/api/job/<id>` chaque seconde, et la file de son espace (`queue` de `/api/status`, entrées produites par
   `queue_view`) toutes les 2 s tant qu'elle n'est pas vide ; la file et l'île ne parlent que des générations de

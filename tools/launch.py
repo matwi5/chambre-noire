@@ -24,6 +24,8 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
         GET /api/job/<id>/result et POST /api/job/<id>/forget (incognito ; forget aussi pour une génération privée),
         espace privé : POST /api/private/create|unlock|lock|code|reset|delete, GET /api/private/history,
         GET /api/private/image|thumb?id=<id>, GET /api/private/input?id=<id>&file=<init.png|ref_N.png>,
+        prompts enregistrés de l'espace privé (private/prompts, chiffré) : GET /api/private/prompts,
+        POST /api/private/prompts, POST /api/private/prompts/delete, POST /api/private/prompts/used,
         GET /api/result?name=<png>[&download=1], GET /api/status,
         historique : GET /api/history, GET /api/thumb?name=<png>, POST /api/delete {"name": <png>},
         images d'entrée d'une image : GET /api/input?name=<png>&file=<init.png|ref_N.png>[&thumb=1][&download=1],
@@ -255,6 +257,15 @@ def prompt_types():
         return []
 
 
+def prompt_list(prompts):
+    """La liste de prompts lue d'un fichier, si elle a la forme attendue ; sinon ValueError (fichier modifié à la
+    main)."""
+    if not (isinstance(prompts, list) and all(isinstance(p, dict) and isinstance(p.get("id"), str)
+                                              and isinstance(p.get("used"), (int, float)) for p in prompts)):
+        raise ValueError("liste de prompts attendue")
+    return prompts
+
+
 def saved_prompts(update=None):
     """Prompts enregistrés : [{id, title, text, usage, used}], used = dernière utilisation (secondes). update(liste)
     renvoie la liste modifiée, ou None pour ne rien écrire ; l'écriture passe par un fichier temporaire renommé
@@ -262,12 +273,9 @@ def saved_prompts(update=None):
     with PROMPTS_LOCK:
         try:
             with open(PROMPTS_FILE, encoding="utf-8") as f:
-                prompts = json.load(f)
+                prompts = prompt_list(json.load(f))
         except FileNotFoundError:
             prompts = []
-        if not (isinstance(prompts, list) and all(isinstance(p, dict) and isinstance(p.get("id"), str)
-                                                  and isinstance(p.get("used"), (int, float)) for p in prompts)):
-            raise ValueError("liste de prompts attendue")
         changed = update(prompts) if update else None
         if changed is None:
             return prompts
@@ -305,9 +313,10 @@ def prompt_error(action, body):
     return None
 
 
-def change_prompt(action, body):
+def change_prompt(action, body, store=saved_prompts):
     """Crée (« save » sans id), modifie (« save » avec id), supprime (« delete ») ou marque comme utilisé (« used ») un
-    prompt enregistré ; renvoie (code HTTP, réponse). Seuls le titre et le texte sont gardés, jamais les réglages."""
+    prompt enregistré ; renvoie (code HTTP, réponse). Seuls le titre et le texte sont gardés, jamais les réglages.
+    store : la liste à modifier, saved_prompts (espace public) ou celle de l'espace privé (private_prompts)."""
     result = (404, {"error": "prompt inconnu"})
 
     def stamp(prompts):
@@ -337,7 +346,7 @@ def change_prompt(action, body):
             p.update(title=body["title"].strip(), text=body["text"].strip())
         result = (200, p)
         return prompts
-    saved_prompts(change)
+    store(change)
     return result
 
 
@@ -504,16 +513,34 @@ def store_private(public, meta, image, inputs):
 
 
 def rekey_space(old_key, code):
-    """Changement de code : nouvelle paire de clés et toutes les images rechiffrées, pour qu'une ancienne copie de
-    space.json ne lise plus rien avec l'ancien code. Ordre d'écriture sûr (DECISIONS.md) : tout est d'abord écrit à part,
-    dans private/.rekey/ (la nouvelle clé publique, chaque fichier rechiffré sous son nom, les nouvelles clés scellées
-    par le nouveau code) ; la bascule est le remplacement de space.json, atomique ; finish_rekey() range ensuite les
-    images rechiffrées à la place des anciennes. Une panne avant la bascule laisse l'ancien espace intact. Sous
-    PRIVATE_LOCK, après finish_rekey() (aucun reste d'un changement interrompu) ; renvoie la nouvelle clé publique."""
+    """Changement de code : nouvelle paire de clés, toutes les images et les prompts privés rechiffrés, pour qu'une
+    ancienne copie de space.json ne lise plus rien avec l'ancien code. Ordre d'écriture sûr (DECISIONS.md) : tout est
+    d'abord écrit à part, dans private/.rekey/ (la nouvelle clé publique, chaque fichier rechiffré sous son nom, les
+    nouvelles clés scellées par le nouveau code) ; la bascule est le remplacement de space.json, atomique ;
+    finish_rekey() range ensuite les fichiers rechiffrés à la place des anciens. Une panne avant la bascule laisse
+    l'ancien espace intact. Sous PRIVATE_LOCK, après finish_rekey() (aucun reste d'un changement interrompu) ; renvoie
+    la nouvelle clé publique."""
     staging = os.path.join(PRIVATE, REKEY)
     key = X25519PrivateKey.generate()
     public = b64e(key.public_key().public_bytes_raw())
+
+    def reseal(src, dst, label):
+        """Copie src rechiffré avec la nouvelle clé ; un fichier déjà illisible avec l'ancienne est gardé tel quel, rien
+        n'est perdu. fsync seul (voir plus bas)."""
+        with open(src, "rb") as f:
+            blob = f.read()
+        try:
+            blob = seal(unseal(blob, old_key, label), public, label)
+        except (InvalidTag, ValueError):
+            pass
+        write_synced(dst, blob, full=False)
     try:
+        # reste d'un enregistrement des prompts privés coupé par une panne : scellé avec l'ancienne clé, il partirait
+        # lisible par l'ancien code
+        try:
+            os.remove(os.path.join(PRIVATE, "prompts.tmp"))
+        except FileNotFoundError:
+            pass
         os.makedirs(os.path.join(staging, "items"))
         # fichiers et dossiers copiés : fsync seul ; le F_FULLFSYNC de write_space, avant la bascule, les met tous sur
         # le disque d'un coup (un F_FULLFSYNC par fichier viderait le cache du disque autant de fois)
@@ -524,15 +551,12 @@ def rekey_space(old_key, code):
                 continue
             os.makedirs(os.path.join(staging, "items", item))
             for role in os.listdir(d):
-                with open(os.path.join(d, role), "rb") as f:
-                    blob = f.read()
-                try:
-                    blob = seal(unseal(blob, old_key, f"{item}/{role}"), public, f"{item}/{role}")
-                except (InvalidTag, ValueError):
-                    pass                        # déjà illisible avec l'ancienne clé : gardé tel quel, rien n'est perdu
-                write_synced(os.path.join(staging, "items", item, role), blob, full=False)
+                reseal(os.path.join(d, role), os.path.join(staging, "items", item, role), f"{item}/{role}")
             sync_dir(os.path.join(staging, "items", item), full=False)
         sync_dir(os.path.join(staging, "items"), full=False)
+        if os.path.exists(os.path.join(PRIVATE, "prompts")):   # prompts enregistrés de l'espace
+            reseal(os.path.join(PRIVATE, "prompts"), os.path.join(staging, "prompts"), "prompts")
+            os.chmod(os.path.join(staging, "prompts"), 0o600)
         write_space(public, key, code, os.path.join(staging, "space.json"))   # copies sur le disque avant la bascule
         sync_dir(PRIVATE)                       # l'entrée de .rekey/ elle-même, avant la bascule qui la rend nécessaire
         # la bascule, dernière instruction du try : si elle échoue, rien n'a changé et les copies sont jetées ; si elle
@@ -547,8 +571,9 @@ def rekey_space(old_key, code):
 
 def finish_rekey():
     """Termine un changement de code interrompu après la bascule (les images rechiffrées remplacent les anciennes, une
-    à une), ou l'abandonne s'il s'est arrêté avant (l'ancien espace est intact : les copies sont jetées). Sans effet
-    sans private/.rekey/. Appelé sous PRIVATE_LOCK, au démarrage et avant toute ouverture ou écriture de l'espace."""
+    à une, puis les prompts privés), ou l'abandonne s'il s'est arrêté avant (l'ancien espace est intact : les copies
+    sont jetées). Sans effet sans private/.rekey/. Appelé sous PRIVATE_LOCK, au démarrage et avant toute ouverture ou
+    écriture de l'espace."""
     staging = os.path.join(PRIVATE, REKEY)
     if not os.path.isdir(staging):
         return
@@ -566,6 +591,9 @@ def finish_rekey():
             shutil.rmtree(dst)                  # l'ancienne version, illisible avec la nouvelle clé (la nouvelle est écrite)
         os.rename(d, dst)
     sync_dir(os.path.join(PRIVATE, "items"))
+    if os.path.exists(os.path.join(staging, "prompts")):   # prompts rechiffrés : remplacent les anciens d'un coup
+        os.replace(os.path.join(staging, "prompts"), os.path.join(PRIVATE, "prompts"))
+        sync_dir(PRIVATE)
     shutil.rmtree(staging)
 
 
@@ -594,6 +622,44 @@ def private_history(private_key):
         if isinstance(meta, dict):
             items.append({**meta, "id": item, "private": True})
     return sorted(items, key=lambda x: x.get("time") or 0, reverse=True)
+
+
+class StaleKey(Exception):
+    """Clé privée d'une session qui n'est plus celle de l'espace : traitée comme un espace verrouillé (403)."""
+
+
+def private_prompts(private_key, update=None):
+    """Prompts enregistrés de l'espace privé, comme saved_prompts (même format, même update), lus et écrits avec la clé
+    d'une session : private/prompts, scellé par seal() avec l'étiquette « prompts », absent tant qu'aucun prompt privé
+    n'existe (DECISIONS.md). Sous PRIVATE_LOCK, après finish_rekey() ; écriture mise sur le disque dans un fichier
+    temporaire, puis remplacement atomique, droits 600. Un fichier illisible lève ValueError (ou InvalidTag) sans être
+    écrasé ; StaleKey si la clé n'est plus celle de l'espace (code changé ou espace supprimé pendant la requête)."""
+    fp = os.path.join(PRIVATE, "prompts")
+    with PRIVATE_LOCK:
+        finish_rekey()
+        public = (read_space() or {}).get("public")
+        if public != b64e(private_key.public_key().public_bytes_raw()):
+            raise StaleKey("espace privé verrouillé")
+        try:
+            with open(fp, "rb") as f:
+                prompts = prompt_list(json.loads(unseal(f.read(), private_key, "prompts")))
+        except FileNotFoundError:
+            prompts = []
+        changed = update(prompts) if update else None
+        if changed is None:
+            return prompts
+        try:
+            write_synced(fp + ".tmp", seal(json.dumps(changed, ensure_ascii=False).encode(), public, "prompts"))
+            os.chmod(fp + ".tmp", 0o600)
+            os.replace(fp + ".tmp", fp)
+        except BaseException:
+            try:
+                os.remove(fp + ".tmp")
+            except OSError:
+                pass
+            raise
+        sync_dir(PRIVATE)
+        return changed
 
 
 def private_code_error(code):
@@ -1642,6 +1708,16 @@ class H(BaseHTTPRequestHandler):
         key, item, action = session["key"], q.get("id"), path[len("/api/private/"):]
         if action == "history":
             return self._send(200, private_history(key))
+        if action == "prompts":                   # prompts enregistrés de l'espace, le dernier utilisé d'abord
+            try:
+                saved = sorted(private_prompts(key), key=lambda p: -p["used"])
+            except StaleKey:
+                return self._send(403, {"error": "espace privé verrouillé"})
+            except OSError:                       # changement de code en cours de réparation, disque
+                return self._send(500, {"error": "prompts privés indisponibles : réessayez dans un instant"})
+            except (InvalidTag, ValueError):
+                return self._send(500, {"error": "prompts privés illisibles"})
+            return self._send(200, {"saved": saved, "types": prompt_types()})
         try:
             if action == "input":                 # images d'entrée : par leur nom dans meta (init.png, ref_N.png)
                 meta = json.loads(read_private(key, item, "meta") or b"{}")
@@ -1683,6 +1759,21 @@ class H(BaseHTTPRequestHandler):
                     return self._send(404, {"error": "image privée inconnue"})
                 shutil.rmtree(os.path.join(PRIVATE, "items", item))
             return self._send(200, {"ok": True})
+        m = re.fullmatch(r"prompts(?:/(delete|used))?", action)
+        if m:                                   # prompts enregistrés de l'espace, session exigée
+            session = self._private_session(touch=True)
+            if not session:
+                return self._send(403, {"error": "espace privé verrouillé"})
+            error = prompt_error(m.group(1) or "save", body)
+            if error:
+                return self._send(400, {"error": error})
+            try:
+                return self._send(*change_prompt(m.group(1) or "save", body,
+                                                 lambda update: private_prompts(session["key"], update)))
+            except StaleKey:
+                return self._send(403, {"error": "espace privé verrouillé"})
+            except (OSError, InvalidTag, ValueError):
+                return self._send(500, {"error": "prompts privés non modifiés"})
         if action == "lock":
             S.private_sessions.pop(self._private_token(), None)
             return self._send_private(200, {"ok": True})
