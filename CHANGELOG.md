@@ -1,0 +1,44 @@
+# Journal des versions
+
+Les versions suivent [SemVer](https://semver.org/lang/fr/) ; tant que l'application est en 0.x, une version mineure
+peut changer un comportement existant.
+
+## 0.2.0 · 2026-10-15
+
+### Ajouté
+
+- **Mac Apple Silicon** : moteur Metal (sd.cpp `master-959`) avec l'encodeur GGUF et sa tour vision ; estimations de
+  durée calibrées sur la machine.
+- **Accès depuis le téléphone** : code d'accès, service macOS qui démarre seul, application installable en HTTPS par
+  `tailscale serve`, notification de fin de génération (Web Push).
+- **Galerie et visionneuse** : zoom au pincement, partage, copie, images d'entrée gardées avec chaque image.
+- **Mode incognito** : l'image n'est gardée nulle part sur l'ordinateur ; elle est remise une fois, puis oubliée une
+  fois vue et quittée.
+- **File d'attente** : « Générer » reste actif pendant une génération ; les demandes attendent leur tour dans une file
+  commune au Mac et au téléphone, avec annulation par génération.
+- **Variantes** (mode Créer) : 1 à 4 images d'un même prompt, une grille pour choisir et « Garder celle-ci ».
+- **Campagne** (mode Éditer) : le même prompt appliqué à chaque photo (10 au plus), une image par photo.
+- **Lots dans la galerie** : badge, « Voir le lot », « Tout télécharger » ; une seule notification par lot.
+- **Prompts enregistrés** partagés entre appareils, et 11 prompts types livrés avec l'application.
+- **Espace privé** : une galerie chiffrée sur le disque, ouverte par un code distinct, par un cadenas discret de la
+  Galerie ; on y entre et on en sort ; « Rendre privée » pour une image existante.
+- **Banc de test** sans GPU : `venv/bin/python -m unittest discover -s tests`.
+
+### Modifié
+
+- Interface refaite (verre, barre d'onglets, panneau de réglages), niveaux de résolution nommés d'après le format
+  vidéo le plus proche ; réglages par défaut 720p et 40 étapes.
+- Une demande invalide est refusée tout de suite, et une génération qui échoue n'arrête plus la file.
+- Une génération annulée ne laisse aucun fichier.
+
+### Sécurité
+
+- Liste blanche de `Host` contre le rebinding DNS et contrôle d'origine des requêtes POST.
+- Espace privé : chiffrement à clé publique (X25519, scrypt, AES-256-GCM), ouverture seulement en HTTPS ou sur le Mac,
+  nouvelles clés à chaque changement de code ; rien d'une génération privée ou incognito ne reste en clair dans le
+  journal, la calibration ou `logs/`, et rien ne la trahit aux autres appareils.
+
+## 0.1.0 · 2026-09-23
+
+Première version : interface web locale, lanceur et installation pour Windows (Vulkan), moteur CUDA en option,
+estimations de durée calibrées, licence MIT.
