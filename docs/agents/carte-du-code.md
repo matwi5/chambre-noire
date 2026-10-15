@@ -104,9 +104,13 @@ dernier bloc, après le HTML.
   - « générations de la page, zone de résultat, île et file » : `pageJobs` (générations lancées par cette page),
     `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `lotOf`, `gridOf`, `show`,
     `showGrid`, `renderStrip`, `renderIsland`, `onIsland` (file non vide : `#queueSheet`, sinon `#engineSheet`),
-    `renderQueue`, `ownOf` (ligne de `queue` → génération de la page), `track` (suit une génération, `pollJobs` chaque
-    seconde), `finish` (image terminée : dans la page, ou recharge la galerie), `drop` ; bouton `#go` et reprise après
-    rechargement (fonction `resume`).
+    `renderQueue`, `ownOf` (ligne de `queue` → génération de la page), `ofSpace`, `spaceActive`, `oldestActive`,
+    `latestResult` (générations de l'espace affiché), `track` (suit une génération, `pollJobs` chaque seconde ; une
+    privée « inconnue » quitte la page sans message), `finish` (image terminée : dans la page, ou recharge la galerie ;
+    une publique finie pendant qu'on est dans l'espace privé garde son image hors de l'écran), `drop` ; bouton `#go` ;
+    reprise : `followQueue` (suit des entrées de la file), `resumeOwn` (générations normales de ce navigateur, après un
+    rechargement et au retour dans l'espace public), `resume`, `adoptPrivate` (dans l'espace privé, toutes les
+    générations privées actives de la file, `adopted` : pas lancées par la page, qui ne les fait pas oublier).
   - « notifications » : `pushSubscribe`, `askNotifications`.
   - « prompts enregistrés » : `prompts`, `openPrompts`, `renderPrompts`, `usePrompt`, `savePrompt`.
   - « galerie et visionneuse » : `histItems`, `vList` (ce que parcourt la visionneuse : la galerie ou les images d'un
@@ -157,8 +161,11 @@ invariants ».
 - **Interface et serveur** : l'interface suit les générations qu'elle a lancées (`pageJobs`) en interrogeant chacune
   par `/api/job/<id>` chaque seconde, et la file de son espace (`queue` de `/api/status`, entrées produites par
   `queue_view`) toutes les 2 s tant qu'elle n'est pas vide ; la file et l'île ne parlent que des générations de
-  l'espace affiché (`ofSpace`, `spaceActive`), le temps d'attente ajoute `ahead` (`waitBefore`) ; après un rechargement, elle se rattache aux seules
-  générations normales lancées depuis ce navigateur (identifiants dans `localStorage`, `qwen-own`). Ses lignes
+  l'espace affiché (`ofSpace`, `spaceActive`), le temps d'attente ajoute `ahead` ; après un rechargement, elle se
+  rattache aux seules générations normales lancées depuis ce navigateur (identifiants dans `localStorage`,
+  `qwen-own`), et dans l'espace privé à toutes les générations privées actives (`adoptPrivate`). À la sortie de
+  l'espace privé, `changedSpace` retire de la page ses générations privées ; dans l'espace privé, les publiques restent
+  suivies hors de l'écran. Ses lignes
   incognito de `queue` se reconnaissent au jeton de la page (`PAGE_TOKEN`, champ `page` de `/api/generate`). Un lot
   terminé s'affiche en grille (`gridOf`) ; la visionneuse parcourt `vList` (la galerie, ou les images d'un lot de la
   page, incognito comprises par leur adresse `blob:`). Réglages, brouillons de la saisie publique et générations à
@@ -167,9 +174,11 @@ invariants ».
   figés au démarrage), `_post_refused` (tout POST : `Sec-Fetch-Site`, `Origin` égal à l'origine du `Host`,
   `Content-Type: application/json` exigé, sinon 403/415), puis `_allowed` (le Mac lui-même passe ; les autres
   appareils, et toute requête relayée par `tailscale serve`, présentent le cookie dérivé du code d'accès). L'espace
-  privé ajoute `_secure` (toutes ses routes sauf `lock`, la génération privée et l'aperçu d'une génération privée) :
+  privé ajoute `_secure` (toutes ses routes sauf `lock` et la génération privée) :
   adresse source 127.0.0.1/::1 et `Host` local ou nom HTTPS de `tailscale serve` (`S.https_hosts`), jamais les
   en-têtes de relais, qu'un appareil du Wi-Fi peut envoyer en `http://` ; `/api/private/reset` exige `_local`.
+  Suivi, aperçu, annulation et oubli d'une génération privée, annulation d'un lot privé : `_hidden` (hors de
+  l'espace privé, `_in_private`, réponse d'un identifiant inconnu, 404).
 - **Espace privé** (format dans `DECISIONS.md`) : `space.json` garde la clé publique X25519 en clair et la clé privée
   chiffrée par scrypt + AES-GCM ; `/api/private/unlock` ouvre une session par appareil (`S.private_sessions`, cookie
   `qwen_private`, en plus du cookie d'accès, demandée même sur le Mac), fermée par `sweep()` après `PRIVATE_IDLE` sans

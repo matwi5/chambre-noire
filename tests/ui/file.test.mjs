@@ -68,11 +68,13 @@ test('espace privé : la file ne montre que les générations privées, avec leu
     { what: 'lot privé dans la file, avec son en-tête' });
   await page.click('#queueList [data-cancel-lot]');
   await page.waitFor(`$('queueList').querySelectorAll('.qrow').length === 2`, { what: 'lot privé annulé' });
-  // annulation d'une génération privée lancée par un autre appareil, depuis la file
+  // annulation d'une génération privée lancée par un autre appareil, depuis la file (la page la suit aussi : elle suit
+  // toutes les générations privées actives, sans la dire « cet appareil »)
   assert.equal(await page.eval(`$('queueList').querySelectorAll('.qrow [data-cancel]').length`), 2);
-  await page.click('#queueList .qrow:not(.own) [data-cancel]');
+  assert.doesNotMatch((await rows())[0], /cet appareil/);
+  await page.eval(`$('queueList').querySelector('.qrow [data-cancel]').click()`);
   await page.waitFor(`$('queueList').querySelectorAll('.qrow').length === 1`, { what: 'génération de l\'autre appareil annulée' });
-  await page.click('#queueList .qrow.own [data-cancel]');
+  await page.click('#queueList .qrow [data-cancel]');
   await page.waitFor(`!pageJobs.some(isActive)`, { what: 'génération de cette page annulée' });
   await page.eval(`closeSheet()`);
   assert.equal((await post(`/api/job/${pub.id}/cancel`)).status, 200);
@@ -80,6 +82,87 @@ test('espace privé : la file ne montre que les générations privées, avec leu
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   page.assertNoErrors();
+});
+
+// ------------------------------------------------------------ sortie de l'espace privé et retour
+const jobs = () => page.eval(`pageJobs.map(p => (p.private ? 'privée ' : 'publique ') + p.prompt)`);
+const onScreen = () => page.eval(`({ shown: shown && (shown.private ? 'privée ' : 'publique ') + shown.prompt,
+  stage: $('stage').style.display !== 'none', strip: [...$('strip').querySelectorAll('[data-i]')].map(b => pageJobs[+b.dataset.i].prompt),
+  island: $('island').classList.contains('run'), last: $('resultMeta').textContent.includes('Dernière génération') })`);
+const PUB = 'SLOW=0.3 zq9public de la page', SECRET = 'SLOW=0.05 zq9secret de la page';
+
+test('sortie : la génération privée quitte l\'écran et la page ; elle revient au retour, aussi après un rechargement', async () => {
+  await page.goto(bench.url + '/');
+  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await type(PUB);                                 // génération publique de la page, en cours
+  await page.click('#go');
+  await page.waitFor(`pageJobs.some(p => !p.private && p.j.status === 'running')`, { what: 'génération publique en cours' });
+
+  await enterPrivate();                            // elle quitte l'écran, reste suivie en mémoire
+  assert.deepEqual(await onScreen(), { shown: null, stage: false, strip: [], island: false, last: false });
+  assert.deepEqual(await jobs(), ['publique ' + PUB]);
+  await type(SECRET);                              // génération privée, en attente derrière la publique
+  await page.click('#go');
+  await page.waitFor(`shown && shown.private`, { what: 'génération privée à l\'écran' });
+  assert.deepEqual((await onScreen()).strip, [], 'pas de vignette de la génération publique');
+
+  await page.click('#privExit');                   // « Sortir » : la privée quitte l'écran et la page, la publique revient
+  await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  assert.deepEqual(await jobs(), ['publique ' + PUB]);
+  const out = await onScreen();
+  assert.equal(out.shown, 'publique ' + PUB);
+  assert.equal(out.stage, true);
+  assert.deepEqual(out.strip, []);
+  assert.doesNotMatch(await page.eval(`document.body.innerText`), /zq9secret/);
+
+  await enterPrivate();                            // retour : la page suit de nouveau la génération privée
+  await page.waitFor(`pageJobs.some(p => p.private && isActive(p))`, { what: 'génération privée retrouvée' });
+  assert.equal((await onScreen()).shown, 'privée ' + SECRET);
+  assert.deepEqual((await onScreen()).strip, []);
+
+  await page.goto(bench.url + '/');                // rechargement dans l'espace privé
+  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  if (!await page.eval(`inPrivate()`)) await enterPrivate();   // la fermeture de la page a pu verrouiller l'espace
+  await page.waitFor(`pageJobs.some(p => p.private && isActive(p))`, { what: 'génération privée retrouvée après le rechargement' });
+  const back = await onScreen();
+  assert.equal(back.shown, 'privée ' + SECRET);
+  assert.equal(back.last, false, 'pas de dernière image publique');
+  assert.deepEqual(back.strip, [], 'aucune vignette publique');
+
+  await page.click('#cancel');                     // annulée depuis la zone de résultat
+  await page.waitFor(`!pageJobs.some(isActive)`, { what: 'génération privée annulée' });
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  // de retour dans l'espace public, la page reprend la génération publique qu'elle avait lancée
+  await page.waitFor(`pageJobs.some(p => !p.private && p.prompt === ${JSON.stringify(PUB)})`, { what: 'génération publique reprise' });
+  await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy)`, { what: 'Mac au repos', timeout: 20000 });
+  page.assertNoErrors();
+});
+
+test('fermé par le Mac : la génération privée quitte l\'écran comme après « Sortir »', async () => {
+  await page.goto(bench.url + '/');
+  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  const pub = await launch('SLOW=1 zq9public d\'un autre appareil');   // la privée attend derrière
+  await enterPrivate();
+  await type(SECRET);
+  await page.click('#go');
+  await page.waitFor(`shown && shown.private`, { what: 'génération privée à l\'écran' });
+  assert.equal((await post('/api/private/lock')).status, 200);   // session fermée sans « Sortir »
+  await page.eval(`refreshStatus()`);
+  await page.waitFor(`!inPrivate()`, { what: 'hors de l\'espace privé' });
+  assert.deepEqual(await jobs(), []);
+  assert.deepEqual(await onScreen(), { shown: null, stage: false, strip: [], island: true, last: false });
+  assert.doesNotMatch(await page.eval(`document.body.innerText`), /zq9secret/);
+  await enterPrivate();
+  await page.waitFor(`pageJobs.some(p => p.private && isActive(p))`, { what: 'génération privée retrouvée' });
+  await page.click('#cancel');
+  await page.waitFor(`!pageJobs.some(isActive)`, { what: 'génération privée annulée' });
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  assert.equal((await post(`/api/job/${pub.id}/cancel`)).status, 200);
+  // suivi interrompu par la fermeture : Chrome note les réponses « inconnu » d'un suivi déjà parti, seules erreurs admises
+  assert.deepEqual(page.errors.filter(e => !/404 \(Not Found\)/.test(e)), []);
+  page.errors.length = 0;
 });
 
 test('espace public : une génération privée en cours n\'allume pas la pastille et n\'est pas dans la file', async () => {

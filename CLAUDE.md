@@ -103,8 +103,9 @@ Ne lancer aucune génération réelle et ne supprimer aucune image de `outputs/`
 - **Contrôle d'accès** (dans cet ordre, dans `H`) : `_host_ok`, `_post_refused`, `_allowed`, et `_secure` pour
   l'espace privé (jamais les en-têtes de relais). Toute nouvelle route POST passe par ces contrôles : l'interface doit
   envoyer `Content-Type: application/json`, même sans corps. Seules les requêtes privées prolongent une session
-  (`_private_session(touch=True)`), jamais `/api/status`. Le jeton de page (`PAGE_TOKEN`, champ `page`) n'ouvre
-  aucune route : ne jamais s'en servir comme droit.
+  (`_private_session(touch=True)`), jamais `/api/status`. Toute route qui suit, prévisualise ou annule une génération
+  ou un lot passe par `_hidden` : une génération privée y est « inconnue » (404) hors de l'espace privé. Le jeton de
+  page (`PAGE_TOKEN`, champ `page`) n'ouvre aucune route : ne jamais s'en servir comme droit.
 - **Formule dupliquée en JavaScript** : `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()` et
   `ref_px()` de `estimate.py` (jetons de 16×16 px, arrondi à 32). Une modification de la formule ou d'un coefficient se
   fait des deux côtés. `PREVIEW_EVERY = 5` côté interface doit égaler le défaut `preview_interval` de `build_cmd`.

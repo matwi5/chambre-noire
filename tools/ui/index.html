@@ -983,7 +983,7 @@ async function refreshStatus(){
     $('phone').hidden=$('phoneBtn').hidden=!s.phone; if(s.phone) facts('phoneFacts', [['Adresse', s.phone.urls[0]], ...s.phone.urls.slice(1).map(u=>['ou', u]), ['Code', s.phone.code, 'code']]);
     const ver = s.model_version ? s.model_version.toUpperCase() : '';
     if(s.sd_ready){ applyEstimates(s.estimates); el.textContent=(s.busy?'En cours':'Prêt')+(ver?' · '+ver:''); el.className='ok'; } else { el.textContent='Non prêt'; el.className='err'; }
-    applyPrivate(s.private);
+    applyPrivate(s.private); if(inPrivate()) adoptPrivate();
     facts('engineFacts', [['État', s.sd_ready ? (s.busy ? 'génération en cours' : 'prêt') : (s.detail||'non prêt')], ['Moteur', s.backend], ['Modèle', s.model],
       ['File d\'attente', s.queued ? s.queued+' en attente' : ''], ['Estimations', !s.estimates ? '' : calibrated ? 'calibrées sur '+s.estimates.samples+' mesure'+(s.estimates.samples>1?'s':'') : 'non calibrées']]); }
   catch(e){ $('status').textContent='Hors ligne'; $('status').className='err'; facts('engineFacts', [['État', 'serveur injoignable']]); }
@@ -1098,11 +1098,13 @@ function saveOwn(){ const inQueue=new Set(queueState.map(e=>e.id).filter(Boolean
   const ids=[...new Set([...(inPrivate() ? ownIds() : ownIds().filter(id=>inQueue.has(id))), ...pageJobs.filter(p=>!p.incognito && !p.private && isActive(p)).map(p=>p.id)])];
   try{ localStorage.setItem('qwen-own', JSON.stringify(ids)); }catch(e){} }
 const isActive = p => ['queued','running'].includes(p.j.status);
-// génération de l'espace affiché (privée dans l'espace privé, normale ou incognito hors de lui) : la file et l'île ne
-// parlent que de celles-là, comme /api/status
+// génération de l'espace affiché (privée dans l'espace privé, normale ou incognito hors de lui) : la zone de résultat,
+// la pellicule, la file et l'île ne parlent que de celles-là, comme /api/status. Dans l'espace privé, les générations
+// publiques de la page restent suivies en mémoire, hors de l'écran ; les privées quittent la page à la sortie.
 const ofSpace = p => !!p.private===inPrivate();
 const spaceActive = () => pageJobs.some(p=>ofSpace(p) && isActive(p));
-const oldestActive = () => pageJobs.find(isActive);
+const oldestActive = () => pageJobs.find(p=>ofSpace(p) && isActive(p));
+const latestResult = () => [...pageJobs].reverse().find(p=>ofSpace(p) && p.result);
 // lot : générations de la page lancées d'une même demande (p.lot : id, rang, taille). Lot terminé avec au moins deux
 // images : la zone de résultat montre leur grille.
 const lotOf = p => p && p.lot ? pageJobs.filter(q=>q.lot && q.lot.id===p.lot.id) : [];
@@ -1199,11 +1201,11 @@ function pick(p){ const prev=shown; if(!p || p===prev) return; show(p); if(prev 
 addEventListener('visibilitychange', markSeen);
 // pellicule : une vignette par génération de la page, quand il y en a plusieurs ; un appui l'affiche
 function renderStrip(){
-  const s=$('strip'); s.hidden=pageJobs.length<2; if(s.hidden){ s.innerHTML=''; return; }
-  const grid=gridOf(shown);
-  s.innerHTML=pageJobs.map((p, i)=>{ const cls=`tile${p===shown || (grid && grid.includes(p)) ?' sel':''}`;
-    if(p.result) return `<button class="${cls}" data-i="${i}" aria-label="Image ${i+1}"><img src="${p.result.blob ? p.result.url : p.result.item ? privThumb(p.result.item) : '/api/thumb?name='+encodeURIComponent(p.result.name)}" alt=""></button>`;
-    return `<button class="${cls}" data-i="${i}" aria-label="Génération ${i+1} en cours"><svg class="pring" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16" pathLength="100"/><circle cx="20" cy="20" r="16" pathLength="100"/></svg><span></span></button>`; }).join('');
+  const s=$('strip'), here=pageJobs.filter(ofSpace); s.hidden=here.length<2; if(s.hidden){ s.innerHTML=''; return; }
+  const grid=gridOf(shown);                        // data-i : rang dans pageJobs ; numéro : rang dans l'espace affiché
+  s.innerHTML=pageJobs.map((p, i)=>{ const cls=`tile${p===shown || (grid && grid.includes(p)) ?' sel':''}`, n=here.indexOf(p)+1; if(!n) return '';
+    if(p.result) return `<button class="${cls}" data-i="${i}" aria-label="Image ${n}"><img src="${p.result.blob ? p.result.url : p.result.item ? privThumb(p.result.item) : '/api/thumb?name='+encodeURIComponent(p.result.name)}" alt=""></button>`;
+    return `<button class="${cls}" data-i="${i}" aria-label="Génération ${n} en cours"><svg class="pring" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16" pathLength="100"/><circle cx="20" cy="20" r="16" pathLength="100"/></svg><span></span></button>`; }).join('');
   tickStrip(); }
 function tickStrip(){                              // vignettes en cours : anneau et position, sans tout redessiner
   $('strip').querySelectorAll('[data-i]').forEach(b=>{ const p=pageJobs[+b.dataset.i]; if(!p || p.result) return;
@@ -1246,7 +1248,7 @@ function renderQueue(){
     const pic = p && p.thumb ? `<img src="${p.thumb}" alt="">`
       : `<span class="qicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${QICON[incog ? 'incognito' : tabOf(e.mode)]}</svg></span>`;
     const camp=e.mode==='edit' || !!(p && p.tab==='edit');   // lot du mode Éditer : une campagne (incognito : connue de sa page)
-    const sub=[e.status==='running' ? 'En cours' : ordinal(e.position)+' en attente', incog || e.lot ? '' : MODE_LABELS[e.mode]||e.mode, e.lot ? `${camp ? 'photo' : 'image'} ${e.lot.rank}/${e.lot.size}` : '', 'prête dans ≈ '+fmt(wait+(e.ahead||0)), p ? 'cet appareil' : ''];
+    const sub=[e.status==='running' ? 'En cours' : ordinal(e.position)+' en attente', incog || e.lot ? '' : MODE_LABELS[e.mode]||e.mode, e.lot ? `${camp ? 'photo' : 'image'} ${e.lot.rank}/${e.lot.size}` : '', 'prête dans ≈ '+fmt(wait+(e.ahead||0)), p && !p.adopted ? 'cet appareil' : ''];
     // lot : un en-tête avant sa première image de la file, avec l'annulation de tout le lot là où l'appareil y a droit
     // (lot normal ou privé : partout dans son espace ; lot incognito : sa page seulement, seule à connaître son
     // identifiant)
@@ -1264,11 +1266,16 @@ $('queueList').addEventListener('click', async ev=>{
   if(p){ closeSheet(); if(mode==='hist') goTab(p.tab); pick(p); $('stage').scrollIntoView({behavior:'smooth', block:'center'}); } });
 // suivi des générations de la page : une interrogation par seconde de chacune tant qu'elle n'est pas terminée
 function track(j, info){
+  const had=pageJobs.find(p=>p.id===j.id);         // déjà suivie (générations privées de la file) : complétée par info
+  if(had){ ['prompt','tab','w','h','thumb','est'].forEach(k=>{ if(info[k]) had[k]=info[k]; }); had.adopted=had.adopted && !!info.adopted;
+    return renderStrip(); }
   pageJobs.push({ id:j.id, j, incognito:!!j.incognito, private:!!j.private, lot:j.lot||null, prompt:info.prompt||'', tab:info.tab||'t2i', w:info.w, h:info.h, thumb:info.thumb||null,
-    est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0 });
+    est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0,
+    adopted:!!info.adopted });                      // adopted : reprise de la file (espace privé), pas lancée ici
   while(pageJobs.length>MAX_PAGE_JOBS){ const k=pageJobs.findIndex(p=>p.result && !p.result.blob && p!==shown && !sameLot(p, shown)); if(k<0) break; pageJobs.splice(k, 1); }
   if(!j.incognito && !j.private) saveOwn();
-  if(shown && shown.incognito && shown.result) renderStrip();   // l'image incognito affichée le reste
+  // l'image incognito affichée le reste ; une génération reprise de la file (adopted) ne remplace pas ce qui est montré
+  if((shown && shown.incognito && shown.result) || (info.adopted && shown)) renderStrip();
   else show(oldestActive());
   renderIsland(); pollJobs(); }
 async function pollJobs(){
@@ -1276,6 +1283,10 @@ async function pollJobs(){
   try{ while(pageJobs.some(isActive)){ await sleep(1000); let ended=false;
       for(const p of pageJobs.filter(isActive)){ let r;
         try{ r=await fetch('/api/job/'+p.id); }catch(e){ continue; }              // serveur injoignable : on réessaie
+        if(!pageJobs.includes(p)) continue;        // sortie de l'espace pendant l'appel : elle n'est plus suivie
+        // privée « inconnue » : espace fermé (la page ne le sait pas encore) ou oubliée par la page qui l'a lancée ;
+        // elle quitte la page sans message d'échec (elle continue, ou est déjà rangée, dans l'espace)
+        if(!r.ok && p.private){ drop(p); ended=true; continue; }
         p.j = r.ok ? await r.json() : {...p.j, status:'failed', error:'génération introuvable (serveur relancé ?)'};
         if(!isActive(p)){ await finish(p); ended=true; } }
       if(ended){ saveOwn(); refreshStatus(); }     // l'île et la file suivent tout de suite (la suivante a démarré)
@@ -1289,7 +1300,7 @@ async function finish(p){                          // génération terminée : s
       catch(e){ j.status='failed'; j.error='image incognito indisponible'; }
     forgetJob(j.id); }
   if(j.private){                                   // image rangée chiffrée dans l'espace privé ; le serveur oublie la génération
-    forgetJob(j.id);
+    if(!p.adopted) forgetJob(j.id);                // (seule la page qui l'a lancée : les autres la suivent encore)
     if(!inPrivate()) return drop(p);         // sorti entre-temps : rien à l'écran ni rien qui signale l'espace (l'image y est rangée)
     if(j.status==='done') p.result={item:j.item, url:privImage(j.item)}; }
   if(j.status==='done'){ const secs=j.seconds||0;
@@ -1297,12 +1308,14 @@ async function finish(p){                          // génération terminée : s
       file:j.incognito ? 'Incognito · non enregistrée : téléchargez-la pour la garder' : j.private ? 'Rangée chiffrée dans l\'espace privé' : j.name,
       chips:[fmt(secs), j.dims?j.dims.join('×'):'', (j.total||'?')+' étapes', j.sec_per_it?j.sec_per_it.toFixed(1)+' s/étape':''] };
     log('terminé en '+Math.round(secs)+' s → '+(j.incognito ? 'image incognito, non enregistrée' : j.private ? 'image privée' : j.path));
+    if(!ofSpace(p)) return;                        // publique finie dans l'espace privé : à l'écran à la sortie
     const lot=lotOf(p), next=lot.find(isActive);
     toast(!p.lot ? 'Image prête en '+fmt(secs) : next ? `Image ${p.lot.rank} sur ${p.lot.size} prête` : 'Lot terminé');
     if(mode==='hist') loadHistory();
     // lot en cours : la zone de résultat passe à son image suivante ; à la fin du lot, sa grille
     if(shown===p) show(next || p, !next); else if(sameLot(shown, p) && !next) show(shown); else renderStrip();
     return; }
+  if(!ofSpace(p)) return drop(p);                  // publique annulée ou en échec dans l'espace privé : sans message
   if(j.status==='cancelled'){ log('génération annulée'); toast('Génération annulée'); }
   else { log('ERREUR '+(j.error||j.status)); toast('Échec : '+(j.error||j.status), 'err'); }
   drop(p); }
@@ -1310,7 +1323,7 @@ function drop(p){                                  // retire une génération de
   const k=pageJobs.indexOf(p); if(k>=0) pageJobs.splice(k, 1);
   if(p.result && p.result.blob) URL.revokeObjectURL(p.result.url);
   const lot=lotOf(p);                              // de préférence une autre image de son lot (ou sa grille)
-  if(shown===p) show(lot.find(isActive) || lot.find(q=>q.result) || oldestActive() || [...pageJobs].reverse().find(q=>q.result));
+  if(shown===p) show(lot.find(isActive) || lot.find(q=>q.result) || oldestActive() || latestResult());
   else if(sameLot(shown, p) && !isActive(shown)) show(shown); else renderStrip(); }
 function inputThumb(){ return mode==='edit' && editImages.length ? editImages[0].dataUrl : mode==='mask' && maskImage ? maskImage.dataUrl : null; }
 $('go').onclick=async()=>{                         // toujours actif : la demande rejoint la file avec les réglages du moment
@@ -1324,22 +1337,41 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   let r, j; try{ r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=await r.json(); }
   catch(e){ toast('Serveur injoignable', 'err'); return; }
   if(!r.ok){ toast('Erreur : '+(j.error||('HTTP '+r.status)), 'err'); return; }
+  log('demande acceptée');
   const jobs=j.jobs || [j];                         // un lot : une génération par image, suivies une à une
   const camp=body.campaign;                         // campagne : chaque génération a sa photo, ses dimensions et son estimation
-  jobs.forEach((x, k)=>track(x, {prompt:body.prompt, tab, w:camp ? camp[k].width : body.width, h:camp ? camp[k].height : body.height,
+  // espace privé quitté pendant l'envoi (fermeture par le Mac) : la génération privée continue sur le Mac, hors de la
+  // page ; une demande publique acceptée après l'entrée dans l'espace privé est suivie, hors de l'écran
+  if(!(priv && !inPrivate())) jobs.forEach((x, k)=>track(x, {prompt:body.prompt, tab, w:camp ? camp[k].width : body.width, h:camp ? camp[k].height : body.height,
     thumb:camp ? camp[k].image : thumb, est:camp ? campaignEst[k]||estOne : estOne, stepSec:stepSeconds, vaeSec:vaeSeconds}));
   emptyTab(tab, priv, sent);                        // demande acceptée : l'onglet est prêt pour la suivante (refus : rien n'est vidé)
-  if(jobs[0].queue_position) toast((!j.lot ? 'Ajoutée' : camp ? `Campagne de ${jobs.length} photos ajoutée` : `Lot de ${jobs.length} images ajouté`)+' à la file · '+ordinal(jobs[0].queue_position)+' en attente');
+  if(priv===inPrivate() && jobs[0].queue_position) toast((!j.lot ? 'Ajoutée' : camp ? `Campagne de ${jobs.length} photos ajoutée` : `Lot de ${jobs.length} images ajouté`)+' à la file · '+ordinal(jobs[0].queue_position)+' en attente');
   document.activeElement.blur(); requestAnimationFrame(()=>$('stage').scrollIntoView({behavior:'smooth', block:'center'}));
   refreshStatus();
 };
-(async function resume(){                          // après un rechargement : se rattache aux générations normales de la file
-  try{ const s=await (await fetch('/api/status')).json(), own=new Set(ownIds());   // lancées depuis ce navigateur seulement
-    for(const e of (s.queue||[]).filter(e=>e.id && own.has(e.id))){ const r=await fetch('/api/job/'+e.id); if(!r.ok) continue; const j=await r.json();
-      if(!['queued','running'].includes(j.status)) continue;
-      log('reprise de la génération '+j.id); track(j, {prompt:e.prompt, tab:tabOf(e.mode), est:e.estimate}); }
-    const j=s.last_job;                              // sinon : la dernière image produite
-    if(!pageJobs.length && j && j.status==='done'){ showResult(j.name, ...(j.dims||[])); setMeta('', ['Dernière génération', fmt(j.seconds||0), j.dims?j.dims.join('×'):''], j.name); }
+// suit les entrées de la file pas encore suivies dont la génération est active et de l'espace affiché ; info : ce
+// qui s'ajoute aux réglages tirés de l'entrée (adopted)
+const following=new Set();
+async function followQueue(entries, info){
+  for(const e of entries.filter(e=>e.id && !following.has(e.id) && !pageJobs.some(p=>p.id===e.id))){
+    following.add(e.id);
+    try{ const r=await fetch('/api/job/'+e.id); if(!r.ok) continue; const j=await r.json();
+      if(!isActive({j}) || !!j.private!==inPrivate() || pageJobs.some(p=>p.id===j.id)) continue;
+      if(!j.private) log('reprise de la génération '+j.id);
+      track(j, {prompt:e.prompt, tab:tabOf(e.mode), est:e.estimate, ...info}); }
+    catch(err){}
+    finally{ following.delete(e.id); } } }
+// générations normales de la file (espace public) lancées depuis ce navigateur : après un rechargement, et au retour
+// dans l'espace public (rechargement fait dans l'espace privé)
+function resumeOwn(queue){ const own=new Set(ownIds()); return followQueue(queue.filter(e=>e.kind==='normal' && own.has(e.id)), {}); }
+// espace privé : la page suit toutes les générations privées actives de la file, qu'elle les ait lancées ou non
+// (l'espace n'a qu'un propriétaire ; aucun identifiant privé n'est écrit dans le navigateur pour les reconnaître)
+function adoptPrivate(){ return followQueue(queueState.filter(e=>e.kind==='private'), {adopted:true}); }
+(async function resume(){                          // après un rechargement
+  try{ const s=await (await fetch('/api/status')).json();
+    await resumeOwn(s.queue||[]);
+    const j=s.last_job;                              // sinon : la dernière image produite (espace public seulement)
+    if(!pageJobs.length && !inPrivate() && j && j.status==='done'){ showResult(j.name, ...(j.dims||[])); setMeta('', ['Dernière génération', fmt(j.seconds||0), j.dims?j.dims.join('×'):''], j.name); }
   }catch(e){} })();
 async function cancelShown(){ if(shown && isActive(shown)){ log('annulation demandée'); await postJson('/api/job/'+shown.id+'/cancel', {}).catch(()=>{}); } }
 $('cancel').onclick=cancelShown; $('cancelLoader').onclick=cancelShown;
@@ -1678,14 +1710,17 @@ function applyPrivate(p){ if(!p) return; const was=inPrivate(); privState=p;
   // hors de l'espace, asideInput est la saisie privée : effacée après « Sortir » (même vue à une interrogation suivante)
   // ou avec l'espace supprimé ; sinon (fermeture par le Mac) gardée pour le retour
   if(!p.unlocked && (erasePrivate || !p.exists)){ asideInput=null; erasePrivate=false; } }
-// entrée ou sortie de l'espace privé : la galerie suit ; en sortant, ses images quittent la page (zone de résultat,
-// pellicule, visionneuse) ; une génération privée en cours continue et sera rangée dans l'espace, mais l'écran ne garde
-// d'elle que sa progression (ni prompt, ni image d'entrée dans la file, ni aperçu)
+// entrée ou sortie de l'espace privé : la galerie, la zone de résultat et la pellicule suivent. En entrant, les
+// générations publiques de la page quittent l'écran mais restent suivies ; la page suit les générations privées actives
+// de la file (adoptPrivate, à chaque état reçu). En sortant, les générations privées de la page la quittent, celle en
+// cours comprise (elle continue sur le Mac et sera rangée dans l'espace) ; les publiques reviennent, avec l'image de
+// celles qui ont fini entre-temps et celles de ce navigateur reprises après un rechargement fait dans l'espace privé
 function changedSpace(inside){
   swapInput();
-  if(!inside){ pageJobs.filter(p=>p.result && p.result.item).forEach(drop); if(vIndex>=0 && vList.some(x=>x.private)) closeViewer();
-    pageJobs.filter(p=>p.private).forEach(p=>{ p.prompt=''; p.thumb=null; });
-    if(shown && shown.private && isActive(shown)) show(shown); }
+  if(vIndex>=0 && vList.some(x=>!!x.private!==inside)) closeViewer();
+  if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
+    resumeOwn(queueState); }
+  show(oldestActive() || latestResult());
   if(mode==='hist') loadHistory(); else histItems=[];
   syncThemeColor(); }
 // Saisie propre à chaque espace (texte, images d'Éditer, image à retoucher et masque de Dessiner, onglet par onglet) :

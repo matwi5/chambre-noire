@@ -256,8 +256,10 @@ espace privé) : rang et « +N en attente » ne comptent qu'elles. Une générat
 de l'autre espace affiche « en attente » et un temps qui compte ce travail caché, sans ligne pour lui ; si rien de
 l'espace ne tourne, la pastille dit « En attente » et le temps avant le début de la première, et si l'espace n'a rien
 en file, elle reste éteinte même quand le Mac calcule pour l'autre espace. On peut recharger la page sans rien
-perdre : elle se rattache aux générations normales qu'elle avait lancées (retenues par le navigateur), pas à celles des autres appareils, qui restent visibles dans la file, ni
-aux générations incognito. Les lignes de l'appareil y sont marquées « cet appareil ». Le bouton Incognito se change à
+perdre : elle se rattache aux générations normales qu'elle avait lancées (retenues par le navigateur), pas à celles
+des autres appareils, qui restent visibles dans la file, ni aux générations incognito ; dans l'espace privé, à toutes
+les générations privées en cours (voir « Espace privé »). Les lignes lancées par l'appareil y sont marquées « cet
+appareil ». Le bouton Incognito se change à
 tout moment : chaque génération garde le mode choisi à son lancement. Chaque image est enregistrée en PNG dans
 **`outputs\`**, avec ses images d'entrée (références, image d'origine, zone peinte) dans `outputs\.inputs\`. Sous le
 résultat : **Télécharger**, **Partager** et **Copier** (dans le presse-papiers), puis **Éditer** et **Dessiner**, qui le
@@ -424,8 +426,14 @@ du Mac, ne suffit pas pour voir les images privées.
   navigateur, brouillons compris : elle ne survit pas à la fermeture de l'application. L'interrupteur **Campagne** et
   les Réglages sont communs aux deux espaces.
 - **Sortir vide l'écran** : la saisie privée est effacée, comme les images privées de la zone de résultat, de la grille
-  et de la visionneuse (si le Mac est injoignable, un message le dit et l'on reste dans l'espace). Une génération privée en cours continue, mais l'écran n'en montre plus que la progression, sans
-  aperçu ni prompt.
+  et de la visionneuse (si le Mac est injoignable, un message le dit et l'on reste dans l'espace). Les générations
+  privées en file ou en cours quittent aussi l'écran et la page (progression, aperçu, prompt, vignette, ligne de la
+  file) : elles continuent sur le Mac et sont rangées dans l'espace, mais une page sortie ne peut plus ni les suivre,
+  ni les prévisualiser, ni les annuler. Les générations publiques de la page, cachées pendant qu'on était dans l'espace
+  privé (elles y restent suivies, hors de l'écran), reviennent, avec leur image si elles ont fini entre-temps.
+- **Retour dans l'espace privé** : la page suit toutes les générations privées encore en file ou en cours, avec leur
+  prompt et leur progression, qu'elle les ait lancées ou non, aussi après un rechargement ou depuis un autre appareil
+  (aucun identifiant privé n'est gardé par le navigateur) ; la dernière image de l'espace public n'y est pas montrée.
 - **Fermeture automatique** : si l'espace se ferme seul (15 minutes sans activité privée), la saisie privée quitte
   l'écran comme à la sortie, mais la page la garde en mémoire : elle revient si l'on rentre sans avoir fermé
   l'application (un long texte en cours n'est pas perdu). Si l'espace privé est supprimé, elle est effacée. Quand
@@ -712,15 +720,19 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   ferme toutes les sessions ; 403 hors du Mac lui-même) ; `/api/status` porte `private` : `available` (bibliothèque
   `cryptography` présente), `exists`, `unlocked` (pour cet appareil, sans prolonger la session), `secure` (l'espace
   peut s'ouvrir par cette adresse) et `local` (le Mac lui-même, seul à pouvoir supprimer l'espace sans le code) ; sans
-  `cryptography`, ces routes répondent 503. Toutes les routes de l'espace privé sauf `lock`, la génération privée et
-  l'aperçu d'une génération privée (`/api/job/<id>/preview`) répondent 403 hors du Mac lui-même et de l'adresse HTTPS de « tailscale serve » (jugé sur l'adresse source
+  `cryptography`, ces routes répondent 503. Toutes les routes de l'espace privé sauf `lock` et la génération privée
+  répondent 403 hors du Mac lui-même et de l'adresse HTTPS de « tailscale serve » (jugé sur l'adresse source
   127.0.0.1 et le nom d'hôte, jamais sur les en-têtes de relais) ;
   génération privée : `"private": true` dans `/api/generate` (403 sans session, 400 avec `incognito` ou si `private`
   n'est pas un booléen, 503 sans `cryptography`), identifiant de
   32 caractères hexadécimaux, absente de `queue` hors de l'espace privé (rien n'y trahit l'espace privé aux autres
   appareils), entrée complète dedans (`kind` `private`, `id`, `mode`, `prompt`, `lot` avec son `id`) ;
   `GET /api/job/<id>` porte `private` et, une fois l'image rangée, `item` (son identifiant dans l'espace privé) ;
-  `POST /api/job/<id>/forget` l'oublie (l'image reste dans l'espace) ; `/api/forget` (fermeture de la page) ne l'arrête
+  `POST /api/job/<id>/forget` l'oublie (l'image reste dans l'espace) ; suivi (`GET /api/job/<id>`, `…/preview`),
+  annulation et oubli (`POST /api/job/<id>/cancel`, `…/forget`) d'une génération privée, et `POST /api/lot/<id>/cancel`
+  d'un lot privé : requête sûre et session exigées, sinon 404 (« job inconnu », « lot inconnu »), comme un identifiant
+  inconnu ; l'annulation et l'oubli prolongent la session, pas le suivi ;
+  `/api/forget` (fermeture de la page) ne l'arrête
   pas. Galerie privée, session exigée (403 sinon), chaque requête prolongeant la session : `GET /api/private/history`
   (réglages déchiffrés de chaque image, avec `id`), `GET /api/private/image?id=…[&download=1]`,
   `GET /api/private/thumb?id=…`, `GET /api/private/input?id=…&file=init.png|ref_N.png[&thumb=1][&download=1]`,

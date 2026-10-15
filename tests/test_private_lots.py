@@ -28,7 +28,7 @@ class PrivateLotTest(bench.BenchCase):
             self.assertRegex(reply["lot"]["id"], r"^[0-9a-f]{32}$")
             self.assertTrue(all(j["private"] for j in reply["jobs"]))
             for j in reply["jobs"]:
-                self.assertEqual(wait_job(j["id"])["status"], "done")
+                self.assertEqual(wait_job(j["id"], private=self.session)["status"], "done")
             sent.wait(1)
             bench.wait_idle()
         self.assertEqual([m["title"] for m in sent], ["3 images prêtes"])
@@ -44,7 +44,7 @@ class PrivateLotTest(bench.BenchCase):
 
     def test_private_lot_is_absent_from_the_public_queue(self):
         reply = self.launch(prompt="SLOW=0.05 zq9lot", count=2, steps=8, page="pageLot1")
-        wait_job(reply["jobs"][0]["id"], ("running",))
+        wait_job(reply["jobs"][0]["id"], ("running",), private=self.session)
         s = call("GET", "/api/status", remote=True)[1]
         self.assertEqual(s["queue"], [])                                     # rien n'y trahit l'espace privé
         self.assertNotIn(reply["lot"]["id"], str(s))
@@ -56,7 +56,7 @@ class PrivateLotTest(bench.BenchCase):
             reply = self.launch(prompt="zq9camp paint it blue", mode="edit", ref_images=[],
                                 campaign=[{"image": bench.data_url(p), "width": 512, "height": 384} for p in photos])
             for j in reply["jobs"]:
-                self.assertEqual(wait_job(j["id"])["status"], "done")
+                self.assertEqual(wait_job(j["id"], private=self.session)["status"], "done")
             sent.wait(1)
         self.assertEqual(sent[0]["title"], "2 images prêtes")
         items = sorted(self.history(), key=lambda i: i["lot"]["rank"])
@@ -68,7 +68,7 @@ class PrivateLotTest(bench.BenchCase):
         with bench.capture_push() as sent:
             reply = self.launch(prompt="zq9 FAILSEED=7", count=2, seed=6)
             for j in reply["jobs"]:
-                wait_job(j["id"])
+                wait_job(j["id"], private=self.session)
             sent.wait(1)
         self.assertEqual(sent[0]["title"], "1 image prête, 1 en échec")
 

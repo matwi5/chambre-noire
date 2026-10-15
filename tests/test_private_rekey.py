@@ -39,7 +39,7 @@ class ChangeCodeTest(bench.BenchCase):
         jobs = [call("POST", "/api/generate", bench.gen_body(p, private=True, **kw), private=session)[1]
                 for p, kw in (("zq9 first", {}), ("zq9 second", {"mode": "edit", "ref_images": [bench.data_url(self.ref)]}))]
         for j in jobs:
-            self.assertEqual(wait_job(j["id"])["status"], "done")
+            self.assertEqual(wait_job(j["id"], private=session)["status"], "done")
         bench.wait_idle()
         self.before = self.contents(session)
         self.assertEqual(len(self.before), 2)
@@ -95,10 +95,11 @@ class ChangeCodeTest(bench.BenchCase):
     def test_a_private_generation_running_during_the_change_is_kept(self):
         session = bench.unlock_private(OLD)
         job = call("POST", "/api/generate", bench.gen_body("SLOW=0.05 zq9 during", steps=10, private=True), private=session)[1]
-        wait_job(job["id"], ("running",))
-        self.assertEqual(self.change()[0], 200)
-        self.assertEqual(wait_job(job["id"])["status"], "done")
-        after = self.contents(self.opens(NEW))
+        wait_job(job["id"], ("running",), private=session)
+        self.assertEqual(self.change()[0], 200)          # toutes les sessions fermées : suivie avec le nouveau code
+        session = self.opens(NEW)
+        self.assertEqual(wait_job(job["id"], private=session)["status"], "done")
+        after = self.contents(session)
         self.assertEqual(sorted(after), ["SLOW=0.05 zq9 during", "zq9 first", "zq9 second"])
 
     def test_wrong_old_code_or_short_new_code_changes_nothing(self):

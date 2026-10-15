@@ -131,11 +131,11 @@ class SpacesQueueTest(bench.BenchCase):
         self.assertGreater(q[0]["ahead"], 0)
         self.assertAlmostEqual(q[0]["ahead"], left, delta=1.5)
         self.assertAlmostEqual(q[1]["ahead"] - q[0]["ahead"], pub[1]["estimate"], delta=0.2)
-        self.assertEqual([bench.job(j["id"])["queue_position"] for j in (p1, p2)], [1, 2])
+        self.assertEqual([bench.job(j["id"], self.session)["queue_position"] for j in (p1, p2)], [1, 2])
         self.assertEqual(p1["queue_position"], 1, "rang annoncé au lancement : celui de l'espace")
         # la publique annulée, la première privée tourne : génération courante de l'espace privé, rien devant elle
         call("POST", f"/api/job/{a}/cancel")
-        wait_job(p1["id"], ("running",))
+        wait_job(p1["id"], ("running",), private=self.session)
         s = self.status(private=True)
         self.assertEqual(s["current_job"], p1["id"])
         self.assertEqual([(e["position"], e["ahead"]) for e in s["queue"]][0], (0, 0))

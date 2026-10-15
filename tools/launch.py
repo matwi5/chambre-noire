@@ -1509,8 +1509,8 @@ def public(job):
 
 def quiet_request(msg):
     """Requêtes tues dans le journal du serveur : interrogations répétées (état, suivi des générations) et tout ce qui
-    touche à l'espace privé (rien n'en va dans logs/)."""
-    return "/api/status" in msg or "/api/job/" in msg or "/api/private/" in msg
+    peut toucher à l'espace privé (rien n'en va dans logs/), annulation d'un lot comprise (son identifiant)."""
+    return "/api/status" in msg or "/api/job/" in msg or "/api/private/" in msg or "/api/lot/" in msg
 
 
 class Server(ThreadingHTTPServer):
@@ -1604,6 +1604,18 @@ class H(BaseHTTPRequestHandler):
         """Cet appareil est-il dans l'espace privé : session ouverte (sans la prolonger) et requête sûre, pour que rien
         de privé ne parte en clair même si le cookie de session suit une adresse http:// du même nom."""
         return HAVE_CRYPTO and self._secure() and self._private_session() is not None
+
+    def _hidden(self, job, touch=False):
+        """Génération privée que cet appareil ne peut ni suivre, ni prévisualiser, ni annuler : hors de l'espace privé
+        (_in_private), elle est traitée comme un identifiant inconnu. touch : geste dans l'espace (annulation), qui
+        prolonge la session ; le suivi, répété chaque seconde, ne la prolonge pas."""
+        if not job.get("private"):
+            return False
+        if not self._in_private():
+            return True
+        if touch:
+            self._private_session(touch=True)
+        return False
 
     def _send_private(self, code, reply, token=""):
         """Réponse qui pose le cookie de session de l'espace privé (token), ou l'efface (token vide) : HttpOnly, sans
@@ -1782,16 +1794,14 @@ class H(BaseHTTPRequestHandler):
         m = re.match(r"^/api/job/([\w-]+)(/preview|/result)?$", path)
         if m:
             job = S.jobs.get(m.group(1))
-            if not job:
+            if not job or self._hidden(job):
                 return self._send(404, {"error": "job inconnu"})
             if m.group(2) == "/result":           # image d'un job incognito, gardée en mémoire seulement
                 png = job.get("png")
                 if not png:
                     return self._send(404, {"error": "image incognito indisponible"})
                 return self._send(200, png, "image/png")
-            if m.group(2):
-                if job.get("private") and not self._secure():   # aperçu privé, en clair : jamais par http:// sur le Wi-Fi
-                    return self._send(403, {"error": PRIVATE_HTTPS_ONLY})
+            if m.group(2):                        # aperçu (privé : par une requête sûre seulement, _hidden)
                 if not job.get("preview"):
                     return self._send(404, {"error": "pas d'aperçu"})
                 try:
@@ -1961,7 +1971,7 @@ class H(BaseHTTPRequestHandler):
         m = re.match(r"^/api/lot/([\w-]+)/cancel$", path)
         if m:                                    # toutes les générations non terminées du lot
             lot = S.lots.get(m.group(1))
-            if not lot:
+            if not lot or self._hidden(lot["jobs"][0], touch=True):
                 return self._send(404, {"error": "lot inconnu"})
             active = [j for j in lot["jobs"] if j.get("status") in ACTIVE]
             for job in active:
@@ -1970,7 +1980,7 @@ class H(BaseHTTPRequestHandler):
         m = re.match(r"^/api/job/([\w-]+)/(cancel|forget)$", path)
         if m:
             job = S.jobs.get(m.group(1))
-            if not job:
+            if not job or self._hidden(job, touch=True):
                 return self._send(404, {"error": "job inconnu"})
             if m.group(2) == "forget" and not secret(job):
                 return self._send(400, {"error": "seul un job incognito ou privé peut être oublié"})
