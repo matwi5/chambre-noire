@@ -7,9 +7,29 @@ lignes « … completed, taking x.xxs »), écrit les aperçus et l'image finale
 Commandes glissées dans le prompt, pour un test :
 - FAIL (mot entier) : échoue après la première étape (ligne [ERROR], code de sortie 1, aucune image) ;
 - FAILSEED=<n> : échoue de même si la graine (-s) vaut n, pour faire échouer une seule image d'un lot ;
-- SLOW ou SLOW=<s> (mot entier) : chaque étape dure <s> secondes (0,3 s pour SLOW seul ; 0,01 s sans commande).
+- SLOW ou SLOW=<s> (mot entier) : chaque étape dure <s> secondes (0,3 s pour SLOW seul ; 0,01 s sans commande) ;
+- HOLD ou HOLD=<nom> : attend, avant la première étape, que le banc libère ce nom (bench.release(nom), « hold » par
+  défaut ; release() du pilote des tests d'interface) : la génération reste en cours, et les suivantes en file, sans
+  dépendre du temps. La libération est un fichier <nom> du dossier QWEN_FAKE_HOLD (posé par le banc dans le script
+  sd-cli) ; elle vaut pour toutes les générations de ce nom jusqu'au test suivant (BenchCase.setUp vide le dossier,
+  après avoir tout libéré par le fichier ALL), et jusqu'à la fin du banc pour les tests d'interface : un nom par test.
+  Sans libération après HOLD_LIMIT secondes, échec comme FAIL.
 """
 import os, re, struct, sys, time, zlib
+
+HOLD_LIMIT = 120
+ALL = "ALL"                                     # fichier qui libère tous les noms (ménage du banc)
+
+
+def hold(name):
+    """Attend que le banc libère name ; False si rien ne vient avant HOLD_LIMIT secondes."""
+    d = os.environ.get("QWEN_FAKE_HOLD", "")
+    end = time.time() + HOLD_LIMIT
+    while not (os.path.exists(os.path.join(d, name)) or os.path.exists(os.path.join(d, ALL))):
+        if time.time() > end:
+            return False
+        time.sleep(0.02)
+    return True
 
 
 def arg(argv, name, default=None):
@@ -35,8 +55,12 @@ def main(argv):
     fail = re.search(r"\bFAIL\b", prompt) or (fail_seed and fail_seed.group(1) == arg(argv, "-s"))
     slow = re.search(r"\bSLOW(?:=(\d+(?:\.\d+)?))?\b", prompt)
     delay = float(slow.group(1) or 0.3) if slow else 0.01
+    held = re.search(r"\bHOLD(?:=([\w-]+))?(?![\w=-])", prompt)
     print("Version: faux sd-cli du banc de test", flush=True)
     print("loading diffusion model", flush=True)
+    if held and not hold(held.group(1) or "hold"):
+        print(f"[ERROR] faux moteur jamais libéré (HOLD, {HOLD_LIMIT} s)", flush=True)
+        return 1
     print("get_learned_condition completed, taking 0.50s", flush=True)
     for k in range(1, steps + 1):
         time.sleep(delay)

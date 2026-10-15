@@ -15,7 +15,7 @@ def read(fp):
         return f.read()
 
 
-class PrivatePromptsCase(bench.BenchCase):
+class PrivatePromptsCase(bench.PrivateFilesCheck, bench.BenchCase):
     def setUp(self):
         super().setUp()
         if os.path.exists(launch.PROMPTS_FILE):
@@ -189,8 +189,11 @@ class PrivatePromptsLifeTest(PrivatePromptsCase):
         p, q = self.create("A", "first"), self.create("B", "second")
         space = launch.P("private", "space.json")
         backup = read(space)                          # sauvegarde des clés d'avant le changement
+        old_key = bench.S.private_sessions[self.session]["key"]
         self.assertEqual(self.change_code(), 200)
-        self.assertEqual(self.saved(self.opens(NEW)), [q, p])
+        new = self.opens(NEW)
+        self.assertEqual(self.saved(new), [q, p])
+        self.assertEqual(bench.assert_old_key_opens_nothing(self, old_key, bench.S.private_sessions[new]["key"]), 1)
         self.assertEqual(sorted(os.listdir(launch.P("private"))), ["prompts", "space.json"])
         if os.name == "posix":
             self.assertEqual(os.stat(launch.P("private", "prompts")).st_mode & 0o777, 0o600)
@@ -205,8 +208,10 @@ class PrivatePromptsLifeTest(PrivatePromptsCase):
         leftover = launch.P("private", "prompts.tmp")
         with open(leftover, "wb") as f:
             f.write(read(launch.P("private", "prompts")))
+        old_key = bench.S.private_sessions[self.session]["key"]
         self.assertEqual(self.change_code(), 200)
         self.assertFalse(os.path.exists(leftover))
+        self.assertEqual(bench.assert_old_key_opens_nothing(self, old_key), 1)
 
     def test_an_unreadable_file_is_kept_as_is_through_a_code_change(self):
         self.create()

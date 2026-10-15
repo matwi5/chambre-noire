@@ -401,9 +401,8 @@ def write_space(public, private_key, code, fp=None):
     nonce = os.urandom(12)
     sealed = AESGCM(code_key(code, kdf)).encrypt(nonce, private_key.private_bytes_raw(), KEY_AAD)
     fp = fp or os.path.join(PRIVATE, "space.json")
-    os.makedirs(os.path.dirname(fp), exist_ok=True)
+    private_dir(os.path.dirname(fp), exist_ok=True)
     write_synced(fp + ".tmp", json.dumps({"v": 1, "public": public, "kdf": kdf, "key": b64e(nonce + sealed)}).encode())
-    os.chmod(fp + ".tmp", 0o600)
     os.replace(fp + ".tmp", fp)
     sync_dir(os.path.dirname(fp))
 
@@ -420,10 +419,39 @@ def sync_fd(fd, full=True):
     os.fsync(fd)
 
 
+def open_private(fp):
+    """Ouvre en écriture binaire un fichier de private/, créé lisible par son seul propriétaire (0o600) : jamais
+    lisible par un autre compte du Mac, même le temps de l'écrire ; un fichier qui existait reprend ces droits."""
+    fd = os.open(fp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0), 0o600)
+    try:
+        os.chmod(fp, 0o600)
+        return os.fdopen(fd, "wb")
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def private_dir(d, exist_ok=False):
+    """Crée le dossier d de private/, et ceux qui lui manquent depuis private/ compris, chacun en 0o700 dès sa
+    création (os.makedirs ne donne un mode qu'au dernier) ; un dossier qui existait reprend ces droits. Comme
+    os.makedirs, échoue si d existe déjà, sauf exist_ok."""
+    rel = os.path.relpath(d, PRIVATE)
+    parts = [] if rel == os.curdir else rel.split(os.sep)
+    path = PRIVATE
+    for i, part in enumerate([None] + parts):
+        path = os.path.join(path, part) if part else path
+        try:
+            os.mkdir(path, 0o700)
+        except FileExistsError:
+            if i == len(parts) and not exist_ok:
+                raise
+        os.chmod(path, 0o700)
+
+
 def write_synced(fp, data, full=True):
-    """Écrit un fichier et attend qu'il soit sur le disque : une coupure de courant ne le laisse ni vide ni tronqué
-    derrière un renommage qui, lui, aurait été écrit."""
-    with open(fp, "wb") as f:
+    """Écrit un fichier de private/ (droits 0o600, open_private) et attend qu'il soit sur le disque : une coupure de
+    courant ne le laisse ni vide ni tronqué derrière un renommage qui, lui, aurait été écrit."""
+    with open_private(fp) as f:
         f.write(data)
         f.flush()
         sync_fd(f.fileno(), full)
@@ -497,13 +525,13 @@ def store_private(public, meta, image, inputs):
         item = secrets.token_hex(16)
         items = os.path.join(PRIVATE, "items")
         tmp = os.path.join(items, "." + item)
-        os.makedirs(tmp)
+        private_dir(tmp)
         try:
             files = {"meta": json.dumps({**meta, "inputs": [n for n, _ in inputs]}, ensure_ascii=False).encode(),
                      "image": image, "thumb": thumb_jpeg(io.BytesIO(image))}
             files.update((f"input_{k}", raw) for k, (_, raw) in enumerate(inputs))
             for role, data in files.items():
-                with open(os.path.join(tmp, role), "wb") as f:
+                with open_private(os.path.join(tmp, role)) as f:
                     f.write(seal(data, public, f"{item}/{role}"))
             os.rename(tmp, os.path.join(items, item))
         except BaseException:
@@ -541,7 +569,7 @@ def rekey_space(old_key, code):
             os.remove(os.path.join(PRIVATE, "prompts.tmp"))
         except FileNotFoundError:
             pass
-        os.makedirs(os.path.join(staging, "items"))
+        private_dir(os.path.join(staging, "items"))
         # fichiers et dossiers copiés : fsync seul ; le F_FULLFSYNC de write_space, avant la bascule, les met tous sur
         # le disque d'un coup (un F_FULLFSYNC par fichier viderait le cache du disque autant de fois)
         write_synced(os.path.join(staging, "public"), public.encode(), full=False)   # marque de la bascule : space.json porte-t-il cette clé ?
@@ -549,14 +577,13 @@ def rekey_space(old_key, code):
             item = os.path.basename(d)
             if not ITEM_RE.fullmatch(item):
                 continue
-            os.makedirs(os.path.join(staging, "items", item))
+            private_dir(os.path.join(staging, "items", item))
             for role in os.listdir(d):
                 reseal(os.path.join(d, role), os.path.join(staging, "items", item, role), f"{item}/{role}")
             sync_dir(os.path.join(staging, "items", item), full=False)
         sync_dir(os.path.join(staging, "items"), full=False)
         if os.path.exists(os.path.join(PRIVATE, "prompts")):   # prompts enregistrés de l'espace
             reseal(os.path.join(PRIVATE, "prompts"), os.path.join(staging, "prompts"), "prompts")
-            os.chmod(os.path.join(staging, "prompts"), 0o600)
         write_space(public, key, code, os.path.join(staging, "space.json"))   # copies sur le disque avant la bascule
         sync_dir(PRIVATE)                       # l'entrée de .rekey/ elle-même, avant la bascule qui la rend nécessaire
         # la bascule, dernière instruction du try : si elle échoue, rien n'a changé et les copies sont jetées ; si elle
@@ -650,7 +677,6 @@ def private_prompts(private_key, update=None):
             return prompts
         try:
             write_synced(fp + ".tmp", seal(json.dumps(changed, ensure_ascii=False).encode(), public, "prompts"))
-            os.chmod(fp + ".tmp", 0o600)
             os.replace(fp + ".tmp", fp)
         except BaseException:
             try:

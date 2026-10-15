@@ -68,7 +68,7 @@ def start():
     launch.PRIVATE = launch.P("private")
     launch.SCRYPT_N = 2 ** 10                       # dérivation du code privé rapide au banc (2**18 en vrai)
     # launch.PROMPT_TYPES_FILE reste le fichier du dépôt : le serveur le lit sans jamais l'écrire
-    for d in ("tools", "outputs", "jobs", "logs", "models"):
+    for d in ("tools", "outputs", "jobs", "logs", "models", "hold"):
         os.makedirs(launch.P(d))
     for table in (launch.MODELS, launch.DIFFUSION):   # modèles en fichiers vides : /api/status dit le moteur prêt
         for k, path in table.items():
@@ -106,12 +106,22 @@ def install_fake_engine():
     if os.name == "nt":                             # non vérifié sous Windows : un .exe ne peut pas être un script
         launch.EXE = "sd-cli.cmd"
         with open(os.path.join(d, launch.EXE), "w") as f:
-            f.write(f'@"{sys.executable}" "{fake}" %*\n')
+            f.write(f'@set "QWEN_FAKE_HOLD={hold_dir()}"\n@"{sys.executable}" "{fake}" %*\n')
         return
     exe = os.path.join(d, launch.EXE)
     with open(exe, "w") as f:
-        f.write(f'#!/bin/sh\nexec "{sys.executable}" "{fake}" "$@"\n')
+        f.write(f'#!/bin/sh\nQWEN_FAKE_HOLD="{hold_dir()}" exec "{sys.executable}" "{fake}" "$@"\n')
     os.chmod(exe, 0o755)
+
+
+def hold_dir():
+    """Dossier des libérations du faux moteur (HOLD, voir fake_sdcli.py), dans le dossier temporaire du banc."""
+    return launch.P("hold")
+
+
+def release(name="hold"):
+    """Libère les générations dont le prompt porte HOLD=<name> (HOLD seul : « hold »), jusqu'au test suivant."""
+    open(os.path.join(hold_dir(), name), "w").close()
 
 
 def call(method, path, body=None, remote=False, cookie=True, headers=None, private=None, wifi=False):
@@ -177,6 +187,77 @@ def private_status(session=None, remote=False, wifi=False):
     return call("GET", "/api/status", remote=remote, private=session, wifi=wifi)[1]["private"]
 
 
+def private_entries():
+    """Fichiers et dossiers de private/ (dossier temporaire du banc) : deux listes de chemins relatifs à private/."""
+    root, files, dirs = launch.P("private"), [], []
+    for here, subdirs, names in os.walk(root):
+        dirs += [os.path.relpath(os.path.join(here, d), root) for d in subdirs]
+        files += [os.path.relpath(os.path.join(here, n), root) for n in names]
+    return files, (["."] + dirs if os.path.isdir(root) else [])
+
+
+def assert_private_owner_only(test):
+    """Contrôle à la fin d'un test de l'espace privé : tout fichier de private/ (restes et fichiers temporaires compris)
+    est lisible par son seul propriétaire (0o600), tout dossier en 0o700. Renvoie le nombre de fichiers examinés.
+    Sans objet sous Windows (droits POSIX)."""
+    if os.name != "posix":
+        return 0
+    files, dirs = private_entries()
+    root = launch.P("private")
+    for rel, mode in [(f, 0o600) for f in files] + [(d, 0o700) for d in dirs]:
+        test.assertEqual(oct(os.stat(os.path.join(root, rel)).st_mode & 0o777), oct(mode), f"private/{rel}")
+    return len(files)
+
+
+def sealed_label(rel):
+    """Étiquette de seal() d'un fichier de private/ (relatif) : « <id>/<rôle> » pour une image (dans items/ ou
+    .rekey/items/, dossier caché .<id> compris), « prompts » pour les prompts (et leur .tmp) ; None si non scellé."""
+    parts = rel.split(os.sep)
+    if parts[0] == launch.REKEY:
+        parts = parts[1:]
+    if len(parts) == 3 and parts[0] == "items":
+        return f"{parts[1].lstrip('.')}/{parts[2]}"
+    if parts in (["prompts"], ["prompts.tmp"]):
+        return "prompts"
+    return None
+
+
+def assert_old_key_opens_nothing(test, old_key, new_key=None):
+    """Après un changement de code : aucun fichier scellé de private/ (restes .tmp et .rekey/ compris) ne s'ouvre avec
+    old_key, la clé privée d'avant ; chacun s'ouvre avec new_key si elle est donnée (contrôle que l'étiquette est la
+    bonne : avec une mauvaise, unseal échouerait pour toute clé). Renvoie le nombre de fichiers scellés examinés."""
+    from cryptography.exceptions import InvalidTag
+    root, n = launch.P("private"), 0
+    for rel in private_entries()[0]:
+        label = sealed_label(rel)
+        if label is None:
+            continue
+        n += 1
+        with open(os.path.join(root, rel), "rb") as f:
+            blob = f.read()
+        with test.assertRaises((InvalidTag, ValueError), msg=f"private/{rel} s'ouvre avec l'ancienne clé"):
+            launch.unseal(blob, old_key, label)
+        if new_key is not None:
+            launch.unseal(blob, new_key, label)
+    return n
+
+
+class PrivateFilesCheck:
+    """À mettre avant BenchCase dans les tests de l'espace privé : assert_private_owner_only() à la fin de chaque test,
+    et au moins un fichier examiné sur toute la classe (sinon le contrôle ne vérifiait rien)."""
+    checked = 0
+
+    def tearDown(self):
+        type(self).checked += assert_private_owner_only(self)
+        super().tearDown()
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        if os.name == "posix" and not cls.checked:
+            raise AssertionError(f"{cls.__name__} : aucun fichier de private/ examiné à la fin des tests")
+
+
 def gen_body(prompt="a red car", mode="t2i", **kw):
     """Corps de /api/generate tel que l'envoie l'interface (512×512, 4 étapes, sans aperçu)."""
     body = {"mode": mode, "prompt": prompt, "width": 512, "height": 512, "steps": 4, "cfg": 1, "seed": -1,
@@ -193,13 +274,18 @@ def generate(prompt="a red car", **kw):
 
 
 def job(jid, private=None):
-    """Suivi d'une génération ; private : session de l'espace privé, exigée pour une génération privée."""
-    return call("GET", f"/api/job/{jid}", private=private)[1]
+    """Suivi d'une génération ; private : session de l'espace privé, exigée pour une génération privée. Échoue tout de
+    suite, avec le code et la réponse, si le suivi répond autre chose que 200 (un refus attendu se teste par call())."""
+    code, reply = call("GET", f"/api/job/{jid}", private=private)
+    if code != 200:
+        raise AssertionError(f"génération {jid} : suivi refusé ({code}) : {short(reply)}")
+    return reply
 
 
 def wait_job(jid, until=("done", "failed", "cancelled"), timeout=30, check=None, private=None):
     """Attend qu'une génération atteigne un des statuts until (et que check(job) soit vrai) ; renvoie la génération.
-    private : session de l'espace privé, pour suivre une génération privée."""
+    private : session de l'espace privé, pour suivre une génération privée. Échoue tout de suite, avec le code et la
+    réponse, si le suivi répond autre chose que 200 (génération inconnue, refus) : attendre n'y changerait rien."""
     end = time.time() + timeout
     while time.time() < end:
         j = job(jid, private)
@@ -322,10 +408,13 @@ class BenchCase(unittest.TestCase):
         warnings.simplefilter("ignore", ResourceWarning)
 
     def setUp(self):
+        release("ALL")                              # générations retenues (HOLD) par un test précédent
         for j in list(S.jobs.values()):            # restes d'un test précédent interrompu par un échec
             if j.get("status") in ("queued", "running"):
                 call("POST", f"/api/job/{j['id']}/cancel")
         wait_idle()
+        shutil.rmtree(hold_dir())                   # chaque test part sans libération
+        os.makedirs(hold_dir())
         S.jobs.clear()
         S.lots.clear()
         S.private_sessions.clear()

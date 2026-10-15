@@ -1,8 +1,16 @@
 # Règles de code
 
 Lues à la revue (axe Standards de `/code-review`) : des jugements qu'aucun contrôle ne fait. Ce que `tests/check.py`
-vérifie (compilation, syntaxe du JavaScript, banc, dépôt public) n'est pas répété ici. Les règles sur les données
-et les tests viennent de bugs passés à travers les revues par ticket.
+vérifie (compilation, syntaxe du JavaScript, banc, dépôt public) n'est pas répété ici, sauf la longueur des lignes,
+que la revue lit aussi. Les règles sur les données et les tests viennent de bugs passés à travers les revues par
+ticket.
+
+## Forme
+
+- **120 caractères au plus par ligne** (caractères, pas octets) dans les `.py`, `.md`, `.mjs` et `.js`, hors
+  `tools/ui/index.html`, tableaux Markdown et blocs de code : une ligne plus longue se lit mal dans un diff et sur un
+  écran étroit. Vérifiée par `tests/check.py` sur les seules lignes ajoutées depuis la base (`git merge-base HEAD
+  origin/main`) : les lignes existantes ne sont reprises que quand on les touche.
 
 ## Données et disque
 
@@ -46,7 +54,11 @@ et les tests viennent de bugs passés à travers les revues par ticket.
 
 - **Un test se synchronise sur une condition observable, jamais sur un `time.sleep`** (`bench.wait_until`,
   `wait_job`, `wait_idle`, `sent.decided`, `threading.Event`) : un `sleep` est trop court sur une machine chargée et
-  rend le test instable, ou trop long partout. Seul un faux qui simule une lenteur (faux moteur) peut dormir.
+  rend le test instable, ou trop long partout. Seul un faux qui simule une lenteur (faux moteur) peut dormir. Pour
+  garder une génération en cours ou en file, `HOLD` dans le prompt plutôt que `SLOW` (voir `tests/fake_sdcli.py`).
+- **Une assertion sur tous les éléments d'une liste vérifie d'abord que la liste n'est pas vide** (`[].every(...)`,
+  `all([])` sont toujours vrais) : `excerpts.length > 0 && excerpts.every(...)`. Sinon une file déjà vide (génération
+  finie plus tôt que prévu) fait passer le test sans rien vérifier.
 - **Une correction de l'interface reçoit un test dans `tests/ui/`** quand le banc ne peut pas la voir : deux bugs
   d'interface ne sont apparus que dans Chrome, banc au vert.
 - **Un fichier de test se termine par `if __name__ == "__main__": unittest.main()`**, pour se lancer seul.

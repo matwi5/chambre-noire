@@ -20,7 +20,9 @@ s'orienter dans le code, `docs/agents/carte-du-code.md`.
   dépôt public). Citer sa ligne « Ran N tests … » telle quelle, jamais un nombre de tête. Un seul fichier de test :
   `venv/bin/python -m unittest discover -s tests -p test_x.py`.
 - Changement d'interface : `venv/bin/python tests/check.py --ui` (Chrome sans écran, vue du téléphone). Une
-  vérification d'interface nouvelle devient un test de `tests/ui/` (pilote `driver.mjs`), pas un script jetable.
+  vérification d'interface nouvelle devient un test de `tests/ui/` (pilote `driver.mjs`), pas un script jetable ;
+  une vérification ponctuelle passe par la sonde (`node tests/ui/probe.mjs --eval '<expression>'`, options en tête
+  du fichier), pas par un script jetable.
 - La fermeture de la page (`pagehide`, `keepalive`) se valide sur le téléphone : Chrome sans écran ne la rejoue pas
   de façon constante.
 - Aucune vraie génération GPU : `tests/run_tests.py` est interdit sans accord du porteur.
