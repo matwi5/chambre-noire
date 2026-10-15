@@ -9,11 +9,17 @@ Mis à jour le 15/10/2026.
   galerie avec visionneuse (zoom au pincement, partage, copie, images d'entrée), estimations calibrées, mode incognito,
   notification de fin de génération (Web Push), file d'attente visible (« Générer » toujours actif), variantes (mode
   Créer) et campagnes (mode Éditer) avec lots dans la galerie, prompts enregistrés et prompts types, espace privé
-  chiffré (entrée discrète par le cadenas de la Galerie). Banc de test permanent sans GPU :
-  `venv/bin/python -m unittest discover -s tests` (129 tests, ≈ 1 min).
+  chiffré (entrée par le cadenas de la Galerie), étanche à l'espace public (galerie, file, saisie et prompts
+  enregistrés propres à chaque espace). Banc de test permanent sans GPU :
+  `venv/bin/python -m unittest discover -s tests` (162 tests, ≈ 1 min 20) ; tests d'interface `tests/check.py --ui`
+  (26 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
-- **En cours** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
+- **En cours** : parcours « Cloisonnement espace privé, file et saisie » (spécification
+  `docs/specs/2026-10-15_espaces-etanches.md`) : les 9 tickets des groupes A, B et C sont faits, revus et fusionnés
+  dans `dev` ; reste la livraison (push, PR vers `main`, mise à jour du dossier principal), après validation du compte
+  rendu.
+- **Fait avant** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
   prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), découpée en 13 tickets Asana (liste et ordre dans
   `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types validée par le porteur. Groupes A (banc, robustesse, file visible, incognito dans la file) et
   B (variantes, lots dans la galerie, campagne), C (prompts) et D (durcissement de l'incognito, espace privé) faits,
@@ -32,7 +38,11 @@ Mis à jour le 15/10/2026.
   - la feuille des prompts (bouton « Prompts » sous le champ de texte) ;
   - l'espace privé : entrée par le cadenas de la Galerie, thème, sortie, verrouillage à la fermeture (inconstant dans
     Chrome sans écran ; l'expiration après 15 min reste le filet), cookie `SameSite=Strict` avec l'application
-    installée, « Rendre privée ».
+    installée, « Rendre privée » ;
+  - après la livraison du parcours des espaces étanches : plusieurs photos d'un coup avec le sélecteur Google Photos,
+    vidage après « Générer », saisie propre à chaque espace, message quand l'espace se ferme seul, file sans les
+    générations de l'autre espace, génération privée retrouvée après un rechargement (cas « page rechargée espace
+    encore ouvert », lié à `pagehide`), prompts privés, cadenas et pastille.
 - **Pistes ouvertes** (aucune demandée) :
   - `sd-cli.log` reste ouvert si la boucle de lecture de `run_job` lève une exception ; `queue_position` trie tout
     `S.jobs`, qui ne fait que grossir, à chaque lecture (trouvés par la revue de groupe A) ;

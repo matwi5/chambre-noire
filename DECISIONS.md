@@ -39,6 +39,10 @@ les messages de commit.
   comme il le devine déjà pour l'incognito des autres appareils. Remplace, dans « Espace privé discret », le cadenas
   « petit et discret » et l'héritage des onglets marqués, et, dans « Espace privé durci après la revue de sécurité »,
   les onglets marqués gardés à la fermeture de l'espace.
+- **Mise en œuvre** (groupe B, sans le porteur) : pour le serveur, un appareil est « dans l'espace privé » s'il a une
+  session **et** que sa requête est sûre (`_secure`, comme les routes privées) : le cookie de session n'a pas le
+  drapeau `Secure` et pourrait suivre une adresse `http://` du même nom, qui recevrait sinon les prompts privés de la
+  file en clair.
 
 ## 2026-10-15 · Espace privé durci après la revue de sécurité
 
