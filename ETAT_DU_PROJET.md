@@ -42,9 +42,9 @@ Mis à jour le 14/10/2026.
     qu'à la fin ;
   - le faux moteur du banc n'a pas été essayé sous Windows (lanceur `sd-cli.cmd`) ;
   - la galerie trie par `st_mtime` en secondes entières : les images d'un même lot peuvent ressortir dans le désordre ;
-  - la file affiche « Génération privée » à tout appareil connecté (`queue_entry` publie `kind: "private"`), ce qui
-    révèle l'espace comme le faisait la notification ; le résultat d'une génération incognito reste servi en `http://`
-    sur le Wi-Fi (trouvés par le groupe E, décision du porteur attendue) ;
+  - le résultat d'une génération incognito reste servi en `http://` sur le Wi-Fi (laissé tel quel par le porteur le
+    15/10/2026 : l'incognito vise le disque, pas le réseau) ; `/api/status` dit à tout appareil connecté si un espace
+    privé existe (`private.exists`, nécessaire pour proposer la création ou le code), ce qui révèle son existence ;
   - `do_POST` lit `Content-Length` sans plafond (une campagne de 10 photos en data URL pèse lourd) ;
   - `push_subscriptions()` écrit `tools/push_subscriptions.json` en place, de façon non atomique ; les messages 500
     des routes de prompts citent le texte de l'exception (chemin local possible, visible des seuls appareils admis) ;
@@ -67,6 +67,10 @@ Mis à jour le 14/10/2026.
 
 ### 2026-10-15
 
+- Une génération privée apparaît dans la file des autres appareils exactement comme une génération incognito, et les
+  messages d'échec de `logs/` disent « incognito » (`c6e968a`, ticket Asana `1219532320923400`, décision du porteur).
+  CLAUDE.md complété avec la règle `_secure`, le rechiffrement et les trois origines du banc (`54a00d0`, validé par le
+  porteur). 129 tests au vert, service relancé.
 - Groupe E fait dans une session à part (worktree) et fusionné (`e30c75b` à `8178d8d`) : notification neutre pour le
   privé, « Sortir » vide l'écran, suppression de l'espace sans code seulement depuis le Mac, espace privé seulement en
   HTTPS ou sur le Mac (`_secure` : adresse source locale et nom d'hôte local ou HTTPS de `tailscale serve`, jamais les
