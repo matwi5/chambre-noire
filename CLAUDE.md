@@ -140,7 +140,8 @@ Ne lancer aucune génération réelle et ne supprimer aucune image de `outputs/`
 - Branches (décision du porteur du 15/10/2026) : on code toujours sur `dev`, dans le worktree `.claude/worktrees/dev`
   (le dossier principal reste sur `main` pour le service) ; les sessions de groupe se lancent depuis ce worktree, pour
   partir de `dev`, et leurs branches s'y fusionnent. `main` ne reçoit que des pull requests depuis `dev` (`/project:pr`)
-  et est protégée sur GitHub (PR obligatoire, ni push direct ni forcé, administrateur compris). `/project:push` se lance
+  et est protégée sur GitHub (PR obligatoire, CI `checks` au vert exigée, ni push direct ni forcé, administrateur
+  compris). `/project:push` se lance
   sur `dev` ; après la fusion d'une PR, `/project:sync main` remet `dev` à jour.
 - Suivi des tâches : Asana « Hub · Suivi des tâches », section « Qwen-Image local » (GID `1219496223389136`), tâche
   mère de Claude « [code] Qwen-Image local : prochaines sessions Claude Code » (GID `1219493010479174`), tenus par

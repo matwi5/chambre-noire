@@ -69,6 +69,10 @@ Mis à jour le 15/10/2026.
 
 ### 2026-10-15
 
+- PR #2 (`dev` → `main`, suites de la rétrospective) fusionnée (`72f19ad`) après un premier passage rouge de la CI :
+  `test_running_or_waiting_incognito_is_not_expired` était instable sur la machine GitHub, plus lente (délai d'oubli
+  de 0,1 s gardé pendant l'attente de la fin), corrigé par `14b031b`. La vérification `checks` est désormais exigée
+  par la protection de `main`. Service relancé sur `main`.
 - Rétrospective du parcours (session principale et 5 sessions de groupe, d'après leurs journaux) : 16 pistes. Les 11
   propres au dépôt, faites par une session liée et fusionnées dans `dev` (`e8e3e1c` à `04140c0`) : `tests/check.py`
   (tous les contrôles en une commande, `--link-venv` pour un worktree, `--ui`), test « dépôt public », banc plus sûr
@@ -77,7 +81,7 @@ Mis à jour le 15/10/2026.
   `docs/agents/carte-du-code.md`, `docs/agents/session-deleguee.md`, `CLAUDE.md` allégé (18,8 → 12,9 Ko), tickets
   qui renvoient à la spec. Vérifié après fusion : `tests/check.py --ui` → Ran 131 tests OK, interface 5/5 OK. Les 5
   pistes communes (règles de revue, `/project:push`, `suivi-asana`, flow-board en mode délégué) faites dans
-  mathis-plugins. Reste : exiger la vérification `checks` dans la protection de `main` après son premier passage.
+  mathis-plugins.
 - Ménage : worktrees et branches des groupes A à E supprimés (contenu vérifié identique à `main`), ainsi que
   `securite-serveur` (branche `fix/server-host-origin`, un commit de notes du 13/10/2026 jamais poussé, avec des
   informations propres au réseau du porteur) et `youthful-bell-35c6b0` (déjà dans `main`).
