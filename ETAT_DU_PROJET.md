@@ -41,6 +41,9 @@ Mis à jour le 15/10/2026.
   - une génération reprise après un rechargement n'a ni dimensions ni coefficients propres : le cadre ne prend sa forme
     qu'à la fin ;
   - le faux moteur du banc n'a pas été essayé sous Windows (lanceur `sd-cli.cmd`) ;
+  - un passage du banc a échoué une fois pendant la session des pistes, sans que la sortie ait été gardée, puis plus
+    jamais en 13 passages (test instable possible, à surveiller) ; `tests/test_private_rekey.py` garde un compteur en
+    liste à un élément, contraire à `CODING_STANDARDS.md` ;
   - la galerie trie par `st_mtime` en secondes entières : les images d'un même lot peuvent ressortir dans le désordre ;
   - le résultat d'une génération incognito reste servi en `http://` sur le Wi-Fi (laissé tel quel par le porteur le
     15/10/2026 : l'incognito vise le disque, pas le réseau) ; `/api/status` dit à tout appareil connecté si un espace
@@ -66,6 +69,15 @@ Mis à jour le 15/10/2026.
 
 ### 2026-10-15
 
+- Rétrospective du parcours (session principale et 5 sessions de groupe, d'après leurs journaux) : 16 pistes. Les 11
+  propres au dépôt, faites par une session liée et fusionnées dans `dev` (`e8e3e1c` à `04140c0`) : `tests/check.py`
+  (tous les contrôles en une commande, `--link-venv` pour un worktree, `--ui`), test « dépôt public », banc plus sûr
+  (messages courts, SIGTERM, plus de `sleep` de synchronisation), pilote d'interface et tests dans `tests/ui/`, CI
+  « Contrôles » (job `checks`) sur les PR vers `main` et les push sur `dev`, `CODING_STANDARDS.md`,
+  `docs/agents/carte-du-code.md`, `docs/agents/session-deleguee.md`, `CLAUDE.md` allégé (18,8 → 12,9 Ko), tickets
+  qui renvoient à la spec. Vérifié après fusion : `tests/check.py --ui` → Ran 131 tests OK, interface 5/5 OK. Les 5
+  pistes communes (règles de revue, `/project:push`, `suivi-asana`, flow-board en mode délégué) faites dans
+  mathis-plugins. Reste : exiger la vérification `checks` dans la protection de `main` après son premier passage.
 - Ménage : worktrees et branches des groupes A à E supprimés (contenu vérifié identique à `main`), ainsi que
   `securite-serveur` (branche `fix/server-host-origin`, un commit de notes du 13/10/2026 jamais poussé, avec des
   informations propres au réseau du porteur) et `youthful-bell-35c6b0` (déjà dans `main`).
