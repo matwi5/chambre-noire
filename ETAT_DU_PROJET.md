@@ -67,6 +67,9 @@ Mis à jour le 15/10/2026.
 
 ### 2026-10-15
 
+- Branches : `dev` créée (depuis `36d3a70`) avec son worktree `.claude/worktrees/dev`, où l'on code désormais ;
+  `main` protégée sur GitHub (PR obligatoire, ni push direct ni forcé) et ne reçoit plus que des PR depuis `dev` ; le
+  dossier principal reste sur `main` pour le service (décisions du porteur, règle dans `CLAUDE.md`).
 - Push de la version 0.2.0 : le `git pull --rebase` de `/project:push` a aplati l'historique local (deux commits de
   fusion du groupe B) alors que le dépôt distant n'avait rien de nouveau, et 39 commits ont changé de hash. Le porteur
   a choisi de garder l'historique aplati : hash corrigés dans ce fichier et dans le plan, tag `v0.2.0` déplacé sur le
