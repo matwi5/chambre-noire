@@ -53,7 +53,9 @@ Aujourd'hui, l'application ne fait qu'une chose à la fois : pendant une génér
 8. Je veux voir sur le téléphone la file lancée depuis le Mac (et inversement), pour avoir une seule vue de ce que
    calcule le Mac.
 9. Je veux que les générations incognito ou privées d'un autre appareil apparaissent dans la file sans prompt ni
-   aperçu (« Génération incognito », « Génération privée »), pour que rien de confidentiel ne s'affiche ailleurs.
+   aperçu (« Génération incognito »), pour que rien de confidentiel ne s'affiche ailleurs. Une génération privée y
+   apparaît exactement comme une génération incognito, pour ne pas révéler l'espace privé (décision du porteur du
+   15/10/2026) ; seul l'appareil qui l'a lancée la voit comme privée.
 10. Je veux que seul l'appareil qui a lancé une génération incognito ou privée puisse la suivre ou l'annuler, pour
     qu'un autre appareil ne voie pas ses aperçus.
 11. Je veux qu'une génération normale puisse être annulée depuis n'importe quel appareil, pour arrêter depuis le

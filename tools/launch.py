@@ -1159,8 +1159,9 @@ def secret(job):
 
 
 def kind_of(job):
-    """Genre d'une génération secrète, pour un message de journal qui n'en dit pas plus."""
-    return "incognito" if job.get("incognito") else "privée"
+    """Genre d'une génération secrète, pour un message de journal qui n'en dit pas plus : « incognito » aussi pour une
+    génération privée, comme dans la file, pour que logs/ ne révèle pas l'espace privé."""
+    return "incognito"
 
 
 def keep_private(job):
@@ -1402,8 +1403,10 @@ def request_inputs(req):
 
 def queue_entry(job, position, coefs):
     """Entrée de la liste de la file (/api/status). Une génération incognito n'y montre que son genre et le jeton de sa
-    page : ni identifiant (seule la page qui l'a lancée peut la suivre ou l'annuler), ni prompt, ni mode. None si la
-    génération vient de finir (forget_files a pu retirer sa demande)."""
+    page : ni identifiant (seule la page qui l'a lancée peut la suivre ou l'annuler), ni prompt, ni mode. Une génération
+    privée y a exactement la même entrée, genre « incognito » compris : rien n'y trahit l'espace privé aux autres
+    appareils (décision du porteur) ; sa page la reconnaît par son jeton. None si la génération vient de finir
+    (forget_files a pu retirer sa demande)."""
     r = job.get("req")
     if r is None:
         return None
@@ -1417,7 +1420,7 @@ def queue_entry(job, position, coefs):
          "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None}
     if secret(job):
         # jeton de la page qui l'a lancée : elle y reconnaît ses lignes ; il n'ouvre aucune route (ni suivi, ni annulation)
-        e.update(kind="incognito" if job.get("incognito") else "private", page=job.get("page"))
+        e.update(kind="incognito", page=job.get("page"))
     else:
         prompt = " ".join(r["prompt"].split())
         e.update(kind="normal", id=job["id"], mode=job["mode"], prompt=prompt[:80] + ("…" if len(prompt) > 80 else ""))

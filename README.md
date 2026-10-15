@@ -694,7 +694,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   127.0.0.1 et le nom d'hôte, jamais sur les en-têtes de relais) ;
   génération privée : `"private": true` dans `/api/generate` (403 sans session, 400 avec `incognito` ou si `private`
   n'est pas un booléen, 503 sans `cryptography`), identifiant de
-  32 caractères hexadécimaux, `kind` `private` dans `queue` (comme l'incognito : jeton `page`, ni `id` ni prompt) ;
+  32 caractères hexadécimaux, même entrée qu'une génération incognito dans `queue` (`kind` `incognito`, jeton
+  `page`, ni `id` ni prompt : rien n'y trahit l'espace privé aux autres appareils) ;
   `GET /api/job/<id>` porte `private` et, une fois l'image rangée, `item` (son identifiant dans l'espace privé) ;
   `POST /api/job/<id>/forget` l'oublie (l'image reste dans l'espace) ; `/api/forget` (fermeture de la page) ne l'arrête
   pas. Galerie privée, session exigée (403 sinon), chaque requête prolongeant la session : `GET /api/private/history`

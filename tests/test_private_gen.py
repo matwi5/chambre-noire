@@ -113,8 +113,11 @@ class PrivateGenerationTest(bench.BenchCase):
         wait_job(job["id"], ("running",))
         s = call("GET", "/api/status", remote=True)[1]
         self.assertIsNone(s["current_job"])
-        self.assertEqual(s["queue"][0]["kind"], "private")
+        # même ligne qu'une génération incognito : rien n'y trahit l'espace privé aux autres appareils
+        self.assertEqual(s["queue"][0]["kind"], "incognito")
+        self.assertEqual(set(s["queue"][0]), {"status", "position", "lot", "kind", "page", "estimate", "elapsed"})
         self.assertEqual(s["queue"][0]["page"], "pagePriv1")
+        self.assertNotIn("priv", str(s["queue"]).replace("pagePriv1", ""))
         self.assertNotIn(job["id"], str(s))
         self.assertNotIn("zq9marker", str(s))
         wait_job(job["id"])

@@ -46,7 +46,7 @@ class PrivateLotTest(bench.BenchCase):
         reply = self.launch(prompt="SLOW=0.05 zq9lot", count=2, steps=8, page="pageLot1")
         wait_job(reply["jobs"][0]["id"], ("running",))
         q = call("GET", "/api/status", remote=True)[1]["queue"]
-        self.assertEqual([e["kind"] for e in q], ["private", "private"])
+        self.assertEqual([e["kind"] for e in q], ["incognito", "incognito"])   # rien n'y trahit l'espace privé
         self.assertEqual([e["lot"] for e in q], [{"rank": 1, "size": 2}, {"rank": 2, "size": 2}])
         self.assertNotIn(reply["lot"]["id"], str(q))
         self.assertEqual(call("POST", f"/api/lot/{reply['lot']['id']}/cancel")[1]["cancelled"], 2)

@@ -1224,15 +1224,17 @@ function renderQueue(){
   const q=queueState, lots=new Set(); let wait=0;
   $('queueNote').textContent = q.length ? `${q.length} génération${q.length>1?'s':''}, une à la fois · file vide dans ≈ ${fmt(q.reduce((t, e)=>t+entryLeft(e), 0))}` : 'Rien en cours.';
   $('queueList').innerHTML=q.map(e=>{ const p=ownOf(e), incog=e.kind in HIDDEN_KIND; wait+=entryLeft(e);
+    // le serveur montre une génération privée comme incognito ; seule sa page sait qu'elle est privée
+    const hidden=incog && (p && p.private ? 'private' : e.kind);
     const pic = p && p.thumb ? `<img src="${p.thumb}" alt="">`
-      : `<span class="qicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${QICON[incog ? e.kind : tabOf(e.mode)]}</svg></span>`;
+      : `<span class="qicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${QICON[incog ? hidden : tabOf(e.mode)]}</svg></span>`;
     const camp=e.mode==='edit' || !!(p && p.tab==='edit');   // lot du mode Éditer : une campagne (incognito : connue de sa page)
     const sub=[e.status==='running' ? 'En cours' : ordinal(e.position)+' en attente', incog || e.lot ? '' : MODE_LABELS[e.mode]||e.mode, e.lot ? `${camp ? 'photo' : 'image'} ${e.lot.rank}/${e.lot.size}` : '', 'prête dans ≈ '+fmt(wait), p ? 'cet appareil' : ''];
     // lot : un en-tête avant sa première image de la file, avec l'annulation de tout le lot là où l'appareil y a droit
     // (lot normal : partout ; lot incognito : sa page seulement, seule à connaître son identifiant)
     const lot=e.lot && (e.lot.id || (p && p.lot && p.lot.id)), head=lot && !lots.has(lot) ? (lots.add(lot), `<div class="qlot"><span>${camp ? 'Campagne de '+e.lot.size+' photos' : 'Lot de '+e.lot.size+' images'}</span><button class="btn secondary small" data-cancel-lot="${esc(lot)}">Annuler le lot</button></div>`) : '';
     // l'identifiant de la ligne est fixé à l'affichage : la file peut avancer avant l'appui
-    return head + `<div class="qrow${p?' own':''}" data-id="${esc(e.id || (p && p.id) || '')}">${pic}<div class="qtxt"><b>${esc(incog ? HIDDEN_KIND[e.kind] : e.prompt)}</b><span>${sub.filter(Boolean).map(esc).join(' · ')}</span></div>`
+    return head + `<div class="qrow${p?' own':''}" data-id="${esc(e.id || (p && p.id) || '')}">${pic}<div class="qtxt"><b>${esc(incog ? HIDDEN_KIND[hidden] : e.prompt)}</b><span>${sub.filter(Boolean).map(esc).join(' · ')}</span></div>`
       + (e.id || p ? '<button class="qx" data-cancel aria-label="Annuler cette génération"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>' : '') + '</div>'; }).join(''); }
 $('queueList').addEventListener('click', async ev=>{
   const lot=ev.target.closest('[data-cancel-lot]');
