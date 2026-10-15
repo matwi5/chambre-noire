@@ -69,6 +69,14 @@ Mis à jour le 15/10/2026.
 
 ### 2026-10-15
 
+- Groupe C (prompts privés et prompt repris) fait par une session liée et fusionné dans `dev` (`1a712d0` à
+  `eeca134`) : prompts enregistrés de l'espace privé chiffrés dans `private/prompts` (routes `/api/private/prompts`,
+  rechiffrés au changement de code, format noté dans `DECISIONS.md`) ; prompt complet donné à la page qui reprend une
+  génération de son espace. Revue du groupe (2 constats corrigés, 4 laissés), revue de sécurité sans constat. Vérifié
+  après fusion : `tests/check.py --ui` → Ran 162 tests OK, interface 26/26 OK. Trouvé : les fichiers de
+  `private/items/` n'ont pas les droits 600 (antérieur) ; le README dit encore que les tests d'interface ne couvrent
+  que les écrans principaux et « Garder celle-ci ». Question au porteur : un `private/prompts` illisible bloque toute
+  la liste privée (gardé ainsi, ou mis de côté en `.corrompu`).
 - Groupe B (file cloisonnée) fait par une session liée et fusionné dans `dev` (`190ce1c` à `c9a452b`) : curseur
   retiré et message quand l'espace privé se ferme seul ; file, pastille, génération en cours et dernière image
   propres à l'espace de l'appareil (durée `ahead` pour le travail caché) ; suivi, aperçu et annulation d'une
