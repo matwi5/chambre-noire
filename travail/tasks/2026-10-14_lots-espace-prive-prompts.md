@@ -126,17 +126,18 @@ Lus le 14/10/2026 dans le code (`main` à `95f96de`). Les numéros de ligne boug
 
 ## Compte rendu
 
-Rédigé le 14/10/2026 par `/flow-board:compte-rendu`, groupes A, B et C faits, groupe D restant.
+Réécrit le 15/10/2026 par `/flow-board:compte-rendu`, les 16 tickets faits (13 du découpage, 2 de durcissement, 1
+correction de fuite).
 
-- **En bref** : file d'attente, lots (variantes, campagne), prompts enregistrés et types livrés, revus (code et
-  sécurité), fusionnés dans `main` et en service sur le Mac ; 75 tests au vert. Reste le groupe D (durcissement de
-  l'incognito, espace privé, 5 tickets). Non encore poussé ; jamais essayé avec une vraie génération GPU ni sur le
-  téléphone.
-- **Fait** : groupe A (`5072ad5`, `cf4f825`, `b9d58ca`, `db6342d`, revue `c934b9f`), groupe B (`65b9cac`,
-  `ddbf2b5`, `8715316`, revue `f1a478f`), groupe C (`8e33bf1`, `cf8a254`, revue `52466e1`) ; revues de sécurité des
-  trois groupes sans faille.
-- **Mal passé** : tickets Asana créés aussi dans une section d'un autre projet (corrigé) ; `/mattpocock-skills:implement`
-  refusé aux sessions de fond ; groupes A et B rendus sans revue de groupe, revues faites après coup (dont
-  « Garder celle-ci » qui pouvait supprimer l'image gardée) ; parcours bloqué en « Version et push » (corrigé).
-- **Attend le porteur** : `/project:push`, essais sur le téléphone et une vraie génération courte, groupe D, portée de
-  la règle « Statut : fait ».
+- **En bref** : file d'attente, lots (variantes, campagne), prompts enregistrés et types, espace privé chiffré et
+  discret, durci après sa revue de sécurité : tout est fait, revu (code et sécurité, sans faille), fusionné dans
+  `main` et en service. 129 tests au vert. Jamais essayé avec une vraie génération GPU ni sur le téléphone ; 39 commits
+  à pousser.
+- **Groupes** : A (`5072ad5`..`db6342d`, revue `c934b9f`), B (`65b9cac`..`8715316`, revue `f1a478f`), C (`8e33bf1`,
+  `cf8a254`, revue `52466e1`), D (`df6896a`..`9f4673f`, revue `4bdd66f`), E (`e30c75b`..`8178d8d`), fuite de la file
+  (`c6e968a`).
+- **Mal passé** : tickets Asana d'abord rangés dans la section d'un autre projet ; `/mattpocock-skills:implement`
+  refusé aux sessions de fond ; groupes A et B revus après coup (dont un bug de « Garder celle-ci ») ; parcours bloqué
+  deux fois au tableau de bord ; compte rendu écrit une première fois trop tôt, avant les groupes D et E.
+- **Attend le porteur** : `/project:push`, une vraie génération courte et un lot, les essais sur le téléphone (dont
+  l'espace privé par l'adresse HTTPS seulement), la portée de la règle « Statut : fait ».
