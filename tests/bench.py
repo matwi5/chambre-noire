@@ -285,7 +285,7 @@ def job(jid, private=None):
 def wait_job(jid, until=("done", "failed", "cancelled"), timeout=30, check=None, private=None):
     """Attend qu'une génération atteigne un des statuts until (et que check(job) soit vrai) ; renvoie la génération.
     private : session de l'espace privé, pour suivre une génération privée. Échoue tout de suite, avec le code et la
-    réponse, si le suivi répond autre chose que 200 (génération inconnue, refus) : attendre le délai n'y changerait rien."""
+    réponse, si le suivi répond autre chose que 200 (génération inconnue, refus) : attendre n'y changerait rien."""
     end = time.time() + timeout
     while time.time() < end:
         j = job(jid, private)

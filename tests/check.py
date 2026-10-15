@@ -8,8 +8,11 @@
 1. compile chaque fichier .py suivi par git (sans écrire de .pyc) ;
 2. passe à « node --check » chaque bloc <script> de tools/ui/index.html (un bloc sur une seule ligne compris) et chaque
    fichier .js ou .mjs suivi ; échoue si un bloc ouvert n'a pas été extrait ;
-3. lance le banc (unittest discover -s tests) et recopie telles quelles sa ligne « Ran N tests … » et son verdict ;
-4. avec --ui : les tests d'interface tests/ui/*.test.mjs (pilote Chrome, voir tests/ui/driver.mjs).
+3. vérifie que les lignes ajoutées depuis la base (git merge-base HEAD origin/main, arbre de travail compris) des
+   fichiers .py, .md, .mjs et .js suivis ont 120 caractères au plus, hors tableaux et blocs de code Markdown ; base
+   introuvable : un avis, et le contrôle passe ;
+4. lance le banc (unittest discover -s tests) et recopie telles quelles sa ligne « Ran N tests … » et son verdict ;
+5. avec --ui : les tests d'interface tests/ui/*.test.mjs (pilote Chrome, voir tests/ui/driver.mjs).
 
 Le Python des contrôles est celui du venv du dépôt (venv/ à la racine, sinon celui du dossier principal quand on est
 dans un worktree), sinon l'interpréteur qui lance ce script (cas de la CI) : check.py se relance de lui-même avec le
@@ -20,6 +23,8 @@ import argparse, os, re, subprocess, sys, tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENV_PY = os.path.join("Scripts", "python.exe") if os.name == "nt" else os.path.join("bin", "python")
 SCRIPT_RE = re.compile(r"<script\b([^>]*)>(.*?)</script\s*>", re.S | re.I)
+LINE_MAX = 120                                       # caractères au plus par ligne ajoutée (CODING_STANDARDS.md)
+LINE_FILES = ("*.py", "*.md", "*.mjs", "*.js")
 
 
 def git(*args):
@@ -124,6 +129,54 @@ def check_js():
     return ok
 
 
+def merge_base():
+    """Commit où la branche s'est séparée de origin/main, ou None (pas de origin/main, historique absent)."""
+    try:
+        return git("merge-base", "HEAD", "origin/main").strip() or None
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def added_lines(base, *paths):
+    """Lignes ajoutées depuis base (arbre de travail compris) : {fichier : ensemble de numéros de ligne}."""
+    out = git("diff", "--unified=0", "--no-color", "--no-ext-diff", base, "--", *paths)
+    added, current = {}, None
+    for line in out.splitlines():
+        if line.startswith("+++ "):
+            current = line[6:] if line.startswith("+++ b/") else None
+        elif line.startswith("@@") and current:
+            m = re.match(r"@@ -\S+ \+(\d+)(?:,(\d+))? @@", line)
+            start, count = int(m.group(1)), int(m.group(2) or 1)
+            added.setdefault(current, set()).update(range(start, start + count))
+    return added
+
+
+def check_line_length(base):
+    """Lignes ajoutées depuis base de plus de LINE_MAX caractères (pas octets), dans les .py, .md, .mjs et .js suivis
+    (tools/ui/index.html n'en est pas) ; hors tableaux Markdown (ligne qui commence par |) et blocs ``` d'un .md."""
+    if not base:
+        print(f"Lignes : avis : base introuvable (git merge-base HEAD origin/main), {LINE_MAX} caractères non vérifiés")
+        return True
+    bad = []
+    for f, numbers in sorted(added_lines(base, *LINE_FILES).items()):
+        if not os.path.exists(os.path.join(ROOT, f)):
+            continue
+        with open(os.path.join(ROOT, f), encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+        fenced = False
+        for k, text in enumerate(lines, 1):
+            md = f.endswith(".md")
+            if md and text.lstrip().startswith("```"):
+                fenced = not fenced
+                continue
+            if k in numbers and not (md and (fenced or text.lstrip().startswith("|"))) and len(text) > LINE_MAX:
+                bad.append(f"{f}:{k} ({len(text)} caractères)")
+    for line in bad:
+        print("  " + line)
+    print(f"Lignes : {len(bad)} ligne(s) ajoutée(s) de plus de {LINE_MAX} caractères" + (" : ÉCHEC" if bad else ""))
+    return not bad
+
+
 def check_bench():
     r = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests"], cwd=ROOT,
                        capture_output=True, text=True)
@@ -164,7 +217,8 @@ def main():
     if args.link_venv:
         return link_venv()
     reexec_in_venv()
-    results = [check_python(), check_js()]
+    base = merge_base()
+    results = [check_python(), check_js(), check_line_length(base)]
     if not args.no_bench:
         results.append(check_bench())
     if args.ui:

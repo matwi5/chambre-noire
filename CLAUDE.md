@@ -44,21 +44,24 @@ Aucun lint ni typage n'est déclaré. Après un changement, une seule commande (
 venv/bin/python tests/check.py [--no-bench] [--ui]
 ```
 
-Elle compile chaque `.py` suivi, passe chaque bloc `<script>` de `tools/ui/index.html` et chaque `.js`/`.mjs` suivi à
-`node --check`, lance le banc et recopie sa ligne « Ran N tests … » et son verdict (c'est elle qu'on cite, jamais un
-compte de tête) ; code de sortie non nul au moindre échec. `tests/test_public_repo.py` y échoue si un fichier suivi
-contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net` autre que ceux du banc.
+Elle compile chaque `.py` suivi, passe chaque bloc `<script>` de `tools/ui/index.html` et chaque `.js`/`.mjs` suivi
+à `node --check`, refuse une ligne ajoutée depuis la base (`git merge-base HEAD origin/main`) de plus de 120
+caractères (`CODING_STANDARDS.md`), lance le banc et recopie sa ligne « Ran N tests … » et son verdict (c'est elle
+qu'on cite, jamais un compte de tête) ; code de sortie non nul au moindre échec. `tests/test_public_repo.py` y
+échoue si un fichier suivi contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net` autre que
+ceux du banc.
 
 - **Banc** (sans GPU, ≈ 1 min) : `venv/bin/python -m unittest discover -s tests` ; un seul fichier :
   `venv/bin/python -m unittest discover -s tests -p test_x.py`. `tests/bench.py` sert `tools/launch.py` sur un port
-  libre, tous ses dossiers repointés vers un dossier temporaire, avec le faux moteur `tests/fake_sdcli.py` (`FAIL` ou
-  `SLOW[=s]` dans le prompt le font échouer ou ralentir, `FAILSEED=<n>` échouer pour la seule graine n, une image
+  libre, tous ses dossiers repointés vers un dossier temporaire, avec le faux moteur `tests/fake_sdcli.py` (`FAIL`
+  ou `SLOW[=s]` dans le prompt le font échouer ou ralentir, `FAILSEED=<n>` échouer pour la seule graine n, une image
   d'un lot, `HOLD[=nom]` attendre que le test le libère par `bench.release(nom)`, aussi offert par le banc du pilote
-  d'interface : une génération reste en cours, les suivantes en file, sans dépendre du temps). Trois origines de requête : `call()` = le Mac, `remote=True` = HTTPS relayé par `tailscale serve`
-  (`bench.HTTPS_HOST`), `wifi=True` = `http://` direct d'un autre appareil (`bench.WIFI_HOST`, `LOCAL_CLIENTS` vidé
-  pendant l'appel). `bench.capture_push()` intercepte les notifications (`sent.decided` : celles que le serveur a
-  décidées, complètes après `bench.wait_idle()`), `bench.wait_until(cond)` attend une condition observable,
-  `bench.LOG` reçoit les sorties du serveur.
+  d'interface : une génération reste en cours, les suivantes en file, sans dépendre du temps). Trois origines de
+  requête : `call()` = le Mac, `remote=True` = HTTPS relayé par `tailscale serve` (`bench.HTTPS_HOST`),
+  `wifi=True` = `http://` direct d'un autre appareil (`bench.WIFI_HOST`, `LOCAL_CLIENTS` vidé pendant l'appel).
+  `bench.capture_push()` intercepte les notifications (`sent.decided` : celles que le serveur a décidées, complètes
+  après `bench.wait_idle()`), `bench.wait_until(cond)` attend une condition observable, `bench.LOG` reçoit les
+  sorties du serveur.
 - **Interface** : `venv/bin/python tests/check.py --ui` (ou `node --test "tests/ui/*.test.mjs"`), en local seulement
   (Chrome installé ; pas en CI). `tests/ui/driver.mjs` lance le banc (`tests/ui/serve.py`) et Chrome sans écran
   (profil temporaire supprimé à la fin), piloté par le protocole DevTools depuis Node (WebSocket natif, sans

@@ -4,6 +4,13 @@ Lues à la revue (axe Standards de `/code-review`) : des jugements qu'aucun cont
 vérifie (compilation, syntaxe du JavaScript, banc, dépôt public) n'est pas répété ici. Les règles sur les données
 et les tests viennent de bugs passés à travers les revues par ticket.
 
+## Forme
+
+- **120 caractères au plus par ligne** (caractères, pas octets) dans les `.py`, `.md`, `.mjs` et `.js`, hors
+  `tools/ui/index.html`, tableaux Markdown et blocs de code : une ligne plus longue se lit mal dans un diff et sur un
+  écran étroit. Vérifiée par `tests/check.py` sur les seules lignes ajoutées depuis la base (`git merge-base HEAD
+  origin/main`) : les lignes existantes ne sont reprises que quand on les touche.
+
 ## Données et disque
 
 - **Supprimer « tous les autres » : par nom ou identifiant, jamais par identité d'objet.** Une liste rechargée entre
