@@ -35,7 +35,7 @@ _À éviter_ : employer « modèle » pour un prompt réutilisable
 ## Prompts
 
 **Prompt enregistré** :
-Un prompt de l'utilisateur, avec un titre, qu'il peut réutiliser, modifier ou supprimer.
+Un prompt de l'utilisateur, avec un titre, qu'il peut réutiliser, modifier ou supprimer ; il appartient à l'espace où il a été enregistré.
 _À éviter_ : favori, preset
 
 **Prompt type** :
@@ -52,8 +52,12 @@ _À éviter_ : mot de passe, code privé
 Un mode où l'image produite n'est gardée nulle part sur l'ordinateur : elle est remise une fois à l'appareil, puis oubliée.
 _À éviter_ : mode privé
 
+**Espace public** :
+L'espace où l'on arrive en ouvrant l'application : sa galerie, sa file, sa saisie et ses prompts enregistrés, protégés par le seul code d'accès.
+_À éviter_ : galerie normale, mode normal
+
 **Espace privé** :
-Une galerie séparée dont les images et tout ce qui s'y rattache sont chiffrés sur l'ordinateur, lisibles seulement dans l'application avec le code privé.
+Un espace étanche à l'espace public (galerie, file, saisie et prompts enregistrés propres) dont tout le contenu est chiffré sur l'ordinateur, lisible seulement dans l'application avec le code privé.
 _À éviter_ : coffre, mode privé, galerie cachée
 
 **Code privé** :

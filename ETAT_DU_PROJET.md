@@ -69,6 +69,14 @@ Mis à jour le 15/10/2026.
 
 ### 2026-10-15
 
+- Demandes du porteur après essai sur le téléphone, cadrées par un grilling (décision « Espaces public et privé
+  étanches » dans `DECISIONS.md`, termes « Espace public » et « Espace privé » dans `GLOSSARY.md`) : prompts
+  enregistrés privés chiffrés et cloisonnés ; file d'attente et générations en cours cloisonnées par espace (dont le
+  faux « Génération incognito » d'une génération privée, et la progression privée visible après la sortie jusqu'au
+  rechargement) ; saisie propre à chaque espace ; texte et images vidés après « Générer » ; cadenas aussi visible que
+  Rafraîchir ; pastille « +N en attente » qui dépasse de l'île. Bug trouvé : en Éditer, une sélection de plusieurs
+  photos n'en ajoute que la première (le gestionnaire `change` vide le champ avant d'avoir lu tous les fichiers ;
+  cause lue dans le code, à confirmer par un test). Suite : `/to-spec` puis `/to-tickets`.
 - PR #2 (`dev` → `main`, suites de la rétrospective) fusionnée (`72f19ad`) après un premier passage rouge de la CI :
   `test_running_or_waiting_incognito_is_not_expired` était instable sur la machine GitHub, plus lente (délai d'oubli
   de 0,1 s gardé pendant l'attente de la fin), corrigé par `14b031b`. La vérification `checks` est désormais exigée
