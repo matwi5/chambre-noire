@@ -69,6 +69,15 @@ Mis à jour le 15/10/2026.
 
 ### 2026-10-15
 
+- Groupe B (file cloisonnée) fait par une session liée et fusionné dans `dev` (`190ce1c` à `c9a452b`) : curseur
+  retiré et message quand l'espace privé se ferme seul ; file, pastille, génération en cours et dernière image
+  propres à l'espace de l'appareil (durée `ahead` pour le travail caché) ; suivi, aperçu et annulation d'une
+  génération privée refusés hors de l'espace (404) ; génération privée retirée de l'écran à la sortie et suivie de
+  nouveau au retour. « Dans l'espace privé » exige aussi une requête sûre. Revue du groupe (4 constats corrigés, 4
+  laissés), revue de sécurité sans constat. Vérifié après fusion : `tests/check.py --ui` → Ran 139 tests OK,
+  interface 23/23 OK. Points ouverts remontés au porteur : oubli d'une génération privée par sa seule page, génération
+  privée finie après la sortie gardée 24 h en mémoire, génération publique annulée pendant l'espace privé retirée sans
+  message, prompt d'une génération privée reprise limité à 80 caractères.
 - Groupe A (saisie et en-tête) fait par une session liée et fusionné dans `dev` (`d1d42b3` à `4a5a55c`) : photos
   choisies d'un coup toutes ajoutées (cause confirmée par le test), onglet vidé après une demande acceptée, saisie
   propre à chaque espace (onglets marqués retirés), cadenas aussi visible que Rafraîchir, pastille dans sa bulle.
