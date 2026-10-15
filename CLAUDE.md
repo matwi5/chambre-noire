@@ -23,11 +23,22 @@ venv/bin/python tools/calibrate.py [--if-needed]   # 3 générations de calibrat
 venv/bin/python tools/make_service.py [--remove]   # Mac : LaunchAgent qui lance launch.py --no-browser --lan
 ```
 
-Vérifications : aucun lint ni typage n'est déclaré. Après un changement :
+Dans un worktree (pas de `venv/`, non suivi) : `python3 tests/check.py --link-venv` crée un lien relatif `venv` vers
+le venv du dossier principal ; ensuite les commandes `venv/bin/python …` marchent telles quelles.
 
-- Python : `venv/bin/python -m py_compile tools/launch.py` (et les fichiers touchés) ;
-- JavaScript de `tools/ui/index.html` : extraire les blocs `<script>` et lancer `node --check` dessus ;
-- comportement du serveur sans GPU : banc de test `venv/bin/python -m unittest discover -s tests` (≈ 1 min).
+Vérifications : aucun lint ni typage n'est déclaré. Après un changement, une seule commande :
+
+```bash
+venv/bin/python tests/check.py [--no-bench] [--ui]
+```
+
+Elle compile chaque `.py` suivi, passe chaque bloc `<script>` de `tools/ui/index.html` et chaque `.js`/`.mjs` suivi à
+`node --check`, lance le banc et recopie sa ligne « Ran N tests … » et son verdict (c'est elle qu'on cite, jamais un
+compte de tête) ; code de sortie non nul au moindre échec. `tests/test_public_repo.py` y échoue si un fichier suivi
+contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net` autre que ceux du banc.
+
+- banc de test seul : `venv/bin/python -m unittest discover -s tests` (≈ 1 min) ; un seul fichier :
+  `venv/bin/python -m unittest discover -s tests -p test_x.py`.
   `tests/bench.py` sert `tools/launch.py` sur un port libre, tous ses dossiers repointés vers un dossier temporaire,
   avec le faux moteur `tests/fake_sdcli.py` (`FAIL` ou `SLOW[=s]` dans le prompt le font échouer ou ralentir,
   `FAILSEED=<n>` échouer pour la seule graine n, une image d'un lot) ;
