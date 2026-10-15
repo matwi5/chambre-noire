@@ -832,7 +832,9 @@ que le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier. Ils ou
 l'interface servie par le banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur
 de la console du navigateur. Ils couvrent les écrans principaux, « Garder celle-ci » après un rechargement de la
 galerie, la saisie (plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque espace), l'en-tête
-(cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés et la reprise d'une génération.
+(cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés, la reprise d'une génération, le
+suivi d'une génération privée devenue inconnue (sans faux « Échec ») et l'absence de brouillon incognito ou privé
+dans le navigateur.
 
 Tests de bout en bout, interface lancée :
 
