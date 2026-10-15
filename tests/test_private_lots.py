@@ -42,14 +42,13 @@ class PrivateLotTest(bench.BenchCase):
         for fp in all_files():
             self.assertNotIn(b"zq9lot", open(fp, "rb").read(), fp)
 
-    def test_private_lot_hides_its_id_in_the_queue(self):
+    def test_private_lot_is_absent_from_the_public_queue(self):
         reply = self.launch(prompt="SLOW=0.05 zq9lot", count=2, steps=8, page="pageLot1")
         wait_job(reply["jobs"][0]["id"], ("running",))
-        q = call("GET", "/api/status", remote=True)[1]["queue"]
-        self.assertEqual([e["kind"] for e in q], ["incognito", "incognito"])   # rien n'y trahit l'espace privé
-        self.assertEqual([e["lot"] for e in q], [{"rank": 1, "size": 2}, {"rank": 2, "size": 2}])
-        self.assertNotIn(reply["lot"]["id"], str(q))
-        self.assertEqual(call("POST", f"/api/lot/{reply['lot']['id']}/cancel")[1]["cancelled"], 2)
+        s = call("GET", "/api/status", remote=True)[1]
+        self.assertEqual(s["queue"], [])                                     # rien n'y trahit l'espace privé
+        self.assertNotIn(reply["lot"]["id"], str(s))
+        self.assertEqual(call("POST", f"/api/lot/{reply['lot']['id']}/cancel", private=self.session)[1]["cancelled"], 2)
 
     def test_private_campaign_keeps_each_photo_as_its_input(self):
         photos = [bench.png_bytes(64, 48), bench.png_bytes(48, 64)]

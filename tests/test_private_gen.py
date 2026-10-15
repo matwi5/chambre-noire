@@ -108,18 +108,17 @@ class PrivateGenerationTest(bench.BenchCase):
         for bad in ("../space.json", "abc", "x" * 32):
             self.assertEqual(call("GET", f"/api/private/image?id={bad}", private=self.session)[0], 404)
 
-    def test_queue_and_status_say_nothing_about_a_private_generation(self):
+    def test_public_space_sees_nothing_of_a_private_generation(self):
         job = self.generate("SLOW=0.1 zq9marker", steps=10, page="pagePriv1")
         wait_job(job["id"], ("running",))
-        s = call("GET", "/api/status", remote=True)[1]
-        self.assertIsNone(s["current_job"])
-        # même ligne qu'une génération incognito : rien n'y trahit l'espace privé aux autres appareils
-        self.assertEqual(s["queue"][0]["kind"], "incognito")
-        self.assertEqual(set(s["queue"][0]), {"status", "position", "lot", "kind", "page", "estimate", "elapsed"})
-        self.assertEqual(s["queue"][0]["page"], "pagePriv1")
-        self.assertNotIn("priv", str(s["queue"]).replace("pagePriv1", ""))
-        self.assertNotIn(job["id"], str(s))
-        self.assertNotIn("zq9marker", str(s))
+        # autre appareil hors de l'espace, ou cet appareil par http:// sur le Wi-Fi malgré sa session : ni ligne, ni
+        # génération en cours, ni rien qui trahisse l'espace privé ; seul busy dit que le Mac calcule
+        for s in (call("GET", "/api/status", remote=True)[1], call("GET", "/api/status", wifi=True, private=self.session)[1]):
+            self.assertEqual((s["queue"], s["queued"], s["current_job"], s["busy"]), ([], 0, None, True))
+            self.assertFalse(s["private"]["unlocked"])
+            self.assertNotIn(job["id"], str(s))
+            self.assertNotIn("zq9marker", str(s))
+            self.assertNotIn("pagePriv1", str(s))
         wait_job(job["id"])
         self.assertIsNone(call("GET", "/api/status")[1]["last_job"])
 

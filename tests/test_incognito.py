@@ -102,7 +102,7 @@ class IncognitoHardeningTest(bench.BenchCase):
         q = call("GET", "/api/status", remote=True)[1]["queue"]
         self.assertEqual(q[1]["page"], "pageB2")
         self.assertNotIn(b, str(q))
-        self.assertEqual(set(q[1]), {"status", "position", "lot", "kind", "page", "estimate", "elapsed"})
+        self.assertEqual(set(q[1]), {"status", "position", "ahead", "lot", "kind", "page", "estimate", "elapsed"})
         call("POST", f"/api/job/{a}/cancel")
         call("POST", f"/api/job/{b}/cancel")
 

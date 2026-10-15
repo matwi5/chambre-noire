@@ -64,10 +64,10 @@ contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net`
   Playwright), dans la vue du téléphone du porteur (367×760, densité 2,5, mobile, tactile : l'interface y passe en
   `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `smoke` (écrans principaux),
   `keep` (régression « Garder celle-ci »), `saisie` (photos choisies d'un coup, vidage après « Générer », saisie
-  propre à chaque espace ; `page.setFiles` remplit un champ de fichiers) et `entete` (cadenas de la galerie, pastille
-  qui tient dans sa bulle). Une vérification d'interface nouvelle y
-  devient un test plutôt qu'un script jetable. Une vue plus grande cache des débordements : regarder aussi les captures
-  (`page.screenshot`).
+  propre à chaque espace ; `page.setFiles` remplit un champ de fichiers), `file` (file et pastille propres à chaque
+  espace) et `entete` (cadenas de la galerie, pastille qui tient dans sa bulle). Une vérification d'interface nouvelle
+  y devient un test plutôt qu'un script jetable. Une vue plus grande cache des débordements : regarder aussi les
+  captures (`page.screenshot`).
 - La fermeture de la page (`pagehide`, envoi `keepalive`) se valide sur le téléphone : Chrome sans écran ne la rejoue
   pas de façon constante.
 - `tests/run_tests.py --steps 8 [--only t2i|edit|mask|annot]` : bout en bout, serveur lancé sur 127.0.0.1:7860. Il
@@ -109,7 +109,8 @@ Ne lancer aucune génération réelle et ne supprimer aucune image de `outputs/`
   `ref_px()` de `estimate.py` (jetons de 16×16 px, arrondi à 32). Une modification de la formule ou d'un coefficient se
   fait des deux côtés. `PREVIEW_EVERY = 5` côté interface doit égaler le défaut `preview_interval` de `build_cmd`.
   La longueur minimale du code privé (`MIN_PRIVATE_CODE`, 8) est aussi vérifiée dans `index.html` (feuilles privées).
-  L'estimation de chaque entrée de la file (`queue_entry`) appelle `estimate.predict` : pas de troisième copie.
+  L'estimation de chaque génération de la file (`job_estimate`, pour `queue_entry` et le travail caché `ahead`)
+  appelle `estimate.predict` : pas de troisième copie.
 - **Interface** : la visionneuse parcourt `vList`, jamais `histItems` directement (la galerie peut être rechargée
   pendant qu'elle est ouverte).
 - **Saisie par espace** : tout ajout à la saisie qui attend (lecture d'image, envoi d'une demande) note son espace ou

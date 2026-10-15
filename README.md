@@ -251,8 +251,12 @@ La pastille d'état en haut suit la génération en cours depuis n'importe quel 
 (« +N » seul quand l'écran est trop étroit pour tout contenir). Un appui ouvre la **file d'attente** : pour chaque
 génération, sa place, le début de son prompt et le temps avant son image, avec un bouton pour l'annuler. Une génération normale s'annule depuis n'importe quel appareil ; une génération
 incognito n'apparaît ailleurs que comme « Génération incognito », sans prompt ni aperçu, et seule la page qui l'a
-lancée peut l'annuler. On peut recharger la page sans rien perdre : elle se rattache aux générations normales qu'elle
-avait lancées (retenues par le navigateur), pas à celles des autres appareils, qui restent visibles dans la file, ni
+lancée peut l'annuler. La file et la pastille ne montrent que les générations de l'espace où l'on est (public, ou
+espace privé) : rang et « +N en attente » ne comptent qu'elles. Une génération qui attend derrière une génération
+de l'autre espace affiche « en attente » et un temps qui compte ce travail caché, sans ligne pour lui ; si rien de
+l'espace ne tourne, la pastille dit « En attente » et le temps avant le début de la première, et si l'espace n'a rien
+en file, elle reste éteinte même quand le Mac calcule pour l'autre espace. On peut recharger la page sans rien
+perdre : elle se rattache aux générations normales qu'elle avait lancées (retenues par le navigateur), pas à celles des autres appareils, qui restent visibles dans la file, ni
 aux générations incognito. Les lignes de l'appareil y sont marquées « cet appareil ». Le bouton Incognito se change à
 tout moment : chaque génération garde le mode choisi à son lancement. Chaque image est enregistrée en PNG dans
 **`outputs\`**, avec ses images d'entrée (références, image d'origine, zone peinte) dans `outputs\.inputs\`. Sous le
@@ -407,8 +411,9 @@ du Mac, ne suffit pas pour voir les images privées.
   miniature, son prompt et ses réglages sont chiffrés sur le Mac. Le texte tapé n'est pas retenu par le navigateur.
   Une génération privée lancée va jusqu'au bout et est rangée chiffrée même si l'espace se verrouille avant la fin, ou
   si l'application est fermée ; sa notification est celle d'une image normale (« Image prête »), sans rien qui
-  trahisse l'espace privé. Les autres appareils ne voient
-  d'elle, dans la file, que « Génération privée », sans prompt ni aperçu.
+  trahisse l'espace privé. Hors de l'espace privé, la file n'en montre rien ; dedans, chaque génération privée y a
+  sa ligne complète (début du prompt, mode, rang dans son lot, temps restant), annulable, ainsi que son lot, quel que
+  soit l'appareil qui l'a lancée.
 - Les **variantes** et les **campagnes** marchent aussi dans l'espace privé : chaque image du lot est chiffrée, la
   grille et « Garder celle-ci » restent, et la notification est celle d'un lot normal (« N images prêtes »).
 - La **Galerie** de l'espace privé ne montre que les images privées, avec la même visionneuse : télécharger,
@@ -661,13 +666,21 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     `--params-backend te=disk` libère les poids de l'encodeur après l'encodage, ce qui laisse la place au cache de
     préfixe en très grande résolution ; `--mmap` fonctionne depuis `master-959` (les versions antérieures sortaient une
     image en bruit).
-- API locale : `POST /api/generate`, `GET /api/job/<id>` (`queue_position` : nombre de générations devant elle,
-  recalculé à chaque lecture ; `seed` : graine utilisée ; `lot`), `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel` (sans effet sur une génération
-  déjà terminée, réussie, en échec ou annulée), `GET /api/status` (`queue` : la file, génération en cours d'abord ;
-  chaque entrée porte `status`, `position`, `lot`, `estimate` et `elapsed` en secondes, `kind`, et pour une génération
-  normale seulement `id`, `mode` et le début du `prompt` ; une génération incognito porte à la place `page`, le jeton
-  opaque que sa page a envoyé dans `/api/generate` (`"page"`, 1 à 64 lettres, chiffres, `-` ou `_`), pour qu'elle y
-  reconnaisse ses lignes : il n'ouvre aucune route) ; lots : `"count"` de 2 à 4 dans `/api/generate` (mode
+- API locale : `POST /api/generate`, `GET /api/job/<id>` (`queue_position` : rang parmi les générations de son
+  espace, public ou privé, 0 pour celle qui tourne, sinon les générations de l'espace en attente devant elle, plus une
+  si une génération tourne ; recalculé à chaque lecture ; `seed` : graine utilisée ; `lot`),
+  `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel` (sans effet sur une génération déjà terminée, réussie, en échec ou annulée), `GET /api/status` (`queue` : la file de l'espace de
+  l'appareil, génération en cours d'abord : dans l'espace privé, ses seules générations privées ; ailleurs, les
+  générations normales et incognito ; l'appareil est dans l'espace privé quand sa session est ouverte et que la
+  requête est sûre, comme pour `private.unlocked` ; chaque entrée porte `status`, `position` (rang dans l'espace, comme
+  `queue_position`), `ahead` (durée restante estimée, en secondes, des générations de l'autre espace placées devant
+  elle : ce qui reste de celle en cours, l'estimation des autres ; 0 sans travail caché), `lot`, `estimate` et
+  `elapsed` en secondes, `kind` (`normal`, `incognito` ou `private`), et pour une génération normale ou privée `id`,
+  `mode` et le début du `prompt` ; une génération incognito porte à la place `page`, le jeton opaque que sa page a
+  envoyé dans `/api/generate` (`"page"`, 1 à 64 lettres, chiffres, `-` ou `_`), pour qu'elle y reconnaisse ses
+  lignes : il n'ouvre aucune route ; `queued` : générations en attente de l'espace ; `current_job` : la génération en
+  cours si elle est de l'espace et n'est pas incognito, sinon `null` ; `last_job` : dernière génération normale,
+  `null` dans l'espace privé ; `busy` : le Mac calcule, quel que soit l'espace) ; lots : `"count"` de 2 à 4 dans `/api/generate` (mode
   Créer, `"mode": "t2i"` ; 1 : génération seule) crée autant de générations ; `"campaign": [{"image": <data URL>, "width",
   "height"}, …]` (1 à 10 photos, mode Éditer, `"mode": "edit"`, sans `ref_images`) crée une édition par photo, avec
   cette seule photo en référence et à ses dimensions (une seule photo : génération seule) ; les générations d'un lot
@@ -704,8 +717,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   127.0.0.1 et le nom d'hôte, jamais sur les en-têtes de relais) ;
   génération privée : `"private": true` dans `/api/generate` (403 sans session, 400 avec `incognito` ou si `private`
   n'est pas un booléen, 503 sans `cryptography`), identifiant de
-  32 caractères hexadécimaux, même entrée qu'une génération incognito dans `queue` (`kind` `incognito`, jeton
-  `page`, ni `id` ni prompt : rien n'y trahit l'espace privé aux autres appareils) ;
+  32 caractères hexadécimaux, absente de `queue` hors de l'espace privé (rien n'y trahit l'espace privé aux autres
+  appareils), entrée complète dedans (`kind` `private`, `id`, `mode`, `prompt`, `lot` avec son `id`) ;
   `GET /api/job/<id>` porte `private` et, une fois l'image rangée, `item` (son identifiant dans l'espace privé) ;
   `POST /api/job/<id>/forget` l'oublie (l'image reste dans l'espace) ; `/api/forget` (fermeture de la page) ne l'arrête
   pas. Galerie privée, session exigée (403 sinon), chaque requête prolongeant la session : `GET /api/private/history`

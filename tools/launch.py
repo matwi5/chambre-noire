@@ -1160,7 +1160,7 @@ def secret(job):
 
 def kind_of(job):
     """Genre d'une génération secrète, pour un message de journal qui n'en dit pas plus : « incognito » aussi pour une
-    génération privée, comme dans la file, pour que logs/ ne révèle pas l'espace privé."""
+    génération privée, pour que logs/ ne révèle pas l'espace privé."""
     return "incognito"
 
 
@@ -1386,10 +1386,30 @@ def active_jobs():
     return sorted((j for j in list(S.jobs.values()) if j.get("status") in ACTIVE), key=lambda j: j.get("status") != "running")
 
 
+def in_space(job, private):
+    """La génération est-elle de cet espace : privée pour l'espace privé, normale ou incognito pour l'espace public."""
+    return bool(job.get("private")) == private
+
+
+def queue_ranks(active, private):
+    """Rang de chaque génération d'un espace dans la file (active : active_jobs()), par identifiant : 0 pour celle qui
+    tourne, sinon le nombre de générations de l'espace en attente devant elle, plus une si une génération tourne,
+    de quelque espace qu'elle soit (« 1re en attente » derrière une génération cachée, sans compter celles-ci)."""
+    running = any(j["status"] == "running" for j in active)
+    ranks, waiting = {}, 0
+    for j in active:
+        if in_space(j, private):
+            ranks[j["id"]] = 0 if j["status"] == "running" else waiting + running
+            waiting += j["status"] == "queued"
+    return ranks
+
+
 def queue_position(job):
-    """Nombre de générations devant celle-ci dans la file (0 : en cours ou la prochaine), None si elle n'y est plus.
-    Calculée à chaque lecture : elle avance à mesure que la file se vide."""
-    return next((k for k, j in enumerate(active_jobs()) if j is job), None)
+    """Rang de la génération parmi celles de son espace (queue_ranks), None si elle n'est plus dans la file. Calculé à
+    chaque lecture : il avance à mesure que la file se vide."""
+    if job.get("status") not in ACTIVE:
+        return None
+    return queue_ranks(active_jobs(), bool(job.get("private"))).get(job["id"])
 
 
 def request_inputs(req):
@@ -1405,30 +1425,55 @@ def request_inputs(req):
     return refs, (w * h if req.get("init_image") else 0)
 
 
-def queue_entry(job, position, coefs):
-    """Entrée de la liste de la file (/api/status). Une génération incognito n'y montre que son genre et le jeton de sa
-    page : ni identifiant (seule la page qui l'a lancée peut la suivre ou l'annuler), ni prompt, ni mode. Une génération
-    privée y a exactement la même entrée, genre « incognito » compris : rien n'y trahit l'espace privé aux autres
-    appareils (décision du porteur) ; sa page la reconnaît par son jeton. None si la génération vient de finir
-    (forget_files a pu retirer sa demande)."""
+def job_estimate(job, r, coefs):
+    """Durée estimée d'une génération de la file (estimate.predict, seule source de l'estimation) ; r : sa demande, lue
+    une seule fois par l'appelant (forget_files la retire à la fin d'une génération secrète, à tout moment)."""
+    refs, init = job["inputs"]
+    previews = r["steps"] // (r.get("preview_interval") or 5) if r.get("preview") else 0
+    return estimate.predict(coefs, r["width"], r["height"], r["steps"], refs, init, previews)
+
+
+def queue_entry(job, position, ahead, coefs):
+    """Entrée de la liste de la file (/api/status), vue depuis l'espace de la génération. Une génération incognito
+    (espace public) n'y montre que son genre et le jeton de sa page : ni identifiant (seule la page qui l'a lancée peut
+    la suivre ou l'annuler), ni prompt, ni mode. Une génération privée n'est vue que depuis l'espace privé, où elle a
+    une entrée complète comme une génération normale, genre « private ». ahead : durée restante estimée des générations
+    de l'autre espace placées devant elle. None si la génération vient de finir."""
     r = job.get("req")
     if r is None:
         return None
-    refs, init = job["inputs"]
-    previews = r["steps"] // (r.get("preview_interval") or 5) if r.get("preview") else 0
-    lot = job.get("lot")
-    e = {"status": job["status"], "position": position,
+    est, lot = job_estimate(job, r, coefs), job.get("lot")
+    e = {"status": job["status"], "position": position, "ahead": round(ahead, 1),
          # identifiant d'un lot incognito : connu de sa seule page, comme celui de ses générations
-         "lot": lot and ({"rank": lot["rank"], "size": lot["size"]} if secret(job) else dict(lot)),
-         "estimate": round(estimate.predict(coefs, r["width"], r["height"], r["steps"], refs, init, previews), 1),
+         "lot": lot and ({"rank": lot["rank"], "size": lot["size"]} if job.get("incognito") else dict(lot)),
+         "estimate": round(est, 1),
          "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None}
-    if secret(job):
+    if job.get("incognito"):
         # jeton de la page qui l'a lancée : elle y reconnaît ses lignes ; il n'ouvre aucune route (ni suivi, ni annulation)
         e.update(kind="incognito", page=job.get("page"))
     else:
         prompt = " ".join(r["prompt"].split())
-        e.update(kind="normal", id=job["id"], mode=job["mode"], prompt=prompt[:80] + ("…" if len(prompt) > 80 else ""))
+        e.update(kind="private" if job.get("private") else "normal", id=job["id"], mode=job["mode"],
+                 prompt=prompt[:80] + ("…" if len(prompt) > 80 else ""))
     return e
+
+
+def queue_view(private, coefs):
+    """Liste de la file vue depuis un espace : les entrées de ses seules générations, rangs propres à l'espace
+    (queue_ranks) ; le travail de l'autre espace placé devant une entrée compte dans son ahead (la génération en cours
+    pour ce qui lui reste, les autres pour leur estimation)."""
+    active, now = active_jobs(), time.time()
+    ranks, entries, hidden = queue_ranks(active, private), [], 0.0
+    for j in active:
+        if in_space(j, private):
+            e = queue_entry(j, ranks[j["id"]], hidden, coefs)
+            if e:
+                entries.append(e)
+        else:
+            r = j.get("req")
+            est = job_estimate(j, r, coefs) if r else 0.0
+            hidden += max(0.0, est - (now - j["started"])) if j["status"] == "running" and j.get("started") else est
+    return entries
 
 
 def new_job(req, inputs, lot=None):
@@ -1444,7 +1489,7 @@ def new_job(req, inputs, lot=None):
     out = os.path.join(d, f"{jid}_{mode}.png") if incognito or private else P("outputs", f"{jid}_{mode}.png")
     return {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
             "incognito": incognito, "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot,
-            "page": req.get("page") if incognito or private else None,   # jeton de la page, montré dans queue à la place de l'id
+            "page": req.get("page") if incognito else None,   # jeton de la page, montré dans queue à la place de l'id
             "public": private and (read_space() or {}).get("public")}    # clé publique de l'espace au lancement
 
 
@@ -1554,6 +1599,11 @@ class H(BaseHTTPRequestHandler):
         if session and touch:
             session["seen"] = time.time()
         return session
+
+    def _in_private(self):
+        """Cet appareil est-il dans l'espace privé : session ouverte (sans la prolonger) et requête sûre, pour que rien
+        de privé ne parte en clair même si le cookie de session suit une adresse http:// du même nom."""
+        return HAVE_CRYPTO and self._secure() and self._private_session() is not None
 
     def _send_private(self, code, reply, token=""):
         """Réponse qui pose le cookie de session de l'espace privé (token), ou l'efface (token vide) : HttpOnly, sans
@@ -1705,26 +1755,30 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, open(P("tools", "ui", "index.html"), "rb").read(), "text/html; charset=utf-8")
         if path == "/api/status":
             missing = [k for k, v in MODELS.items() if not os.path.exists(v)]
+            # espace de l'appareil : la file, la génération en cours et la dernière image ne montrent que les siennes
+            inside = self._in_private()
             # un job incognito n'est jamais repris après un rechargement de la page : il est perdu avec elle
-            last = max((j for j in list(S.jobs.values()) if not secret(j)), key=lambda j: j["created"], default=None)
-            coefs, active = S.store.coefficients(S.backend, S.model, S.engine), active_jobs()
+            last = None if inside else max((j for j in list(S.jobs.values()) if not secret(j)), key=lambda j: j["created"],
+                                           default=None)
+            coefs, current = S.store.coefficients(S.backend, S.model, S.engine), S.jobs.get(S.current) or {}
+            queue = queue_view(inside, coefs)
             return self._send(200, {"sd_ready": not missing, "backend": S.backend, "busy": S.current is not None,
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model,
-                                    "queued": sum(j["status"] == "queued" for j in active),
-                                    "queue": [e for e in (queue_entry(j, k, coefs) for k, j in enumerate(active)) if e],
-                                    # identifiant d'une génération incognito ou privée : connu de sa seule page
-                                    "current_job": None if secret(S.jobs.get(S.current) or {}) else S.current,
+                                    "queued": sum(e["status"] == "queued" for e in queue),
+                                    "queue": queue,
+                                    # identifiant d'une génération incognito : connu de sa seule page
+                                    "current_job": S.current if current and in_space(current, inside)
+                                                   and not current.get("incognito") else None,
                                     "last_job": public(last) if last else None,
                                     "estimates": coefs,
                                     # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
                                     "phone": {"urls": S.lan_urls, "code": S.access_code} if S.access_code and self._local() else None,
-                                    # espace privé : existe-t-il, est-il déverrouillé pour cet appareil (sans prolonger la
-                                    # session), peut-il s'ouvrir par cette adresse (HTTPS ou le Mac) et y être supprimé
-                                    # sans le code (le Mac lui-même seulement)
+                                    # espace privé : existe-t-il, est-on dedans sur cet appareil (sans prolonger la session),
+                                    # peut-il s'ouvrir par cette adresse (HTTPS ou le Mac) et y être supprimé sans le code
+                                    # (le Mac lui-même seulement)
                                     "private": {"available": HAVE_CRYPTO, "exists": HAVE_CRYPTO and os.path.exists(os.path.join(PRIVATE, "space.json")),
-                                                "unlocked": HAVE_CRYPTO and self._private_session() is not None,
-                                                "secure": self._secure(), "local": self._local()}})
+                                                "unlocked": inside, "secure": self._secure(), "local": self._local()}})
         m = re.match(r"^/api/job/([\w-]+)(/preview|/result)?$", path)
         if m:
             job = S.jobs.get(m.group(1))

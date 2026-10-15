@@ -56,14 +56,17 @@ Dans l'ordre du fichier :
   fichiers d'une génération secrète supprimés, fin de lot, puis `S.current` rendu en dernier), `end_of_lot`.
 - **Demandes** : `request_error` (400 pour tout champ que `build_cmd` utilise tel quel), `expand_request` (une
   demande par image d'un lot : variantes `count`, campagne `campaign`), `draw_seeds` (graines -1 tirées par le serveur
-  pour être écrites au journal), `active_jobs`, `queue_position`, `request_inputs`, `queue_entry` (ligne de `queue`
-  dans `/api/status`, estimation par `estimate.predict`), `new_job`, `public(job)` (ce que `/api/job/<id>` montre),
+  pour être écrites au journal), `active_jobs`, `in_space` (génération de l'espace public ou privé), `queue_ranks`
+  (rang dans l'espace), `queue_position`, `request_inputs`, `job_estimate` (estimation par `estimate.predict`, seule
+  source), `queue_entry` (ligne de `queue` dans `/api/status`), `queue_view` (file vue depuis un espace, `ahead` :
+  travail caché de l'autre espace devant chaque entrée), `new_job`, `public(job)` (ce que `/api/job/<id>` montre),
   `quiet_request`.
 - **HTTP** : `class Server` (file de 128 connexions : la galerie en ouvre une par miniature), `class H` : `log_message`
   (tait `/api/private/`), `_send` ; contrôles dans l'ordre `_host_ok` (liste blanche de `Host`), `_post_refused`
   (POST : `Sec-Fetch-Site`, `Origin`, `Content-Type: application/json`), `_allowed` (le Mac passe, les autres
   présentent le cookie d'accès) ; `_proxied`, `_local`, `_secure` (espace privé : adresse source locale et `Host` local
-  ou nom HTTPS de `tailscale serve`) ; sessions privées : `_private_token`, `_private_session`, `_send_private`,
+  ou nom HTTPS de `tailscale serve`) ; sessions privées : `_private_token`, `_private_session`, `_in_private` (l'appareil est dans
+  l'espace privé : session et requête sûre ; espace de `/api/status`), `_send_private`,
   `_open_session` ; routes privées : `_private_get`, `_private_post` ; toutes les autres routes : `do_GET`, `do_POST`
   (une suite de `if path == …`).
 - **Démarrage** : `exclude_from_backup` (Mac : `jobs/` hors de Time Machine), `setup_state`, `main()` (options,
@@ -152,8 +155,9 @@ invariants ».
   Enregistrer un prompt est un geste explicite, permis aussi en incognito (décision de la spec) ; choisir un prompt en
   incognito ne met pas à jour `used`. Le banc lit `tools/prompt_types.json` du dépôt (pas de repointage).
 - **Interface et serveur** : l'interface suit les générations qu'elle a lancées (`pageJobs`) en interrogeant chacune
-  par `/api/job/<id>` chaque seconde, et la file commune (`queue` de `/api/status`, entrées produites par
-  `queue_entry`) toutes les 2 s tant qu'elle n'est pas vide ; après un rechargement, elle se rattache aux seules
+  par `/api/job/<id>` chaque seconde, et la file de son espace (`queue` de `/api/status`, entrées produites par
+  `queue_view`) toutes les 2 s tant qu'elle n'est pas vide ; la file et l'île ne parlent que des générations de
+  l'espace affiché (`ofSpace`, `spaceActive`), le temps d'attente ajoute `ahead` (`waitBefore`) ; après un rechargement, elle se rattache aux seules
   générations normales lancées depuis ce navigateur (identifiants dans `localStorage`, `qwen-own`). Ses lignes
   incognito de `queue` se reconnaissent au jeton de la page (`PAGE_TOKEN`, champ `page` de `/api/generate`). Un lot
   terminé s'affiche en grille (`gridOf`) ; la visionneuse parcourt `vList` (la galerie, ou les images d'un lot de la
@@ -181,7 +185,8 @@ invariants ».
   hasard et n'est connu que de sa page : ni `queue`, ni `current_job` ne le montrent. Une génération incognito
   terminée que sa page n'a jamais fait oublier l'est par `sweep()`, `INCOGNITO_TTL` (24 h) après sa fin.
 - **Génération privée** (`"private": true`, session exigée) : même chemin que l'incognito pendant le calcul
-  (`jobs/private_<id>/`, `sd-cli.log` vers `os.devnull`, identifiant de 128 bits, rien dans `queue` ni les journaux),
+  (`jobs/private_<id>/`, `sd-cli.log` vers `os.devnull`, identifiant de 128 bits, rien dans les journaux ; dans
+  `queue`, une entrée complète vue depuis l'espace privé seulement),
   puis `keep_private` chiffre image, miniature (en mémoire), entrées et réglages avec la clé publique notée au
   lancement (`store_private`). Une génération privée ne s'arrête pas à la fermeture de la page (`/api/forget` ne vise
   que l'incognito, décision du porteur). Au lancement sur Mac, `exclude_from_backup` exclut `jobs/` de Time Machine.
