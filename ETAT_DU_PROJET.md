@@ -69,6 +69,13 @@ Mis à jour le 15/10/2026.
 
 ### 2026-10-15
 
+- Groupe A (saisie et en-tête) fait par une session liée et fusionné dans `dev` (`d1d42b3` à `4a5a55c`) : photos
+  choisies d'un coup toutes ajoutées (cause confirmée par le test), onglet vidé après une demande acceptée, saisie
+  propre à chaque espace (onglets marqués retirés), cadenas aussi visible que Rafraîchir, pastille dans sa bulle.
+  Revue du groupe faite (3 constats corrigés, 4 laissés), revue de sécurité sans constat au-dessus du seuil.
+  Vérifié après fusion : `tests/check.py --ui` → Ran 131 tests OK, interface 18/18 OK. Restent au porteur : le vrai
+  sélecteur de photos sur le téléphone, et une remarque de sécurité à trancher (fermeture automatique de l'espace
+  pendant une frappe : les touches suivantes vont dans la saisie publique).
 - Demandes du porteur après essai sur le téléphone, cadrées par un grilling (décision « Espaces public et privé
   étanches » dans `DECISIONS.md`, termes « Espace public » et « Espace privé » dans `GLOSSARY.md`) : prompts
   enregistrés privés chiffrés et cloisonnés ; file d'attente et générations en cours cloisonnées par espace (dont le
