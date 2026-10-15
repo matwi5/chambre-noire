@@ -826,7 +826,9 @@ pull request vers `main` et chaque envoi sur `dev` (`.github/workflows/checks.ym
 
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui`. Ils ouvrent
 l'interface servie par le banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur
-de la console du navigateur (écrans principaux, et « Garder celle-ci » après un rechargement de la galerie).
+de la console du navigateur. Ils couvrent les écrans principaux, « Garder celle-ci » après un rechargement de la
+galerie, la saisie (plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque espace), l'en-tête
+(cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés et la reprise d'une génération.
 
 Tests de bout en bout, interface lancée :
 
