@@ -32,7 +32,11 @@ et les tests viennent de bugs passés à travers les revues par ticket.
 
 - **Un test se synchronise sur une condition observable, jamais sur un `time.sleep`** (`bench.wait_until`,
   `wait_job`, `wait_idle`, `sent.decided`, `threading.Event`) : un `sleep` est trop court sur une machine chargée et
-  rend le test instable, ou trop long partout. Seul un faux qui simule une lenteur (faux moteur) peut dormir.
+  rend le test instable, ou trop long partout. Seul un faux qui simule une lenteur (faux moteur) peut dormir. Pour
+  garder une génération en cours ou en file, `HOLD` dans le prompt plutôt que `SLOW` (voir `tests/fake_sdcli.py`).
+- **Une assertion sur tous les éléments d'une liste vérifie d'abord que la liste n'est pas vide** (`[].every(...)`,
+  `all([])` sont toujours vrais) : `excerpts.length > 0 && excerpts.every(...)`. Sinon une file déjà vide (génération
+  finie plus tôt que prévu) fait passer le test sans rien vérifier.
 - **Une correction de l'interface reçoit un test dans `tests/ui/`** quand le banc ne peut pas la voir : deux bugs
   d'interface ne sont apparus que dans Chrome, banc au vert.
 - **Un fichier de test se termine par `if __name__ == "__main__": unittest.main()`**, pour se lancer seul.

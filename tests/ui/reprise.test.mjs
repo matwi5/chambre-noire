@@ -18,9 +18,11 @@ after(async () => {
   await bench?.stop();
 });
 
-// plus de 80 caractères ; SLOW : chaque image prend plusieurs secondes, le lot est encore en file après le rechargement
-const LONG = 'SLOW=0.15 zq6 un phare au crépuscule, une mer agitée, des embruns dorés, un ciel violet, '
+// plus de 80 caractères ; HOLD=<nom> : la génération reste en file jusqu'à bench.release(nom) (voir
+// tests/fake_sdcli.py), un nom par test (une libération vaut jusqu'à la fin du banc)
+const TEXT = ' zq6 un phare au crépuscule, une mer agitée, des embruns dorés, un ciel violet, '
   + 'des mouettes au loin et une petite maison blanche au pied du phare';
+const LONG = 'HOLD=lot' + TEXT, LONG_PRIV = 'HOLD=privee' + TEXT;
 const CODE = 'code-du-banc-1';
 const post = (url, body = {}) => page.eval(`postJson(${JSON.stringify(url)}, ${JSON.stringify(body)}).then(r => r.status)`);
 const queue = () => page.eval(`fetch('/api/status').then(r => r.json()).then(s => s.queue.map(e => e.prompt))`);
@@ -41,6 +43,7 @@ test('rechargement : un lot repris montre le prompt complet et « Reprendre » r
   const excerpts = await queue();
   assert.ok(excerpts.length > 0 && excerpts.every(p => p.length < LONG.length), 'la file n\'a qu\'un extrait');
   assert.deepEqual(await page.eval(`pageJobs.map(p => p.prompt)`), [LONG, LONG]);
+  bench.release('lot');
   await page.waitFor(`!$('lotGrid').hidden && $('lotGrid').querySelectorAll('button[data-k]').length === 2`,
     { what: 'grille du lot terminé', timeout: 30000 });
   assert.equal(await page.eval(`$('resultMeta').querySelector('.m-prompt').textContent`), LONG, 'prompt sous l\'image');
@@ -62,13 +65,14 @@ test('espace privé : une génération privée lancée d\'un autre appareil est 
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
   // demande envoyée hors de l'interface, comme depuis un autre appareil : la page ne la suit pas encore
-  assert.equal(await post('/api/generate', { mode: 't2i', prompt: LONG, width: 512, height: 512, steps: 12, cfg: 1,
+  assert.equal(await post('/api/generate', { mode: 't2i', prompt: LONG_PRIV, width: 512, height: 512, steps: 4, cfg: 1,
     seed: -1, preview: false, ref_images: [], private: true }), 202);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`pageJobs.some(p => p.private && p.adopted)`, { what: 'génération privée reprise de la file' });
   const excerpts = await queue();
-  assert.ok(excerpts.length > 0 && excerpts.every(p => p.length < LONG.length), 'la file n\'a qu\'un extrait');
-  assert.equal(await page.eval(`pageJobs.find(p => p.private).prompt`), LONG);
+  assert.ok(excerpts.length > 0 && excerpts.every(p => p.length < LONG_PRIV.length), 'la file n\'a qu\'un extrait');
+  assert.equal(await page.eval(`pageJobs.find(p => p.private).prompt`), LONG_PRIV);
+  bench.release('privee');
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   await idle();

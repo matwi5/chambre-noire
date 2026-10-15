@@ -53,7 +53,8 @@ contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net`
   `venv/bin/python -m unittest discover -s tests -p test_x.py`. `tests/bench.py` sert `tools/launch.py` sur un port
   libre, tous ses dossiers repointés vers un dossier temporaire, avec le faux moteur `tests/fake_sdcli.py` (`FAIL` ou
   `SLOW[=s]` dans le prompt le font échouer ou ralentir, `FAILSEED=<n>` échouer pour la seule graine n, une image
-  d'un lot). Trois origines de requête : `call()` = le Mac, `remote=True` = HTTPS relayé par `tailscale serve`
+  d'un lot, `HOLD[=nom]` attendre que le test le libère par `bench.release(nom)`, aussi offert par le banc du pilote
+  d'interface : une génération reste en cours, les suivantes en file, sans dépendre du temps). Trois origines de requête : `call()` = le Mac, `remote=True` = HTTPS relayé par `tailscale serve`
   (`bench.HTTPS_HOST`), `wifi=True` = `http://` direct d'un autre appareil (`bench.WIFI_HOST`, `LOCAL_CLIENTS` vidé
   pendant l'appel). `bench.capture_push()` intercepte les notifications (`sent.decided` : celles que le serveur a
   décidées, complètes après `bench.wait_idle()`), `bench.wait_until(cond)` attend une condition observable,

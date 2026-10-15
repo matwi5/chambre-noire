@@ -68,7 +68,7 @@ def start():
     launch.PRIVATE = launch.P("private")
     launch.SCRYPT_N = 2 ** 10                       # dérivation du code privé rapide au banc (2**18 en vrai)
     # launch.PROMPT_TYPES_FILE reste le fichier du dépôt : le serveur le lit sans jamais l'écrire
-    for d in ("tools", "outputs", "jobs", "logs", "models"):
+    for d in ("tools", "outputs", "jobs", "logs", "models", "hold"):
         os.makedirs(launch.P(d))
     for table in (launch.MODELS, launch.DIFFUSION):   # modèles en fichiers vides : /api/status dit le moteur prêt
         for k, path in table.items():
@@ -106,12 +106,22 @@ def install_fake_engine():
     if os.name == "nt":                             # non vérifié sous Windows : un .exe ne peut pas être un script
         launch.EXE = "sd-cli.cmd"
         with open(os.path.join(d, launch.EXE), "w") as f:
-            f.write(f'@"{sys.executable}" "{fake}" %*\n')
+            f.write(f'@set "QWEN_FAKE_HOLD={hold_dir()}"\n@"{sys.executable}" "{fake}" %*\n')
         return
     exe = os.path.join(d, launch.EXE)
     with open(exe, "w") as f:
-        f.write(f'#!/bin/sh\nexec "{sys.executable}" "{fake}" "$@"\n')
+        f.write(f'#!/bin/sh\nQWEN_FAKE_HOLD="{hold_dir()}" exec "{sys.executable}" "{fake}" "$@"\n')
     os.chmod(exe, 0o755)
+
+
+def hold_dir():
+    """Dossier des libérations du faux moteur (HOLD, voir fake_sdcli.py), dans le dossier temporaire du banc."""
+    return launch.P("hold")
+
+
+def release(name="hold"):
+    """Libère les générations dont le prompt porte HOLD=<name> (HOLD seul : « hold »), jusqu'au test suivant."""
+    open(os.path.join(hold_dir(), name), "w").close()
 
 
 def call(method, path, body=None, remote=False, cookie=True, headers=None, private=None, wifi=False):
@@ -327,10 +337,13 @@ class BenchCase(unittest.TestCase):
         warnings.simplefilter("ignore", ResourceWarning)
 
     def setUp(self):
+        release("ALL")                              # générations retenues (HOLD) par un test précédent
         for j in list(S.jobs.values()):            # restes d'un test précédent interrompu par un échec
             if j.get("status") in ("queued", "running"):
                 call("POST", f"/api/job/{j['id']}/cancel")
         wait_idle()
+        shutil.rmtree(hold_dir())                   # chaque test part sans libération
+        os.makedirs(hold_dir())
         S.jobs.clear()
         S.lots.clear()
         S.private_sessions.clear()
