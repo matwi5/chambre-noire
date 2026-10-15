@@ -44,7 +44,7 @@ async function refusedGenerate() {
   await page.send('Fetch.disable');
 }
 
-test('incognito : un texte tapé en mode normal ne reste pas en brouillon après une demande incognito refusée', async () => {
+test('incognito : un texte tapé en mode normal ne reste pas en brouillon après une demande refusée', async () => {
   await fresh();
   await type('t2i', 'un phare au crépuscule');
   assert.deepEqual(await drafts(), ['qwen-t2i_prompt'], 'brouillon public retenu');
@@ -60,8 +60,8 @@ test('incognito : un texte tapé en mode normal ne reste pas en brouillon après
 
 test('espace privé : un texte tapé puis une demande refusée ne laissent aucun brouillon', async () => {
   await fresh();
-  assert.equal(await page.eval(`postJson('/api/private/create', { code: ${JSON.stringify(CODE)} }).then(r => r.status)`),
-    200);
+  const create = `postJson('/api/private/create', { code: ${JSON.stringify(CODE)} }).then(r => r.status)`;
+  assert.equal(await page.eval(create), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
   await type('t2i', 'une forêt sous la neige');

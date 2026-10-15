@@ -78,6 +78,9 @@ distincts) ; suivi de fichiers, il ne lance que ceux-là. Un avis « zone sensib
   propres à chaque espace) et `reprise` (prompt complet d'une génération reprise, publique ou privée). Une
   vérification d'interface nouvelle y devient un test plutôt qu'un script jetable. Une vue plus grande cache des
   débordements : regarder aussi les captures (`page.screenshot`).
+- **Sonde** : `node tests/ui/probe.mjs [--width N] [--shot f.png] [--private] --eval '<expression>'` (ou
+  `--script f.mjs`) lance le banc et Chrome par le pilote, évalue dans la vue du téléphone, imprime et ferme tout :
+  une vérification ponctuelle passe par elle, pas par un script jetable.
 - La fermeture de la page (`pagehide`, envoi `keepalive`) se valide sur le téléphone : Chrome sans écran ne la rejoue
   pas de façon constante.
 - `tests/run_tests.py --steps 8 [--only t2i|edit|mask|annot]` : bout en bout, serveur lancé sur 127.0.0.1:7860. Il

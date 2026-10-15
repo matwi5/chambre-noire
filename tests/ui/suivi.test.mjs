@@ -67,7 +67,8 @@ test('deux pages : celle qui a repris la génération la voit oubliée par l\'au
   // recevra le 404 de l'oubli (et non l'état « fini », qu'une interrogation plus rapide aurait pu voir)
   await second.eval(`(() => { window.heldFollow = true; const f = window.fetch;
     window.fetch = (u, ...a) => String(u).startsWith('/api/job/') && heldFollow
-      ? new Promise(r => { const t = setInterval(() => { if (!heldFollow) { clearInterval(t); r(f(u, ...a)); } }, 50); })
+      ? new Promise(r => { const t = setInterval(() => {
+        if (!heldFollow) { clearInterval(t); r(f(u, ...a)); } }, 50); })
       : f(u, ...a); })()`);
   bench.release('deux');
   await first.waitFor(`!pageJobs.some(p => p.private && p.j.status !== 'done') && $('resultMeta').textContent !== ''`,
