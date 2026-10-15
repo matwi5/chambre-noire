@@ -126,6 +126,17 @@ dernier bloc, après le HTML.
     d'image asynchrone (Éditer, Dessiner) va dans la saisie de l'espace où il a commencé. `openPrivSheet`,
     `privCreate`, `privUnlock`, `privLock`, `privChangeCode`, `privReset`, `adoptImage`.
 
+Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
+« Dessiner », « Reprendre » (reprend le texte du prompt) et « Supprimer » → `viewerAction('edit' | 'mask' | 'prompt'
+| 'delete')`, avec l'image décrite par `pageItem` pour une image de la page ; texte sous l'image de la zone de
+résultat → `setMeta` ; « Garder celle-ci » → `keepThis` ; cadenas de la Galerie → `#privEntry`, « Sortir » →
+`privLock` ; pastille du haut → `#island`, `renderIsland`.
+
+Deux boucles suivent les générations sans se synchroniser : `pollJobs` (`/api/job/<id>`, chaque seconde) et
+`refreshStatus` (`/api/status`, toutes les 2 à 5 s). Une réponse de l'une peut arriver avant celle de l'autre :
+rapprocher une génération de la file par son identifiant, et traiter un 404 qui précède l'annonce de la fermeture de
+l'espace (voir `CODING_STANDARDS.md`).
+
 Fichiers voisins : `tools/ui/sw.js` (service worker : navigation seulement, jamais `/api/*`),
 `tools/ui/manifest.webmanifest` et les icônes (installation sur le téléphone).
 
