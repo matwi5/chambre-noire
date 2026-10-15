@@ -112,6 +112,9 @@ Ne lancer aucune génération réelle et ne supprimer aucune image de `outputs/`
   L'estimation de chaque entrée de la file (`queue_entry`) appelle `estimate.predict` : pas de troisième copie.
 - **Interface** : la visionneuse parcourt `vList`, jamais `histItems` directement (la galerie peut être rechargée
   pendant qu'elle est ouverte).
+- **Saisie par espace** : tout ajout à la saisie qui attend (lecture d'image, envoi d'une demande) note son espace ou
+  sa liste avant la première attente, sinon un changement d'espace pendant l'attente le fait tomber dans la saisie de
+  l'autre espace (une image privée dans la saisie publique).
 - **Noms des modèles** : ceux de `setup.py` doivent correspondre à `MODELS` et `DIFFUSION` en tête de `tools/launch.py`.
 - **Release de sd.cpp** : `.installed` doit garder le format `master-NNN-hash` ; `estimate.prefix_cache` en lit le numéro
   (cache de préfixe à partir de 903). Si sd-cli change le texte de ses lignes « completed », `make_sample` renvoie

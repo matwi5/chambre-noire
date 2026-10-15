@@ -133,6 +133,9 @@ l'espace privé).
 40. Je ne veux plus d'onglets « marqués » ni de demande du code privé en touchant « Générer » dans l'espace public,
     puisque rien de privé n'y reste affiché.
 41. Quand l'espace privé est supprimé, je veux que la saisie privée gardée en mémoire soit effacée.
+41 bis. Quand l'espace privé se ferme seul pendant que je tape, je veux que le champ perde le curseur et qu'un message
+   me dise que je suis revenu dans l'espace public, pour que mes touches suivantes ne partent pas dans la saisie
+   publique sans que je le voie (ajouté le 15/10/2026 après la revue de sécurité du groupe A).
 
 ### Vider après « Générer »
 
@@ -249,6 +252,8 @@ l'espace privé).
   fois). Sortie par « Sortir » ou suppression de l'espace : le jeu privé est effacé, le jeu public revient. Fermeture
   après 15 minutes : le jeu privé est mis de côté en mémoire de la page, le jeu public revient ; il réapparaît à la
   prochaine entrée dans la même page.
+- Sortie que l'appareil n'a pas demandée (fermeture après 15 minutes, suppression de l'espace depuis le Mac) : le
+  champ qui a le curseur le perd et un message dit le retour dans l'espace public ; rien de tel après « Sortir ».
 - Brouillons du navigateur (`qwen-<onglet>_prompt`) : écrits seulement pour la saisie publique hors incognito, comme
   aujourd'hui ; jamais pour la saisie privée.
 - Le mécanisme des onglets marqués disparaît : `privTabs`, `markTab`, `clearTab`, `renderMarks`, la classe
