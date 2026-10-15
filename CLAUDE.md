@@ -71,13 +71,10 @@ distincts) ; suivi de fichiers, il ne lance que ceux-là. Un avis « zone sensib
   (Chrome installé ; pas en CI). `tests/ui/driver.mjs` lance le banc (`tests/ui/serve.py`) et Chrome sans écran
   (profil temporaire supprimé à la fin), piloté par le protocole DevTools depuis Node (WebSocket natif, sans
   Playwright), dans la vue du téléphone du porteur (367×760, densité 2,5, mobile, tactile : l'interface y passe en
-  `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `smoke` (écrans principaux),
-  `keep` (régression « Garder celle-ci »), `saisie` (photos choisies d'un coup, vidage après « Générer », saisie
-  propre à chaque espace ; `page.setFiles` remplit un champ de fichiers), `file` (file et pastille propres à chaque
-  espace), `entete` (cadenas de la galerie, pastille qui tient dans sa bulle), `prompts` (prompts enregistrés
-  propres à chaque espace) et `reprise` (prompt complet d'une génération reprise, publique ou privée). Une
-  vérification d'interface nouvelle y devient un test plutôt qu'un script jetable. Une vue plus grande cache des
-  débordements : regarder aussi les captures (`page.screenshot`).
+  `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `tests/ui/*.test.mjs` : chaque
+  fichier dit en tête ce qu'il couvre ; `page.setFiles` remplit un champ de fichiers. Une vérification d'interface
+  nouvelle y devient un test plutôt qu'un script jetable. Une vue plus grande cache des débordements : regarder
+  aussi les captures (`page.screenshot`).
 - **Sonde** : `node tests/ui/probe.mjs [--width N] [--shot f.png] [--private] --eval '<expression>'` (ou
   `--script f.mjs`) lance le banc et Chrome par le pilote, évalue dans la vue du téléphone, imprime et ferme tout :
   une vérification ponctuelle passe par elle, pas par un script jetable.
@@ -110,7 +107,9 @@ Ne lancer aucune génération réelle et ne supprimer aucune image de `outputs/`
 - **Incognito et espace privé** : `secret(job)` désigne l'un ou l'autre mode ; chaque `print`, écriture de journal,
   de calibration ou de fichier hors du dossier de travail passe par lui. **Toute nouvelle écriture sur le disque ou
   dans les journaux doit respecter ces deux modes.** `log_message` tait `/api/private/` et aucun `print` ne parle de
-  l'espace privé ; ni le titre ni le texte d'un prompt enregistré ne vont dans les journaux du serveur.
+  l'espace privé ; ni le titre ni le texte d'un prompt enregistré ne vont dans les journaux du serveur. Côté
+  interface : rien de l'incognito ni de l'espace privé dans `localStorage`, brouillons compris (un texte
+  incognito ou privé n'y est jamais écrit, même quand la demande est refusée ; `tests/ui/brouillons.test.mjs`).
 - **Verrous** : toute écriture de `outputs/journal.jsonl` passe sous `JOURNAL_LOCK` ; toute écriture ou suppression
   d'une image privée ou des prompts privés (`private/prompts`) passe sous `PRIVATE_LOCK`, après `finish_rekey()` ; un
   nouveau fichier de `private/` est aussi rechiffré par `rekey_space` et rangé par `finish_rekey`.
@@ -164,7 +163,7 @@ Ne lancer aucune génération réelle et ne supprimer aucune image de `outputs/`
   partir de `dev`, et leurs branches s'y fusionnent. `main` ne reçoit que des pull requests depuis `dev` (`/project:pr`)
   et est protégée sur GitHub (PR obligatoire, CI `checks` au vert exigée, ni push direct ni forcé, administrateur
   compris). `/project:push` se lance
-  sur `dev` ; après la fusion d'une PR, `/project:sync main` remet `dev` à jour.
+  sur `dev` ; après la fusion d'une PR, `/project:sync base` remet `dev` à jour.
 - Suivi des tâches : Asana « Hub · Suivi des tâches », section « Qwen-Image local » (GID `1219496223389136`), tâche
   mère de Claude « [code] Qwen-Image local : prochaines sessions Claude Code » (GID `1219493010479174`), tenus par
   `asana-board:suivi-asana` (adopté le 14/10/2026). Specs dans `docs/specs/`, plans des gros travaux dans

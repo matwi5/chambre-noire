@@ -1,8 +1,9 @@
 # Règles de code
 
 Lues à la revue (axe Standards de `/code-review`) : des jugements qu'aucun contrôle ne fait. Ce que `tests/check.py`
-vérifie (compilation, syntaxe du JavaScript, banc, dépôt public) n'est pas répété ici. Les règles sur les données
-et les tests viennent de bugs passés à travers les revues par ticket.
+vérifie (compilation, syntaxe du JavaScript, banc, dépôt public) n'est pas répété ici, sauf la longueur des lignes,
+que la revue lit aussi. Les règles sur les données et les tests viennent de bugs passés à travers les revues par
+ticket.
 
 ## Forme
 
