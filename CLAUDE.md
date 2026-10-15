@@ -41,7 +41,7 @@ Aucun lint ni typage n'est déclaré. Après un changement, une seule commande (
 `.github/workflows/checks.yml`, sur chaque pull request vers `main` et chaque envoi sur `dev`) :
 
 ```bash
-venv/bin/python tests/check.py [--no-bench] [--ui]
+venv/bin/python tests/check.py [--no-bench | --quick] [--ui [tests/ui/x.test.mjs …]]
 ```
 
 Elle compile chaque `.py` suivi, passe chaque bloc `<script>` de `tools/ui/index.html` et chaque `.js`/`.mjs` suivi
@@ -50,6 +50,11 @@ caractères (`CODING_STANDARDS.md`), lance le banc et recopie sa ligne « Ran N 
 qu'on cite, jamais un compte de tête) ; code de sortie non nul au moindre échec. `tests/test_public_repo.py` y
 échoue si un fichier suivi contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net` autre que
 ceux du banc.
+
+`--quick` (en local, jamais en CI) saute le banc quand aucun `.py` n'a changé depuis la base, sauf
+`tests/test_public_repo.py`. `--ui` tourne en même temps que le banc (ports libres et dossiers temporaires
+distincts) ; suivi de fichiers, il ne lance que ceux-là. Un avis « zone sensible : passe bogues /code-review requise »
+(sans échec) signale une ligne de code ajoutée qui touche l'incognito ou l'espace privé.
 
 - **Banc** (sans GPU, ≈ 1 min) : `venv/bin/python -m unittest discover -s tests` ; un seul fichier :
   `venv/bin/python -m unittest discover -s tests -p test_x.py`. `tests/bench.py` sert `tools/launch.py` sur un port
