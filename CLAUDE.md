@@ -63,8 +63,9 @@ contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net`
   (profil temporaire supprimé à la fin), piloté par le protocole DevTools depuis Node (WebSocket natif, sans
   Playwright), dans la vue du téléphone du porteur (367×760, densité 2,5, mobile, tactile : l'interface y passe en
   `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `smoke` (écrans principaux),
-  `keep` (régression « Garder celle-ci ») et `saisie` (photos choisies d'un coup, vidage après « Générer », saisie
-  propre à chaque espace ; `page.setFiles` remplit un champ de fichiers). Une vérification d'interface nouvelle y
+  `keep` (régression « Garder celle-ci »), `saisie` (photos choisies d'un coup, vidage après « Générer », saisie
+  propre à chaque espace ; `page.setFiles` remplit un champ de fichiers) et `entete` (cadenas de la galerie, pastille
+  qui tient dans sa bulle). Une vérification d'interface nouvelle y
   devient un test plutôt qu'un script jetable. Une vue plus grande cache des débordements : regarder aussi les captures
   (`page.screenshot`).
 - La fermeture de la page (`pagehide`, envoi `keepalive`) se valide sur le téléphone : Chrome sans écran ne la rejoue

@@ -74,7 +74,7 @@
   .priv .ambient .mesh { filter:hue-rotate(-95deg) saturate(.7); opacity:.45; }
   .priv .logo { background:radial-gradient(120% 120% at 25% 15%, #b8f5e6, var(--iris) 45%, #0f5a4c); box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 8px 22px -6px rgba(31,143,122,.7); }
   #privExit { flex:none; margin-left:8px; color:var(--iris2); }
-  #privExit[hidden] { display:none; } #privExit svg, #privEntry svg { width:18px; height:18px; }
+  #privExit[hidden] { display:none; } #privExit svg { width:18px; height:18px; }
   @media (max-width: 420px) { #privExit span, .priv .topbar h1 { display:none; } #privExit { padding:0 10px; } }
   .priv #incog { display:none; }
   .incog .logo, .incog .orb, .incog .shimmer { filter:grayscale(1); }
@@ -306,7 +306,7 @@
   .hist-head span { color:var(--ink2); font-size:14px; margin-top:4px; font-variant-numeric:tabular-nums; }
   .hist-head .btn-icon { width:40px; height:40px; margin-left:auto; }
   .hist-head .btn-icon svg { width:19px; height:19px; }
-  .hist-head #privEntry { color:var(--ink2); opacity:.55; } .hist-head #privEntry:not([hidden]) + .btn-icon { margin-left:0; }   /* espace privé : entrée discrète */
+  .hist-head #privEntry:not([hidden]) + .btn-icon { margin-left:0; }   /* espace privé : cadenas à côté de Rafraîchir, même aspect */
   .hgrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; }
   @media (min-width: 700px) { .hgrid { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; } }
   .hgrid > button { position:relative; padding:0; border:0; border-radius:14px; overflow:hidden; aspect-ratio:1; background:var(--field); cursor:pointer;
@@ -438,9 +438,12 @@
   .act.danger { color:var(--err); }
 
   /* ------------------------------------------------------------ île : la pastille d'état suit la génération en cours */
-  .isl { display:none; align-items:center; gap:8px; white-space:nowrap; font-variant-numeric:tabular-nums; }
-  .isl svg { width:20px; height:20px; transform:rotate(-90deg); }
-  .isl span { color:var(--ink2); font-weight:500; }
+  /* la bulle suit son contenu jusqu'à sa largeur maximale ; au-delà, « +N » seul (renderIsland), et en dernier recours
+     l'étape cède (points de suspension) : rien ne dépasse de la bulle */
+  .isl { display:none; align-items:center; gap:8px; min-width:0; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .isl svg { flex:none; width:20px; height:20px; transform:rotate(-90deg); }
+  .isl b { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .isl span { flex:none; color:var(--ink2); font-weight:500; }
   .island.run #status { display:none; } .island.run .isl { display:flex; }
   .island::after { content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none; opacity:0;
     box-shadow:0 0 0 1px color-mix(in srgb, var(--iris) 55%, transparent), 0 8px 34px -4px color-mix(in srgb, var(--iris) 85%, transparent); }
@@ -564,7 +567,7 @@
   </div>
 
   <div class="pane" id="pane-hist">
-    <div class="hist-head"><h2>Galerie</h2><span id="histCount"></span><button class="btn-icon glass" id="privEntry" hidden aria-label="Espace privé"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg></button><button class="btn-icon glass" onclick="loadHistory()" aria-label="Actualiser la galerie"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg></button></div>
+    <div class="hist-head"><h2>Galerie</h2><span id="histCount"></span><button class="btn-icon glass" id="privEntry" hidden aria-label="Espace privé"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg></button><button class="btn-icon glass" onclick="loadHistory()" aria-label="Actualiser la galerie"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg></button></div>
     <div class="hgrid" id="histGrid"></div>
   </div>
 </section>
@@ -1211,7 +1214,9 @@ function renderIsland(){
   else if(run){ const left=entryLeft(run); frac=Math.min(.97, 1-left/Math.max(run.estimate, 1)); label='En cours'; eta='≈ '+fmt(left); }
   const waiting=queueState.filter(e=>e.status==='queued').length;
   $('islRing').style.strokeDashoffset=(100-Math.max(frac, .02)*100).toFixed(1); $('islStep').textContent=label; $('islEta').textContent=eta;
-  $('islMore').textContent = waiting ? `+${waiting} en attente` : ''; }
+  $('islMore').textContent = waiting ? `+${waiting} en attente` : '';
+  const isl=$('island'), step=$('islStep');      // trop étroit (étape tronquée ou contenu qui dépasse) : « +N » seul
+  if(waiting && (step.scrollWidth>step.clientWidth+1 || isl.scrollWidth>isl.clientWidth+1)) $('islMore').textContent=`+${waiting}`; }
 function onIsland(){                               // file non vide : sa liste ; sinon : panneau Moteur
   if(!queueState.length && !pageJobs.some(isActive)) return openSheet('engineSheet');
   openSheet('queueSheet'); renderQueue(); refreshStatus(); }

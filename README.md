@@ -246,9 +246,9 @@ moteur) ; une génération qui attend affiche sa place dans la file et le temps 
 suit la plus ancienne génération de la page qui n'est pas terminée, puis montre son image ; quand la page en a lancé
 plusieurs, une rangée de vignettes sous l'image passe de l'une à l'autre.
 
-La pastille d'état en haut suit la génération en cours depuis n'importe quel onglet et affiche « +N en attente ». Un
-appui ouvre la **file d'attente** : pour chaque génération, sa place, le début de son prompt et le temps avant son
-image, avec un bouton pour l'annuler. Une génération normale s'annule depuis n'importe quel appareil ; une génération
+La pastille d'état en haut suit la génération en cours depuis n'importe quel onglet et affiche « +N en attente »
+(« +N » seul quand l'écran est trop étroit pour tout contenir). Un appui ouvre la **file d'attente** : pour chaque
+génération, sa place, le début de son prompt et le temps avant son image, avec un bouton pour l'annuler. Une génération normale s'annule depuis n'importe quel appareil ; une génération
 incognito n'apparaît ailleurs que comme « Génération incognito », sans prompt ni aperçu, et seule la page qui l'a
 lancée peut l'annuler. On peut recharger la page sans rien perdre : elle se rattache aux générations normales qu'elle
 avait lancées (retenues par le navigateur), pas à celles des autres appareils, qui restent visibles dans la file, ni
@@ -387,8 +387,8 @@ Une galerie à part, chiffrée sur le Mac, qui ne s'ouvre qu'avec un **code priv
 d'accès du téléphone et demandé sur chaque appareil, le Mac compris : connaître le code d'accès, ou ouvrir les dossiers
 du Mac, ne suffit pas pour voir les images privées.
 
-- Rien ne le signale à l'arrivée sur l'application. Son entrée est le petit **cadenas** de l'en-tête de la
-  **Galerie** : la première fois, il crée l'espace (code de 8 caractères au moins, lettres, chiffres, signes ;
+- Rien ne le signale à l'arrivée sur l'application. Son entrée est le **cadenas** de l'en-tête de la **Galerie**,
+  à côté du bouton Rafraîchir et aussi visible que lui : la première fois, il crée l'espace (code de 8 caractères au moins, lettres, chiffres, signes ;
   majuscules et minuscules comptent ; saisi deux fois).
 - **En HTTPS ou sur le Mac seulement** : l'espace privé ne s'ouvre (création, entrée, galerie privée, Changer le
   code, Rendre privée) que sur le Mac lui-même ou par l'adresse HTTPS de Tailscale (celle en `https://` du panneau
