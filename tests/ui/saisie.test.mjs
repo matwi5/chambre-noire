@@ -274,6 +274,41 @@ test('espaces : fermée par le Mac, la saisie privée attend le retour dans la p
   page.assertNoErrors();
 });
 
+// messages affichés depuis l'appel (chaque texte posé dans #toast, même remplacé aussitôt par un autre)
+const watchToasts = () => page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
+  window.toastWatch = new MutationObserver(() => seenToasts.push($('toast').textContent));
+  toastWatch.observe($('toast'), { childList: true, characterData: true, subtree: true }); })()`);
+const CLOSED = 'Espace privé fermé : retour dans l\'espace public';
+
+test('espaces : fermé sans « Sortir », le champ perd le curseur et un message dit le retour dans l\'espace public', async () => {
+  await fresh('t2i');
+  await enterPrivate();
+  await page.eval(`$('t2i_prompt').focus()`);
+  assert.equal(await page.eval(`document.activeElement === $('t2i_prompt')`), true);
+  await watchToasts();
+  await closedByMac();                             // 15 minutes sans requête privée
+  assert.equal(await page.eval(`document.activeElement === $('t2i_prompt')`), false, 'le champ a perdu le curseur');
+  assert.deepEqual(await page.eval(`seenToasts`), [CLOSED]);
+  assert.equal(await page.eval(`$('toast').classList.contains('on')`), true);
+
+  await enterPrivate();                            // espace supprimé depuis le Mac pendant qu'on tape
+  await page.eval(`$('edit_prompt').focus()`);
+  await watchToasts();
+  assert.equal(await post('/api/private/reset', { confirm: 'SUPPRIMER' }), 200);
+  await page.eval(`refreshStatus()`);
+  await page.waitFor(`!inPrivate()`, { what: 'hors de l\'espace privé' });
+  assert.equal(await page.eval(`document.activeElement === $('edit_prompt')`), false, 'le champ a perdu le curseur');
+  assert.deepEqual(await page.eval(`seenToasts`), [CLOSED]);
+
+  await enterPrivate();                            // « Sortir » : la sortie est demandée, pas de message de fermeture
+  await page.eval(`$('t2i_prompt').focus()`);
+  await watchToasts();
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate() && seenToasts.length > 0`, { what: 'sorti de l\'espace privé' });
+  assert.deepEqual(await page.eval(`seenToasts`), ['Sorti de l\'espace privé']);
+  page.assertNoErrors();
+});
+
 test('espaces : une demande privée acceptée après la fermeture par le Mac ne vide pas la saisie publique', async () => {
   await fresh('t2i');
   await type('t2i', 'texte public');

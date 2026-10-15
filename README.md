@@ -423,7 +423,11 @@ du Mac, ne suffit pas pour voir les images privées.
   aperçu ni prompt.
 - **Fermeture automatique** : si l'espace se ferme seul (15 minutes sans activité privée), la saisie privée quitte
   l'écran comme à la sortie, mais la page la garde en mémoire : elle revient si l'on rentre sans avoir fermé
-  l'application (un long texte en cours n'est pas perdu). Si l'espace privé est supprimé, elle est effacée.
+  l'application (un long texte en cours n'est pas perdu). Si l'espace privé est supprimé, elle est effacée. Quand
+  l'espace se ferme sans que l'appareil l'ait demandé (15 minutes sans activité privée, espace supprimé ou code changé
+  depuis un autre appareil), le champ en cours de saisie perd le curseur et un message dit « Espace privé fermé :
+  retour dans l'espace public », pour que la suite de la frappe ne parte pas dans la saisie publique sans qu'on le
+  voie ; rien de tel après « Sortir ».
 - **Rendre privée** : dans la visionneuse de la galerie normale, une fois l'espace créé, ce petit bouton demande le
   code privé, chiffre l'image, ses images d'entrée et ses réglages dans l'espace privé, puis l'efface de la galerie,
   de ses miniatures, du journal des générations et du dossier de travail, sans faire entrer dans l'espace. Il n'y a

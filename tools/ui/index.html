@@ -1662,6 +1662,11 @@ function applyPrivate(p){ if(!p) return; const was=inPrivate(); privState=p;
   $('privExit').hidden=!p.unlocked;
   document.documentElement.classList.toggle('priv', p.unlocked); document.documentElement.classList.toggle('incog', incogOn && !p.unlocked);
   if(was!==p.unlocked) changedSpace(p.unlocked);
+  // sortie que l'appareil n'a pas demandée (fermeture par le Mac après 15 minutes, espace supprimé ou code changé
+  // ailleurs) : le
+  // champ perd le curseur et un message le dit, pour que les touches suivantes ne partent pas dans la saisie publique
+  // sans qu'on le voie ; rien de tel après « Sortir »
+  if(was && !p.unlocked && !erasePrivate){ document.activeElement?.blur(); toast('Espace privé fermé : retour dans l\'espace public'); }
   // hors de l'espace, asideInput est la saisie privée : effacée après « Sortir » (même vue à une interrogation suivante)
   // ou avec l'espace supprimé ; sinon (fermeture par le Mac) gardée pour le retour
   if(!p.unlocked && (erasePrivate || !p.exists)){ asideInput=null; erasePrivate=false; } }
