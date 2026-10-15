@@ -94,7 +94,8 @@ dernier bloc, après le HTML.
   - « onglets & statut » : `TABS`, changement d'onglet (`mode`) ; « panneaux du bas » : `openSheet`, `closeSheet`
     (un seul ouvert, `openedSheet`) ; `refreshStatus()` (interroge `/api/status` toutes les 5 s, 2 s tant que la file
     n'est pas vide ; met à jour `queueState`, l'île, la file et l'espace privé par `applyPrivate`).
-  - « images », « dessin » : `toEntry`, `renderEditThumbs`, `setMaskImage`, `exportMask`.
+  - « images », « dessin » : `toEntry`, `renderEditThumbs`, `setMaskImage`, `showMaskImage`, `dropMaskImage`,
+    `exportMask`.
   - « requête & loader » : `buildRequest` ; « messages et confirmations » : `toast`, `ask` et `answer` (feuille
     `#askSheet`, jamais `confirm()`).
   - « générations de la page, zone de résultat, île et file » : `pageJobs` (générations lancées par cette page),
@@ -107,10 +108,13 @@ dernier bloc, après le HTML.
   - « prompts enregistrés » : `prompts`, `openPrompts`, `renderPrompts`, `usePrompt`, `savePrompt`.
   - « galerie et visionneuse » : `histItems`, `vList` (ce que parcourt la visionneuse : la galerie ou les images d'un
     lot de la page), `loadHistory`, `renderGallery`, `openViewer`, `stepViewer`, `closeViewer`, gestes (`resetZoom`).
-  - « partager et copier » ; « images d'entrée » : `openInputs`, `inputAction` ; actions de la visionneuse :
-    `viewerAction`, `removeFromViewer`, `lotMembers`, `keepThis` (« Garder celle-ci »), `deleteCurrent`.
-  - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `privTabs` et `markTab` (onglets saisis dans
-    l'espace), `openPrivSheet`, `privCreate`, `privUnlock`, `privLock`, `privChangeCode`, `privReset`, `adoptImage`.
+  - « partager et copier » ; « images d'entrée » : `openInputs`, `inputAction`, `addEditImage` ; actions de la
+    visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`, `keepThis` (« Garder celle-ci »), `deleteCurrent`.
+  - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
+    `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,
+    `putInput`, `swapInput`, `emptyTab` (vidage après « Générer », dans l'espace d'où la demande est partie) ; un ajout
+    d'image asynchrone (Éditer, Dessiner) va dans la saisie de l'espace où il a commencé. `openPrivSheet`,
+    `privCreate`, `privUnlock`, `privLock`, `privChangeCode`, `privReset`, `adoptImage`.
 
 Fichiers voisins : `tools/ui/sw.js` (service worker : navigation seulement, jamais `/api/*`),
 `tools/ui/manifest.webmanifest` et les icônes (installation sur le téléphone).
@@ -153,8 +157,8 @@ invariants ».
   générations normales lancées depuis ce navigateur (identifiants dans `localStorage`, `qwen-own`). Ses lignes
   incognito de `queue` se reconnaissent au jeton de la page (`PAGE_TOKEN`, champ `page` de `/api/generate`). Un lot
   terminé s'affiche en grille (`gridOf`) ; la visionneuse parcourt `vList` (la galerie, ou les images d'un lot de la
-  page, incognito comprises par leur adresse `blob:`). Réglages, brouillons et générations à reprendre dans
-  `localStorage` (`qwen-opt`, `qwen-<onglet>_prompt`, `qwen-own`).
+  page, incognito comprises par leur adresse `blob:`). Réglages, brouillons de la saisie publique et générations à
+  reprendre dans `localStorage` (`qwen-opt`, `qwen-<onglet>_prompt`, `qwen-own`).
 - **Contrôle d'accès** : `_host_ok` (liste blanche de `Host` contre le rebinding DNS, noms du Wi-Fi et de Tailscale
   figés au démarrage), `_post_refused` (tout POST : `Sec-Fetch-Site`, `Origin` égal à l'origine du `Host`,
   `Content-Type: application/json` exigé, sinon 403/415), puis `_allowed` (le Mac lui-même passe ; les autres

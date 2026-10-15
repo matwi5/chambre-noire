@@ -230,7 +230,7 @@ Sous le texte, trois pastilles résument le format, la résolution et les étape
 Le bouton **Générer** affiche le temps estimé ; à sa droite, le bouton **Incognito** (icône de chapeau et lunettes)
 active le [mode incognito](#mode-incognito) : l'interface passe alors en thème graphite sombre, sans couleurs ni image
 en fond, comme la navigation privée des navigateurs. Le navigateur retient les réglages choisis,
-le mode incognito et le texte en cours de chaque onglet (sauf en incognito).
+le mode incognito et le texte en cours de chaque onglet de l'espace public (sauf en incognito).
 
 Conseil : **540p + 12 étapes** pour chercher la bonne formulation, puis montez la résolution et les étapes pour la version finale.
 Les descriptions en **anglais, longues et précises** donnent les meilleurs résultats.
@@ -412,16 +412,17 @@ du Mac, ne suffit pas pour voir les images privées.
   grille et « Garder celle-ci » restent, et la notification est celle d'un lot normal (« N images prêtes »).
 - La **Galerie** de l'espace privé ne montre que les images privées, avec la même visionneuse : télécharger,
   partager, copier, images d'entrée, Éditer, Dessiner, Reprendre, Supprimer. En sortant, elles quittent l'écran.
-- **Sortir vide l'écran** : le texte et les images saisis dans l'espace (Créer, Éditer, Dessiner, Reprendre depuis
-  une image privée) sont effacés des onglets, comme les images privées de la zone de résultat, de la grille et de la
-  visionneuse. Une génération privée en cours continue, mais l'écran n'en montre plus que la progression, sans
+- **Chaque espace a sa propre saisie**, onglet par onglet : texte, images d'Éditer, image à retoucher et son masque
+  de Dessiner. En entrant dans l'espace privé, la saisie publique est mise de côté et la saisie privée revient (vide
+  la première fois) ; en sortant, la saisie publique revient intacte. La saisie privée n'est jamais retenue par le
+  navigateur, brouillons compris : elle ne survit pas à la fermeture de l'application. L'interrupteur **Campagne** et
+  les Réglages sont communs aux deux espaces.
+- **Sortir vide l'écran** : la saisie privée est effacée, comme les images privées de la zone de résultat, de la grille
+  et de la visionneuse (si le Mac est injoignable, un message le dit et l'on reste dans l'espace). Une génération privée en cours continue, mais l'écran n'en montre plus que la progression, sans
   aperçu ni prompt.
-- **Ce qui part de l'espace privé y reste** : si l'espace se ferme seul (15 minutes sans activité privée), un onglet
-  dont le texte ou les images ont été saisis dans l'espace garde son contenu et une pastille sarcelle. **Générer** y
-  demande alors le code et ne lance la génération, privée, qu'une fois dans l'espace : rien ne
-  repart en clair, pas même en incognito. La pastille disparaît quand l'onglet est entièrement vidé (texte et images)
-  hors de l'espace ; son texte n'est jamais retenu par le navigateur. Si l'espace privé est supprimé, ces onglets sont
-  vidés.
+- **Fermeture automatique** : si l'espace se ferme seul (15 minutes sans activité privée), la saisie privée quitte
+  l'écran comme à la sortie, mais la page la garde en mémoire : elle revient si l'on rentre sans avoir fermé
+  l'application (un long texte en cours n'est pas perdu). Si l'espace privé est supprimé, elle est effacée.
 - **Rendre privée** : dans la visionneuse de la galerie normale, une fois l'espace créé, ce petit bouton demande le
   code privé, chiffre l'image, ses images d'entrée et ses réglages dans l'espace privé, puis l'efface de la galerie,
   de ses miniatures, du journal des générations et du dossier de travail, sans faire entrer dans l'espace. Il n'y a

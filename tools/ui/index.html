@@ -121,9 +121,6 @@
     transition:color .3s; }
   .tabbar button svg { width:24px; height:24px; transition:transform .45s var(--spring); }
   .tabbar button.active { color:var(--ink); }
-  /* onglet qui garde un contenu venu de l'espace privé : il ne repart qu'en privé */
-  .tabbar button.privmark::after { content:""; position:absolute; top:7px; left:calc(50% + 10px); width:8px; height:8px; border-radius:50%;
-    background:#5fcfb6; box-shadow:0 0 8px #5fcfb6; }
   .tabbar button.active svg { transform:translateY(-1px) scale(1.08); color:var(--iris2); }
   .tabbar button:focus-visible { outline:2px solid var(--iris); outline-offset:-4px; }
   .lens { position:absolute; z-index:0; top:5px; bottom:5px; left:5px; width:calc((100% - 10px) / 4); border-radius:999px;
@@ -736,7 +733,6 @@
 <section class="sheet glass privsheet" id="privUnlockSheet" role="dialog" aria-modal="true" aria-labelledby="privUnlockTitle">
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
   <div class="sheet-head"><h2 id="privUnlockTitle">Espace privé</h2></div>
-  <p class="note" id="puNote" hidden>Ce contenu vient de l'espace privé : entrez-y pour lancer la génération, qui restera privée.</p>
   <label for="puCode">Code privé</label><input class="field" id="puCode" type="password" autocomplete="current-password" enterkeyhint="go">
   <p class="err" id="puErr" role="alert"></p>
   <button class="btn" id="puGo" onclick="privUnlock()">Entrer</button>
@@ -792,6 +788,7 @@ const RATIO_LABELS = { '1:1':'Carré 1:1', '4:3':'Paysage 4:3', '3:4':'Portrait 
 // libellés : format vidéo au nombre de pixels le plus proche (640×360, 960×540, 1280×720, 1920×1080, 2560×1440)
 const RES   = [ {k:'low',label:'360p',scale:0.25}, {k:'medium',label:'540p',scale:0.375}, {k:'high',label:'720p',scale:0.5}, {k:'xhigh',label:'1080p',scale:0.75}, {k:'max',label:'1440p',scale:1.0} ];
 const STEPS = [ {k:'low',label:'Low',steps:8}, {k:'medium',label:'Medium',steps:12}, {k:'high',label:'High',steps:20}, {k:'xhigh',label:'XHigh',steps:30}, {k:'max',label:'Max',steps:40} ];
+const TEXT_TABS = ['t2i', 'edit', 'mask'];   // onglets qui ont un texte (champ <onglet>_prompt) et une saisie
 const CFG = 1, MAX_PIXELS = 2048*2048, MAX_INPUT_SIDE = 2048, PREVIEW_EVERY = 5, MAX_VARIANTS = 4, MAX_REFS = 10;   // MAX_REFS : références d'une édition, photos d'une campagne
 // coefficients d'estimation envoyés par /api/status (tools/estimate.py) : valeurs de départ du moteur, puis ajustées
 // sur les générations mesurées de la machine. Même formule que estimate.predict() côté serveur.
@@ -804,7 +801,6 @@ function applyEstimates(est){
 const $ = id => document.getElementById(id);
 let mode='t2i', editImages=[], maskImage=null, paintMode='paint', lastResult=null, estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
 let privState={available:false, exists:false, unlocked:false};   // espace privé vu par cet appareil (/api/status)
-const privTabs=new Set();   // onglets dont le contenu (texte, images) a été saisi dans l'espace privé : voir markTab
 
 function log(m){ const l=$('log'); l.textContent += new Date().toLocaleTimeString()+'  '+m+'\n'; l.scrollTop=l.scrollHeight; }
 const round32 = v => Math.max(256, Math.round(v/32)*32);
@@ -894,11 +890,12 @@ function refreshChoices(){
   $('countOpts').addEventListener('click', e=>{ const b=e.target.closest('[data-k]'); if(!b) return; opt.count=+b.dataset.k; saveOpt(); refreshChoices(); });
   $('pills').addEventListener('click', e=>{ if(e.target.closest('[data-open]')) openSheet('setSheet'); });
   ['previewChk','mask_mode'].forEach(id=>$(id).addEventListener('change', ()=>{ saveOpt(); refreshChoices(); })); refreshChoices();
-  // brouillons des trois textes, retenus par ce navigateur, sauf en incognito (le brouillon modifié est alors effacé)
-  ['t2i_prompt','edit_prompt','mask_prompt'].forEach(id=>{ const t=$(id);
+  // brouillons des trois textes de l'espace public, retenus par ce navigateur, sauf en incognito (le brouillon modifié
+  // est alors effacé) ; la saisie de l'espace privé n'y est jamais écrite, et n'y touche pas
+  TEXT_TABS.map(tab=>tab+'_prompt').forEach(id=>{ const t=$(id);
     try{ t.value = localStorage.getItem('qwen-'+id) || ''; }catch(e){}
-    t.addEventListener('input', ()=>{ const tab=id.split('_')[0]; markTab(tab);
-      try{ if(incogOn || inPrivate() || privTabs.has(tab)) localStorage.removeItem('qwen-'+id); else localStorage.setItem('qwen-'+id, t.value); }catch(e){} }); });
+    t.addEventListener('input', ()=>{ if(inPrivate()) return;
+      try{ if(incogOn) localStorage.removeItem('qwen-'+id); else localStorage.setItem('qwen-'+id, t.value); }catch(e){} }); });
 })();
 function setIncog(on){ incogOn=on; $('incog').classList.toggle('on', on); $('incog').setAttribute('aria-pressed', on);
   document.documentElement.classList.toggle('incog', on && !inPrivate()); setTimeout(syncThemeColor); }   // après le chargement du script (variables lues)   // thème graphite sombre, barre d'état comprise
@@ -1006,14 +1003,16 @@ async function toEntry(name, dataUrl){ let im=await loadImg(dataUrl); let w=im.n
 function wireDrop(dropId, inputId, handler){ const d=$(dropId), inp=$(inputId); d.addEventListener('click',()=>inp.click());
   d.addEventListener('dragover',e=>{e.preventDefault(); d.classList.add('over');}); d.addEventListener('dragleave',()=>d.classList.remove('over'));
   d.addEventListener('drop',e=>{e.preventDefault(); d.classList.remove('over'); handler([...e.dataTransfer.files]);}); inp.addEventListener('change',e=>{ handler([...e.target.files]); e.target.value=''; }); }
-wireDrop('edit_drop','edit_files', async files=>{ let skipped=0;
-  for(const f of files){ if(editImages.length>=MAX_REFS){ skipped++; continue; } editImages.push(await toEntry(f.name, await readFile(f))); }
-  renderEditThumbs(); suggestRatio();
+// les images lues vont dans la saisie de l'espace où l'ajout a commencé (list, pris avant toute attente), même s'il
+// change pendant la lecture : une image privée ne tombe jamais dans la saisie publique
+wireDrop('edit_drop','edit_files', async files=>{ let skipped=0; const list=editImages;
+  for(const f of files){ if(list.length>=MAX_REFS){ skipped++; continue; } list.push(await toEntry(f.name, await readFile(f))); }
+  if(list===editImages){ renderEditThumbs(); suggestRatio(); }
   if(skipped) toast(`${MAX_REFS} ${campaignOn ? 'photos' : 'images'} au maximum : ${skipped} non ajoutée${skipped>1?'s':''}`, 'err'); });
-wireDrop('mask_drop','mask_file', async files=>{ const f=files[0]; if(f) await setMaskImage(f.name, await readFile(f)); });
+wireDrop('mask_drop','mask_file', async files=>{ const f=files[0], priv=inPrivate(); if(f) await setMaskImage(f.name, await readFile(f), priv); });
 const maskMode = () => document.querySelector('input[name=mask_mode]:checked').value;
 ['edit_drop','mask_drop'].forEach(id=>$(id).addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); $(id).querySelector('input').click(); } }));
-function renderEditThumbs(){ const t=$('edit_thumbs'); t.innerHTML=''; markTab('edit');
+function renderEditThumbs(){ const t=$('edit_thumbs'); t.innerHTML='';
   const k=editImages.length;                       // campagne : des photos éditées une à une, pas des références numérotées
   $('refTitle').textContent = campaignOn ? 'Photos de la campagne' : 'Images de référence';
   $('dropHint').textContent = campaignOn ? `1 à ${MAX_REFS} photos, chacune éditée séparément` : `1 à ${MAX_REFS} images, à citer dans l'instruction`;
@@ -1027,10 +1026,14 @@ const canvas=$('paintCanvas'); const ctx=canvas.getContext('2d');
 $('brush').addEventListener('input',e=>$('brushVal').textContent=e.target.value+' px');
 $('modePaint').onclick=()=>{paintMode='paint'; $('modePaint').classList.add('on'); $('modeErase').classList.remove('on');};
 $('modeErase').onclick=()=>{paintMode='erase'; $('modeErase').classList.add('on'); $('modePaint').classList.remove('on');};
-async function setMaskImage(name, dataUrl){ maskImage=await toEntry(name, dataUrl);
-  if(!inPrivate() && !$('mask_prompt').value.trim()) privTabs.delete('mask');   // image privée remplacée hors de l'espace, texte vide : plus rien de privé
-  markTab('mask'); $('paintImg').src=maskImage.dataUrl; $('paintWrap').style.display='inline-block'; $('pane-mask').classList.add('has-img');
-  canvas.width=maskImage.w; canvas.height=maskImage.h; ctx.clearRect(0,0,canvas.width,canvas.height); suggestRatio(); }
+// priv : espace où le choix de l'image a commencé ; s'il a changé entre-temps, l'image va dans sa saisie mise de côté
+async function setMaskImage(name, dataUrl, priv=inPrivate()){ const entry=await toEntry(name, dataUrl);
+  if(priv!==inPrivate()){ if(asideInput) asideInput.mask={image:entry, pixels:null}; return false; }
+  maskImage=entry; showMaskImage(); suggestRatio(); return true; }
+// image à retoucher (maskImage) sur la zone de dessin, avec un masque déjà peint (pixels) ou vierge
+function showMaskImage(pixels){ $('paintImg').src=maskImage.dataUrl; $('paintWrap').style.display='inline-block'; $('pane-mask').classList.add('has-img');
+  canvas.width=maskImage.w; canvas.height=maskImage.h; ctx.clearRect(0,0,canvas.width,canvas.height); if(pixels) ctx.putImageData(pixels, 0, 0); }
+function dropMaskImage(){ maskImage=null; clearMask(); $('paintWrap').style.display='none'; $('pane-mask').classList.remove('has-img'); }
 function clearMask(){ ctx.clearRect(0,0,canvas.width,canvas.height); }
 let drawing=false, last=null, rect=null;      // rect : position du canevas, mesurée une fois par trait
 function pos(ev){ const r=rect; return [(ev.clientX-r.left)*canvas.width/r.width, (ev.clientY-r.top)*canvas.height/r.height]; }
@@ -1298,9 +1301,8 @@ function drop(p){                                  // retire une génération de
   else if(sameLot(shown, p) && !isActive(shown)) show(shown); else renderStrip(); }
 function inputThumb(){ return mode==='edit' && editImages.length ? editImages[0].dataUrl : mode==='mask' && maskImage ? maskImage.dataUrl : null; }
 $('go').onclick=async()=>{                         // toujours actif : la demande rejoint la file avec les réglages du moment
-  if(privTabs.has(mode) && !inPrivate()){ pendingGo=true; return openPrivSheet('privUnlockSheet', true); }   // jamais en clair
   let body; try{ body=buildRequest(); }catch(e){ toast(e.message, 'err'); return; }
-  const tab=mode, thumb=inputThumb();               // pris avant l'envoi : l'onglet peut changer pendant l'attente
+  const tab=mode, thumb=inputThumb(), priv=inPrivate();   // pris avant l'envoi : onglet et espace peuvent changer pendant l'attente
   askNotifications();                              // première génération : autorisation demandée une fois (appui en cours)
   if(estSeconds>3600 && !await ask('Génération longue', 'Temps estimé : '+fmt(estSeconds)+'. La lancer quand même ?', 'Lancer')) return;
   log(`${body.mode} ${body.width}x${body.height} ${body.steps} étapes refs=${body.ref_images.length}${body.campaign ? ' campagne='+body.campaign.length : ''} mask=${body.mask_image?'oui':'non'} aperçus=${body.preview?'oui':'non'} estimation=${fmt(estSeconds)}`);
@@ -1311,7 +1313,7 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   const camp=body.campaign;                         // campagne : chaque génération a sa photo, ses dimensions et son estimation
   jobs.forEach((x, k)=>track(x, {prompt:body.prompt, tab, w:camp ? camp[k].width : body.width, h:camp ? camp[k].height : body.height,
     thumb:camp ? camp[k].image : thumb, est:camp ? campaignEst[k]||estOne : estOne, stepSec:stepSeconds, vaeSec:vaeSeconds}));
-  clearTab(tab);                                    // demande acceptée : l'onglet est prêt pour la suivante (refus : rien n'est vidé)
+  emptyTab(tab, priv);                              // demande acceptée : l'onglet est prêt pour la suivante (refus : rien n'est vidé)
   if(jobs[0].queue_position) toast((!j.lot ? 'Ajoutée' : camp ? `Campagne de ${jobs.length} photos ajoutée` : `Lot de ${jobs.length} images ajouté`)+' à la file · '+ordinal(jobs[0].queue_position)+' en attente');
   document.activeElement.blur(); requestAnimationFrame(()=>$('stage').scrollIntoView({behavior:'smooth', block:'center'}));
   refreshStatus();
@@ -1527,8 +1529,12 @@ async function dataUrlOf(name, url){ if(lastResult && lastResult.blob && lastRes
   const b=await (await fetch(url || resultUrl(name))).blob(); return await readFile(b); }
 async function useAsEditInput(name=lastResult && lastResult.name, url=lastResult && lastResult.url){
   if(!name) return; if(editImages.length>=MAX_REFS){ toast(MAX_REFS+' images de référence au maximum', 'err'); return; }
-  editImages.push(await toEntry(name, await dataUrlOf(name, url))); renderEditThumbs(); goTab('edit'); suggestRatio(); toast('Ajoutée aux images de référence'); }
-async function useAsMaskInput(name=lastResult && lastResult.name, url=lastResult && lastResult.url){ if(!name) return; await setMaskImage(name, await dataUrlOf(name, url)); goTab('mask'); }
+  const list=editImages; addEditImage(list, await toEntry(name, await dataUrlOf(name, url))); }
+async function useAsMaskInput(name=lastResult && lastResult.name, url=lastResult && lastResult.url){ if(!name) return; const priv=inPrivate();
+  if(await setMaskImage(name, await dataUrlOf(name, url), priv)) goTab('mask'); }
+// image reprise dans Éditer : list est la saisie de l'espace où le geste a commencé (prise avant toute attente)
+function addEditImage(list, entry){ list.push(entry); if(list!==editImages) return;
+  renderEditThumbs(); goTab('edit'); suggestRatio(); toast('Ajoutée aux images de référence'); }
 // ------------------------------------------------------------ partager et copier (HTTPS ou Mac seulement : boutons masqués sinon)
 const canShare = (()=>{ try{ return !!(navigator.canShare && navigator.canShare({files:[new File([''], 'x.png', {type:'image/png'})]})); }catch(e){ return false; } })();
 const canCopy = !!(window.isSecureContext && navigator.clipboard && navigator.clipboard.write && window.ClipboardItem);
@@ -1560,12 +1566,12 @@ function showInput(i){
   $('ivDl').href=inputUrl(it, f, '&download=1'); $('ivDl').download=it.name.slice(0, -4)+'_'+f; }
 function closeInputs(){ $('iv').classList.remove('on'); ivIndex=-1; syncThemeColor(); }
 async function inputAction(kind){             // repartir de cette image d'entrée : Éditer (référence) ou Dessiner
-  const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f;
+  const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f, list=editImages, priv=inPrivate();
   closeInputs(); closeViewer();
   const dataUrl=await readFile(await (await fetch(url)).blob());
-  if(kind==='mask'){ await setMaskImage(name, dataUrl); goTab('mask'); return; }
-  if(editImages.length>=MAX_REFS){ toast(MAX_REFS+' images de référence au maximum', 'err'); return; }
-  editImages.push(await toEntry(name, dataUrl)); renderEditThumbs(); goTab('edit'); suggestRatio(); toast('Ajoutée aux images de référence'); }
+  if(kind==='mask'){ if(await setMaskImage(name, dataUrl, priv)) goTab('mask'); return; }
+  if(list.length>=MAX_REFS){ toast(MAX_REFS+' images de référence au maximum', 'err'); return; }
+  addEditImage(list, await toEntry(name, dataUrl)); }
 (function inputSwipe(){        // glisser à gauche ou à droite : image d'entrée voisine ; vers le bas : fermer
   const st=$('ivStage'), img=$('ivImg'); let p=null;
   st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return; p={x:e.clientX, y:e.clientY, dx:0, dy:0}; st.setPointerCapture(e.pointerId); st.classList.add('drag'); });
@@ -1645,40 +1651,53 @@ async function deleteCurrent(){
 // de l'en-tête de la galerie.
 function inPrivate(){ return privState.unlocked; }
 function applyPrivate(p){ if(!p) return; const was=inPrivate(); privState=p;
-  if(!p.exists && privTabs.size) [...privTabs].forEach(clearTab);   // espace supprimé : son contenu ne repart pas en clair
   $('privEntry').hidden=!p.available || p.unlocked; $('privEntry').title=p.exists ? 'Espace privé' : 'Créer l\'espace privé';
   $('privExit').hidden=!p.unlocked;
   document.documentElement.classList.toggle('priv', p.unlocked); document.documentElement.classList.toggle('incog', incogOn && !p.unlocked);
-  if(was!==p.unlocked) changedSpace(p.unlocked); renderMarks(); }
+  if(was!==p.unlocked) changedSpace(p.unlocked);
+  // hors de l'espace, asideInput est la saisie privée : effacée après « Sortir » (même vue à une interrogation suivante)
+  // ou avec l'espace supprimé ; sinon (fermeture par le Mac) gardée pour le retour
+  if(!p.unlocked && (erasePrivate || !p.exists)){ asideInput=null; erasePrivate=false; } }
 // entrée ou sortie de l'espace privé : la galerie suit ; en sortant, ses images quittent la page (zone de résultat,
 // pellicule, visionneuse) ; une génération privée en cours continue et sera rangée dans l'espace, mais l'écran ne garde
 // d'elle que sa progression (ni prompt, ni image d'entrée dans la file, ni aperçu)
 function changedSpace(inside){
+  swapInput();
   if(!inside){ pageJobs.filter(p=>p.result && p.result.item).forEach(drop); if(vIndex>=0 && vList.some(x=>x.private)) closeViewer();
     pageJobs.filter(p=>p.private).forEach(p=>{ p.prompt=''; p.thumb=null; });
     if(shown && shown.private && isActive(shown)) show(shown); }
   if(mode==='hist') loadHistory(); else histItems=[];
   syncThemeColor(); }
-// Ce qui part de l'espace privé y reste (récit 61) : un onglet dont le texte ou les images ont été saisis dans l'espace
-// (Éditer, Dessiner, Reprendre depuis une image privée, ou saisie directe) est marqué ; hors de l'espace, il ne lance rien
-// en clair et demande d'y entrer. La marque tombe quand l'onglet est vidé hors de l'espace.
-function tabEmpty(tab){ return !$(tab+'_prompt').value.trim() && (tab!=='edit' || !editImages.length) && (tab!=='mask' || !maskImage); }
-function markTab(tab){ if(inPrivate()) privTabs.add(tab); else if(tabEmpty(tab)) privTabs.delete(tab); renderMarks(); }
-// vide un onglet : texte et brouillon, images (Éditer), image à retoucher et masque (Dessiner) ; l'estimation suit
-function clearTab(tab){ privTabs.delete(tab); $(tab+'_prompt').value='';
-  try{ localStorage.removeItem('qwen-'+tab+'_prompt'); }catch(e){}
+// Saisie propre à chaque espace (texte, images d'Éditer, image à retoucher et masque de Dessiner, onglet par onglet) :
+// celle de l'espace affiché est dans les champs, celle de l'autre espace est mise de côté en mémoire de la page
+// (asideInput : la saisie publique dans l'espace privé, la saisie privée hors de lui), jamais dans le navigateur.
+// Entrer ou sortir les échange ; « Sortir » et la suppression de l'espace effacent la saisie privée, la fermeture par
+// le Mac (15 minutes) la garde pour le retour dans la même page.
+let asideInput=null, erasePrivate=false;            // erasePrivate : « Sortir » demandé, saisie privée à effacer
+function readInput(){ return { text:Object.fromEntries(TEXT_TABS.map(t=>[t, $(t+'_prompt').value])), editImages,
+  mask:maskImage && { image:maskImage, pixels:ctx.getImageData(0, 0, canvas.width, canvas.height) },
+  imageRatio:opt.ratio==='image' }; }              // format « Image » : il revient avec son image
+function putInput(s){                              // s : saisie mise de côté, ou rien (saisie vide)
+  TEXT_TABS.forEach(t=>{ $(t+'_prompt').value = s ? s.text[t] : ''; });
+  editImages = s ? s.editImages : []; renderEditThumbs();
+  if(s && s.mask){ maskImage=s.mask.image; showMaskImage(s.mask.pixels); } else dropMaskImage();
+  forceImageRatio=!!(s && s.imageRatio); refreshChoices(); }
+function swapInput(){ const here=readInput(); putInput(asideInput); asideInput=here; }
+// vide un onglet de la saisie d'un espace (priv : celui d'où la demande est partie) : texte, images (Éditer), image à
+// retoucher et masque (Dessiner), et le brouillon s'il est public ; si l'espace a changé entre-temps, c'est sa saisie
+// mise de côté qui est vidée. L'estimation suit.
+function emptyTab(tab, priv=inPrivate()){
+  if(!priv) try{ localStorage.removeItem('qwen-'+tab+'_prompt'); }catch(e){}
+  if(priv!==inPrivate()){ const s=asideInput; if(s){ s.text[tab]=''; if(tab==='edit') s.editImages=[]; if(tab==='mask') s.mask=null; } return; }
+  $(tab+'_prompt').value='';
   if(tab==='edit'){ editImages=[]; renderEditThumbs(); }
-  if(tab==='mask' && maskImage){ maskImage=null; clearMask(); $('paintWrap').style.display='none'; $('pane-mask').classList.remove('has-img'); }
-  renderMarks(); refreshChoices(); }
-function renderMarks(){ TABS.forEach(b=>{ const on=privTabs.has(b.dataset.pane) && !inPrivate(); b.classList.toggle('privmark', on);
-  if(on) b.title='Contenu de l\'espace privé'; else b.removeAttribute('title'); }); }
-let pendingGo=false;   // Générer touché sur un onglet marqué : relancé une fois entré dans l'espace
-function openPrivSheet(id, fromMark){
+  if(tab==='mask' && maskImage) dropMaskImage();
+  refreshChoices(); }
+function openPrivSheet(id){
   // en http:// sur le Wi-Fi, l'espace ne s'ouvre pas (le code passerait en clair) : la feuille le dit, sans champ de code.
   // secure ou local absent (serveur pas encore relancé après une mise à jour de cette page) : rien n'est masqué, le
   // serveur reste seul juge
-  if(privState.secure===false){ pendingGo=false; return openSheet('privHttpsSheet'); }
-  $('puNote').hidden=!fromMark; if(!fromMark) pendingGo=false;
+  if(privState.secure===false) return openSheet('privHttpsSheet');
   ['pcCode','pcCode2','puCode','pkOld','pkNew','pkNew2','prWord','paCode'].forEach(k=>$(k).value='');
   ['pcErr','puErr','pkErr','prErr','paErr'].forEach(k=>$(k).textContent='');
   // supprimer sans le code : sur le Mac lui-même seulement (décision du porteur) ; ailleurs, la feuille le dit
@@ -1699,14 +1718,15 @@ async function privCreate(){ const c=$('pcCode').value;
   if(c!==$('pcCode2').value) return $('pcErr').textContent='Les deux codes diffèrent.';
   if(await privPost('/api/private/create', {code:c}, $('pcGo'), 'pcErr')){ closeSheet(); toast('Espace privé créé'); } }
 async function privUnlock(){ if(!$('puCode').value) return;
-  if(await privPost('/api/private/unlock', {code:$('puCode').value}, $('puGo'), 'puErr')){ closeSheet(); toast('Espace privé ouvert');
-    if(pendingGo){ pendingGo=false; $('go').click(); } }
+  if(await privPost('/api/private/unlock', {code:$('puCode').value}, $('puGo'), 'puErr')){ closeSheet(); toast('Espace privé ouvert'); }
   else { $('puCode').select(); } }
-// « Sortir » vide l'écran de tout ce qui vient de l'espace (décision du porteur du 14/10/2026) : texte et images des
-// onglets marqués, en plus de ce que changedSpace retire à toute sortie (résultats, grille, visionneuse, aperçus)
-async function privLock(){ await postJson('/api/private/lock', {}).catch(()=>{}); await refreshStatus();
-  [...privTabs].forEach(clearTab);                 // une fois sorti : vidé, l'onglet perd sa marque (markTab)
-  toast('Sorti de l\'espace privé'); }
+// « Sortir » vide l'écran de tout ce qui vient de l'espace (décision du porteur du 14/10/2026) : la saisie privée est
+// effacée (applyPrivate, à la sortie), en plus de ce que changedSpace retire à toute sortie (résultats, grille,
+// visionneuse, aperçus)
+async function privLock(){ erasePrivate=true;
+  const ok=await postJson('/api/private/lock', {}).then(r=>r.ok, ()=>false);
+  if(!ok){ erasePrivate=false; return toast('Sortie impossible : Mac injoignable', 'err'); }   // rien n'est effacé
+  await refreshStatus(); toast('Sorti de l\'espace privé'); }
 async function privChangeCode(){ const n=$('pkNew').value;
   if(n.length<8) return $('pkErr').textContent='Nouveau code : 8 caractères au moins.';
   if(n!==$('pkNew2').value) return $('pkErr').textContent='Les deux nouveaux codes diffèrent.';
