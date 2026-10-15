@@ -1,6 +1,6 @@
 """Lots et variantes : plusieurs générations d'une seule demande (count), graines tirées par le serveur, annulation du
 lot, une seule notification par lot."""
-import time, unittest
+import unittest
 
 import bench
 from bench import call, files, journal, wait_job
@@ -88,8 +88,7 @@ class LotCancelTest(bench.BenchCase):
             bench.wait_idle()
             self.assertEqual(files("outputs", "*.png"), [])
             self.assertEqual(files("jobs", "*"), [])
-            time.sleep(0.3)
-            self.assertEqual(list(sent), [])               # tout le lot annulé : aucune notification
+            self.assertEqual((sent.decided, list(sent)), ([], []))   # tout le lot annulé : aucune notification
 
     def test_cancelling_the_rest_of_a_lot_keeps_the_finished_images(self):
         jobs = generate_lot("SLOW=0.05 lot", count=3, steps=8)["jobs"]
@@ -115,10 +114,10 @@ class LotNotificationTest(bench.BenchCase):
         bench.wait_idle()
 
     def only(self, sent):
-        """La seule notification envoyée (une seconde envoyée par erreur aurait le temps d'arriver)."""
+        """La seule notification envoyée : le calcul au repos, toutes les notifications sont décidées (sent.decided)."""
         sent.wait(1)
-        time.sleep(0.3)
-        self.assertEqual(len(sent), 1, list(sent))
+        bench.wait_idle()
+        self.assertEqual(len(sent.decided), 1, sent.decided)
         return sent[0]
 
     def test_one_notification_for_the_whole_lot(self):

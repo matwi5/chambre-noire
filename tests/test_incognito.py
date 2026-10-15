@@ -79,16 +79,18 @@ class IncognitoHardeningTest(bench.BenchCase):
             wait_job(done)
             wait_job(failed)
             self.assertEqual(call("GET", f"/api/job/{done}/result")[0], 200)   # avant le délai : toujours là
-            time.sleep(0.6)
-            for jid in (done, failed):
-                self.assertEqual(call("GET", f"/api/job/{jid}")[0], 404)
+            # chaque requête fait le ménage (sweep) : on interroge jusqu'à l'oubli, passé le délai
+            bench.wait_until(lambda: all(call("GET", f"/api/job/{jid}")[0] == 404 for jid in (done, failed)),
+                             what="générations incognito oubliées")
             self.assertEqual(call("GET", f"/api/job/{done}/result")[0], 404)
             self.assertNotIn(done, bench.S.jobs)
 
     def test_running_or_waiting_incognito_is_not_expired(self):
         with mock.patch("launch.INCOGNITO_TTL", 0.1):
             jid = generate("SLOW=0.1 long", incognito=True, steps=8)["id"]
-            time.sleep(0.4)
+            started = lambda: bench.S.jobs[jid]   # en cours depuis plus que le délai, sans être oubliée
+            bench.wait_until(lambda: started().get("status") == "running" and time.time() - started()["created"] > 0.2,
+                             what="génération en cours depuis plus que le délai")
             self.assertEqual(call("GET", f"/api/job/{jid}")[0], 200)
             self.assertEqual(wait_job(jid)["status"], "done")
 

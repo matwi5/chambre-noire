@@ -42,7 +42,9 @@ contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net`
   `tests/bench.py` sert `tools/launch.py` sur un port libre, tous ses dossiers repointés vers un dossier temporaire,
   avec le faux moteur `tests/fake_sdcli.py` (`FAIL` ou `SLOW[=s]` dans le prompt le font échouer ou ralentir,
   `FAILSEED=<n>` échouer pour la seule graine n, une image d'un lot) ;
-  `bench.capture_push()` intercepte les notifications, `bench.LOG` reçoit les sorties du serveur. Trois origines de
+  `bench.capture_push()` intercepte les notifications (`sent.decided` : celles que le serveur a décidées, complètes
+  après `bench.wait_idle()`), `bench.wait_until(cond)` attend une condition observable, `bench.LOG` reçoit les
+  sorties du serveur. Trois origines de
   requête : `call()` = le Mac, `remote=True` = HTTPS relayé par `tailscale serve` (`bench.HTTPS_HOST`), `wifi=True` =
   `http://` direct d'un autre appareil (`bench.WIFI_HOST`, `LOCAL_CLIENTS` vidé pendant l'appel). Un nouveau chemin
   calculé à l'import de `launch.py` doit être repointé dans `bench.start()`, sinon le banc écrit dans le dépôt. Les
