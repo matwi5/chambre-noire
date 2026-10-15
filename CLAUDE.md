@@ -41,34 +41,43 @@ Aucun lint ni typage n'est déclaré. Après un changement, une seule commande (
 `.github/workflows/checks.yml`, sur chaque pull request vers `main` et chaque envoi sur `dev`) :
 
 ```bash
-venv/bin/python tests/check.py [--no-bench] [--ui]
+venv/bin/python tests/check.py [--no-bench | --quick] [--ui [tests/ui/x.test.mjs …]]
 ```
 
-Elle compile chaque `.py` suivi, passe chaque bloc `<script>` de `tools/ui/index.html` et chaque `.js`/`.mjs` suivi à
-`node --check`, lance le banc et recopie sa ligne « Ran N tests … » et son verdict (c'est elle qu'on cite, jamais un
-compte de tête) ; code de sortie non nul au moindre échec. `tests/test_public_repo.py` y échoue si un fichier suivi
-contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net` autre que ceux du banc.
+Elle compile chaque `.py` suivi, passe chaque bloc `<script>` de `tools/ui/index.html` et chaque `.js`/`.mjs` suivi
+à `node --check`, refuse une ligne ajoutée depuis la base (`git merge-base HEAD origin/main`) de plus de 120
+caractères (`CODING_STANDARDS.md`), lance le banc et recopie sa ligne « Ran N tests … » et son verdict (c'est elle
+qu'on cite, jamais un compte de tête) ; code de sortie non nul au moindre échec. `tests/test_public_repo.py` y
+échoue si un fichier suivi contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net` autre que
+ceux du banc.
+
+`--quick` (en local, jamais en CI) saute le banc quand aucun `.py` n'a changé depuis la base, sauf
+`tests/test_public_repo.py`. `--ui` tourne en même temps que le banc (ports libres et dossiers temporaires
+distincts) ; suivi de fichiers, il ne lance que ceux-là. Un avis « zone sensible : passe bogues /code-review requise »
+(sans échec) signale une ligne de code ajoutée qui touche l'incognito ou l'espace privé.
 
 - **Banc** (sans GPU, ≈ 1 min) : `venv/bin/python -m unittest discover -s tests` ; un seul fichier :
   `venv/bin/python -m unittest discover -s tests -p test_x.py`. `tests/bench.py` sert `tools/launch.py` sur un port
-  libre, tous ses dossiers repointés vers un dossier temporaire, avec le faux moteur `tests/fake_sdcli.py` (`FAIL` ou
-  `SLOW[=s]` dans le prompt le font échouer ou ralentir, `FAILSEED=<n>` échouer pour la seule graine n, une image
-  d'un lot). Trois origines de requête : `call()` = le Mac, `remote=True` = HTTPS relayé par `tailscale serve`
-  (`bench.HTTPS_HOST`), `wifi=True` = `http://` direct d'un autre appareil (`bench.WIFI_HOST`, `LOCAL_CLIENTS` vidé
-  pendant l'appel). `bench.capture_push()` intercepte les notifications (`sent.decided` : celles que le serveur a
-  décidées, complètes après `bench.wait_idle()`), `bench.wait_until(cond)` attend une condition observable,
-  `bench.LOG` reçoit les sorties du serveur.
+  libre, tous ses dossiers repointés vers un dossier temporaire, avec le faux moteur `tests/fake_sdcli.py` (`FAIL`
+  ou `SLOW[=s]` dans le prompt le font échouer ou ralentir, `FAILSEED=<n>` échouer pour la seule graine n, une image
+  d'un lot, `HOLD[=nom]` attendre que le test le libère par `bench.release(nom)`, aussi offert par le banc du pilote
+  d'interface : une génération reste en cours, les suivantes en file, sans dépendre du temps). Trois origines de
+  requête : `call()` = le Mac, `remote=True` = HTTPS relayé par `tailscale serve` (`bench.HTTPS_HOST`),
+  `wifi=True` = `http://` direct d'un autre appareil (`bench.WIFI_HOST`, `LOCAL_CLIENTS` vidé pendant l'appel).
+  `bench.capture_push()` intercepte les notifications (`sent.decided` : celles que le serveur a décidées, complètes
+  après `bench.wait_idle()`), `bench.wait_until(cond)` attend une condition observable, `bench.LOG` reçoit les
+  sorties du serveur.
 - **Interface** : `venv/bin/python tests/check.py --ui` (ou `node --test "tests/ui/*.test.mjs"`), en local seulement
   (Chrome installé ; pas en CI). `tests/ui/driver.mjs` lance le banc (`tests/ui/serve.py`) et Chrome sans écran
   (profil temporaire supprimé à la fin), piloté par le protocole DevTools depuis Node (WebSocket natif, sans
   Playwright), dans la vue du téléphone du porteur (367×760, densité 2,5, mobile, tactile : l'interface y passe en
-  `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `smoke` (écrans principaux),
-  `keep` (régression « Garder celle-ci »), `saisie` (photos choisies d'un coup, vidage après « Générer », saisie
-  propre à chaque espace ; `page.setFiles` remplit un champ de fichiers), `file` (file et pastille propres à chaque
-  espace), `entete` (cadenas de la galerie, pastille qui tient dans sa bulle), `prompts` (prompts enregistrés
-  propres à chaque espace) et `reprise` (prompt complet d'une génération reprise, publique ou privée). Une
-  vérification d'interface nouvelle y devient un test plutôt qu'un script jetable. Une vue plus grande cache des
-  débordements : regarder aussi les captures (`page.screenshot`).
+  `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `tests/ui/*.test.mjs` : chaque
+  fichier dit en tête ce qu'il couvre ; `page.setFiles` remplit un champ de fichiers. Une vérification d'interface
+  nouvelle y devient un test plutôt qu'un script jetable. Une vue plus grande cache des débordements : regarder
+  aussi les captures (`page.screenshot`).
+- **Sonde** : `node tests/ui/probe.mjs [--width N] [--shot f.png] [--private] --eval '<expression>'` (ou
+  `--script f.mjs`) lance le banc et Chrome par le pilote, évalue dans la vue du téléphone, imprime et ferme tout :
+  une vérification ponctuelle passe par elle, pas par un script jetable.
 - La fermeture de la page (`pagehide`, envoi `keepalive`) se valide sur le téléphone : Chrome sans écran ne la rejoue
   pas de façon constante.
 - `tests/run_tests.py --steps 8 [--only t2i|edit|mask|annot]` : bout en bout, serveur lancé sur 127.0.0.1:7860. Il
@@ -98,7 +107,9 @@ Ne lancer aucune génération réelle et ne supprimer aucune image de `outputs/`
 - **Incognito et espace privé** : `secret(job)` désigne l'un ou l'autre mode ; chaque `print`, écriture de journal,
   de calibration ou de fichier hors du dossier de travail passe par lui. **Toute nouvelle écriture sur le disque ou
   dans les journaux doit respecter ces deux modes.** `log_message` tait `/api/private/` et aucun `print` ne parle de
-  l'espace privé ; ni le titre ni le texte d'un prompt enregistré ne vont dans les journaux du serveur.
+  l'espace privé ; ni le titre ni le texte d'un prompt enregistré ne vont dans les journaux du serveur. Côté
+  interface : rien de l'incognito ni de l'espace privé dans `localStorage`, brouillons compris (un texte
+  incognito ou privé n'y est jamais écrit, même quand la demande est refusée ; `tests/ui/brouillons.test.mjs`).
 - **Verrous** : toute écriture de `outputs/journal.jsonl` passe sous `JOURNAL_LOCK` ; toute écriture ou suppression
   d'une image privée ou des prompts privés (`private/prompts`) passe sous `PRIVATE_LOCK`, après `finish_rekey()` ; un
   nouveau fichier de `private/` est aussi rechiffré par `rekey_space` et rangé par `finish_rekey`.
@@ -152,7 +163,7 @@ Ne lancer aucune génération réelle et ne supprimer aucune image de `outputs/`
   partir de `dev`, et leurs branches s'y fusionnent. `main` ne reçoit que des pull requests depuis `dev` (`/project:pr`)
   et est protégée sur GitHub (PR obligatoire, CI `checks` au vert exigée, ni push direct ni forcé, administrateur
   compris). `/project:push` se lance
-  sur `dev` ; après la fusion d'une PR, `/project:sync main` remet `dev` à jour.
+  sur `dev` ; après la fusion d'une PR, `/project:sync base` remet `dev` à jour.
 - Suivi des tâches : Asana « Hub · Suivi des tâches », section « Qwen-Image local » (GID `1219496223389136`), tâche
   mère de Claude « [code] Qwen-Image local : prochaines sessions Claude Code » (GID `1219493010479174`), tenus par
   `asana-board:suivi-asana` (adopté le 14/10/2026). Specs dans `docs/specs/`, plans des gros travaux dans

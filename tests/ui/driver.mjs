@@ -6,6 +6,7 @@
 //   const page = await chrome.phonePage();       // vue du téléphone du porteur : 367×760, densité 2,5, tactile
 //   await page.goto(bench.url + '/'); await page.waitFor(`$('status').className==='ok'`);
 //   …; page.assertNoErrors(); await chrome.close(); await bench.stop();
+//   bench.release('nom')                         // libère les générations HOLD=nom du faux moteur
 //
 // Variables d'environnement : CHROME (chemin de Chrome), PYTHON (Python du banc ; défaut : venv/ du dépôt, sinon
 // celui du dossier principal quand on est dans un worktree, sinon python3).
@@ -55,9 +56,11 @@ export async function startBench() {
     rl.once('line', line => resolve(line));
     proc.once('exit', code => reject(new Error(`serveur du banc arrêté au démarrage (code ${code})`)));
   });
-  const { url } = JSON.parse(first);
+  const { url, hold } = JSON.parse(first);
   return {
     url,
+    // libère les générations dont le prompt porte HOLD=<name> (HOLD seul : 'hold') ; voir tests/fake_sdcli.py
+    release(name = 'hold') { fs.writeFileSync(path.join(hold, name), ''); },
     async stop() {
       process.off('exit', killer);
       if (proc.exitCode !== null) return;

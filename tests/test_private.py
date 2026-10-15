@@ -9,7 +9,7 @@ from bench import call, private_status
 CODE = "Mot2passe!"
 
 
-class PrivateSpaceTest(bench.BenchCase):
+class PrivateSpaceTest(bench.PrivateFilesCheck, bench.BenchCase):
     def test_status_says_available_without_space(self):
         self.assertEqual(private_status(), {"available": True, "exists": False, "unlocked": False, "secure": True, "local": True})
 

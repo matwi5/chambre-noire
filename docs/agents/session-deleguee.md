@@ -16,11 +16,14 @@ s'orienter dans le code, `docs/agents/carte-du-code.md`.
 
 ## Contrôles
 
-- Après chaque changement : `venv/bin/python tests/check.py` (compilation, JavaScript de l'interface, banc,
-  dépôt public). Citer sa ligne « Ran N tests … » telle quelle, jamais un nombre de tête. Un seul fichier de test :
-  `venv/bin/python -m unittest discover -s tests -p test_x.py`.
+- Contrôle complet (`venv/bin/python tests/check.py`, avec `--ui` si l'interface a changé) deux fois par ticket :
+  avant sa revue et avant son commit. Citer sa ligne « Ran N tests … » telle quelle, jamais un nombre de tête.
+- Entre les deux, pendant le travail : le seul fichier touché (`venv/bin/python -m unittest discover -s tests -p
+  test_x.py`, ou `check.py --ui tests/ui/x.test.mjs`), ou `check.py --quick` (banc sauté si aucun `.py` n'a changé).
 - Changement d'interface : `venv/bin/python tests/check.py --ui` (Chrome sans écran, vue du téléphone). Une
-  vérification d'interface nouvelle devient un test de `tests/ui/` (pilote `driver.mjs`), pas un script jetable.
+  vérification d'interface nouvelle devient un test de `tests/ui/` (pilote `driver.mjs`), pas un script jetable ;
+  une vérification ponctuelle passe par la sonde (`node tests/ui/probe.mjs --eval '<expression>'`, options en tête
+  du fichier), pas par un script jetable.
 - La fermeture de la page (`pagehide`, `keepalive`) se valide sur le téléphone : Chrome sans écran ne la rejoue pas
   de façon constante.
 - Aucune vraie génération GPU : `tests/run_tests.py` est interdit sans accord du porteur.

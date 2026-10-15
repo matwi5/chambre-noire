@@ -819,16 +819,22 @@ venv\Scripts\python.exe -m unittest discover -s tests
 Sur Mac : `venv/bin/python -m unittest discover -s tests`. Le faux moteur n'a été vérifié que sur Mac.
 
 Tous les contrôles en une commande : `venv/bin/python tests/check.py` compile les fichiers Python, vérifie la syntaxe
-du JavaScript de l'interface avec Node.js (`node --check`), lance le banc et affiche son résultat (`--no-bench` pour
-le sauter). Il échoue aussi si un fichier du dépôt contient un repère propre à une machine (chemin de dossier
-personnel, adresse IP privée, nom Tailscale) : le dépôt est public. Sur GitHub, la même commande tourne sur chaque
-pull request vers `main` et chaque envoi sur `dev` (`.github/workflows/checks.yml`, sur macOS).
+du JavaScript de l'interface avec Node.js (`node --check`), refuse une ligne ajoutée de plus de 120 caractères
+depuis la séparation d'avec `origin/main`, lance le banc et affiche son résultat (`--no-bench` pour le sauter ;
+`--quick` le saute si aucun fichier Python n'a changé depuis cette séparation). Il échoue aussi si un fichier du
+dépôt contient un repère propre à une machine (chemin de dossier personnel, adresse IP privée, nom Tailscale) : le
+dépôt est public. Un avis, sans échec, signale un changement de code qui touche l'incognito ou l'espace privé. Sur
+GitHub, la même commande, complète, tourne sur chaque pull request vers `main` et chaque envoi sur `dev`
+(`.github/workflows/checks.yml`, sur macOS).
 
-Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui`. Ils ouvrent
+Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps
+que le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier. Ils ouvrent
 l'interface servie par le banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur
 de la console du navigateur. Ils couvrent les écrans principaux, « Garder celle-ci » après un rechargement de la
 galerie, la saisie (plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque espace), l'en-tête
-(cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés et la reprise d'une génération.
+(cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés, la reprise d'une génération, le
+suivi d'une génération privée devenue inconnue (sans faux « Échec ») et l'absence de brouillon incognito ou privé
+dans le navigateur.
 
 Tests de bout en bout, interface lancée :
 

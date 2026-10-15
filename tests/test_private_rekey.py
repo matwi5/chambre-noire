@@ -31,7 +31,7 @@ def no_cleanup():
         yield
 
 
-class ChangeCodeTest(bench.BenchCase):
+class ChangeCodeTest(bench.PrivateFilesCheck, bench.BenchCase):
     def setUp(self):
         super().setUp()
         session = bench.create_private(OLD)
@@ -67,6 +67,7 @@ class ChangeCodeTest(bench.BenchCase):
 
     def test_new_code_reads_every_image_and_all_sessions_close(self):
         mac, phone = bench.unlock_private(OLD), bench.unlock_private(OLD, remote=True)
+        old_key = bench.S.private_sessions[mac]["key"]
         status, reply, headers = bench.call_full("POST", "/api/private/code", {"old": OLD, "new": NEW}, private=mac)
         self.assertEqual(status, 200, reply)
         self.assertIn("Max-Age=0", headers.get("Set-Cookie", ""))
@@ -74,8 +75,10 @@ class ChangeCodeTest(bench.BenchCase):
         self.assertFalse(bench.private_status(phone, remote=True)["unlocked"])
         self.assertEqual(bench.S.private_sessions, {})
         self.assertIsNone(self.opens(OLD))
-        self.assertEqual(self.contents(self.opens(NEW)), self.before)
+        new = self.opens(NEW)
+        self.assertEqual(self.contents(new), self.before)
         self.assertEqual(sorted(os.listdir(bench.launch.P("private"))), ["items", "space.json"])
+        self.assertEqual(bench.assert_old_key_opens_nothing(self, old_key, bench.S.private_sessions[new]["key"]), 7)
 
     def test_an_old_copy_of_the_keys_no_longer_reads_the_images(self):
         space = bench.launch.P("private", "space.json")
@@ -118,6 +121,7 @@ class ChangeCodeTest(bench.BenchCase):
             for crash in (False, True):
                 with self.subTest(f"{name} n°{k}" + (", arrêt brutal" if crash else "")):
                     self.setUp()
+                    old_key = bench.S.private_sessions[self.opens(OLD)]["key"]
                     with failing(module, name, k) as calls, no_cleanup() if crash else contextlib.nullcontext():
                         status, reply, _ = self.change()
                     if not crash:                  # sans ménage, un rangement peut échouer de lui-même avant le k-ième appel
@@ -126,6 +130,8 @@ class ChangeCodeTest(bench.BenchCase):
                     old, new = self.opens(OLD), self.opens(NEW)
                     self.assertEqual([old is not None, new is not None].count(True), 1, (old, new))
                     self.assertEqual(self.contents(old or new), self.before)
+                    if new:                        # le nouveau code l'a emporté : l'ancienne clé n'ouvre plus rien
+                        self.assertGreater(bench.assert_old_key_opens_nothing(self, old_key), 0)
                     self.assertEqual(sorted(os.listdir(launch.P("private"))), ["items", "space.json"])
                     self.assertTrue(all(launch.ITEM_RE.fullmatch(n) for n in os.listdir(launch.P("private", "items"))))
 

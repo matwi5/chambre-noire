@@ -79,6 +79,15 @@ Mis à jour le 15/10/2026.
 
 ### 2026-10-15
 
+- Rétrospective du parcours « Cloisonnement espace privé, file et saisie » (session mère et trois sessions de
+  groupe, 21 pistes), appliquée : règles de revue (écriture asynchrone liée à un espace, génération rapprochée par
+  identifiant, trois autres) et repères de la carte du code (`46f9713`) ; banc qui échoue tout de suite sur un suivi
+  refusé, commande `HOLD` du faux moteur, droits 600/700 de tout `private/` (ticket coché), limite de 120 caractères
+  vérifiée sur les lignes ajoutées, `check.py` plus rapide (`--quick`, `--ui <fichiers>`, banc et interface en
+  parallèle : 186 s → 96 s), avis « zone sensible », tests d'interface `suivi` et `brouillons`, sonde
+  `tests/ui/probe.mjs` (fusion de `retro-controles`) ; avis limité à `tools/`, consigne des contrôles complets
+  (`8203f18`). Dossiers de l'espace privé réel passés en 700 à la main. Côté mathis-plugins : brief des sessions
+  liées (adresse stable de la mère, revues), skills `pr` et `push`, `CLAUDE.global.md` allégé.
 - Version 0.3.0 (`94ac860`, tag `v0.3.0`) : espaces public et privé étanches, prompts privés chiffrés, retouches de
   la saisie ; compte rendu du parcours validé par le porteur. Reste la livraison (`/project:push`, `/project:pr`).
 - Groupe C (prompts privés et prompt repris) fait par une session liée et fusionné dans `dev` (`1a712d0` à

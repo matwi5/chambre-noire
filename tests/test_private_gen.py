@@ -17,7 +17,7 @@ def all_files():
             if os.path.isfile(fp) and not fp.startswith(os.path.join(root, "tools", "ui"))]
 
 
-class PrivateGenerationTest(bench.BenchCase):
+class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
     def setUp(self):
         super().setUp()
         self.session = bench.create_private(CODE)
@@ -173,7 +173,7 @@ class PrivateGenerationTest(bench.BenchCase):
         self.assertEqual(files("private", "items", "*"), [])
 
 
-class PrivateTrackingTest(bench.BenchCase):
+class PrivateTrackingTest(bench.PrivateFilesCheck, bench.BenchCase):
     """Suivi, aperçu et annulation d'une génération ou d'un lot privés : requête sûre et session exigées, sinon la
     réponse d'un identifiant inconnu (404), qui ne dit pas que la génération existe."""
 

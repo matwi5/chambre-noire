@@ -6,8 +6,8 @@ import unittest
 import bench
 from bench import call, wait_job
 
-# plus de 80 caractères ; 10 étapes de 0,2 s : encore dans la file à la lecture qui suit le lancement
-LONG = "SLOW=0.2 zq6 " + "a long and detailed description of a lighthouse at dusk, " * 4
+# plus de 80 caractères ; HOLD : la génération reste en cours jusqu'à bench.release()
+LONG = "HOLD zq6 " + "a long and detailed description of a lighthouse at dusk, " * 4
 CODE = "Code-prive-1"
 
 
@@ -19,6 +19,7 @@ class JobPromptTest(bench.BenchCase):
         self.assertLess(len(entry["prompt"]), len(LONG))           # la file n'en montre que le début
         self.assertEqual(bench.job(job["id"])["prompt"], LONG)
         self.assertEqual(call("GET", f"/api/job/{job['id']}", remote=True)[1]["prompt"], LONG)   # autre appareil
+        bench.release()
         self.assertEqual(wait_job(job["id"])["prompt"], LONG)      # aussi une fois terminée
 
     def test_following_a_private_generation_gives_its_full_prompt_in_the_private_space_only(self):
@@ -31,6 +32,7 @@ class JobPromptTest(bench.BenchCase):
         for origin in ({}, {"remote": True}, {"wifi": True, "private": session}):   # hors de l'espace privé
             with self.subTest(origin=origin):
                 self.assertEqual(call("GET", f"/api/job/{job['id']}", **origin), (404, {"error": "job inconnu"}))
+        bench.release()
         done = wait_job(job["id"], private=session)
         bench.wait_idle()
         self.assertEqual(done["status"], "done")
@@ -40,6 +42,7 @@ class JobPromptTest(bench.BenchCase):
         job = bench.generate(LONG, steps=10, incognito=True)
         self.assertIsNone(job["prompt"])
         self.assertIsNone(bench.job(job["id"])["prompt"])
+        bench.release()
         self.assertIsNone(wait_job(job["id"])["prompt"])
 
 
