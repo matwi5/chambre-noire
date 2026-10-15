@@ -19,8 +19,8 @@
 5. avec --ui : les tests d'interface tests/ui/*.test.mjs, ou les seuls fichiers donnés (pilote Chrome, voir
    tests/ui/driver.mjs), en même temps que le banc : chacun sert le serveur sur un port libre, depuis son propre
    dossier temporaire (bench.start()), et l'interface dans un autre processus (tests/ui/serve.py) ;
-6. avis, sans échec, « zone sensible : passe bogues /code-review requise » quand une ligne de code ajoutée depuis la
-   base touche l'incognito ou l'espace privé (SENSITIVE).
+6. avis, sans échec, « zone sensible : passe bogues /code-review requise » quand une ligne ajoutée depuis la base
+   dans tools/ touche l'incognito ou l'espace privé (SENSITIVE).
 
 Le Python des contrôles est celui du venv du dépôt (venv/ à la racine, sinon celui du dossier principal quand on est
 dans un worktree), sinon l'interpréteur qui lance ce script (cas de la CI) : check.py se relance de lui-même avec le
@@ -189,13 +189,14 @@ def check_line_length(base):
 
 
 def sensitive_notice(base):
-    """Avis (jamais un échec) quand une ligne ajoutée depuis base, hors documentation (.md) et hors ce fichier, touche
-    une zone sensible (SENSITIVE) : le ticket demande alors la passe bogues de /code-review (CLAUDE.md global)."""
+    """Avis (jamais un échec) quand une ligne ajoutée depuis base dans le code de l'application (tools/, hors .md)
+    touche une zone sensible (SENSITIVE) : le ticket demande alors la passe bogues de /code-review. Les tests, qui
+    nomment ces zones pour les vérifier, ne déclenchent pas l'avis."""
     if not base:
         return
     hits, current = {}, None
-    for line in git("diff", "--unified=0", "--no-color", "--no-ext-diff", base, "--", ".", ":!*.md",
-                    ":!tests/check.py").splitlines():
+    for line in git("diff", "--unified=0", "--no-color", "--no-ext-diff", base, "--", "tools/",
+                    ":!*.md").splitlines():
         if line.startswith("+++ "):
             current = line[6:] if line.startswith("+++ b/") else None
         elif line.startswith("+") and current:
