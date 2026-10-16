@@ -438,13 +438,14 @@ du Mac, ne suffit pas pour voir les images privées.
   navigateur, brouillons compris : elle ne survit pas à la fermeture de l'application. L'interrupteur **Campagne** et
   les Réglages sont communs aux deux espaces.
 - **Sortir vide l'écran** : la saisie privée est effacée, comme les images privées de la zone de résultat, de la grille,
-  de la galerie, de la visionneuse, des images d'entrée et de la feuille « Voir le lot » (fermée), même cachées : la
-  page ne les garde plus prêtes à l'affichage, et celles qui chargeaient encore sont abandonnées (si le Mac est
-  injoignable, un message le dit et l'on reste dans l'espace). Les générations privées en file ou en cours quittent
-  aussi l'écran et la page (progression, aperçu, prompt, vignette, ligne de la file) : elles continuent sur le Mac et
-  sont rangées dans l'espace, mais une page sortie ne peut plus ni les suivre, ni les prévisualiser, ni les annuler. Les
-  générations publiques de la page, cachées pendant qu'on était dans l'espace privé (elles y restent suivies, hors de
-  l'écran), reviennent, avec leur image si elles ont fini entre-temps.
+  de la galerie, de la visionneuse, des images d'entrée et de la feuille « Voir le lot » (fermée), même cachées, et les
+  lignes du journal du panneau Moteur écrites dans l'espace : la page ne les garde plus prêtes à l'affichage, et celles
+  qui chargeaient encore sont abandonnées (si le Mac est injoignable, un message le dit et l'on reste dans l'espace).
+  Les générations privées en file ou en cours quittent aussi l'écran et la page (progression, aperçu, prompt, vignette,
+  ligne de la file) : elles continuent sur le Mac et sont rangées dans l'espace, mais une page sortie ne peut plus ni
+  les suivre, ni les prévisualiser, ni les annuler. Les générations publiques de la page, cachées pendant qu'on était
+  dans l'espace privé (elles y restent suivies, hors de l'écran), reviennent, avec leur image si elles ont fini
+  entre-temps.
 - **Retour dans l'espace privé** : la page suit toutes les générations privées encore en file ou en cours, avec leur
   prompt et leur progression, qu'elle les ait lancées ou non, aussi après un rechargement ou depuis un autre appareil
   (aucun identifiant privé n'est gardé par le navigateur) ; la dernière image de l'espace public n'y est pas montrée.

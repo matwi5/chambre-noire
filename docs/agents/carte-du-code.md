@@ -95,7 +95,8 @@ dernier bloc, après le HTML.
   feuilles `.sheet` : `#askSheet`, `#setSheet`, `#engineSheet`, `#lotSheet`, `#queueSheet`, `#promptSheet`,
   `#promptEditSheet` et celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`, `#adoptSheet`…).
 - **JavaScript**, sections dans l'ordre :
-  - « valeurs fixes » : `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
+  - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
+    privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
     (`refPx`, `inputsFor`, `parts` : copies de `estimate.py`) ; réglages `opt` (`localStorage` `qwen-opt`),
     `refreshChoices`, `setIncog`.
   - « onglets & statut » : `TABS`, changement d'onglet (`mode`) ; « panneaux du bas » : `openSheet`, `closeSheet`

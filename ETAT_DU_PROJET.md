@@ -11,8 +11,8 @@ Mis à jour le 16/10/2026.
   Créer) et campagnes (mode Éditer) avec lots dans la galerie, prompts enregistrés et prompts types, espace privé
   chiffré (entrée par le cadenas de la Galerie), étanche à l'espace public (galerie, file, saisie et prompts
   enregistrés propres à chaque espace). Banc de test permanent sans GPU :
-  `venv/bin/python -m unittest discover -s tests` (162 tests, ≈ 1 min 20) ; tests d'interface `tests/check.py --ui`
-  (37 tests).
+  `venv/bin/python -m unittest discover -s tests` (167 tests, ≈ 1 min 20) ; tests d'interface `tests/check.py --ui`
+  (41 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
 - **En cours** : parcours « Cloisonnement espace privé, file et saisie » (spécification
@@ -78,6 +78,15 @@ Mis à jour le 16/10/2026.
 ## Journal
 
 ### 2026-10-16
+
+- Rétrospective de la session (fuite et affichage des images), appliquée en entier à la demande du porteur :
+  `check.py` contrôle aussi les fichiers nouveaux pas encore ajoutés à git et refuse une adresse donnée à la main à une
+  image affichée (`d77e1aa`) ; relais façon `tailscale serve` dans le pilote des tests d'interface et test
+  `relais.test.mjs` (`fe25f85`) ; version du code servi et serveur « à relancer » dans le panneau Moteur, et règle du
+  compte rendu « en ligne ou seulement sur `dev` » (`a4f5e62`) ; contrôle rapide pendant les corrections
+  (`7c81c9b`) ; test d'étanchéité `etancheite.test.mjs` (parcours privé complet, sortie par « Sortir » et par le Mac,
+  fouille de toute la page), qui a trouvé un reste de plus : le journal du panneau Moteur gardait le nom `prive_…`
+  d'une image privée supprimée (ses lignes écrites dans l'espace en sortent maintenant avec lui).
 
 - Retours du porteur sur le téléphone, qui tourne encore sur `main` (sans `d3169f8`) : image d'entrée privée revue un
   instant dans l'espace public, et galerie privée revue un instant en revenant à la galerie publique après une sortie

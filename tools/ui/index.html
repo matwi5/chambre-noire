@@ -805,7 +805,10 @@ const $ = id => document.getElementById(id);
 let mode='t2i', editImages=[], maskImage=null, paintMode='paint', lastResult=null, estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
 let privState={available:false, exists:false, unlocked:false};   // espace privé vu par cet appareil (/api/status)
 
-function log(m){ const l=$('log'); l.textContent += new Date().toLocaleTimeString()+'  '+m+'\n'; l.scrollTop=l.scrollHeight; }
+// journal du panneau Moteur ; une ligne écrite dans l'espace privé (nom prive_…, taille d'une photo) en sort avec lui
+let logLines=[];
+function log(m){ logLines.push({text:new Date().toLocaleTimeString()+'  '+m, priv:inPrivate()}); renderLog(); }
+function renderLog(){ const l=$('log'); l.textContent=logLines.map(x=>x.text+'\n').join(''); l.scrollTop=l.scrollHeight; }
 const round32 = v => Math.max(256, Math.round(v/32)*32);
 function singleImage(){ if(mode==='edit' && editImages.length===1) return editImages[0]; if(mode==='mask' && maskImage) return maskImage; return null; }
 function closestRatio(w, h){ const t=Math.log(w/h); let best='1:1', bd=Infinity; for(const r in RATIOS){ const d=Math.abs(Math.log(RATIOS[r][0]/RATIOS[r][1])-t); if(d<bd){ bd=d; best=r; } } return best; }
@@ -1806,6 +1809,7 @@ function changedSpace(inside){
   if(ivIndex>=0 && !!ivOwner.private!==inside) closeInputs();
   if(vIndex>=0 && vList.some(x=>!!x.private!==inside)) closeViewer();
   if(!inside){ forgetPrivateImages();               // rien de l'espace quitté dans la page, même caché ou chargé en avance
+    logLines=logLines.filter(x=>!x.priv); renderLog();
     if(ivIndex<0) emptyInputs(); if(vIndex<0) emptyViewer(); }   // vues fermées : vidées sans attendre le fondu
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
     resumeOwn(queueState); }
