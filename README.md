@@ -139,7 +139,8 @@ Sur Mac : `venv/bin/python tools/launch.py`.
 Options : `--port 7860` (changer de port), `--model q4|q8` (modèle Q4_K_M par défaut, Q8_0 s'il a été installé par
 `setup.py --q8`), `--backend vulkan|cuda|cpu` (Windows : forcer un moteur ; par défaut CUDA s'il est installé, sinon
 Vulkan ; sur Mac, le moteur est toujours Metal), `--no-browser`. Pour lancer Q8_0 par le raccourci, ajoutez
-`"model": "q8"` dans `tools/config.json`. La pastille d'état en haut à droite indique le modèle utilisé ; un appui ouvre
+`"model": "q8"` dans `tools/config.local.json` (réglages propres à la machine, non suivis par git, lus par-dessus
+`tools/config.json`). La pastille d'état en haut à droite indique le modèle utilisé ; un appui ouvre
 le panneau **Moteur** (moteur, modèle, calibration des estimations, version du code servi, journal) : la ligne
 **Version** dit quel commit tourne (utile pour savoir si un correctif est en ligne sur le téléphone), et **Serveur**
 « à relancer » apparaît quand `tools/launch.py` ou `tools/estimate.py` a changé depuis le lancement du serveur (le
@@ -506,8 +507,8 @@ Le modèle n'est pas inclus dans ce dépôt : GitHub refuse les fichiers de plus
 
 | Fichier | Rôle | Taille | Source |
 | --- | --- | --- | --- |
-| `qwen-image-2.1-UC-Q4_K_M.gguf` | Modèle de diffusion, 7 milliards de paramètres, quantifié 4 bits | 4,6 Go | [abenzerps/Qwen-Image-2.1-Uncensored-Quantized](https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized) |
-| `qwen-image-2.1-UC-Q8_0.gguf` (option `--q8`) | Même modèle quantifié 8 bits, plus fidèle | 7,6 Go | idem |
+| `qwen-image-2.1-Q4_K_M.gguf` | Modèle de diffusion [Qwen/Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1), 7 milliards de paramètres, quantifié 4 bits | 4,6 Go | [abenzerps, branche `base`](https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized/tree/base) |
+| `qwen-image-2.1-Q8_0.gguf` (option `--q8`) | Même modèle quantifié 8 bits, plus fidèle | 7,6 Go | idem |
 | `qwen3vl_8b_int8_convrot.safetensors` (Windows) | Encodeur texte et image Qwen3-VL-8B, int8 | 9,35 Go | [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1), dossier `text_encoders` |
 | `qwen_image_2.1_vae_bf16.safetensors` | Décodeur d'image (VAE) | 676 Mo | idem, dossier `vae` |
 | `Qwen3VL-8B-Instruct-Q8_0.gguf` (Mac) | Même encodeur Qwen3-VL-8B, GGUF quantifié 8 bits | 8,7 Go | [Qwen/Qwen3-VL-8B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF) |
@@ -519,17 +520,19 @@ version GGUF officielle de Qwen, qui tourne sur le GPU : ≈ 3 s pour la même r
 identique. Sur une installation Mac antérieure, `setup.py` télécharge ces deux fichiers et signale que les fichiers
 `qwen3vl_8b_int8_convrot*.safetensors` (≈ 18,7 Go) ne servent plus et peuvent être supprimés.
 
-**Variante « UC » (Uncensored).** Le modèle de diffusion est la variante non censurée publiée par abenzerps :
-elle n'a ni filtre de contenu ni refus de prompt, et produit ce que décrit le prompt, contenus adultes compris.
-Ce dépôt Hugging Face s'appelait `abenzerps/Qwen-Image-2.1-GGUF` ; il a été renommé (constaté le 12 octobre 2026) et
-garde les quantifications du modèle officiel sur sa branche `base`. Les téléchargements sont épinglés sur un commit précis de chaque dépôt :
-un renommage ou une mise à jour ultérieure ne change pas les fichiers installés.
+**Quantifications du modèle.** Le modèle de diffusion est le modèle officiel de Qwen, quantifié en GGUF par abenzerps à
+partir des poids d'origine (branche `base` de son dépôt Hugging Face). Les téléchargements sont épinglés sur un commit
+précis de chaque dépôt : un renommage ou une mise à jour ultérieure ne change pas les fichiers installés.
+
+**Variante communautaire (option).** `setup.py --uc` installe aussi la variante affinée publiée sur la branche
+principale du même dépôt (`uc-q4`, et `uc-q8` avec `--q8`), à choisir par `--model uc-q4` ou `--model uc-q8`. Elle
+n'est ni installée ni utilisée par défaut.
 
 Empreintes SHA256 vérifiées par `setup.py` (identiques à celles des fichiers `SHA256SUMS` et des métadonnées des dépôts) :
 
 ```text
-e79c8a009f2ecbdb6c70fd663d9aea9ee304a0d91f347e4169a756b8ad141b41  qwen-image-2.1-UC-Q4_K_M.gguf
-cde456c72ea3ecebfc1be783300e972711d875e0c5f1bed33d42b66b156affa8  qwen-image-2.1-UC-Q8_0.gguf
+833439e91bc1152d28f37aa198c7f6f4218b7de95754c2f7a318a2422ab4b2f8  qwen-image-2.1-Q4_K_M.gguf
+9a7ec02f4c9d5cf5b78e8efa6ccd81ec0c35a898defbf8e77ac7c02a32fe0d7e  qwen-image-2.1-Q8_0.gguf
 8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f  text_encoders/qwen3vl_8b_int8_convrot.safetensors
 bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9  vae/qwen_image_2.1_vae_bf16.safetensors
 0d264b3941185d00a74f75c4245521dae088ff1efc90ab8d1754e83f5844adb0  text_encoders/Qwen3VL-8B-Instruct-Q8_0.gguf
@@ -794,7 +797,6 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 ├── setup.py              installation : moteur (Vulkan, CPU, CUDA en option ; Metal sur Mac), modèle, correctif, raccourci
 ├── requirements.txt      Pillow, NumPy, pywebpush (notifications), cryptography (espace privé), pywin32
 ├── start.cmd             lancement alternatif (postes sans restriction de scripts)
-├── start-ui-sdcpp.cmd    variante : interface web intégrée de sd-server, sans outil de dessin
 ├── tools/
 │   ├── launch.py         serveur local + pilotage de sd-cli
 │   ├── estimate.py       modèle de coût et calibration des estimations de durée
@@ -805,21 +807,21 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── make_shortcut.py  crée Qwen-Image.lnk (Windows) ou Qwen-Image.command (Mac)
 │   ├── make_service.py   Mac : démarrage automatique de l'interface, accessible depuis le Wi-Fi
 │   ├── make_mask.py      génère un masque ou une annotation par script
-│   ├── make_test_image.py
+│   ├── make_test_image.py  génère une image de test (formes et texte) pour essayer l'édition
 │   ├── config.json       moteur, modèle et port par défaut (moteur écrit par setup.py sous Windows)
+│   ├── config.local.json réglages propres à la machine, lus par-dessus config.json (facultatif, non versionné)
 │   ├── calibration.json  mesures de durée de la machine (créé à l'usage, non versionné)
 │   ├── access_code.txt   code d'accès des appareils du Wi-Fi (créé par --lan, non versionné)
 │   ├── push_vapid.pem, push_subscriptions.json   notifications : clé d'envoi et appareils abonnés (non versionnés)
 │   ├── prompt_types.json    prompts types livrés avec l'application (lecture seule)
 │   └── saved_prompts.json   prompts enregistrés, communs à tous les appareils (créé à l'usage, non versionné)
-├── tests/
-│   ├── run_tests.py      tests de bout en bout des trois usages (interface lancée, vraies générations)
-│   ├── bench.py          banc de test du serveur, sans GPU : serveur sur un port libre, dossier temporaire
-│   ├── fake_sdcli.py     faux moteur du banc
-│   ├── check.py          tous les contrôles en une commande (compilation, JavaScript, banc, interface)
-│   ├── test_*.py         tests du banc
-│   └── ui/               tests de l'interface dans Chrome sans écran (pilote driver.mjs, tests *.test.mjs)
-└── workflows/            paramètres de référence des trois usages (JSON)
+└── tests/
+    ├── run_tests.py      tests de bout en bout des trois usages (interface lancée, vraies générations)
+    ├── bench.py          banc de test du serveur, sans GPU : serveur sur un port libre, dossier temporaire
+    ├── fake_sdcli.py     faux moteur du banc
+    ├── check.py          tous les contrôles en une commande (compilation, JavaScript, banc, interface)
+    ├── test_*.py         tests du banc
+    └── ui/               tests de l'interface dans Chrome sans écran (pilote driver.mjs, tests *.test.mjs)
 ```
 
 Créés par l'installation et l'usage, ignorés par git : `venv/`, `sdcpp/`, `models/`, `outputs/`, `jobs/`, `logs/`,
@@ -865,8 +867,9 @@ Sur Mac : `venv/bin/python tests/run_tests.py --steps 8`.
 
 - **Qwen-Image-2.1** : Alibaba Qwen, [Qwen/Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1),
   sous **Qwen Research License**. Lisez-la avant tout usage : elle encadre notamment l'usage commercial.
-- **Variante non censurée et quantisation GGUF** : [abenzerps/Qwen-Image-2.1-Uncensored-Quantized](https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized)
-  (ex-Qwen-Image-2.1-GGUF), sous la même Qwen Research License ; encodeur int8 (Windows) et VAE issus de
+- **Quantification GGUF** : abenzerps, branche `base` de
+  [son dépôt Hugging Face](https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized/tree/base), sous la
+  même Qwen Research License ; encodeur int8 (Windows) et VAE issus de
   [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1).
 - **Encodeur GGUF (Mac)** : Alibaba Qwen, [Qwen/Qwen3-VL-8B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF),
   sous licence Apache 2.0.
