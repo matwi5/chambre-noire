@@ -4,6 +4,15 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-16 · Une image reste dans son espace : « Rendre privée » retiré
+
+- **Contexte** : en essayant la livraison sur le téléphone, le porteur demande d'abord un « Rendre publique » en
+  face de « Rendre privée », puis se ravise.
+- **Décision** (porteur, 16/10/2026) : une image publique ne devient pas privée, ni l'inverse. Le bouton « Rendre
+  privée », sa feuille et la route `/api/private/adopt` sont retirés (avec `adopt_output` et la réécriture du
+  journal, `drop_from_journal`). Remplace « Rendre privée » dans « Espace privé discret » (14/10/2026) et dans
+  « Espace privé durci après la revue de sécurité » (15/10/2026).
+
 ## 2026-10-16 · Images affichées sans l'image d'avant, page vide de tout privé après la sortie
 
 - **Contexte** : sur le téléphone, une image d'entrée vue dans l'espace privé réapparaissait un instant dans l'espace
@@ -12,7 +21,9 @@ les messages de commit.
 - **Décision** (correction demandée par le porteur, approche choisie sans lui) : toute image affichée passe par
   `showImage` (vidée, puis remplie une fois l'image décodée à part ; `check.py` refuse l'affectation à la main) ; les
   dernières images décodées sont gardées **en mémoire de la page** (`ready`), pas en cache HTTP du navigateur, qui
-  garderait sur le téléphone une copie d'une image ensuite rendue privée ; les réponses restent en `no-store`. À la
+  garderait sur le téléphone une copie des images vues (celles de l'espace privé comprises, après sa fermeture) ; les
+  réponses restent en `no-store`. En attendant l'image, sa miniature prend déjà sa taille à l'écran (`fitThumb`, en
+  unités de la scène : la taille suit le panneau et la rotation). À la
   sortie de l'espace privé, la page retire toute image, tout lien et toute ligne de journal privés, et les vues
   fermées se vident ; `tests/ui/etancheite.test.mjs` fouille la page entière après un parcours privé.
 - **Version servie** : `/api/status` donne le commit du dossier servi et l'empreinte du code que le serveur charge au
@@ -77,10 +88,11 @@ les messages de commit.
     du contrôle d'accès : adresse source et nom d'hôte locaux, non relayée par Tailscale) ; ailleurs 403, et la feuille
     de l'interface dit d'ouvrir l'application sur le Mac (`local` dans `/api/status`).
   - **En HTTPS ou sur le Mac seulement** : toutes les routes de l'espace privé sauf `lock` (création, déverrouillage,
-    changement de code, « Rendre privée », galerie et lectures déchiffrées, suppression d'une image), la génération
-    privée et l'aperçu d'une génération privée (`/api/job/<id>/preview`, en clair) exigent une requête « sûre » (`_secure`) : adresse source 127.0.0.1 ou ::1 **et** nom d'hôte local ou nom
-    HTTPS de « tailscale serve » (`S.https_hosts`, le relais arrivant de 127.0.0.1). Ailleurs 403 avec un message qui
-    dit de passer par l'adresse HTTPS ; `secure` dans `/api/status` permet à l'interface de le dire avant toute saisie.
+    changement de code, « Rendre privée » (retiré le 16/10/2026), galerie et lectures déchiffrées, suppression d'une
+    image), la génération privée et l'aperçu d'une génération privée (`/api/job/<id>/preview`, en clair) exigent une
+    requête « sûre » (`_secure`) : adresse source 127.0.0.1 ou ::1 **et** nom d'hôte local ou nom HTTPS de « tailscale
+    serve » (`S.https_hosts`, le relais arrivant de 127.0.0.1). Ailleurs 403 avec un message qui dit de passer par
+    l'adresse HTTPS ; `secure` dans `/api/status` permet à l'interface de le dire avant toute saisie.
   - **Changer le code change les clés** : une nouvelle paire X25519 est tirée, chaque fichier de chaque image est
     déchiffré avec l'ancienne clé et rescellé avec la nouvelle (même identifiant d'image, mêmes rôles, même format),
     toutes les sessions sont fermées. Ordre d'écriture sûr : tout s'écrit d'abord à part dans `private/.rekey/`
@@ -124,8 +136,8 @@ _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par �
   code). Déverrouiller fait **entrer dans l'espace privé** : toute l'application prend un thème propre (nuit sarcelle,
   comme le graphite de l'incognito), le bouton Incognito disparaît, toute génération part en privé, la galerie montre
   les images privées. Une seule sortie, un cadenas « Sortir » en haut à droite, qui verrouille. « Rendre privée », dans
-  la visionneuse normale, demande le code sans faire entrer dans l'espace privé. Fermer l'application n'annule pas les
-  générations privées.
+  la visionneuse normale, demande le code sans faire entrer dans l'espace privé (retiré le 16/10/2026). Fermer
+  l'application n'annule pas les générations privées.
 - **Écarté** : bouton « Privé » à côté de « Générer » (visible à l'arrivée) ; geste caché (appui long sur le logo) ;
   mode Privé dans la feuille Réglages ; galerie normale visible depuis l'espace privé.
 - **Conséquences** : il n'y a plus de « mode Privé » distinct de l'état déverrouillé ; une génération privée est

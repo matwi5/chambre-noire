@@ -331,7 +331,8 @@
   .v-top .btn-icon { width:44px; height:44px; }
   .v-top a.btn-icon { color:var(--ink); }
   .v-top .chipbtn { cursor:default; font-variant-numeric:tabular-nums; }
-  .v-stage { position:relative; flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:10px 12px; touch-action:none; user-select:none; }
+  .v-stage { position:relative; flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:10px 12px; touch-action:none; user-select:none;
+    container-type:size; }                         /* cqw, cqh : taille de la miniature en attendant l'image (fitThumb) */
   .v-stage img { max-width:100%; max-height:100%; border-radius:18px; box-shadow:0 30px 80px -20px rgba(0,0,0,.85); -webkit-user-drag:none;
     transform:scale(.96); opacity:.4; transition:transform .35s var(--ease), opacity .3s; }
   .viewer.on .v-stage img { transform:none; opacity:1; }
@@ -356,8 +357,6 @@
   .lotsheet-grid b { position:absolute; left:8px; top:8px; padding:2px 9px; border-radius:999px; font-size:12px; color:#fff; background:rgba(10,8,22,.62); }
   #lotSheet > .btn { width:100%; margin-top:14px; }
   .keep[hidden] { display:none; }
-  .v-adopt { display:flex; align-items:center; gap:6px; margin:14px auto 0; border:0; background:none; color:var(--ink2); font-size:13px; font-weight:600; cursor:pointer; padding:6px 10px; }
-  .v-adopt svg { width:15px; height:15px; } .v-adopt[hidden] { display:none; }
   .v-acts .act { background:var(--field); font-size:12.5px; padding:13px 4px 11px; border-radius:20px; gap:7px; }
   .v-panel .m-chips { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; margin:0; padding:0 18px 0 2px;
     -webkit-mask:linear-gradient(90deg, #000 85%, transparent); mask:linear-gradient(90deg, #000 85%, transparent); }
@@ -651,7 +650,6 @@
       <button class="act" onclick="viewerAction('prompt')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15M4.5 11.5h15M4.5 16.5h8"/><path d="m16 15.5 2.5 2.5 3-4"/></svg><span>Reprendre</span></button>
       <button class="act danger" id="vDelete" onclick="viewerAction('delete')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="m6.5 7 1 12.5h9l1-12.5"/></svg><span>Supprimer</span></button>
     </div>
-    <button class="v-adopt" id="vAdopt" onclick="openAdopt()" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg>Rendre privée</button>
   </div>
 </div>
 <div class="viewer iv" id="iv" role="dialog" aria-modal="true" aria-label="Images d'entrée">
@@ -740,14 +738,6 @@
   <p class="err" id="puErr" role="alert"></p>
   <button class="btn" id="puGo" onclick="privUnlock()">Entrer</button>
   <div class="links"><button onclick="openPrivSheet('privCodeSheet')">Changer le code</button><button class="danger" onclick="openPrivSheet('privResetSheet')">Supprimer l'espace privé</button></div>
-</section>
-<section class="sheet glass privsheet" id="adoptSheet" role="dialog" aria-modal="true" aria-labelledby="adoptTitle">
-  <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
-  <div class="sheet-head"><h2 id="adoptTitle">Rendre privée</h2></div>
-  <p class="note">L'image, ses images d'entrée et ses réglages seront chiffrés dans l'espace privé, puis effacés de la galerie et du journal. Il n'y a pas de retour en arrière. Les copies déjà faites restent : sauvegardes Time Machine, téléchargements, partages.</p>
-  <label for="paCode">Code privé</label><input class="field" id="paCode" type="password" autocomplete="current-password" enterkeyhint="go">
-  <p class="err" id="paErr" role="alert"></p>
-  <div class="ask-acts"><button class="btn secondary" onclick="closeSheet()">Annuler</button><button class="btn" id="paGo" onclick="adoptImage()">Rendre privée</button></div>
 </section>
 <section class="sheet glass privsheet" id="privCodeSheet" role="dialog" aria-modal="true" aria-labelledby="privCodeTitle">
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
@@ -1109,18 +1099,32 @@ function preload(url){ let e=ready.get(url);
 // keep : laisser l'image d'avant jusqu'à la nouvelle (aperçu suivant de la même génération), même si la nouvelle est
 // illisible ; sans keep, une image illisible est confiée au navigateur (nouvel essai, ou image cassée comme avant).
 // then(ok) : appelée quand la nouvelle image est à l'écran (ok faux : illisible). once : image servie une seule fois
-// (aperçu), qui ne reste pas dans ready.
-function showImage(img, url, {thumb, keep, then, once}={}){
+// (aperçu), qui ne reste pas dans ready. fit : la miniature prend la taille où s'affichera l'image complète (visionneuses :
+// sinon elle s'affiche à ses 320 px, puis l'image saute) ; dims : dimensions de l'image complète, si connues (sinon
+// devinées : une miniature plus petite que THUMB_SIDE est l'image elle-même, une autre vient d'une image plus grande que
+// l'écran).
+function showImage(img, url, {thumb, keep, then, once, fit, dims}={}){
   if(img.want===url && img.getAttribute('src')===url && img.complete && img.naturalWidth){ if(then) then(true); return; }   // déjà là
   img.want=url;                                    // adresse attendue : une image chargée trop tard pour un autre choix est ignorée
   const put=e=>{ if(once && ready.get(url)===e) ready.delete(url);
-    if(img.want!==url) return; if((e.im || !keep) && img.getAttribute('src')!==url) img.src=url; if(then) then(!!e.im); };
+    if(img.want!==url) return; if((e.im || !keep) && img.getAttribute('src')!==url){ img.src=url; unfit(img); }
+    if(then) then(!!e.im); };
   const e=preload(url); if(e.im!==undefined) return put(e);   // déjà prête : tout de suite, sans image vide entre les deux
   if(!keep) img.removeAttribute('src');
-  if(thumb){ const t=preload(thumb), side=()=>{ if(img.want===url && t.im && !img.getAttribute('src')) img.src=thumb; };
+  if(thumb){ const t=preload(thumb), side=()=>{ if(img.want!==url || !t.im || img.getAttribute('src')) return;
+      if(fit){ const tw=t.im.naturalWidth, th=t.im.naturalHeight;   // dimensions inconnues : celles que dit la miniature
+        fitThumb(img, dims || (Math.max(tw, th)<THUMB_SIDE ? [tw, th] : [tw*1e3, th*1e3])); }   // plus petite : l'image
+      img.src=thumb; };
     if(t.im!==undefined) side(); else t.p.then(side); }
   e.p.then(()=>put(e)); }
-function clearImage(img){ img.want=null; img.removeAttribute('src'); }
+function clearImage(img){ img.want=null; img.removeAttribute('src'); unfit(img); }
+// miniature affichée à la taille de l'image complète de dimensions [w, h] dans la scène de la visionneuse : sa forme, et
+// la plus petite largeur entre la sienne, celle de la scène et celle que permet la hauteur de la scène. Taille en unités
+// de la scène (cqw, cqh) : recalculée par le navigateur quand la scène change (panneau, rotation).
+function fitThumb(img, [w, h]){ img.style.aspectRatio=`${w} / ${h}`; img.style.height='auto';
+  img.style.width=`min(${w}px, 100cqw, ${(w/h*100).toFixed(3)}cqh)`; }
+function unfit(img){ img.style.width=img.style.height=img.style.aspectRatio=''; }
+const THUMB_SIDE = 320;                           // côté le plus long des miniatures du Mac (thumb_jpeg) : jamais agrandies
 const dropLink = a => { a.removeAttribute('href'); a.removeAttribute('download'); };   // lien de téléchargement retiré
 // aperçus (/api/job/) compris : dans l'espace privé, la page ne montre que ceux des générations privées
 const secretUrl = u => !!u && (u.startsWith('/api/private/') || u.startsWith('/api/job/'));
@@ -1581,7 +1585,7 @@ function openViewer(i, list=vList){
   const it=list[i]; if(!it) return; clearTimeout(vEmpty); vList=list; vIndex=i; resetZoom();
   const v=$('viewer'), img=$('vImg');
   // la miniature en attendant l'image ; une fois l'image là, sa première image d'entrée est chargée en avance
-  showImage(img, srcOf(it), {thumb:thumbOf(it), then:()=>{ if(vList[vIndex]===it && (it.inputs||[]).length) preload(inputUrl(it, it.inputs[0])); }});
+  showImage(img, srcOf(it), {thumb:thumbOf(it), fit:true, dims:it.width && it.height ? [it.width, it.height] : null, then:()=>{ if(vList[vIndex]===it && (it.inputs||[]).length) preload(inputUrl(it, it.inputs[0])); }});
   showImage($('vBg'), thumbOf(it), {keep:true});  // fond flouté : d'une image à l'autre, l'ancien en attendant
   // voisines : leurs miniatures, et l'image complète de celle vers qui l'on avance (mémoire et données du téléphone)
   const n=list.length; [list[(i+1)%n], list[(i+n-1)%n]].forEach(x=>{ if(x!==it) preload(thumbOf(x)); });
@@ -1597,7 +1601,6 @@ function openViewer(i, list=vList){
   $('vKeep').hidden=!(it.lot && it.mode==='t2i' && !it.url && members.length>1);
   $('vLot').hidden=members.length<2; $('vLotOpen').textContent=`Voir le lot (${members.length})`;
   $('vDelete').querySelector('span').textContent = it.url ? 'Effacer' : 'Supprimer';
-  $('vAdopt').hidden=!(privState.exists && !inPrivate() && !it.url && !it.private);   // image de la galerie normale
   if(!v.classList.contains('on')){ v.classList.remove('immersive'); v.classList.add('on'); document.body.style.overflow='hidden'; }
   syncThemeColor();
 }
@@ -1607,7 +1610,7 @@ function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); documen
 // visionneuse fermée : plus rien de l'image vue dans la page cachée (image, prompt, réglages, rang, lot, lien)
 function emptyViewer(){ clearTimeout(vEmpty); vList=[]; clearImage($('vImg')); clearImage($('vBg'));   // fond compris
   $('vImg').alt=$('vCount').textContent=$('vLotOpen').textContent=''; $('vChips').innerHTML=$('vInputs').innerHTML='';
-  $('vInputs').hidden=$('vLot').hidden=$('vKeep').hidden=$('vAdopt').hidden=true; dropLink($('vDl'));
+  $('vInputs').hidden=$('vLot').hidden=$('vKeep').hidden=true; dropLink($('vDl'));
   $('vDelete').querySelector('span').textContent='Supprimer'; }   // « Effacer » dirait qu'elle était incognito
 function stepViewer(d){ if(vIndex<0 || !vList.length) return; vStep=d; openViewer((vIndex+d+vList.length)%vList.length); }
 addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevented) return;
@@ -1697,7 +1700,7 @@ function openInputs(i){ const it=vList[vIndex]; if(!it || !(it.inputs||[]).lengt
 function showInput(i){ if(!ivOwner) return;       // fermée (boutons et gestes pendant le fondu de fermeture)
   const it=ivOwner, n=it.inputs.length; ivIndex=(i+n)%n; const f=it.inputs[ivIndex], thumb=g=>inputUrl(it, g, '&thumb=1&t='+it.time);
   resetInputZoom();
-  showImage($('ivImg'), inputUrl(it, f), {thumb:thumb(f)});   // miniature : celle du bouton de la visionneuse, déjà là
+  showImage($('ivImg'), inputUrl(it, f), {thumb:thumb(f), fit:true});   // miniature : celle du bouton de la visionneuse, déjà là
   if(n>1) [it.inputs[(ivIndex+1)%n], it.inputs[(ivIndex+n-1)%n]].forEach(g=>{ preload(thumb(g)); preload(inputUrl(it, g)); });
   $('ivImg').alt=inputLabel(it, f); $('ivLabel').textContent=inputLabel(it, f);
   $('ivCount').textContent=`${ivIndex+1} / ${n}`; $('iv').classList.toggle('single', n<2);
@@ -1853,8 +1856,8 @@ function openPrivSheet(id){
   // secure ou local absent (serveur pas encore relancé après une mise à jour de cette page) : rien n'est masqué, le
   // serveur reste seul juge
   if(privState.secure===false) return openSheet('privHttpsSheet');
-  ['pcCode','pcCode2','puCode','pkOld','pkNew','pkNew2','prWord','paCode'].forEach(k=>$(k).value='');
-  ['pcErr','puErr','pkErr','prErr','paErr'].forEach(k=>$(k).textContent='');
+  ['pcCode','pcCode2','puCode','pkOld','pkNew','pkNew2','prWord'].forEach(k=>$(k).value='');
+  ['pcErr','puErr','pkErr','prErr'].forEach(k=>$(k).textContent='');
   // supprimer sans le code : sur le Mac lui-même seulement (décision du porteur) ; ailleurs, la feuille le dit
   const local=privState.local!==false;
   $('prMac').hidden=local; $('prForm').hidden=$('prActs').hidden=!local; $('prBack').hidden=local;
@@ -1895,13 +1898,6 @@ document.querySelectorAll('.privsheet input').forEach(inp=>inp.addEventListener(
   if(k<all.length-1) all[k+1].focus(); else inp.closest('.privsheet').querySelector('.btn:not(.secondary)').click(); }));
 // page fermée ou rechargée : l'espace se verrouille (la session de cet appareil est fermée sur le Mac)
 addEventListener('pagehide', ()=>{ if(privState.unlocked) fetch('/api/private/lock', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}', keepalive:true}).catch(()=>{}); });
-// « Rendre privée » (visionneuse de la galerie normale) : le code est vérifié par le Mac, qui chiffre l'image avec la clé
-// publique de l'espace et l'efface de la galerie et du journal, sans faire entrer dans l'espace (décision du porteur)
-let adoptItem=null;
-function openAdopt(){ adoptItem=vList[vIndex]; if(adoptItem) openPrivSheet('adoptSheet'); }
-async function adoptImage(){ const it=adoptItem; if(!it || !$('paCode').value) return;
-  if(!await privPost('/api/private/adopt', {name:it.name, code:$('paCode').value}, $('paGo'), 'paErr')) return $('paCode').select();
-  closeSheet(); toast('Image rendue privée'); log('image rendue privée'); forgetResult(it.name); removeFromViewer([it]); }
 // application installable sur le téléphone (le navigateur n'accepte le service worker qu'en HTTPS ou sur le Mac)
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 </script>

@@ -15,12 +15,11 @@ Mis à jour le 16/10/2026.
   (41 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
-- **En cours** : livraison de la correction de la fuite et des glitchs d'affichage des images (affichage par
-  `showImage`, rien de privé dans la page après la sortie, zoom et chargement anticipé des images d'entrée) et de la
-  rétrospective qui a suivi (contrôles de `check.py`, test d'étanchéité, relais des tests, version dans le panneau
-  Moteur) : PR de `dev` vers `main`, puis `git pull --ff-only` dans le dossier principal et relance du service
-  (`tools/launch.py` a changé), puis essais sur le téléphone. Le parcours « Cloisonnement espace privé, file et
-  saisie » est livré (PR #4).
+- **En cours** : livraison de la miniature des visionneuses à la taille de l'image complète et du retrait de
+  « Rendre privée » (`1664321`, `fd94cbd`) : PR de `dev` vers `main`, `git pull --ff-only` dans le dossier principal,
+  relance du service (`tools/launch.py` a changé), puis essai sur le téléphone de l'arrivée des images d'entrée
+  privées. Livrés avant : la correction de la fuite et des glitchs d'affichage et la rétrospective qui a suivi (PR #5,
+  essais du porteur bons), le parcours « Cloisonnement espace privé, file et saisie » (PR #4).
 - **Fait avant** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
   prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), découpée en 13 tickets Asana (liste et ordre dans
   `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types validée par le porteur. Groupes A (banc, robustesse, file visible, incognito dans la file) et
@@ -40,7 +39,7 @@ Mis à jour le 16/10/2026.
   - la feuille des prompts (bouton « Prompts » sous le champ de texte) ;
   - l'espace privé : entrée par le cadenas de la Galerie, thème, sortie, verrouillage à la fermeture (inconstant dans
     Chrome sans écran ; l'expiration après 15 min reste le filet), cookie `SameSite=Strict` avec l'application
-    installée, « Rendre privée » ;
+    installée ;
   - après la livraison du parcours des espaces étanches : plusieurs photos d'un coup avec le sélecteur Google Photos,
     vidage après « Générer », saisie propre à chaque espace, message quand l'espace se ferme seul, file sans les
     générations de l'autre espace, génération privée retrouvée après un rechargement (cas « page rechargée espace
@@ -80,6 +79,14 @@ Mis à jour le 16/10/2026.
 ## Journal
 
 ### 2026-10-16
+
+- Après la livraison (PR #5, `abbb3ec`, service relancé), essais du porteur sur le téléphone : version servie, plus de
+  fuite des images d'entrée ni de la galerie privée, zoom des images d'entrée : bons. Restait un saut des images
+  d'entrée privées à leur arrivée : la miniature (320 px) s'affichait à sa taille avant l'image complète ; elle prend
+  maintenant la taille de l'image complète, en unités de la scène pour suivre le panneau et la rotation (`showImage`,
+  `fit`, `fitThumb` ; revue : une première version en pixels figés déformait la miniature), tests ajoutés. « Rendre
+  privée » retiré à la demande du porteur (bouton, feuille, route `/api/private/adopt`, `adopt_output`,
+  `drop_from_journal`, `tests/test_adopt.py`) : une image reste dans son espace (`DECISIONS.md`).
 
 - Rétrospective de la session (fuite et affichage des images), appliquée en entier à la demande du porteur :
   `check.py` contrôle aussi les fichiers nouveaux pas encore ajoutés à git et refuse une adresse donnée à la main à une

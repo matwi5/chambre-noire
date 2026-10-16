@@ -122,6 +122,13 @@ class PrivateSpaceTest(bench.PrivateFilesCheck, bench.BenchCase):
             self.assertEqual(call("POST", "/api/private/create", {"code": CODE})[0], 503)
             self.assertEqual(call("POST", "/api/private/unlock", {"code": CODE})[0], 503)
 
+    def test_an_image_stays_in_its_space(self):
+        """« Rendre privée » retiré (porteur, 16/10/2026) : la route n'existe plus, l'image publique reste publique."""
+        bench.create_private(CODE)
+        name = bench.wait_job(bench.generate("an image that stays public")["id"])["name"]
+        self.assertEqual(call("POST", "/api/private/adopt", {"name": name, "code": CODE})[0], 404)
+        self.assertIn(name, [it["name"] for it in call("GET", "/api/history")[1]])
+
 
 if __name__ == "__main__":
     unittest.main()

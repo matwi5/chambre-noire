@@ -5,7 +5,7 @@
 //   node --test tests/ui/images.test.mjs   (ou : venv/bin/python tests/check.py --ui tests/ui/images.test.mjs)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, PHONE } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -213,5 +213,56 @@ test('zone de résultat : son image retirée, son lien de téléchargement part 
     showResult(h[0].name, 512, 512); show(null);   // comme une image supprimée ou effacée : zone vidée
     return { href: $('dl').hasAttribute('href'), name: $('dl').hasAttribute('download') }; })`);
   assert.deepEqual(kept, { href: false, name: false }, 'lien vers l\'image retirée resté dans la page');
+  page.assertNoErrors();
+});
+
+// une édition dont la référence fait w×h, puis ses images d'entrée ouvertes en retenant l'image complète (jamais
+// demandée : rien dans les images de la page) : renvoie [taille de la miniature, taille de l'image complète], hors
+// animation d'ouverture ; during() : appelé pendant que la miniature est seule à l'écran
+async function inputSizes(prompt, w, h, during) {
+  assert.equal(await page.eval(`postJson('/api/generate', { mode: 'edit', prompt: ${JSON.stringify(prompt)},
+    width: 512, height: 512, steps: 2, cfg: 1, seed: -1, preview: false, ref_images: [(() => {
+      const c = document.createElement('canvas'); c.width = ${w}; c.height = ${h}; const x = c.getContext('2d');
+      x.fillStyle = '#3080a0'; x.fillRect(0, 0, ${w}, ${h}); return c.toDataURL('image/png'); })()] })
+    .then(r => r.status)`),
+  202);
+  await idle();
+  await page.eval(`goTab('t2i'); goTab('hist')`);
+  const index = `histItems.findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
+  await page.waitFor(`${index} >= 0`, { what: 'image dans la galerie' });
+  const held = [], hold = p => held.push(p.requestId);
+  page.on('Fetch.requestPaused', hold);
+  await page.send('Fetch.enable',
+    { patterns: [{ urlPattern: '*/api/input?*file=ref_1.png', requestStage: 'Request' }] });
+  await page.eval(`openViewer(${index}, histItems); openInputs(0)`);
+  await page.waitFor(`$('ivImg').src.includes('thumb=1') && $('ivImg').complete && $('ivImg').naturalWidth > 0`,
+    { what: 'miniature affichée' });
+  const size = `[$('ivImg').offsetWidth, $('ivImg').offsetHeight]`;
+  if (during) await during();
+  const thumb = await page.eval(size);
+  await waitUntil(() => held.length > 0, { what: 'image complète demandée' });
+  for (const requestId of held.splice(0)) await page.send('Fetch.continueRequest', { requestId });
+  await page.send('Fetch.disable');
+  await page.waitFor(`!$('ivImg').src.includes('thumb=1') && $('ivImg').complete && $('ivImg').naturalWidth > 0`,
+    { what: 'image complète affichée' });
+  const full = await page.eval(size);
+  await page.eval(`closeInputs(); closeViewer()`);
+  return [thumb, full];
+}
+const near = (a, b) => Math.abs(a[0] - b[0]) <= 2 && Math.abs(a[1] - b[1]) <= 2;
+
+test('images d\'entrée : la miniature a la taille de l\'image complète (grande, petite, après rotation)', async () => {
+  await page.waitFor(`!inPrivate()`, { what: 'espace public' });
+  const [bigThumb, big] = await inputSizes('zq9 grande', 1200, 900);   // plus grande que la miniature et l'écran
+  assert.ok(near(bigThumb, big), `grande photo : miniature ${bigThumb} au lieu de ${big}`);
+  const [smallThumb, small] = await inputSizes('zq9 petite', 200, 150);   // plus petite : jamais agrandie
+  assert.ok(near(smallThumb, small), `petite photo : miniature ${smallThumb} au lieu de ${small}`);
+  // téléphone tourné pendant que la miniature attend son image : elle garde sa forme (4/3)
+  const turned = await inputSizes('zq9 tournée', 1200, 900, () => page.send('Emulation.setDeviceMetricsOverride',
+    { ...PHONE, width: PHONE.height, height: PHONE.width }));
+  await page.send('Emulation.setDeviceMetricsOverride', PHONE);
+  const [t] = turned;
+  assert.ok(Math.abs(t[0] / t[1] - 4 / 3) < 0.03, `miniature déformée après rotation : ${t}`);
+  assert.ok(near(...turned), `après rotation : miniature ${turned[0]} au lieu de ${turned[1]}`);
   page.assertNoErrors();
 });

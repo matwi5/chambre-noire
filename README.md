@@ -411,7 +411,7 @@ du Mac, ne suffit pas pour voir les images privées.
   à côté du bouton Rafraîchir et aussi visible que lui : la première fois, il crée l'espace (code de 8 caractères au moins, lettres, chiffres, signes ;
   majuscules et minuscules comptent ; saisi deux fois).
 - **En HTTPS ou sur le Mac seulement** : l'espace privé ne s'ouvre (création, entrée, galerie privée, Changer le
-  code, Rendre privée) que sur le Mac lui-même ou par l'adresse HTTPS de Tailscale (celle en `https://` du panneau
+  code) que sur le Mac lui-même ou par l'adresse HTTPS de Tailscale (celle en `https://` du panneau
   Téléphone). Par l'adresse `http://` du Wi-Fi, le code et les images passeraient en clair sur le réseau : le cadenas
   le dit et ne demande pas le code. Le téléphone doit donc passer par l'adresse HTTPS, ce qu'il fait déjà s'il a
   installé l'application depuis elle.
@@ -457,12 +457,8 @@ du Mac, ne suffit pas pour voir les images privées.
   depuis un autre appareil), le champ en cours de saisie perd le curseur et un message dit « Espace privé fermé :
   retour dans l'espace public », pour que la suite de la frappe ne parte pas dans la saisie publique sans qu'on le
   voie ; rien de tel après « Sortir ».
-- **Rendre privée** : dans la visionneuse de la galerie normale, une fois l'espace créé, ce petit bouton demande le
-  code privé, chiffre l'image, ses images d'entrée et ses réglages dans l'espace privé, puis l'efface de la galerie,
-  de ses miniatures, du journal des générations et du dossier de travail, sans faire entrer dans l'espace. Il n'y a
-  pas de chemin inverse (on télécharge l'image depuis l'espace privé). Les copies déjà faites restent : sauvegardes
-  Time Machine, téléchargements, partages, et, faites à sa génération, la ligne du journal du serveur (`logs\`, nom du
-  fichier et durée, sans le prompt) et sa mesure de calibration (dimensions et durées).
+- **Une image reste dans son espace** : une image publique ne devient pas privée, ni l'inverse (le bouton « Rendre
+  privée » a été retiré le 16/10/2026). Pour garder une image en privé, on la génère dans l'espace privé.
 - **Prompts enregistrés privés** : dans l'espace privé, le bouton **Prompts** montre les prompts enregistrés de
   l'espace privé et les prompts types, jamais ceux de l'espace public (et inversement). Ils se créent, s'utilisent, se
   modifient, se suppriment et se filtrent comme les autres, et **Dupliquer** un prompt type en fait un prompt privé.
@@ -766,11 +762,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `POST /api/private/delete {"id"}` ; prompts enregistrés de l'espace privé, session exigée (403 sinon) et
   prolongée, mêmes champs, mêmes limites et mêmes réponses que `/api/prompts` : `GET /api/private/prompts` (avec les
   mêmes `types`), `POST /api/private/prompts`, `POST /api/private/prompts/delete`, `POST /api/private/prompts/used`
-  (500 si `private/prompts` est illisible, sans l'écraser) ; « Rendre privée » :
-  `POST /api/private/adopt {"name": <png de outputs/>, "code"}` (sans session : le code est vérifié, 403 après une seconde s'il est faux, 404 pour une image ou un espace inconnu,
-  409 pendant la fin de sa génération ; en cas d'échec, l'original reste entier et rien n'est rangé),
-  qui répond l'`id` de l'image dans l'espace privé et retire l'image, ses miniatures, ses entrées et sa ligne de
-  `outputs/journal.jsonl` (réécrit sous le verrou de l'écriture de fin de génération).
+  (500 si `private/prompts` est illisible, sans l'écraser).
 - `POST /api/prompts` refuse (400) un titre ou un texte vide ou qui n'est pas un texte, un titre de plus de 80
   caractères, un texte de plus de 4 000, un `usage` inconnu à la création, et une création au-delà de 500 prompts.
   `tools/saved_prompts.json` est écrit dans un fichier temporaire renommé ensuite : il n'est jamais à moitié écrit. Un

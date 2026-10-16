@@ -45,10 +45,9 @@ Dans l'ordre du fichier :
   `finish_rekey` (termine ou abandonne un changement interrompu, au démarrage et sous `PRIVATE_LOCK` avant toute
   ouverture ou écriture) ; `private_code_error`.
 - **Galerie et journal** : `input_files`, `save_inputs` (entrées copiées vers `outputs/.inputs/<image>/`),
-  `output_path`, `JOURNAL_LOCK`, `journal_entries`, `append_journal` (fin de génération), `write_journal`,
-  `drop_from_journal` (« Rendre privée »), `delete_output` et `delete_extras` (image et tout ce qui s'y rattache),
-  `read_inputs`, `adopt_output` (« Rendre privée »), `history()` (PNG de `outputs/` croisés avec le journal),
-  `thumb_jpeg`, `thumbnail` (`outputs/.thumbs/`).
+  `output_path`, `JOURNAL_LOCK`, `journal_entries`, `append_journal` (fin de génération), `delete_output` et
+  `delete_extras` (image et tout ce qui s'y rattache), `read_inputs`, `history()` (PNG de `outputs/` croisés avec le
+  journal), `thumb_jpeg`, `thumbnail` (`outputs/.thumbs/`).
 - **État** : `class State`, instance `S` (moteur, modèle, générations en mémoire `S.jobs`, file `S.q`, lots `S.lots`,
   génération en cours `S.current`, sessions privées `S.private_sessions`, noms `S.lan_hosts` et `S.https_hosts`).
 - **Préparer et lancer une génération** : `data_url_bytes`, `write_data_url`, `image_size`, `build_cmd` (ligne de
@@ -95,7 +94,7 @@ dernier bloc, après le HTML.
   `#composer` (prompts `#t2i_prompt`, `#edit_prompt`, `#mask_prompt`, bouton `#go`) ; zone de résultat `#result` ;
   barre d'onglets `#tabbar` ; visionneuse `#viewer` (`#vKeep` : « Garder celle-ci ») ; images d'entrée `#iv` ;
   feuilles `.sheet` : `#askSheet`, `#setSheet`, `#engineSheet`, `#lotSheet`, `#queueSheet`, `#promptSheet`,
-  `#promptEditSheet` et celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`, `#adoptSheet`…).
+  `#promptEditSheet` et celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`, `#privCodeSheet`…).
 - **JavaScript**, sections dans l'ordre :
   - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
     privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
@@ -111,13 +110,14 @@ dernier bloc, après le HTML.
     `#askSheet`, jamais `confirm()`).
   - « affichage des images » : `showImage` (toute image qui change d'adresse : vidée, puis remplie une fois l'image
     chargée et décodée à part, miniature d'abord ; `img.want` : adresse attendue, une image arrivée trop tard est
-    ignorée ; `keep` : l'aperçu d'avant reste jusqu'au suivant ; `once` : aperçu servi une fois), `preload` et `ready`
-    (les 10 dernières images décodées : miniatures des voisines de la visionneuse, image complète de la suivante dans le
-    sens du parcours `vStep`, première image d'entrée ; une image incognito en sort à son oubli), `clearImage`,
-    `forgetPrivateImages` (sortie de l'espace privé : images privées et aperçus affichés, attendus ou chargés en avance,
-    chargements en cours abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne jamais réaffecter
-    `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement de la nouvelle
-    (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
+    ignorée ; `keep` : l'aperçu d'avant reste jusqu'au suivant ; `once` : aperçu servi une fois ; `fit`, `dims` :
+    miniature des visionneuses à la taille de l'image complète, par `fitThumb`, en unités de la scène `cqw`, `cqh`),
+    `preload` et `ready` (les 10 dernières images décodées : miniatures des voisines de la visionneuse, image complète
+    de la suivante dans le sens du parcours `vStep`, première image d'entrée ; une image incognito en sort à son oubli),
+    `clearImage`, `forgetPrivateImages` (sortie de l'espace privé : images privées et aperçus affichés, attendus ou
+    chargés en avance, chargements en cours abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne
+    jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
+    de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
   - « générations de la page, zone de résultat, île et file » : `pageJobs` (générations lancées par cette page),
     `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `lotOf`, `gridOf`, `show`,
     `showGrid`, `renderStrip`, `renderIsland`, `onIsland` (file non vide : `#queueSheet`, sinon `#engineSheet`),
@@ -142,7 +142,7 @@ dernier bloc, après le HTML.
     `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,
     `putInput`, `swapInput`, `emptyTab` (vidage après « Générer », dans l'espace d'où la demande est partie) ; un ajout
     d'image asynchrone (Éditer, Dessiner) va dans la saisie de l'espace où il a commencé. `openPrivSheet`,
-    `privCreate`, `privUnlock`, `privLock`, `privChangeCode`, `privReset`, `adoptImage`.
+    `privCreate`, `privUnlock`, `privLock`, `privChangeCode`, `privReset`.
 
 Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
 « Dessiner », « Reprendre » (reprend le texte du prompt) et « Supprimer » → `viewerAction('edit' | 'mask' | 'prompt'
@@ -169,13 +169,12 @@ invariants ».
   survivent pas à un redémarrage.
 - **Fichiers** : dossier de travail `jobs/<id>/` (images d'entrée, aperçus, `sd-cli.log` ; les 20 derniers gardés au
   lancement), image finale `outputs/<id>_<mode>.png`, une ligne par image dans `outputs/journal.jsonl`. La galerie
-  (`/api/history`) est la liste des PNG de `outputs/` croisée avec le journal ; miniatures dans `outputs/.thumbs/`.
-  Les images d'entrée (`init.png`, `ref_N.png`) sont copiées du dossier de travail vers `outputs/.inputs/<image>/` en
-  fin de job (`save_inputs`, et au démarrage pour les dossiers encore présents) ; `/api/delete` les supprime avec
-  l'image (`delete_output`). Toute écriture du journal passe sous `JOURNAL_LOCK` : l'ajout de fin de génération
-  (`append_journal`) et la réécriture de « Rendre privée » (`drop_from_journal`, qui retire la ligne d'une image).
-  Une génération annulée (en cours ou en file) ne laisse rien : `discard_cancelled` supprime son dossier de travail et
-  une image finale déjà écrite. Le statut `cancelled` est posé avant que le moteur soit arrêté.
+  (`/api/history`) est la liste des PNG de `outputs/` croisée avec le journal ; miniatures dans `outputs/.thumbs/`. Les
+  images d'entrée (`init.png`, `ref_N.png`) sont copiées du dossier de travail vers `outputs/.inputs/<image>/` en fin de
+  job (`save_inputs`, et au démarrage pour les dossiers encore présents) ; `/api/delete` les supprime avec l'image
+  (`delete_output`). Toute écriture du journal passe sous `JOURNAL_LOCK` (`append_journal`, en fin de génération). Une
+  génération annulée (en cours ou en file) ne laisse rien : `discard_cancelled` supprime son dossier de travail et une
+  image finale déjà écrite. Le statut `cancelled` est posé avant que le moteur soit arrêté.
 - **Lots** (variantes : `count` de 2 à 4, mode Créer ; campagne : `campaign`, 2 à 10 photos avec leurs dimensions,
   mode Éditer) : `expand_request` en tire une demande par image, `/api/generate` une génération par demande
   (`new_job`), reliées par `job["lot"]` (`id`, `rank`, `size`) et gardées dans `S.lots` même quand une génération
