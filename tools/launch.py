@@ -54,10 +54,14 @@ import estimate
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 P = lambda *a: os.path.join(ROOT, *a)
 CONFIG = P("tools", "config.json")
-DIFFUSION = {   # versions du modèle de diffusion installables par setup.py (q8 : option --q8)
-    "q4": P("models", "diffusion_models", "qwen-image-2.1-UC-Q4_K_M.gguf"),
-    "q8": P("models", "diffusion_models", "qwen-image-2.1-UC-Q8_0.gguf"),
+CONFIG_LOCAL = P("tools", "config.local.json")   # réglages propres à la machine, non suivis, lus par-dessus CONFIG
+DIFFUSION = {   # versions du modèle de diffusion installables par setup.py (voir SETUP_FLAGS)
+    "q4": P("models", "diffusion_models", "qwen-image-2.1-Q4_K_M.gguf"),
+    "q8": P("models", "diffusion_models", "qwen-image-2.1-Q8_0.gguf"),
+    "uc-q4": P("models", "diffusion_models", "qwen-image-2.1-UC-Q4_K_M.gguf"),   # variante communautaire, en option
+    "uc-q8": P("models", "diffusion_models", "qwen-image-2.1-UC-Q8_0.gguf"),
 }
+SETUP_FLAGS = {"q4": "", "q8": "--q8", "uc-q4": "--uc", "uc-q8": "--uc --q8"}   # options de setup.py par version
 MODELS = {
     "diffusion": DIFFUSION["q4"],   # remplacé au démarrage selon --model
     "vae": P("models", "vae", "qwen_image_2.1_vae_bf16.safetensors"),
@@ -111,8 +115,10 @@ def record_calib(job):
 
 def load_config():
     cfg = {"backend": "vulkan", "ui_port": 7860, "cfg_scale": 1.0, "extra_args": []}
-    if os.path.exists(CONFIG):
-        cfg.update(json.load(open(CONFIG, encoding="utf-8")))
+    for path in (CONFIG, CONFIG_LOCAL):
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                cfg.update(json.load(f))
     return cfg
 
 
@@ -2098,7 +2104,8 @@ def setup_state(cfg, backend, model):
     """Fixe le moteur et le modèle (repli si l'un n'est pas installé) et charge la calibration ; sort si sd-cli manque."""
     S.cfg = cfg
     if not os.path.exists(DIFFUSION[model]) and model != "q4":
-        print(f"[launch] modèle {model} absent (setup.py --{model} pour l'installer), repli sur q4", flush=True)
+        print(f"[launch] modèle {model} absent (setup.py {SETUP_FLAGS[model]} pour l'installer), repli sur q4",
+              flush=True)
         model = "q4"
     if not os.path.exists(P("sdcpp", backend, EXE)) and backend != PLATFORM_BACKENDS[0]:
         print(f"[launch] moteur {backend} absent (setup.py --{backend} pour l'installer), repli sur {PLATFORM_BACKENDS[0]}", flush=True)
@@ -2118,7 +2125,8 @@ def main():
     ap.add_argument("--port", type=int, default=cfg["ui_port"])
     ap.add_argument("--backend", choices=PLATFORM_BACKENDS, default=default_backend(cfg))
     ap.add_argument("--model", choices=list(DIFFUSION), default=cfg.get("model", "q4"),
-                    help="q4 (Q4_K_M, par défaut) ou q8 (Q8_0, plus fidèle, installé par setup.py --q8)")
+                    help="q4 (Q4_K_M, par défaut), q8 (Q8_0, plus fidèle, setup.py --q8) ; uc-q4, uc-q8 : variante "
+                         "communautaire (setup.py --uc)")
     ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--lan", action="store_true", default=bool(cfg.get("lan")),
                     help="accessible aussi depuis le Wi-Fi (téléphone), avec un code d'accès ; Mac maintenu éveillé")

@@ -61,6 +61,7 @@ def start():
     _cleanup_on_sigterm(root)
     launch.ROOT = root                              # P() lit ROOT à chaque appel ; les chemins figés à l'import suivent
     launch.CONFIG, launch.CALIB = launch.P("tools", "config.json"), launch.P("tools", "calibration.json")
+    launch.CONFIG_LOCAL = launch.P("tools", "config.local.json")
     launch.THUMBS, launch.INPUTS = launch.P("outputs", ".thumbs"), launch.P("outputs", ".inputs")
     launch.PUSH_KEY, launch.PUSH_SUBS = launch.P("tools", "push_vapid.pem"), launch.P("tools", "push_subscriptions.json")
     launch.ACCESS_FILE = launch.P("tools", "access_code.txt")
