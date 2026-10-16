@@ -89,7 +89,10 @@ Mis à jour le 16/10/2026.
   d'une image privée supprimée (ses lignes écrites dans l'espace en sortent maintenant avec lui). Revue de ces commits
   (sous-agent Opus, effort xhigh) : ligne du journal rattachée à l'espace où l'action a commencé, « rendue privée »
   sans nom d'image, git appelé seulement dans un dépôt et jamais après un échec (Mac sans outils de développement),
-  « à relancer » seulement quand `tools/launch.py` a changé, délai maximal du relais.
+  « à relancer » seulement quand `tools/launch.py` a changé, délai maximal du relais (`2361c10`) ; puis, après la revue
+  de ce commit : une ligne privée finie hors de l'espace n'entre plus du tout au journal, les lignes de la demande et
+  de fin de génération portent leur espace, l'empreinte compte aussi `estimate.py`, un délai dépassé de git est
+  retenté, test d'étanchéité sur le nombre exact d'images.
 
 - Retours du porteur sur le téléphone, qui tourne encore sur `main` (sans `d3169f8`) : image d'entrée privée revue un
   instant dans l'espace public, et galerie privée revue un instant en revenant à la galerie publique après une sortie

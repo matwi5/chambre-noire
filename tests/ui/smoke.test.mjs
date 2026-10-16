@@ -63,7 +63,7 @@ test('panneau Moteur : version du code servi, et serveur à relancer quand launc
     same: staleServer({ version: { commit: 'b2', server: 'f1' }, server_version: { commit: 'a1', server: 'f1' } }),
     stale: staleServer({ version: { commit: 'abc1234', server: 'f2' },
       server_version: { commit: 'def5678', server: 'f1' } }) })`);
-  assert.deepEqual(shown,
-    { v: 'abc1234 · main · 16/10/2026', none: '', same: '', stale: 'lancé sur def5678 : à relancer' });
+  assert.deepEqual(shown, { v: 'abc1234 · main · 16/10/2026', none: '', same: '',
+    stale: 'à relancer : son code a changé depuis son lancement' });
   page.assertNoErrors();
 });

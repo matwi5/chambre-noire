@@ -20,8 +20,9 @@ Dans l'ordre du fichier :
   (options de sd-cli par moteur, réglages Metal justifiés en commentaire), `PLATFORM_BACKENDS`, `PROGRESS_RE` et
   `TAKING_RE` (lecture de la sortie de sd-cli), `MAX_VARIANTS`, `MAX_CAMPAIGN`, `INCOGNITO_TTL`, `PAGE_TOKEN_RE`.
   `record_calib`, `load_config`, `code_version` (commit, date et branche du dossier servi, empreinte `server`
-  de `launch.py`, relus toutes les `VERSION_TTL` s ; git seulement s'il y a un `.git`, jamais après un échec ;
-  `S.started` : la même chose au lancement, posé par `main()`), `engine_tag`, `default_backend`.
+  de `launch.py` et `estimate.py`, relus toutes les `VERSION_TTL` s ; git seulement s'il y a un `.git`, jamais après un
+  échec, sauf un délai dépassé ; `S.started` : la même chose au lancement, posé par `main()`), `engine_tag`,
+  `default_backend`.
 - **Accès** : `ACCESS_FILE`, `ACCESS_COOKIE`, `LOCAL_CLIENTS`, `PUBLIC_FILES` (manifeste, icônes, service worker,
   servis sans cookie), `LOGIN_PAGE`. Plus bas : `normalize_code`, `access_token`, `load_access_code`, `lan_address`,
   `tailscale_hosts`, `tailscale_serve_url`.

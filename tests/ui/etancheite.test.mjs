@@ -10,7 +10,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome } from './driver.mjs';
 
-let bench, chrome, page;
+let bench, chrome, page, kept;                     // kept : images privées que le premier test laisse
 
 before(async () => {
   bench = await startBench();
@@ -104,6 +104,7 @@ const scan = (markers, aside) => page.eval(`((m) => {
 test('« Sortir » : plus rien de l\'espace privé dans la page', async () => {
   await enter();
   const markers = await privateTour();
+  kept = await page.eval(`histItems.length`);
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.deepEqual(await scan(markers, true), [], 'données privées restées dans la page');
@@ -113,7 +114,7 @@ test('« Sortir » : plus rien de l\'espace privé dans la page', async () => {
 test('fermeture par le Mac : plus rien de l\'espace privé dans la page (hors saisie mise de côté)', async () => {
   await enter();
   await page.click('#tabbar [data-pane="hist"]');
-  await page.waitFor(`histItems.length > 0 && histItems.every(it => it.private)`, { what: 'galerie privée' });
+  await page.waitFor(`histItems.length === ${kept} && histItems.every(it => it.private)`, { what: 'galerie privée' });
   const markers = [...new Set([...await page.eval(`histItems.map(it => it.id)`), ...WORDS, '/api/private/', 'prive_'])];
   await page.eval(`openViewer(histItems.findIndex(it => it.inputs.length), histItems); openInputs(0); openPrompts()`);
   await page.waitFor(`$('ivImg').complete && $('ivImg').naturalWidth > 0`, { what: 'image d\'entrée privée' });
