@@ -75,7 +75,9 @@ distincts) ; suivi de fichiers, il ne lance que ceux-là. Un avis « zone sensib
   `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `tests/ui/*.test.mjs` : chaque
   fichier dit en tête ce qu'il couvre ; `page.setFiles` remplit un champ de fichiers. Une vérification d'interface
   nouvelle y devient un test plutôt qu'un script jetable. Une vue plus grande cache des débordements : regarder
-  aussi les captures (`page.screenshot`).
+  aussi les captures (`page.screenshot`). Un bug vu sur le téléphone seulement se rejoue par
+  `startBench({ relay: true })` puis `bench.login(page)` : l'interface passe par `tests/ui/relay.py`, comme par
+  `tailscale serve` (nom HTTPS, en-têtes de relais, code d'accès).
 - **Sonde** : `node tests/ui/probe.mjs [--width N] [--shot f.png] [--private] --eval '<expression>'` (ou
   `--script f.mjs`) lance le banc et Chrome par le pilote, évalue dans la vue du téléphone, imprime et ferme tout :
   une vérification ponctuelle passe par elle, pas par un script jetable.

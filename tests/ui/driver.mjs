@@ -7,6 +7,8 @@
 //   await page.goto(bench.url + '/'); await page.waitFor(`$('status').className==='ok'`);
 //   …; page.assertNoErrors(); await chrome.close(); await bench.stop();
 //   bench.release('nom')                         // libère les générations HOLD=nom du faux moteur
+//   const bench = await startBench({ relay: true }); await bench.login(page);   // comme le téléphone par Tailscale :
+//                                                // bench.url passe par tests/ui/relay.py (adresse HTTPS relayée)
 //
 // Variables d'environnement : CHROME (chemin de Chrome), PYTHON (Python du banc ; défaut : venv/ du dépôt, sinon
 // celui du dossier principal quand on est dans un worktree, sinon python3).
@@ -46,28 +48,43 @@ function python() {
   return found || 'python3';
 }
 
-// serveur du banc dans un processus Python à part ; stop() ferme son entrée standard, il s'arrête et fait le ménage
-export async function startBench() {
-  const proc = spawn(python(), [path.join(HERE, 'serve.py')], { cwd: ROOT, stdio: ['pipe', 'pipe', 'inherit'] });
+// processus Python à part, qui écrit une ligne au démarrage et s'arrête à la fermeture de son entrée standard
+async function startPython(script, args, what) {
+  const proc = spawn(python(), [path.join(HERE, script), ...args], { cwd: ROOT, stdio: ['pipe', 'pipe', 'inherit'] });
   const killer = () => proc.kill();
   process.on('exit', killer);
   const first = await new Promise((resolve, reject) => {
     const rl = readline.createInterface({ input: proc.stdout });
     rl.once('line', line => resolve(line));
-    proc.once('exit', code => reject(new Error(`serveur du banc arrêté au démarrage (code ${code})`)));
+    proc.once('exit', code => reject(new Error(`${what} arrêté au démarrage (code ${code})`)));
   });
-  const { url, hold } = JSON.parse(first);
+  async function stop() {
+    process.off('exit', killer);
+    if (proc.exitCode !== null) return;
+    const gone = new Promise(r => proc.once('exit', r));
+    proc.stdin.end();
+    await Promise.race([gone, pause(10000).then(() => proc.kill())]);
+  }
+  return { first, stop };
+}
+
+// serveur du banc ; relay : l'interface passe par tests/ui/relay.py, comme le téléphone par « tailscale serve »
+// (nom HTTPS, en-têtes de relais : le serveur demande le code d'accès, bench.login(page)). stop() arrête tout.
+export async function startBench({ relay = false } = {}) {
+  const server = await startPython('serve.py', [], 'serveur du banc');
+  const { url: direct, hold, https, cookie } = JSON.parse(server.first);
+  const relayed = relay ? await startPython('relay.py', [direct, https], 'relais du banc') : null;
+  const url = relayed ? `http://127.0.0.1:${relayed.first.trim()}` : direct;
   return {
-    url,
+    url, direct,
+    // par le relais : le cookie du code d'accès (celui que pose la saisie du code), puis l'interface ouverte
+    async login(page) {
+      await page.send('Network.setCookie', { ...cookie, url, httpOnly: true, sameSite: 'Lax' });
+      await page.goto(url + '/');
+    },
     // libère les générations dont le prompt porte HOLD=<name> (HOLD seul : 'hold') ; voir tests/fake_sdcli.py
     release(name = 'hold') { fs.writeFileSync(path.join(hold, name), ''); },
-    async stop() {
-      process.off('exit', killer);
-      if (proc.exitCode !== null) return;
-      const gone = new Promise(r => proc.once('exit', r));
-      proc.stdin.end();
-      await Promise.race([gone, pause(10000).then(() => proc.kill())]);
-    },
+    async stop() { await relayed?.stop(); await server.stop(); },
   };
 }
 
