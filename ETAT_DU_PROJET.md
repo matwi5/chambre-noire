@@ -79,6 +79,14 @@ Mis à jour le 16/10/2026.
 
 ### 2026-10-16
 
+- Retours du porteur sur le téléphone, qui tourne encore sur `main` (sans `d3169f8`) : image d'entrée privée revue un
+  instant dans l'espace public, et galerie privée revue un instant en revenant à la galerie publique après une sortie
+  faite depuis un autre onglet (même cause que la fuite : la grille gardait ses images, corrigée par `d3169f8`, test
+  ajouté, rouge sur `main`). Ajouté : zoom au pincement (et à la molette) sur les images d'entrée, par les gestes de la
+  visionneuse mis en commun (`zoomable`) ; première image d'entrée chargée en avance dès l'image affichée, pour
+  qu'elle s'ouvre sans attente. Aperçus privés : le Mac écrit bien `preview_000.png` pendant une génération privée
+  (observé dans son dossier de travail) et le porteur les a vus s'afficher à ce dernier essai ; problème non reproduit,
+  laissé ouvert s'il revient.
 - Fuite de l'espace privé à l'écran corrigée (signalée par le porteur) : une `<img>` qui reçoit une autre adresse garde
   l'image d'avant à l'écran jusqu'au chargement de la nouvelle, donc l'image d'entrée privée vue avant réapparaissait
   un instant dans l'espace public (et les « glitchs » entre deux images). Toute image passe désormais par

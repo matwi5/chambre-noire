@@ -1085,21 +1085,25 @@ function answer(v){ const r=askResolve; askResolve=null; closeSheet(); if(r) r(v
 // l'image chargée et décodée à part (Chrome la sert alors aussitôt depuis les images de la page, sans nouvelle
 // requête), la miniature d'abord si elle est prête avant. Les dernières images chargées restent prêtes (ready) : la
 // visionneuse y charge en avance les images voisines. À la sortie de l'espace privé, forgetPrivateImages retire de la
-// page toute image privée, même cachée.
-const ready=new Map(), READY_MAX=8, FADE_MS=350;   // FADE_MS : fondu de .viewer (CSS, 0,3 s)              // adresse → { im : image décodée (null : illisible), p : promesse }
+// page toute image privée, même cachée, et abandonne celles qui chargeaient encore.
+const ready=new Map(), READY_MAX=10;              // adresse → { el : Image, im : image décodée (null : illisible), p : promesse }
+const FADE_MS=350;                                // fondu de fermeture de .viewer (CSS, 0,3 s)
 function preload(url){ let e=ready.get(url);
   if(e) ready.delete(url);                        // la plus récente en dernier : les plus anciennes partent d'abord
   else { const im=new Image(); im.decoding='async'; im.src=url;
-    e={ im:undefined, p:im.decode().then(()=>im, ()=>null) };
+    e={ el:im, im:undefined, p:im.decode().then(()=>im, ()=>null) };
     e.p.then(x=>{ e.im=x; if(!x && ready.get(url)===e) ready.delete(url); }); }   // illisible : redemandée la fois suivante
   ready.set(url, e); while(ready.size>READY_MAX) ready.delete(ready.keys().next().value);
   return e; }
 // keep : laisser l'image d'avant jusqu'à la nouvelle (aperçu suivant de la même génération), même si la nouvelle est
 // illisible ; sans keep, une image illisible est confiée au navigateur (nouvel essai, ou image cassée comme avant).
-// then(ok) : appelée quand la nouvelle image est à l'écran (ok faux : illisible).
-function showImage(img, url, {thumb, keep, then}={}){
+// then(ok) : appelée quand la nouvelle image est à l'écran (ok faux : illisible). once : image servie une seule fois
+// (aperçu), qui ne reste pas dans ready.
+function showImage(img, url, {thumb, keep, then, once}={}){
+  if(img.want===url && img.getAttribute('src')===url && img.complete && img.naturalWidth){ if(then) then(true); return; }   // déjà là
   img.want=url;                                    // adresse attendue : une image chargée trop tard pour un autre choix est ignorée
-  const put=e=>{ if(img.want!==url) return; if((e.im || !keep) && img.getAttribute('src')!==url) img.src=url; if(then) then(!!e.im); };
+  const put=e=>{ if(once && ready.get(url)===e) ready.delete(url);
+    if(img.want!==url) return; if((e.im || !keep) && img.getAttribute('src')!==url) img.src=url; if(then) then(!!e.im); };
   const e=preload(url); if(e.im!==undefined) return put(e);   // déjà prête : tout de suite, sans image vide entre les deux
   if(!keep) img.removeAttribute('src');
   if(thumb){ const t=preload(thumb), side=()=>{ if(img.want===url && t.im && !img.getAttribute('src')) img.src=thumb; };
@@ -1107,10 +1111,12 @@ function showImage(img, url, {thumb, keep, then}={}){
   e.p.then(()=>put(e)); }
 function clearImage(img){ img.want=null; img.removeAttribute('src'); }
 function clearLater(img, still){ setTimeout(()=>{ if(still()) clearImage(img); }, FADE_MS); }   // après le fondu de fermeture
+// aperçus (/api/job/) compris : dans l'espace privé, la page ne montre que ceux des générations privées
+const secretUrl = u => !!u && (u.startsWith('/api/private/') || u.startsWith('/api/job/'));
 function forgetPrivateImages(){
-  for(const u of [...ready.keys()]) if(u.startsWith('/api/private/') || u.startsWith('/api/job/')) ready.delete(u);   // aperçus compris
+  for(const [u, e] of [...ready]) if(secretUrl(u)){ ready.delete(u); if(e.im===undefined) e.el.src=''; }   // chargement abandonné
   document.querySelectorAll('img').forEach(i=>{   // affichée, ou attendue (chargement en cours : ignorée à son arrivée)
-    if([i.getAttribute('src'), i.want].some(u=>u && u.startsWith('/api/private/'))) clearImage(i); }); }
+    if(secretUrl(i.getAttribute('src')) || secretUrl(i.want)) clearImage(i); }); }
 
 // ------------------------------------------------------------ générations de la page, zone de résultat, île et file
 // La page suit les générations qu'elle a lancées (ou reprises après un rechargement), dans l'ordre : pageJobs. La zone de
@@ -1150,13 +1156,15 @@ function setMeta(prompt, chips, file){
     + (chips.filter(Boolean).length ? `<div class="m-chips">${chips.filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('')}</div>` : '')
     + (file ? `<p class="m-file">${esc(file)}</p>` : ''); }
 function showLoader(on){ $('stage').style.display='block'; $('resultEmpty').style.display='none'; $('loader').style.display=on?'flex':'none'; $('shimmer').style.display=on?'block':'none'; $('bar').style.display=on?'block':'none'; }
-// keep : l'aperçu de la même génération reste à l'écran jusqu'à son image finale
-function showResult(name, w, h, reveal, inc, keep){   // image de outputs/, ou image incognito (inc : {blob, url}) ou privée (inc : {private, item, url})
+// image de outputs/, ou image incognito (inc : {blob, url}) ou privée (inc : {private, item, url}) ; keep : l'aperçu de la
+// même génération reste à l'écran jusqu'à son image finale ; shown : appelée quand l'image est à l'écran
+function showResult(name, w, h, {reveal, inc, keep, shown:onShown}={}){
   const url=inc ? inc.url : '/api/result?name='+encodeURIComponent(name), img=$('stageImg');
   if(w && h) setStageRatio(w, h);
-  showLoader(false); img.style.display='block';
+  showLoader(false); img.style.display='block'; if(!keep) $('shimmer').style.display='block';   // reflet jusqu'à l'image
   showImage(img, url, {keep, then:ok=>{ if(!ok) img.src=url;   // illisible : confiée au navigateur, jamais l'aperçu pour l'image finale
-    img.className = reveal ? 'final reveal' : 'final'; $('stage').classList.remove('has-preview'); }});
+    img.className = reveal ? 'final reveal' : 'final'; $('stage').classList.remove('has-preview'); $('shimmer').style.display='none';
+    if(onShown) onShown(); }});
   $('dl').href=inc && inc.blob ? url : url+'&download=1'; $('dl').download=name; $('resultActions').style.display='';
   lastResult={url, name, blob:inc ? inc.blob : null, item:inc && inc.item}; if(!inc) setAmbient(name); }   // pas de fond ambiant en incognito : il passerait par une miniature sur le disque
 function hideResult(){ clearImage($('stageImg')); $('stageImg').job=null; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
@@ -1191,8 +1199,9 @@ function show(p, reveal){                          // met une génération de la
   const grid=gridOf(p); if(grid) return showGrid(grid);
   $('lotBadge').hidden=!p.lot; if(p.lot) $('lotBadge').textContent=`${p.tab==='edit' ? 'Photo' : 'Image'} ${p.lot.rank} sur ${p.lot.size}`;
   const img=$('stageImg'), was=img.job; img.job=p.id;   // img.job : génération dont la zone montre l'aperçu ou l'image
-  if(p.result){ const r=p.result; showResult(r.name, ...(r.dims||[0, 0]), reveal, r.blob || r.item ? r : null, was===p.id);
-    setMeta(p.prompt, r.chips, r.file); return markSeen(); }
+  if(p.result){ const r=p.result;   // image incognito vue seulement une fois peinte
+    showResult(r.name, ...(r.dims||[0, 0]), {reveal, inc:r.blob || r.item ? r : null, keep:was===p.id, shown:markSeen});
+    setMeta(p.prompt, r.chips, r.file); return; }
   lastResult=null; if(p.w && p.h) setStageRatio(p.w, p.h);
   showLoader(true); $('resultActions').style.display='none'; setMeta('', [], '');
   if(was!==p.id){ img.className=''; clearImage(img); $('stage').classList.remove('has-preview'); p.pv=0; }
@@ -1226,7 +1235,7 @@ function renderProgress(){                         // image en cours dans la zon
   if(j.preview_version && j.preview_version!==p.pv && (!p.private || inPrivate())){ p.pv=j.preview_version; const img=$('stageImg');   // aperçu privé : dans l'espace seulement
     img.style.display='block';                     // l'aperçu d'avant reste jusqu'au suivant, chargé
     const url='/api/job/'+j.id+'/preview?v='+p.pv;
-    showImage(img, url, {keep:true, then:ok=>{ ready.delete(url); if(!ok || shown!==p) return;   // aperçu : servi une fois
+    showImage(img, url, {keep:true, once:true, then:ok=>{ if(!ok || shown!==p) return;
       img.className='preview'; $('stage').classList.add('has-preview'); $('shimmer').style.display='none'; }}); } }
 function syncButtons(){ $('cancel').disabled=!(shown && isActive(shown)); }
 // image incognito : gardée par la page jusqu'à ce qu'elle ait été vue (affichée, application visible, hors galerie) puis
@@ -1523,7 +1532,8 @@ async function duplicatePrompt(p, b){ b.disabled=true; const priv=inPrivate();
 // pendant une saisie composée (accents, clavier prédictif)
 $('peTitle').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.isComposing){ e.preventDefault(); if(!$('peSave').disabled) savePrompt(); } });
 // ------------------------------------------------------------ galerie et visionneuse
-let histItems=[], vIndex=-1, vList=[];   // vList : images que parcourt la visionneuse (la galerie, ou les images d'un lot)
+// vList : images que parcourt la visionneuse (la galerie, ou les images d'un lot) ; vStep : sens du dernier passage
+let histItems=[], vIndex=-1, vList=[], vStep=1;
 const MODE_LABELS={ t2i:'Texte → image', edit:'Édition', mask:'Masque', annot:'Annotation' };
 const resultUrl = name => '/api/result?name='+encodeURIComponent(name);
 const thumbUrl = it => '/api/thumb?name='+encodeURIComponent(it.name)+'&t='+it.time;
@@ -1557,8 +1567,12 @@ function renderGallery(){
 function openViewer(i, list=vList){
   const it=list[i]; if(!it) return; vList=list; vIndex=i; resetZoom();
   const v=$('viewer'), img=$('vImg');
-  showImage(img, srcOf(it), {thumb:thumbOf(it)}); showImage($('vBg'), thumbOf(it));   // la miniature en attendant l'image
-  const n=list.length; [list[(i+1)%n], list[(i+n-1)%n]].forEach(x=>{ if(x!==it){ preload(thumbOf(x)); preload(srcOf(x)); } });   // voisines
+  // la miniature en attendant l'image ; une fois l'image là, sa première image d'entrée est chargée en avance
+  showImage(img, srcOf(it), {thumb:thumbOf(it), then:()=>{ if(vList[vIndex]===it && (it.inputs||[]).length) preload(inputUrl(it, it.inputs[0])); }});
+  showImage($('vBg'), thumbOf(it), {keep:true});  // fond flouté : l'ancien en attendant, jamais un fond noir
+  // voisines : leurs miniatures, et l'image complète de celle vers qui l'on avance (mémoire et données du téléphone)
+  const n=list.length; [list[(i+1)%n], list[(i+n-1)%n]].forEach(x=>{ if(x!==it) preload(thumbOf(x)); });
+  const next=list[(i+vStep+n)%n]; if(next!==it) preload(srcOf(next));
   img.alt=it.prompt||it.name; $('vCount').textContent=`${i+1} / ${list.length}`;
   const date=new Date(it.time*1000).toLocaleString('fr-FR', {dateStyle:'short', timeStyle:'short'});
   $('vChips').innerHTML=[date, MODE_LABELS[it.mode]||it.mode, it.width?it.width+'×'+it.height:'', it.steps?it.steps+' étapes':'', it.model?it.model.toUpperCase():'', it.seconds?fmt(it.seconds):'',
@@ -1576,23 +1590,23 @@ function openViewer(i, list=vList){
 }
 function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor();
   clearLater($('vImg'), ()=>vIndex<0); clearLater($('vBg'), ()=>vIndex<0); }
-function stepViewer(d){ if(vIndex<0 || !vList.length) return; openViewer((vIndex+d+vList.length)%vList.length); }
+function stepViewer(d){ if(vIndex<0 || !vList.length) return; vStep=d; openViewer((vIndex+d+vList.length)%vList.length); }
 addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevented) return;
   if(ivIndex>=0){ if(e.key==='Escape') closeInputs(); else if(e.key==='ArrowLeft') showInput(ivIndex-1); else if(e.key==='ArrowRight') showInput(ivIndex+1); return; }
   if(e.key==='Escape') closeViewer(); else if(e.key==='ArrowLeft') stepViewer(-1); else if(e.key==='ArrowRight') stepViewer(1); });
-// visionneuse : pincer pour zoomer (l'image passe au-dessus de tout et revient à sa taille dès qu'on relâche les doigts) ;
-// sur ordinateur, molette pour zoomer et glisser pour déplacer, un clic pour revenir ; sans zoom, glisser à gauche ou
-// à droite : image voisine ; vers le bas : fermer ; un appui : masquer les commandes
-let resetZoom=()=>{};
-(function gestures(){
-  const st=$('vStage'), img=$('vImg'), v=$('viewer'), pts=new Map(), MAX=6;
+// visionneuse et images d'entrée : pincer pour zoomer (l'image passe au-dessus de tout et revient à sa taille dès qu'on
+// relâche les doigts) ; sur ordinateur, molette pour zoomer et glisser pour déplacer, un clic pour revenir ; sans zoom,
+// glisser à gauche ou à droite : image voisine (step) ; vers le bas : fermer (close) ; un appui : masquer les
+// commandes. Renvoie la remise à la taille initiale.
+function zoomable(st, img, v, step, close){
+  const pts=new Map(), MAX=6;
   let z={s:1, x:0, y:0}, one=null, pinch=null, unzoom=null;
   const center=()=>{ const r=st.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2}; };
   function apply(){ img.style.transform = z.s>1 ? `translate(${z.x}px, ${z.y}px) scale(${z.s})` : ''; clearTimeout(unzoom);
     if(z.s>1) v.classList.add('zoomed'); else unzoom=setTimeout(()=>{ if(z.s<=1) v.classList.remove('zoomed'); }, 400); }   // reste au-dessus pendant le retour (0,35 s)
   function zoomAt(s2, px, py, from=z){ const c=center(), k=s2/from.s;   // le point (px, py) de l'écran reste sous les doigts
     z={s:s2, x:(px-c.x)-((px-c.x)-from.x)*k, y:(py-c.y)-((py-c.y)-from.y)*k}; if(s2<=1.01) z={s:1, x:0, y:0}; apply(); }
-  resetZoom=()=>{ st.classList.remove('drag'); z={s:1, x:0, y:0}; apply(); };
+  const reset=()=>{ st.classList.remove('drag'); z={s:1, x:0, y:0}; apply(); };
   const mid=()=>{ const [a,b]=[...pts.values()]; return {x:(a.x+b.x)/2, y:(a.y+b.y)/2, d:Math.hypot(a.x-b.x, a.y-b.y)}; };
   st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return;
     pts.set(e.pointerId, {x:e.clientX, y:e.clientY}); st.setPointerCapture(e.pointerId); st.classList.add('drag');
@@ -1610,18 +1624,19 @@ let resetZoom=()=>{};
     if(pinch && pts.size===1){ const [q]=[...pts.values()]; pinch=null; one={x0:q.x, y0:q.y, from:{...z}, dx:0, dy:0, pinched:true}; return; }
     if(pts.size) return;
     const was=one; pinch=null; one=null; v.style.opacity='';
-    if(e.pointerType!=='mouse' && (z.s>1 || (was && was.pinched))) return resetZoom();     // doigts relâchés : taille initiale
+    if(e.pointerType!=='mouse' && (z.s>1 || (was && was.pinched))) return reset();     // doigts relâchés : taille initiale
     st.classList.remove('drag'); if(!was) return;
     const {dx, dy}=was;
-    if(Math.abs(dx)<6 && Math.abs(dy)<6){ if(z.s>1) resetZoom(); else { img.style.transform=''; v.classList.toggle('immersive'); } return; }
+    if(Math.abs(dx)<6 && Math.abs(dy)<6){ if(z.s>1) reset(); else { img.style.transform=''; v.classList.toggle('immersive'); } return; }
     if(z.s>1) return;
     img.style.transform='';
-    if(Math.abs(dx)>70 && Math.abs(dx)>Math.abs(dy)) stepViewer(dx<0 ? 1 : -1);
-    else if(dy>110) closeViewer(); };
+    if(Math.abs(dx)>70 && Math.abs(dx)>Math.abs(dy)) step(dx<0 ? 1 : -1);
+    else if(dy>110) close(); };
   st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
   let wheelEnd=null;
   st.addEventListener('wheel', e=>{ e.preventDefault(); st.classList.add('drag'); clearTimeout(wheelEnd); wheelEnd=setTimeout(()=>st.classList.remove('drag'), 150); zoomAt(Math.min(MAX, Math.max(1, z.s*Math.exp(-e.deltaY*0.002))), e.clientX, e.clientY); }, {passive:false});
-})();
+  return reset; }
+const resetZoom=zoomable($('vStage'), $('vImg'), $('viewer'), stepViewer, closeViewer);
 async function dataUrlOf(name, url){ if(lastResult && lastResult.blob && lastResult.name===name) return await readFile(lastResult.blob);
   const own=pageJobs.find(p=>p.result && p.result.blob && p.result.name===name); if(own) return await readFile(own.result.blob);   // image incognito d'un lot
   const b=await (await fetch(url || resultUrl(name))).blob(); return await readFile(b); }
@@ -1656,15 +1671,17 @@ function renderInputsButton(it){
   const b=$('vInputs'), list=it.inputs||[]; b.hidden=!list.length; if(!list.length) return;
   b.innerHTML=`<span class="v-in-thumbs">${list.slice(0,3).map(f=>`<img src="${inputUrl(it, f, '&thumb=1&t='+it.time)}" alt="">`).join('')}</span>`
     + `<span>${list.length>1 ? list.length+" images d'entrée" : "Image d'entrée"}</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>`; }
-function openInputs(i){ const it=vList[vIndex]; if(!it || !(it.inputs||[]).length) return; ivOwner=it; showInput(i); $('iv').classList.add('on'); syncThemeColor(); }
+function openInputs(i){ const it=vList[vIndex]; if(!it || !(it.inputs||[]).length) return; ivOwner=it; showInput(i);
+  $('iv').classList.remove('immersive'); $('iv').classList.add('on'); syncThemeColor(); }
 function showInput(i){
   const it=ivOwner, n=it.inputs.length; ivIndex=(i+n)%n; const f=it.inputs[ivIndex], thumb=g=>inputUrl(it, g, '&thumb=1&t='+it.time);
+  resetInputZoom();
   showImage($('ivImg'), inputUrl(it, f), {thumb:thumb(f)});   // miniature : celle du bouton de la visionneuse, déjà là
   if(n>1) [it.inputs[(ivIndex+1)%n], it.inputs[(ivIndex+n-1)%n]].forEach(g=>{ preload(thumb(g)); preload(inputUrl(it, g)); });
   $('ivImg').alt=inputLabel(it, f); $('ivLabel').textContent=inputLabel(it, f);
   $('ivCount').textContent=`${ivIndex+1} / ${n}`; $('iv').classList.toggle('single', n<2);
   $('ivDl').href=inputUrl(it, f, '&download=1'); $('ivDl').download=it.name.slice(0, -4)+'_'+f; }
-function closeInputs(){ $('iv').classList.remove('on'); ivIndex=-1; syncThemeColor();
+function closeInputs(){ resetInputZoom(); $('iv').classList.remove('on'); ivIndex=-1; syncThemeColor();
   clearLater($('ivImg'), ()=>ivIndex<0); }
 async function inputAction(kind){             // repartir de cette image d'entrée : Éditer (référence) ou Dessiner
   const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f, list=editImages, priv=inPrivate();
@@ -1673,15 +1690,7 @@ async function inputAction(kind){             // repartir de cette image d'entr�
   if(kind==='mask'){ if(await setMaskImage(name, dataUrl, priv)) goTab('mask'); return; }
   if(list.length>=MAX_REFS){ toast(MAX_REFS+' images de référence au maximum', 'err'); return; }
   addEditImage(list, await toEntry(name, dataUrl)); }
-(function inputSwipe(){        // glisser à gauche ou à droite : image d'entrée voisine ; vers le bas : fermer
-  const st=$('ivStage'), img=$('ivImg'); let p=null;
-  st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return; p={x:e.clientX, y:e.clientY, dx:0, dy:0}; st.setPointerCapture(e.pointerId); st.classList.add('drag'); });
-  st.addEventListener('pointermove', e=>{ if(!p) return; p.dx=e.clientX-p.x; p.dy=e.clientY-p.y;
-    img.style.transform = Math.abs(p.dx)>Math.abs(p.dy) ? `translateX(${p.dx}px)` : `translateY(${Math.max(0, p.dy)}px)`; });
-  const end=()=>{ if(!p) return; const {dx, dy}=p; p=null; st.classList.remove('drag'); img.style.transform='';
-    if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)) showInput(ivIndex+(dx<0 ? 1 : -1)); else if(dy>110) closeInputs(); };
-  st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
-})();
+const resetInputZoom=zoomable($('ivStage'), $('ivImg'), $('iv'), d=>showInput(ivIndex+d), closeInputs);   // comme la visionneuse
 async function viewerAction(kind){
   const it=vList[vIndex]; if(!it) return;
   if(kind==='edit' || kind==='mask'){ closeViewer(); return kind==='edit' ? useAsEditInput(it.name, srcOf(it)) : useAsMaskInput(it.name, srcOf(it)); }

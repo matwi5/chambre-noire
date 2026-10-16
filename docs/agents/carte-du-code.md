@@ -106,10 +106,12 @@ dernier bloc, après le HTML.
     `#askSheet`, jamais `confirm()`).
   - « affichage des images » : `showImage` (toute image qui change d'adresse : vidée, puis remplie une fois l'image
     chargée et décodée à part, miniature d'abord ; `img.want` : adresse attendue, une image arrivée trop tard est
-    ignorée ; `keep` : l'aperçu d'avant reste jusqu'au suivant), `preload` et `ready` (les 8 dernières images
-    décodées, voisines de la visionneuse comprises ; un aperçu en sort une fois affiché, une image incognito à son oubli), `clearImage`, `clearLater`, `forgetPrivateImages` (sortie de l'espace privé :
-    images privées affichées, attendues ou chargées en avance). Ne jamais réaffecter `src` d'une image visible à la
-    main : elle garderait l'image d'avant à l'écran jusqu'au chargement de la nouvelle.
+    ignorée ; `keep` : l'aperçu d'avant reste jusqu'au suivant ; `once` : aperçu servi une fois), `preload` et `ready`
+    (les 10 dernières images décodées : miniatures des voisines de la visionneuse, image complète de la suivante dans le
+    sens du parcours `vStep`, première image d'entrée ; une image incognito en sort à son oubli), `clearImage`,
+    `clearLater`, `forgetPrivateImages` (sortie de l'espace privé : images privées et aperçus affichés, attendus ou
+    chargés en avance ; chargements en cours abandonnés). Ne jamais réaffecter `src` d'une image visible à la main :
+    elle garderait l'image d'avant à l'écran jusqu'au chargement de la nouvelle.
   - « générations de la page, zone de résultat, île et file » : `pageJobs` (générations lancées par cette page),
     `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `lotOf`, `gridOf`, `show`,
     `showGrid`, `renderStrip`, `renderIsland`, `onIsland` (file non vide : `#queueSheet`, sinon `#engineSheet`),
@@ -124,9 +126,11 @@ dernier bloc, après le HTML.
   - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts`, `renderPrompts`,
     `usePrompt`, `savePrompt`.
   - « galerie et visionneuse » : `histItems`, `vList` (ce que parcourt la visionneuse : la galerie ou les images d'un
-    lot de la page), `loadHistory`, `renderGallery`, `openViewer`, `stepViewer`, `closeViewer`, gestes (`resetZoom`).
-  - « partager et copier » ; « images d'entrée » : `openInputs`, `inputAction`, `addEditImage` ; actions de la
-    visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`, `keepThis` (« Garder celle-ci »), `deleteCurrent`.
+    lot de la page), `loadHistory`, `renderGallery`, `openViewer`, `stepViewer`, `closeViewer`, gestes : `zoomable`
+    (pincer, molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les images d'entrée).
+  - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs`, `inputAction`,
+    `addEditImage` ; actions de la visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`, `keepThis`
+    (« Garder celle-ci »), `deleteCurrent`.
   - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
     `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,
     `putInput`, `swapInput`, `emptyTab` (vidage après « Générer », dans l'espace d'où la demande est partie) ; un ajout

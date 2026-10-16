@@ -332,8 +332,10 @@ masquée dans la galerie.
 
 Une image ne s'affiche qu'une fois chargée : sa miniature d'abord, puis l'image complète, sans jamais laisser voir un
 instant l'image vue avant (ni celle d'une autre image, ni celle de l'autre espace). Les images voisines de la
-visionneuse et des images d'entrée sont chargées en avance, pour que glisser de l'une à l'autre soit immédiat ; pendant
-une génération, chaque aperçu reste à l'écran jusqu'à ce que le suivant soit prêt.
+visionneuse et des images d'entrée sont chargées en avance, pour que glisser de l'une à l'autre soit immédiat, comme
+la première image d'entrée dès que l'image est affichée ; en revenant à la galerie, celle de l'autre espace ne
+réapparaît pas le temps du chargement. Pendant une génération, chaque aperçu reste à l'écran jusqu'à ce que le
+suivant soit prêt.
 
 Les images d'un même lot (variantes) portent un repère « 2/4 » (leur rang dans le lot) tant qu'il en reste au moins
 deux dans la galerie. Dans la visionneuse, **Voir le lot** montre les images du lot côte à côte ; un appui en ouvre une
@@ -342,7 +344,8 @@ image du lot (une par fichier, pas d'archive ; le navigateur peut demander d'aut
 **Garder celle-ci** supprime les autres images du lot après confirmation.
 
 Pour une édition ou un dessin guidé, le bouton **Image d'entrée** (ou **N images d'entrée**) ouvre les images de
-départ en grand, une par une : glisser à gauche ou à droite passe de l'une à l'autre, vers le bas ferme. Chacune peut
+départ en grand, une par une, avec les mêmes gestes que la visionneuse : pincer pour zoomer (molette sur ordinateur),
+glisser à gauche ou à droite pour passer de l'une à l'autre, vers le bas pour fermer. Chacune peut
 être téléchargée, ou reprise dans **Éditer** ou **Dessiner** pour repartir d'elle. Les images d'entrée sont conservées
 depuis le 13/10/2026 ; pour les images plus anciennes, elles ont été récupérées tant que leur dossier de travail
 existait encore (les 20 derniers).
@@ -433,12 +436,13 @@ du Mac, ne suffit pas pour voir les images privées.
   navigateur, brouillons compris : elle ne survit pas à la fermeture de l'application. L'interrupteur **Campagne** et
   les Réglages sont communs aux deux espaces.
 - **Sortir vide l'écran** : la saisie privée est effacée, comme les images privées de la zone de résultat, de la grille,
-  de la galerie, de la visionneuse et des images d'entrée, y compris celles gardées en mémoire par la page ou encore en
-  chargement (si le Mac est injoignable, un message le dit et l'on reste dans l'espace). Les générations
-  privées en file ou en cours quittent aussi l'écran et la page (progression, aperçu, prompt, vignette, ligne de la
-  file) : elles continuent sur le Mac et sont rangées dans l'espace, mais une page sortie ne peut plus ni les suivre,
-  ni les prévisualiser, ni les annuler. Les générations publiques de la page, cachées pendant qu'on était dans l'espace
-  privé (elles y restent suivies, hors de l'écran), reviennent, avec leur image si elles ont fini entre-temps.
+  de la galerie, de la visionneuse et des images d'entrée, même cachées : la page ne les garde plus prêtes à
+  l'affichage, et celles qui chargeaient encore sont abandonnées (si le Mac est injoignable, un message le dit et l'on
+  reste dans l'espace). Les générations privées en file ou en cours quittent aussi l'écran et la page (progression,
+  aperçu, prompt, vignette, ligne de la file) : elles continuent sur le Mac et sont rangées dans l'espace, mais une page
+  sortie ne peut plus ni les suivre, ni les prévisualiser, ni les annuler. Les générations publiques de la page, cachées
+  pendant qu'on était dans l'espace privé (elles y restent suivies, hors de l'écran), reviennent, avec leur image si
+  elles ont fini entre-temps.
 - **Retour dans l'espace privé** : la page suit toutes les générations privées encore en file ou en cours, avec leur
   prompt et leur progression, qu'elle les ait lancées ou non, aussi après un rechargement ou depuis un autre appareil
   (aucun identifiant privé n'est gardé par le navigateur) ; la dernière image de l'espace public n'y est pas montrée.
