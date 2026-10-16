@@ -44,12 +44,13 @@ Aucun lint ni typage n'est déclaré. Après un changement, une seule commande (
 venv/bin/python tests/check.py [--no-bench | --quick] [--ui [tests/ui/x.test.mjs …]]
 ```
 
-Elle compile chaque `.py` suivi, passe chaque bloc `<script>` de `tools/ui/index.html` et chaque `.js`/`.mjs` suivi
-à `node --check`, refuse une ligne ajoutée depuis la base (`git merge-base HEAD origin/main`) de plus de 120
-caractères (`CODING_STANDARDS.md`), lance le banc et recopie sa ligne « Ran N tests … » et son verdict (c'est elle
-qu'on cite, jamais un compte de tête) ; code de sortie non nul au moindre échec. `tests/test_public_repo.py` y
-échoue si un fichier suivi contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net` autre que
-ceux du banc.
+Elle compile chaque `.py` suivi, passe chaque bloc `<script>` de `tools/ui/index.html` et chaque `.js`/`.mjs` suivi à
+`node --check`, refuse une ligne ajoutée depuis la base (`git merge-base HEAD origin/main`) de plus de 120 caractères
+(`CODING_STANDARDS.md`) et une adresse donnée à la main à une image affichée (`$('vImg').src=…` : passer par
+`showImage`), lance le banc et recopie sa ligne « Ran N tests … » et son verdict (c'est elle qu'on cite, jamais un
+compte de tête) ; code de sortie non nul au moindre échec. « Suivi » compte aussi un fichier nouveau pas encore ajouté à
+git. `tests/test_public_repo.py` y échoue si un fichier suivi contient un chemin `/Users/<nom>`, une adresse IP privée
+ou un nom en `.ts.net` autre que ceux du banc.
 
 `--quick` (en local, jamais en CI) saute le banc quand aucun `.py` n'a changé depuis la base, sauf
 `tests/test_public_repo.py`. `--ui` tourne en même temps que le banc (ports libres et dossiers temporaires

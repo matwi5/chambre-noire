@@ -111,7 +111,8 @@ dernier bloc, après le HTML.
     sens du parcours `vStep`, première image d'entrée ; une image incognito en sort à son oubli), `clearImage`,
     `forgetPrivateImages` (sortie de l'espace privé : images privées et aperçus affichés, attendus ou chargés en avance,
     chargements en cours abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne jamais réaffecter
-    `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement de la nouvelle.
+    `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement de la nouvelle
+    (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
   - « générations de la page, zone de résultat, île et file » : `pageJobs` (générations lancées par cette page),
     `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `lotOf`, `gridOf`, `show`,
     `showGrid`, `renderStrip`, `renderIsland`, `onIsland` (file non vide : `#queueSheet`, sinon `#engineSheet`),
