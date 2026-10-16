@@ -12,7 +12,7 @@ Mis à jour le 16/10/2026.
   chiffré (entrée par le cadenas de la Galerie), étanche à l'espace public (galerie, file, saisie et prompts
   enregistrés propres à chaque espace). Banc de test permanent sans GPU :
   `venv/bin/python -m unittest discover -s tests` (162 tests, ≈ 1 min 20) ; tests d'interface `tests/check.py --ui`
-  (32 tests).
+  (35 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
 - **En cours** : parcours « Cloisonnement espace privé, file et saisie » (spécification
@@ -88,7 +88,11 @@ Mis à jour le 16/10/2026.
   (observé dans son dossier de travail) et le porteur les a vus s'afficher à ce dernier essai ; problème non reproduit,
   laissé ouvert s'il revient. Revue de sécurité du diff (`b547a4f..3591b85`) : rien de bloquant ; corrigés aussi, à
   la sortie, un geste des images d'entrée qui pouvait rouvrir une entrée privée cachée, et le prompt, les réglages,
-  la liste et les liens de téléchargement privés restés dans la page cachée (antérieurs au diff).
+  la liste et les liens de téléchargement privés restés dans la page cachée (antérieurs au diff ; `9f9e269`), puis,
+  après la revue de ce commit, la feuille « Voir le lot » d'un lot privé fermée et vidée à la sortie, tout lien vers
+  une route privée retiré de la page (nom `prive_<id>` compris) et le geste en cours abandonné à la fermeture.
+  À reporter dans Asana (accord du porteur) : un ticket pour la fuite et les glitchs d'affichage (`d3169f8`,
+  `9f9e269`), un pour le zoom et le préchargement des images d'entrée (`3591b85`).
 - Fuite de l'espace privé à l'écran corrigée (signalée par le porteur) : une `<img>` qui reçoit une autre adresse garde
   l'image d'avant à l'écran jusqu'au chargement de la nouvelle, donc l'image d'entrée privée vue avant réapparaissait
   un instant dans l'espace public (et les « glitchs » entre deux images). Toute image passe désormais par
@@ -97,8 +101,7 @@ Mis à jour le 16/10/2026.
   ou encore en chargement ; une galerie privée reçue après la sortie est ignorée. Aperçu suivant affiché seulement une
   fois chargé (plus d'image cassée ni de cadre vide). Test d'interface `tests/ui/images.test.mjs`, rouge avant le
   correctif. Aperçus de l'espace privé « qui ne marchent pas » : non reproduits au banc (ils s'affichent, en vue du
-  téléphone, depuis le Mac) ; à observer sur le téléphone. À reporter dans Asana (accord du porteur) : un ticket pour
-  ce correctif et, si besoin, un pour les aperçus privés.
+  téléphone, depuis le Mac) ; à observer sur le téléphone (suite dans l'entrée ci-dessus).
 
 ### 2026-10-15
 

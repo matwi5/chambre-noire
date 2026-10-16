@@ -70,8 +70,9 @@ test('espace privé : après la sortie, ni visionneuse ni images d\'entrée ne m
   assert.deepEqual(left, [], 'images privées restées dans la page');
   // ni lien vers une route privée, ni texte de l'image privée (prompt en texte de remplacement), ni liste privée
   assert.deepEqual(await page.eval(`({ links: [...document.querySelectorAll('[href*="/api/private/"]')].map(a => a.id),
+    names: [...document.querySelectorAll('[download^="prive_"]')].map(a => a.id),
     prompt: document.documentElement.outerHTML.includes('zq3 privée'), list: vList.length })`),
-  { links: [], prompt: false, list: 0 }, 'données privées restées dans la page');
+  { links: [], names: [], prompt: false, list: 0 }, 'données privées restées dans la page');
   // la même adresse redemandée à part : sa réponse arrivée, celle de l'image abandonnée l'aurait été aussi
   await page.eval(`fetch(${JSON.stringify(late)}).then(r => r.blob())
     .then(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))`);
@@ -166,5 +167,28 @@ test('images d\'entrée : pincer zoome, relâcher rend la taille initiale', asyn
   await page.waitFor(`!$('iv').classList.contains('on') && $('viewer').classList.contains('on')`,
     { what: 'images d\'entrée fermées' });
   await page.eval(`closeViewer()`);
+  page.assertNoErrors();
+});
+
+test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et se vide à la sortie', async () => {
+  await page.eval(`closeInputs(); closeViewer()`);
+  assert.equal(await privatePost('/api/private/unlock'), 200);
+  await page.eval(`refreshStatus()`);
+  await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
+  assert.equal(await page.eval(`postJson('/api/generate', { mode: 't2i', prompt: 'zq7 lot privé', width: 512,
+    height: 512, steps: 2, cfg: 1, seed: -1, preview: false, ref_images: [], private: true, count: 2 })
+    .then(r => r.status)`), 202);
+  await idle();
+  await page.eval(`goTab('t2i'); goTab('hist')`);   // galerie rechargée, lot compris
+  await page.waitFor(`histItems.filter(it => it.lot).length === 2`, { what: 'lot privé dans la galerie' });
+  await page.eval(`openViewer(histItems.findIndex(it => it.lot), histItems); openLot()`);
+  await page.waitFor(`openedSheet === $('lotSheet') && $('lotSheetGrid').querySelectorAll('img').length === 2`,
+    { what: 'feuille du lot ouverte' });
+  const after = await page.eval(`(() => { applyPrivate({ ...privState, unlocked: false });
+    return { open: openedSheet === $('lotSheet'), cells: $('lotSheetGrid').children.length,
+      images: ${PRIVATE_IMAGES} }; })()`);
+  assert.deepEqual(after, { open: false, cells: 0, images: [] }, 'lot privé resté dans la page');
+  await page.eval(`postJson('/api/private/lock', {})`);
+  await page.eval(`refreshStatus()`);
   page.assertNoErrors();
 });

@@ -1116,7 +1116,9 @@ const secretUrl = u => !!u && (u.startsWith('/api/private/') || u.startsWith('/a
 function forgetPrivateImages(){
   for(const [u, e] of [...ready]) if(secretUrl(u)){ ready.delete(u); if(e.im===undefined) e.el.src=''; }   // chargement abandonné
   document.querySelectorAll('img').forEach(i=>{   // affichée, ou attendue (chargement en cours : ignorée à son arrivée)
-    if(secretUrl(i.getAttribute('src')) || secretUrl(i.want)) clearImage(i); }); }
+    if(secretUrl(i.getAttribute('src')) || secretUrl(i.want)) clearImage(i); });
+  document.querySelectorAll('[href]').forEach(a=>{   // liens de téléchargement, et leur nom de fichier (prive_<id>)
+    if(secretUrl(a.getAttribute('href'))){ a.removeAttribute('href'); a.removeAttribute('download'); } }); }
 
 // ------------------------------------------------------------ générations de la page, zone de résultat, île et file
 // La page suit les générations qu'elle a lancées (ou reprises après un rechargement), dans l'ordre : pageJobs. La zone de
@@ -1167,7 +1169,7 @@ function showResult(name, w, h, {reveal, inc, keep, shown:onShown}={}){
     if(onShown) onShown(); }});
   $('dl').href=inc && inc.blob ? url : url+'&download=1'; $('dl').download=name; $('resultActions').style.display='';
   lastResult={url, name, blob:inc ? inc.blob : null, item:inc && inc.item}; if(!inc) setAmbient(name); }   // pas de fond ambiant en incognito : il passerait par une miniature sur le disque
-function hideResult(){ clearImage($('stageImg')); $('stageImg').job=null; $('dl').removeAttribute('href'); $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
+function hideResult(){ clearImage($('stageImg')); $('stageImg').job=null; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
 const forgetJob = id => fetch('/api/job/'+id+'/forget', {method:'POST', headers:{'Content-Type':'application/json'}}).catch(()=>{});
 // progression d'une génération de la page : part faite (0 à 1), titre, détail, temps restant avant son image
 function progress(p){
@@ -1606,7 +1608,8 @@ function zoomable(st, img, v, step, close){
     if(z.s>1) v.classList.add('zoomed'); else unzoom=setTimeout(()=>{ if(z.s<=1) v.classList.remove('zoomed'); }, 400); }   // reste au-dessus pendant le retour (0,35 s)
   function zoomAt(s2, px, py, from=z){ const c=center(), k=s2/from.s;   // le point (px, py) de l'écran reste sous les doigts
     z={s:s2, x:(px-c.x)-((px-c.x)-from.x)*k, y:(py-c.y)-((py-c.y)-from.y)*k}; if(s2<=1.01) z={s:1, x:0, y:0}; apply(); }
-  const reset=()=>{ st.classList.remove('drag'); z={s:1, x:0, y:0}; apply(); };
+  // taille initiale ; le geste en cours est abandonné (fermeture pendant le geste : sa fin ne fait plus rien)
+  const reset=()=>{ st.classList.remove('drag'); pts.clear(); one=pinch=null; v.style.opacity=''; z={s:1, x:0, y:0}; apply(); };
   const mid=()=>{ const [a,b]=[...pts.values()]; return {x:(a.x+b.x)/2, y:(a.y+b.y)/2, d:Math.hypot(a.x-b.x, a.y-b.y)}; };
   st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return;
     pts.set(e.pointerId, {x:e.clientX, y:e.clientY}); st.setPointerCapture(e.pointerId); st.classList.add('drag');
@@ -1684,14 +1687,14 @@ function showInput(i){
 function closeInputs(){ resetInputZoom(); $('iv').classList.remove('on'); ivIndex=-1; ivOwner=null; syncThemeColor();
   clearLater($('ivImg'), ()=>ivIndex<0); }
 async function inputAction(kind){             // repartir de cette image d'entrée : Éditer (référence) ou Dessiner
+  if(!ivOwner || ivIndex<0) return;               // second appui pendant le fondu de fermeture
   const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f, list=editImages, priv=inPrivate();
   closeInputs(); closeViewer();
   const dataUrl=await readFile(await (await fetch(url)).blob());
   if(kind==='mask'){ if(await setMaskImage(name, dataUrl, priv)) goTab('mask'); return; }
   if(list.length>=MAX_REFS){ toast(MAX_REFS+' images de référence au maximum', 'err'); return; }
   addEditImage(list, await toEntry(name, dataUrl)); }
-// comme la visionneuse ; un geste qui s'achève après la fermeture (sortie de l'espace pendant le geste) ne rouvre rien
-const resetInputZoom=zoomable($('ivStage'), $('ivImg'), $('iv'), d=>{ if(ivIndex>=0) showInput(ivIndex+d); }, closeInputs);
+const resetInputZoom=zoomable($('ivStage'), $('ivImg'), $('iv'), d=>showInput(ivIndex+d), closeInputs);   // comme la visionneuse
 async function viewerAction(kind){
   const it=vList[vIndex]; if(!it) return;
   if(kind==='edit' || kind==='mask'){ closeViewer(); return kind==='edit' ? useAsEditInput(it.name, srcOf(it)) : useAsMaskInput(it.name, srcOf(it)); }
@@ -1783,12 +1786,15 @@ function changedSpace(inside){
   // prompts enregistrés : ceux de l'espace quitté ne restent ni à l'écran ni en mémoire de la page
   // (confirmation de suppression comprise : elle montre le titre du prompt)
   if([$('promptSheet'), $('promptEditSheet'), $('askSheet')].includes(openedSheet)){ closeSheet(); $('askText').textContent=''; }
+  if(openedSheet===$('lotSheet')) closeSheet();      // « Voir le lot » : images de l'espace quitté
+  $('lotSheetGrid').innerHTML=''; $('lotSheetGrid').onclick=null;
   prompts={saved:[], types:prompts.types}; editingPrompt=null; $('peTitle').value=$('peText').value=''; renderPrompts();
   if(ivIndex>=0 && !!ivOwner.private!==inside) closeInputs();
   if(vIndex>=0 && vList.some(x=>!!x.private!==inside)) closeViewer();
   if(!inside){ forgetPrivateImages();               // rien de l'espace quitté dans la page, même caché ou chargé en avance
-    if(vIndex<0){ vList=[]; $('vImg').alt=$('ivImg').alt=''; $('vChips').innerHTML=$('ivLabel').textContent='';   // prompt, réglages
-      ['vDl', 'ivDl'].forEach(id=>$(id).removeAttribute('href')); } }   // liens vers l'image ou l'entrée privée
+    $('ivImg').alt=$('ivLabel').textContent=$('ivCount').textContent='';   // images d'entrée (fermées juste avant)
+    if(vIndex<0){ vList=[]; $('vImg').alt=$('vCount').textContent=$('vLotOpen').textContent='';   // prompt, rang, lot
+      $('vChips').innerHTML=$('vInputs').innerHTML=''; $('vInputs').hidden=true; } }   // réglages, images d'entrée
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
     resumeOwn(queueState); }
   show(oldestActive() || latestResult());
