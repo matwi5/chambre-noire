@@ -1,4 +1,5 @@
-// Test de fumée de l'interface, dans la vue du téléphone : chaque écran principal s'ouvre sans erreur de console.
+// Test de fumée de l'interface, dans la vue du téléphone : chaque écran principal s'ouvre sans erreur de console, et le
+// panneau Moteur dit quelle version du code est servie.
 //   node --test "tests/ui/*.test.mjs"   (ou : venv/bin/python tests/check.py --ui)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -53,5 +54,14 @@ test('feuille de la file, puis annulation depuis la file', async () => {
   const status = await (await fetch(bench.url + '/api/status')).json();
   assert.equal(status.queue.length, 0);
   await page.eval(`closeSheet()`);
+  page.assertNoErrors();
+});
+
+test('panneau Moteur : version du code servi, et serveur à relancer quand il tourne sur un autre commit', async () => {
+  const shown = await page.eval(`({ v: fmtVersion({ commit: 'abc1234', branch: 'main', date: '2026-10-16' }),
+    none: fmtVersion(undefined), same: staleServer({ version: { commit: 'a1' }, server_version: { commit: 'a1' } }),
+    stale: staleServer({ version: { commit: 'abc1234' }, server_version: { commit: 'def5678' } }) })`);
+  assert.deepEqual(shown,
+    { v: 'abc1234 · main · 16/10/2026', none: '', same: '', stale: 'lancé sur def5678 : à relancer' });
   page.assertNoErrors();
 });

@@ -976,6 +976,10 @@ document.querySelectorAll('.sheet').forEach(sh=>{ let y0=null, dy=0;
 const esc = t => String(t).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function facts(id, rows){ $(id).innerHTML=rows.filter(r=>r[1]!=null && r[1]!=='').map(([k,v,cls])=>`<dt>${esc(k)}</dt><dd class="${cls||''}">${esc(v)}</dd>`).join(''); }
 let statusTimer=null, queueState=[], queueAt=0;   // file de l'espace de l'appareil reçue de /api/status, et quand
+// version du code servi (git, /api/status) : commit, branche, date ; le serveur lancé sur un autre commit est à relancer
+const fmtVersion = v => v ? [v.commit, v.branch, v.date && v.date.split('-').reverse().join('/')].filter(Boolean).join(' · ') : '';
+const staleServer = s => s.server_version && s.version && s.server_version.commit!==s.version.commit
+  ? `lancé sur ${s.server_version.commit} : à relancer` : '';
 async function refreshStatus(){
   try{ const s=await (await fetch('/api/status')).json(); const el=$('status');
     queueState=s.queue||[]; queueAt=Date.now();
@@ -985,7 +989,8 @@ async function refreshStatus(){
     if(s.sd_ready){ applyEstimates(s.estimates); el.textContent=(s.busy?'En cours':'Prêt')+(ver?' · '+ver:''); el.className='ok'; } else { el.textContent='Non prêt'; el.className='err'; }
     applyPrivate(s.private); if(inPrivate()) adoptPrivate();
     facts('engineFacts', [['État', s.sd_ready ? (s.busy ? 'génération en cours' : 'prêt') : (s.detail||'non prêt')], ['Moteur', s.backend], ['Modèle', s.model],
-      ['File d\'attente', s.queued ? s.queued+' en attente' : ''], ['Estimations', !s.estimates ? '' : calibrated ? 'calibrées sur '+s.estimates.samples+' mesure'+(s.estimates.samples>1?'s':'') : 'non calibrées']]); }
+      ['File d\'attente', s.queued ? s.queued+' en attente' : ''], ['Estimations', !s.estimates ? '' : calibrated ? 'calibrées sur '+s.estimates.samples+' mesure'+(s.estimates.samples>1?'s':'') : 'non calibrées'],
+      ['Version', fmtVersion(s.version)], ['Serveur', staleServer(s)]]); }
   catch(e){ $('status').textContent='Hors ligne'; $('status').className='err'; facts('engineFacts', [['État', 'serveur injoignable']]); }
   renderIsland(); renderQueue();
   clearTimeout(statusTimer);                       // un appel hors du rythme (lancement, île) remplace le suivant prévu

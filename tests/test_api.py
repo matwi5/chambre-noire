@@ -1,5 +1,6 @@
 """Comportement de base de l'API locale, sur le banc à faux moteur (voir bench.py)."""
-import os, unittest
+import os, subprocess, unittest
+from unittest import mock
 
 import bench
 from bench import call, files, gen_body, generate, journal, wait_job
@@ -112,6 +113,23 @@ class NotificationTest(bench.BenchCase):
         self.assertEqual([m["title"] for m in sent], ["Image incognito prête", "Échec de la génération"])
         for msg in sent:
             self.assertNoPrompt(msg, "zq7marker")
+
+
+class VersionTest(bench.BenchCase):
+    """Version du code servie par /api/status (panneau Moteur) : le dernier commit du dossier, relu périodiquement."""
+
+    def test_status_reports_the_served_code(self):
+        status = call("GET", "/api/status")[1]
+        self.assertIn("version", status)                 # le banc sert un dossier temporaire hors git : None
+        self.assertIsNone(status["server_version"])      # main() n'est pas lancé par le banc
+
+    def test_version_is_the_last_commit_of_the_folder(self):
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        head = subprocess.run(["git", "-C", repo, "log", "-1", "--format=%h %cs"], capture_output=True, text=True,
+                              check=True).stdout.split()
+        with mock.patch.object(bench.launch, "ROOT", repo), mock.patch.dict(bench.launch._version, root=None):
+            version = bench.launch.code_version()
+        self.assertEqual([version["commit"], version["date"]], head)
 
 
 if __name__ == "__main__":

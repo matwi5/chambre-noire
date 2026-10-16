@@ -90,11 +90,12 @@ distincts) ; suivi de fichiers, il ne lance que ceux-là. Un avis « zone sensib
 ## Service macOS sur le poste du porteur
 
 L'interface tourne en LaunchAgent `com.matwi5.qwen-image-local` (journal `logs/service.log`), avec `--lan`, depuis le
-dossier principal du dépôt, qui reste sur la branche `main` : le service ne fait tourner que ce qui est fusionné.
-Après la fusion d'une PR, mettre ce dossier à jour (`git pull --ff-only` sur `main`) avant de relancer le service.
+dossier principal du dépôt, qui reste sur la branche `main` : le service ne fait tourner que ce qui est fusionné. Après
+la fusion d'une PR, mettre ce dossier à jour (`git pull --ff-only` sur `main`) avant de relancer le service.
 `tools/ui/index.html` est relu à chaque requête : un changement d'interface est en ligne dès l'enregistrement, donc
-avant que le serveur qui va avec soit relancé. Un changement de `tools/launch.py` demande de relancer le service, et
-seulement si aucune génération ne tourne :
+avant que le serveur qui va avec soit relancé. Le téléphone ne voit que ce dossier : un compte rendu dit si le
+changement est en ligne ou seulement sur `dev` ; le panneau Moteur affiche le commit servi (« Version »). Un changement
+de `tools/launch.py` demande de relancer le service, et seulement si aucune génération ne tourne :
 
 ```bash
 venv/bin/python -c "import json,urllib.request as u; print(json.load(u.urlopen('http://127.0.0.1:7860/api/status'))['busy'])"

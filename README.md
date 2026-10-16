@@ -140,7 +140,9 @@ Options : `--port 7860` (changer de port), `--model q4|q8` (modèle Q4_K_M par d
 `setup.py --q8`), `--backend vulkan|cuda|cpu` (Windows : forcer un moteur ; par défaut CUDA s'il est installé, sinon
 Vulkan ; sur Mac, le moteur est toujours Metal), `--no-browser`. Pour lancer Q8_0 par le raccourci, ajoutez
 `"model": "q8"` dans `tools/config.json`. La pastille d'état en haut à droite indique le modèle utilisé ; un appui ouvre
-le panneau **Moteur** (moteur, modèle, calibration des estimations, journal).
+le panneau **Moteur** (moteur, modèle, calibration des estimations, version du code servi, journal) : la ligne
+**Version** dit quel commit tourne (utile pour savoir si un correctif est en ligne sur le téléphone), et **Serveur**
+« à relancer » apparaît quand le serveur tourne encore sur un commit plus ancien que l'interface.
 
 Par défaut, l'interface n'écoute que sur `127.0.0.1` : elle n'est pas accessible depuis le réseau.
 
@@ -708,7 +710,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   envoyé dans `/api/generate` (`"page"`, 1 à 64 lettres, chiffres, `-` ou `_`), pour qu'elle y reconnaisse ses
   lignes : il n'ouvre aucune route ; `queued` : générations en attente de l'espace ; `current_job` : la génération en
   cours si elle est de l'espace et n'est pas incognito, sinon `null` ; `last_job` : dernière génération normale,
-  `null` dans l'espace privé ; `busy` : le Mac calcule, quel que soit l'espace) ; lots : `"count"` de 2 à 4 dans `/api/generate` (mode
+  `null` dans l'espace privé ; `busy` : le Mac calcule, quel que soit l'espace ; `version` : `commit`, `date` et
+  `branch` du dernier commit du dossier servi, relu toutes les 30 s, `null` hors git ; `server_version` : la même
+  chose au lancement du serveur, `null` sans `main()`) ; lots : `"count"` de 2 à 4 dans `/api/generate` (mode
   Créer, `"mode": "t2i"` ; 1 : génération seule) crée autant de générations ; `"campaign": [{"image": <data URL>, "width",
   "height"}, …]` (1 à 10 photos, mode Éditer, `"mode": "edit"`, sans `ref_images`) crée une édition par photo, avec
   cette seule photo en référence et à ses dimensions (une seule photo : génération seule) ; les générations d'un lot

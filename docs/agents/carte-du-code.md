@@ -19,7 +19,8 @@ Dans l'ordre du fichier :
   `ROOT`), `MODELS` et `DIFFUSION` (noms des fichiers de modèles, à garder égaux à ceux de `setup.py`), `BACKENDS`
   (options de sd-cli par moteur, réglages Metal justifiés en commentaire), `PLATFORM_BACKENDS`, `PROGRESS_RE` et
   `TAKING_RE` (lecture de la sortie de sd-cli), `MAX_VARIANTS`, `MAX_CAMPAIGN`, `INCOGNITO_TTL`, `PAGE_TOKEN_RE`.
-  `record_calib`, `load_config`, `engine_tag`, `default_backend`.
+  `record_calib`, `load_config`, `code_version` (commit, date et branche du dossier servi, relus toutes les
+  `VERSION_TTL` s ; `S.started` : la même chose au lancement, posé par `main()`), `engine_tag`, `default_backend`.
 - **Accès** : `ACCESS_FILE`, `ACCESS_COOKIE`, `LOCAL_CLIENTS`, `PUBLIC_FILES` (manifeste, icônes, service worker,
   servis sans cookie), `LOGIN_PAGE`. Plus bas : `normalize_code`, `access_token`, `load_access_code`, `lan_address`,
   `tailscale_hosts`, `tailscale_serve_url`.
@@ -99,7 +100,8 @@ dernier bloc, après le HTML.
     `refreshChoices`, `setIncog`.
   - « onglets & statut » : `TABS`, changement d'onglet (`mode`) ; « panneaux du bas » : `openSheet`, `closeSheet`
     (un seul ouvert, `openedSheet`) ; `refreshStatus()` (interroge `/api/status` toutes les 5 s, 2 s tant que la file
-    n'est pas vide ; met à jour `queueState`, l'île, la file et l'espace privé par `applyPrivate`).
+    n'est pas vide ; met à jour `queueState`, l'île, la file et l'espace privé par `applyPrivate`, et le panneau
+    Moteur, version servie comprise : `fmtVersion`, `staleServer`).
   - « images », « dessin » : `toEntry`, `renderEditThumbs`, `setMaskImage`, `showMaskImage`, `dropMaskImage`,
     `exportMask`.
   - « requête & loader » : `buildRequest` ; « messages et confirmations » : `toast`, `ask` et `answer` (feuille
