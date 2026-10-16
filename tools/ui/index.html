@@ -1594,10 +1594,10 @@ let vEmpty=null, ivEmpty=null;                     // vidage prévu après le fo
 function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor();
   clearTimeout(vEmpty); vEmpty=setTimeout(emptyViewer, FADE_MS); }   // après le fondu de fermeture
 // visionneuse fermée : plus rien de l'image vue dans la page cachée (image, prompt, réglages, rang, lot, lien)
-// (le fond flouté reste jusqu'à la prochaine image : forgetPrivateImages le retire s'il est privé)
-function emptyViewer(){ clearTimeout(vEmpty); vList=[]; clearImage($('vImg'));
+function emptyViewer(){ clearTimeout(vEmpty); vList=[]; clearImage($('vImg')); clearImage($('vBg'));   // fond compris
   $('vImg').alt=$('vCount').textContent=$('vLotOpen').textContent=''; $('vChips').innerHTML=$('vInputs').innerHTML='';
-  $('vInputs').hidden=$('vLot').hidden=$('vKeep').hidden=$('vAdopt').hidden=true; dropLink($('vDl')); }
+  $('vInputs').hidden=$('vLot').hidden=$('vKeep').hidden=$('vAdopt').hidden=true; dropLink($('vDl'));
+  $('vDelete').querySelector('span').textContent='Supprimer'; }   // « Effacer » dirait qu'elle était incognito
 function stepViewer(d){ if(vIndex<0 || !vList.length) return; vStep=d; openViewer((vIndex+d+vList.length)%vList.length); }
 addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevented) return;
   if(ivIndex>=0){ if(e.key==='Escape') closeInputs(); else if(e.key==='ArrowLeft') showInput(ivIndex-1); else if(e.key==='ArrowRight') showInput(ivIndex+1); return; }
@@ -1615,7 +1615,7 @@ function zoomable(st, img, v, step, close){
   function zoomAt(s2, px, py, from=z){ const c=center(), k=s2/from.s;   // le point (px, py) de l'écran reste sous les doigts
     z={s:s2, x:(px-c.x)-((px-c.x)-from.x)*k, y:(py-c.y)-((py-c.y)-from.y)*k}; if(s2<=1.01) z={s:1, x:0, y:0}; apply(); }
   // taille initiale, et le geste en cours abandonné : sa fin ne fait plus rien (image changée ou vue fermée pendant
-  // le geste ; les doigts encore posés commencent un nouveau geste en se relevant)
+  // le geste) ; les doigts encore posés sont ignorés jusqu'à ce qu'ils se relèvent
   const reset=()=>{ st.classList.remove('drag'); pts.clear(); one=pinch=null; v.style.opacity=''; z={s:1, x:0, y:0}; apply(); };
   const mid=()=>{ const [a,b]=[...pts.values()]; return {x:(a.x+b.x)/2, y:(a.y+b.y)/2, d:Math.hypot(a.x-b.x, a.y-b.y)}; };
   st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return;
@@ -1800,8 +1800,8 @@ function changedSpace(inside){
   prompts={saved:[], types:prompts.types}; editingPrompt=null; $('peTitle').value=$('peText').value=''; renderPrompts();
   if(ivIndex>=0 && !!ivOwner.private!==inside) closeInputs();
   if(vIndex>=0 && vList.some(x=>!!x.private!==inside)) closeViewer();
-  if(!inside){ forgetPrivateImages();               // rien de l'espace quitté dans la page, même caché ou chargé en avance
-    if(ivIndex<0) emptyInputs(); if(vIndex<0) emptyViewer(); }   // vues fermées : vidées sans attendre le fondu
+  if(!inside) forgetPrivateImages();                // rien de l'espace quitté dans la page, même caché ou chargé en avance
+  if(ivIndex<0) emptyInputs(); if(vIndex<0) emptyViewer();   // vues fermées : vidées sans attendre le fondu (les deux sens)
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
     resumeOwn(queueState); }
   show(oldestActive() || latestResult());

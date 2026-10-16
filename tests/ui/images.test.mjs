@@ -173,6 +173,8 @@ test('images d\'entrée : pincer zoome, relâcher rend la taille initiale', asyn
   await page.waitFor(`!$('ivImg').getAttribute('src') && !$('ivLabel').textContent && !$('ivDl').hasAttribute('href')`,
     { what: 'images d\'entrée vidées après le fondu' });
   await page.eval(`closeViewer()`);
+  await page.waitFor(`!$('vImg').hasAttribute('src') && !$('vBg').hasAttribute('src')`,
+    { what: 'visionneuse vidée après le fondu, fond flouté compris' });
   page.assertNoErrors();
 });
 
@@ -181,6 +183,8 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
   assert.equal(await privatePost('/api/private/unlock'), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
+  // une visionneuse publique ouverte puis fermée juste avant l'entrée : rien d'elle, fond compris, dans l'espace privé
+  assert.equal(await page.eval(`$('vBg').getAttribute('src')`), null, 'fond public resté dans l\'espace privé');
   assert.equal(await page.eval(`postJson('/api/generate', { mode: 't2i', prompt: 'zq7 lot privé', width: 512,
     height: 512, steps: 2, cfg: 1, seed: -1, preview: false, ref_images: [], private: true, count: 2 })
     .then(r => r.status)`), 202);
@@ -202,9 +206,10 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
 });
 
 test('zone de résultat : son image retirée, son lien de téléchargement part avec elle', async () => {
-  await page.waitFor(`!inPrivate() && histItems.length === 2`, { what: 'galerie publique' });
-  const kept = await page.eval(`(() => { showResult(histItems[0].name, 512, 512); hideResult();
-    return { href: $('dl').hasAttribute('href'), name: $('dl').hasAttribute('download') }; })()`);
+  await page.waitFor(`!inPrivate()`, { what: 'espace public' });
+  const kept = await page.eval(`fetch('/api/history').then(r => r.json()).then(h => {
+    showResult(h[0].name, 512, 512); show(null);   // comme une image supprimée ou effacée : zone vidée
+    return { href: $('dl').hasAttribute('href'), name: $('dl').hasAttribute('download') }; })`);
   assert.deepEqual(kept, { href: false, name: false }, 'lien vers l\'image retirée resté dans la page');
   page.assertNoErrors();
 });
