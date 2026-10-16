@@ -3,6 +3,36 @@
 Les versions suivent [SemVer](https://semver.org/lang/fr/) ; tant que l'application est en 0.x, une version mineure
 peut changer un comportement existant.
 
+## 0.4.0 · 2026-10-17
+
+### Ajouté
+
+- **Zoom sur les images d'entrée** : pincement, molette et balayage, comme dans la visionneuse ; la première image
+  d'entrée est chargée en avance et s'ouvre sans attente.
+- **Version servie dans le panneau Moteur** : la ligne « Version » dit quel commit tourne, et « Serveur : à
+  relancer » apparaît quand `tools/launch.py` ou `tools/estimate.py` a changé depuis le lancement du serveur.
+- **Variante communautaire du modèle en option** : `setup.py --uc` l'installe (`uc-q4`, et `uc-q8` avec `--q8`),
+  à choisir par `--model`.
+- **Réglages propres à la machine** dans `tools/config.local.json`, non suivi par git, lu par-dessus
+  `tools/config.json`.
+
+### Modifié
+
+- **Modèle par défaut** : `q4` et `q8` installent les quantifications GGUF des poids officiels de
+  Qwen/Qwen-Image-2.1 (mêmes tailles qu'avant) ; une installation existante télécharge ces fichiers au prochain
+  `setup.py`.
+- **Une image reste dans son espace** : le bouton « Rendre privée » et la route `POST /api/private/adopt` sont
+  retirés.
+- **Affichage des images** : une image n'apparaît qu'une fois chargée, sans l'image d'avant ; une miniature
+  d'entrée prend tout de suite la taille de l'image complète, sans saut à son arrivée.
+- **Dépôt allégé** : `workflows/` et `start-ui-sdcpp.cmd`, périmés, sont retirés.
+
+### Corrigé
+
+- Une image d'entrée privée ou la galerie privée ne réapparaissent plus un instant dans l'espace public.
+- Après la sortie de l'espace privé, la page ne garde plus rien de privé, même caché : visionneuse, images
+  d'entrée, feuille d'un lot, liens de téléchargement, prompt, lignes du journal du panneau Moteur.
+
 ## 0.3.0 · 2026-10-15
 
 ### Ajouté
