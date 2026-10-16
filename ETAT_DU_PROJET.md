@@ -95,8 +95,9 @@ Mis à jour le 16/10/2026.
   `emptyInputs`), sans erreur sur un appui pendant ce fondu (`a4f49ac`) ; puis vidage annulé si la vue se rouvre pendant
   le fondu, geste abandonné à chaque changement d'image, tests du vidage immédiat à la sortie et du lien de la zone
   de résultat (revues en sous-agent Opus, effort xhigh, à la demande du porteur) ; fond flouté de la visionneuse de
-  nouveau vidé à la fermeture et à tout changement d'espace (sinon une image incognito effacée, ou une publique dans
-  l'espace privé, restait en fond).
+  nouveau vidé à la fermeture (sinon une image incognito effacée, ou une publique dans l'espace privé, restait en
+  fond). Dernière revue (`8d81b13`) : aucun vrai bogue ; vidage des vues à l'entrée dans l'espace privé retiré (il
+  coupait le fondu sans rien protéger), test et commentaires précisés.
   À reporter dans Asana (accord du porteur) : un ticket pour la fuite et les glitchs d'affichage (`d3169f8`,
   `9f9e269`), un pour le zoom et le préchargement des images d'entrée (`3591b85`).
 - Fuite de l'espace privé à l'écran corrigée (signalée par le porteur) : une `<img>` qui reçoit une autre adresse garde

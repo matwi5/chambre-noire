@@ -1571,7 +1571,7 @@ function openViewer(i, list=vList){
   const v=$('viewer'), img=$('vImg');
   // la miniature en attendant l'image ; une fois l'image là, sa première image d'entrée est chargée en avance
   showImage(img, srcOf(it), {thumb:thumbOf(it), then:()=>{ if(vList[vIndex]===it && (it.inputs||[]).length) preload(inputUrl(it, it.inputs[0])); }});
-  showImage($('vBg'), thumbOf(it), {keep:true});  // fond flouté : l'ancien en attendant, jamais un fond noir
+  showImage($('vBg'), thumbOf(it), {keep:true});  // fond flouté : d'une image à l'autre, l'ancien en attendant
   // voisines : leurs miniatures, et l'image complète de celle vers qui l'on avance (mémoire et données du téléphone)
   const n=list.length; [list[(i+1)%n], list[(i+n-1)%n]].forEach(x=>{ if(x!==it) preload(thumbOf(x)); });
   const next=list[(i+vStep+n)%n]; if(next!==it) preload(srcOf(next));
@@ -1800,8 +1800,8 @@ function changedSpace(inside){
   prompts={saved:[], types:prompts.types}; editingPrompt=null; $('peTitle').value=$('peText').value=''; renderPrompts();
   if(ivIndex>=0 && !!ivOwner.private!==inside) closeInputs();
   if(vIndex>=0 && vList.some(x=>!!x.private!==inside)) closeViewer();
-  if(!inside) forgetPrivateImages();                // rien de l'espace quitté dans la page, même caché ou chargé en avance
-  if(ivIndex<0) emptyInputs(); if(vIndex<0) emptyViewer();   // vues fermées : vidées sans attendre le fondu (les deux sens)
+  if(!inside){ forgetPrivateImages();               // rien de l'espace quitté dans la page, même caché ou chargé en avance
+    if(ivIndex<0) emptyInputs(); if(vIndex<0) emptyViewer(); }   // vues fermées : vidées sans attendre le fondu
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
     resumeOwn(queueState); }
   show(oldestActive() || latestResult());
