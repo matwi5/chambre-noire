@@ -7,12 +7,16 @@
   venv/bin/python tests/check.py --quick    # banc sauté si aucun .py n'a changé depuis la base (jamais en CI)
   python3 tests/check.py --link-venv        # worktree : crée le lien venv vers le venv du dossier principal
 
-1. compile chaque fichier .py suivi par git (sans écrire de .pyc) ;
+« Suivi » veut dire ici suivi par git, ou nouveau et pas encore ajouté (fichier non suivi que .gitignore n'exclut pas) :
+un fichier créé passe les contrôles avant son premier commit.
+
+1. compile chaque fichier .py suivi (sans écrire de .pyc) ;
 2. passe à « node --check » chaque bloc <script> de tools/ui/index.html (un bloc sur une seule ligne compris) et chaque
-   fichier .js ou .mjs suivi ; échoue si un bloc ouvert n'a pas été extrait ;
-3. vérifie que les lignes ajoutées depuis la base (git merge-base HEAD origin/main, arbre de travail compris) des
-   fichiers .py, .md, .mjs et .js suivis ont 120 caractères au plus, hors tableaux et blocs de code Markdown ; base
-   introuvable : un avis, et le contrôle passe ;
+   fichier .js ou .mjs suivi ; échoue si un bloc ouvert n'a pas été extrait ; refuse une adresse donnée à la main à
+   une image des visionneuses ou de la zone de résultat ($('vImg').src=…, IMAGE_IDS) : elles passent par showImage ;
+3. vérifie que les lignes ajoutées depuis la base (git merge-base HEAD origin/main, arbre de travail compris ; toutes
+   celles d'un fichier nouveau) des fichiers .py, .md, .mjs et .js suivis ont 120 caractères au plus, hors tableaux et
+   blocs de code Markdown ; base introuvable : un avis, et le contrôle passe ;
 4. lance le banc (unittest discover -s tests) et recopie telles quelles sa ligne « Ran N tests … » et son verdict ;
    avec --quick et aucun .py changé depuis la base (non suivis compris ; sans base, le banc tourne), seul
    tests/test_public_repo.py tourne ;
@@ -36,10 +40,24 @@ LINE_FILES = ("*.py", "*.md", "*.mjs", "*.js")
 # mots d'une ligne ajoutée qui demandent la passe bogues de /code-review (confidentialité : incognito, espace privé)
 SENSITIVE = ("localStorage", "incognito", "inPrivate", "privState", "asideInput", "secret(", "/api/private/",
              "private/")
+# images de l'interface que seul showImage remplit (sinon l'image d'avant reste à l'écran jusqu'au chargement)
+IMAGE_IDS = ("vImg", "vBg", "ivImg", "stageImg")
+IMAGE_SRC_RE = re.compile(r"\$\(\s*['\"](" + "|".join(IMAGE_IDS) + r")['\"]\s*\)\.src\s*=(?!=)")
 
 
 def git(*args):
     return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+
+
+def new_files(*patterns):
+    """Fichiers nouveaux, pas encore ajoutés à git et non exclus par .gitignore."""
+    return git("ls-files", "--others", "--exclude-standard", "--", *patterns).splitlines()
+
+
+def checked_files(*patterns):
+    """Fichiers suivis par git et fichiers nouveaux (new_files), présents sur le disque."""
+    names = dict.fromkeys(git("ls-files", "--", *patterns).splitlines() + new_files(*patterns))
+    return [f for f in names if os.path.exists(os.path.join(ROOT, f))]
 
 
 def main_checkout():
@@ -89,7 +107,7 @@ def reexec_in_venv():
 
 
 def check_python():
-    files = [f for f in git("ls-files", "*.py").splitlines() if os.path.exists(os.path.join(ROOT, f))]
+    files = checked_files("*.py")
     bad = []
     for f in files:
         with open(os.path.join(ROOT, f), "rb") as fh:
@@ -132,12 +150,21 @@ def check_js():
             with open(path, "w", encoding="utf-8") as f:
                 f.write(code)
             ok &= node_check(path, f"index.html, bloc <script> {i} (ligne {line})")
-    files = [f for f in git("ls-files", "*.js", "*.mjs").splitlines() if os.path.exists(os.path.join(ROOT, f))]
+    files = checked_files("*.js", "*.mjs")
     for f in files:
         ok &= node_check(os.path.join(ROOT, f), f)
+    bad = image_src_lines(html)
+    for line in bad:
+        print(f"  index.html:{line} : adresse donnée à la main à une image affichée : passer par showImage")
+    ok &= not bad
     print(f"JavaScript : {len(blocks)} bloc(s) <script> de index.html et {len(files)} fichier(s) vérifiés"
           + ("" if ok else " : ÉCHEC"))
     return ok
+
+
+def image_src_lines(html):
+    """Numéros des lignes de html qui donnent une adresse à la main à une image de IMAGE_IDS."""
+    return [k for k, text in enumerate(html.splitlines(), 1) if IMAGE_SRC_RE.search(text)]
 
 
 def merge_base():
@@ -149,7 +176,8 @@ def merge_base():
 
 
 def added_lines(base, *paths):
-    """Lignes ajoutées depuis base (arbre de travail compris) : {fichier : ensemble de numéros de ligne}."""
+    """Lignes ajoutées depuis base (arbre de travail compris ; toutes celles d'un fichier nouveau, new_files) :
+    {fichier : ensemble de numéros de ligne}."""
     out = git("diff", "--unified=0", "--no-color", "--no-ext-diff", base, "--", *paths)
     added, current = {}, None
     for line in out.splitlines():
@@ -159,6 +187,12 @@ def added_lines(base, *paths):
             m = re.match(r"@@ -\S+ \+(\d+)(?:,(\d+))? @@", line)
             start, count = int(m.group(1)), int(m.group(2) or 1)
             added.setdefault(current, set()).update(range(start, start + count))
+    for f in new_files(*paths):                       # fichier nouveau : git diff ne le voit pas, tout est ajouté
+        try:
+            with open(os.path.join(ROOT, f), encoding="utf-8") as fh:
+                added[f] = set(range(1, len(fh.read().splitlines()) + 1))
+        except (OSError, UnicodeDecodeError):
+            pass
     return added
 
 
@@ -203,6 +237,15 @@ def sensitive_notice(base):
             for word in SENSITIVE:
                 if word in line:
                     hits.setdefault(word, set()).add(current)
+    for f in new_files("tools/", ":!*.md"):          # fichier nouveau : toutes ses lignes sont ajoutées
+        try:
+            with open(os.path.join(ROOT, f), encoding="utf-8") as fh:
+                text = fh.read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for word in SENSITIVE:
+            if word in text:
+                hits.setdefault(word, set()).add(f)
     if hits:
         print("Avis : zone sensible : passe bogues /code-review requise ("
               + " ; ".join(f"{w} dans {', '.join(sorted(fs))}" for w, fs in hits.items()) + ")")

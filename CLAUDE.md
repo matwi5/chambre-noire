@@ -44,17 +44,20 @@ Aucun lint ni typage n'est déclaré. Après un changement, une seule commande (
 venv/bin/python tests/check.py [--no-bench | --quick] [--ui [tests/ui/x.test.mjs …]]
 ```
 
-Elle compile chaque `.py` suivi, passe chaque bloc `<script>` de `tools/ui/index.html` et chaque `.js`/`.mjs` suivi
-à `node --check`, refuse une ligne ajoutée depuis la base (`git merge-base HEAD origin/main`) de plus de 120
-caractères (`CODING_STANDARDS.md`), lance le banc et recopie sa ligne « Ran N tests … » et son verdict (c'est elle
-qu'on cite, jamais un compte de tête) ; code de sortie non nul au moindre échec. `tests/test_public_repo.py` y
-échoue si un fichier suivi contient un chemin `/Users/<nom>`, une adresse IP privée ou un nom en `.ts.net` autre que
-ceux du banc.
+Elle compile chaque `.py` suivi, passe chaque bloc `<script>` de `tools/ui/index.html` et chaque `.js`/`.mjs` suivi à
+`node --check`, refuse une ligne ajoutée depuis la base (`git merge-base HEAD origin/main`) de plus de 120 caractères
+(`CODING_STANDARDS.md`) et une adresse donnée à la main à une image affichée (`$('vImg').src=…` : passer par
+`showImage`), lance le banc et recopie sa ligne « Ran N tests … » et son verdict (c'est elle qu'on cite, jamais un
+compte de tête) ; code de sortie non nul au moindre échec. « Suivi » compte aussi un fichier nouveau pas encore ajouté à
+git. `tests/test_public_repo.py` y échoue si un fichier suivi contient un chemin `/Users/<nom>`, une adresse IP privée
+ou un nom en `.ts.net` autre que ceux du banc.
 
 `--quick` (en local, jamais en CI) saute le banc quand aucun `.py` n'a changé depuis la base, sauf
 `tests/test_public_repo.py`. `--ui` tourne en même temps que le banc (ports libres et dossiers temporaires
 distincts) ; suivi de fichiers, il ne lance que ceux-là. Un avis « zone sensible : passe bogues /code-review requise »
-(sans échec) signale une ligne de code ajoutée qui touche l'incognito ou l'espace privé.
+(sans échec) signale une ligne de code ajoutée qui touche l'incognito ou l'espace privé. Pendant une correction
+(tours de revue compris), `--quick --ui <fichiers touchés>` suffit ; le contrôle complet (`--ui` seul) se lance une
+fois, avant le commit.
 
 - **Banc** (sans GPU, ≈ 1 min) : `venv/bin/python -m unittest discover -s tests` ; un seul fichier :
   `venv/bin/python -m unittest discover -s tests -p test_x.py`. `tests/bench.py` sert `tools/launch.py` sur un port
@@ -74,7 +77,9 @@ distincts) ; suivi de fichiers, il ne lance que ceux-là. Un avis « zone sensib
   `html.lite`) ; `page.assertNoErrors()` échoue sur toute erreur de console. Tests : `tests/ui/*.test.mjs` : chaque
   fichier dit en tête ce qu'il couvre ; `page.setFiles` remplit un champ de fichiers. Une vérification d'interface
   nouvelle y devient un test plutôt qu'un script jetable. Une vue plus grande cache des débordements : regarder
-  aussi les captures (`page.screenshot`).
+  aussi les captures (`page.screenshot`). Un bug vu sur le téléphone seulement se rejoue par
+  `startBench({ relay: true })` puis `bench.login(page)` : l'interface passe par `tests/ui/relay.py`, comme par
+  `tailscale serve` (nom HTTPS, en-têtes de relais, code d'accès).
 - **Sonde** : `node tests/ui/probe.mjs [--width N] [--shot f.png] [--private] --eval '<expression>'` (ou
   `--script f.mjs`) lance le banc et Chrome par le pilote, évalue dans la vue du téléphone, imprime et ferme tout :
   une vérification ponctuelle passe par elle, pas par un script jetable.
@@ -87,11 +92,12 @@ distincts) ; suivi de fichiers, il ne lance que ceux-là. Un avis « zone sensib
 ## Service macOS sur le poste du porteur
 
 L'interface tourne en LaunchAgent `com.matwi5.qwen-image-local` (journal `logs/service.log`), avec `--lan`, depuis le
-dossier principal du dépôt, qui reste sur la branche `main` : le service ne fait tourner que ce qui est fusionné.
-Après la fusion d'une PR, mettre ce dossier à jour (`git pull --ff-only` sur `main`) avant de relancer le service.
+dossier principal du dépôt, qui reste sur la branche `main` : le service ne fait tourner que ce qui est fusionné. Après
+la fusion d'une PR, mettre ce dossier à jour (`git pull --ff-only` sur `main`) avant de relancer le service.
 `tools/ui/index.html` est relu à chaque requête : un changement d'interface est en ligne dès l'enregistrement, donc
-avant que le serveur qui va avec soit relancé. Un changement de `tools/launch.py` demande de relancer le service, et
-seulement si aucune génération ne tourne :
+avant que le serveur qui va avec soit relancé. Le téléphone ne voit que ce dossier : un compte rendu dit si le
+changement est en ligne ou seulement sur `dev` ; le panneau Moteur affiche le commit servi (« Version »). Un changement
+de `tools/launch.py` demande de relancer le service, et seulement si aucune génération ne tourne :
 
 ```bash
 venv/bin/python -c "import json,urllib.request as u; print(json.load(u.urlopen('http://127.0.0.1:7860/api/status'))['busy'])"

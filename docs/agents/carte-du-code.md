@@ -19,7 +19,10 @@ Dans l'ordre du fichier :
   `ROOT`), `MODELS` et `DIFFUSION` (noms des fichiers de modèles, à garder égaux à ceux de `setup.py`), `BACKENDS`
   (options de sd-cli par moteur, réglages Metal justifiés en commentaire), `PLATFORM_BACKENDS`, `PROGRESS_RE` et
   `TAKING_RE` (lecture de la sortie de sd-cli), `MAX_VARIANTS`, `MAX_CAMPAIGN`, `INCOGNITO_TTL`, `PAGE_TOKEN_RE`.
-  `record_calib`, `load_config`, `engine_tag`, `default_backend`.
+  `record_calib`, `load_config`, `code_version` (commit, date et branche du dossier servi, empreinte `server`
+  de `launch.py` et `estimate.py`, relus toutes les `VERSION_TTL` s ; git seulement s'il y a un `.git`, jamais après un
+  échec, sauf un délai dépassé ; `S.started` : la même chose au lancement, posé par `main()`), `engine_tag`,
+  `default_backend`.
 - **Accès** : `ACCESS_FILE`, `ACCESS_COOKIE`, `LOCAL_CLIENTS`, `PUBLIC_FILES` (manifeste, icônes, service worker,
   servis sans cookie), `LOGIN_PAGE`. Plus bas : `normalize_code`, `access_token`, `load_access_code`, `lan_address`,
   `tailscale_hosts`, `tailscale_serve_url`.
@@ -94,16 +97,27 @@ dernier bloc, après le HTML.
   feuilles `.sheet` : `#askSheet`, `#setSheet`, `#engineSheet`, `#lotSheet`, `#queueSheet`, `#promptSheet`,
   `#promptEditSheet` et celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`, `#adoptSheet`…).
 - **JavaScript**, sections dans l'ordre :
-  - « valeurs fixes » : `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
+  - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
+    privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
     (`refPx`, `inputsFor`, `parts` : copies de `estimate.py`) ; réglages `opt` (`localStorage` `qwen-opt`),
     `refreshChoices`, `setIncog`.
   - « onglets & statut » : `TABS`, changement d'onglet (`mode`) ; « panneaux du bas » : `openSheet`, `closeSheet`
     (un seul ouvert, `openedSheet`) ; `refreshStatus()` (interroge `/api/status` toutes les 5 s, 2 s tant que la file
-    n'est pas vide ; met à jour `queueState`, l'île, la file et l'espace privé par `applyPrivate`).
+    n'est pas vide ; met à jour `queueState`, l'île, la file et l'espace privé par `applyPrivate`, et le panneau
+    Moteur, version servie comprise : `fmtVersion`, `staleServer`).
   - « images », « dessin » : `toEntry`, `renderEditThumbs`, `setMaskImage`, `showMaskImage`, `dropMaskImage`,
     `exportMask`.
   - « requête & loader » : `buildRequest` ; « messages et confirmations » : `toast`, `ask` et `answer` (feuille
     `#askSheet`, jamais `confirm()`).
+  - « affichage des images » : `showImage` (toute image qui change d'adresse : vidée, puis remplie une fois l'image
+    chargée et décodée à part, miniature d'abord ; `img.want` : adresse attendue, une image arrivée trop tard est
+    ignorée ; `keep` : l'aperçu d'avant reste jusqu'au suivant ; `once` : aperçu servi une fois), `preload` et `ready`
+    (les 10 dernières images décodées : miniatures des voisines de la visionneuse, image complète de la suivante dans le
+    sens du parcours `vStep`, première image d'entrée ; une image incognito en sort à son oubli), `clearImage`,
+    `forgetPrivateImages` (sortie de l'espace privé : images privées et aperçus affichés, attendus ou chargés en avance,
+    chargements en cours abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne jamais réaffecter
+    `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement de la nouvelle
+    (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
   - « générations de la page, zone de résultat, île et file » : `pageJobs` (générations lancées par cette page),
     `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `lotOf`, `gridOf`, `show`,
     `showGrid`, `renderStrip`, `renderIsland`, `onIsland` (file non vide : `#queueSheet`, sinon `#engineSheet`),
@@ -118,9 +132,12 @@ dernier bloc, après le HTML.
   - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts`, `renderPrompts`,
     `usePrompt`, `savePrompt`.
   - « galerie et visionneuse » : `histItems`, `vList` (ce que parcourt la visionneuse : la galerie ou les images d'un
-    lot de la page), `loadHistory`, `renderGallery`, `openViewer`, `stepViewer`, `closeViewer`, gestes (`resetZoom`).
-  - « partager et copier » ; « images d'entrée » : `openInputs`, `inputAction`, `addEditImage` ; actions de la
-    visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`, `keepThis` (« Garder celle-ci »), `deleteCurrent`.
+    lot de la page), `loadHistory`, `renderGallery`, `openViewer`, `stepViewer`, `closeViewer` et `emptyViewer` (contenu
+    vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace privé), gestes : `zoomable` (pincer,
+    molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les images d'entrée).
+  - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
+    `inputAction`, `addEditImage` ; actions de la visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`,
+    `keepThis` (« Garder celle-ci »), `deleteCurrent`.
   - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
     `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,
     `putInput`, `swapInput`, `emptyTab` (vidage après « Générer », dans l'espace d'où la demande est partie) ; un ajout

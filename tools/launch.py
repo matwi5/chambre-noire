@@ -116,6 +116,46 @@ def load_config():
     return cfg
 
 
+VERSION_TTL = 30                                     # secondes entre deux lectures de la version du code servi
+_version = {"root": None, "at": 0.0, "value": None, "git": True}
+
+
+def code_version():
+    """Version du code servi par ce dossier : {"server", "commit", "date", "branch"}. server : empreinte de
+    tools/launch.py et tools/estimate.py, seul code que le serveur charge à son lancement (il n'est à relancer que si
+    elle a changé depuis) ; les autres : dernier commit (git), None hors git. Relue au plus toutes les VERSION_TTL
+    secondes : index.html est relu à chaque requête, un git pull change donc l'interface servie sans relancer le
+    serveur. git n'est appelé que si le dossier a un .git (fichier dans un worktree), et plus jamais après un échec :
+    sur un Mac sans outils de développement, /usr/bin/git ouvre une fenêtre d'installation ; un délai dépassé (disque
+    occupé par une génération) est retenté."""
+    if _version["root"] == ROOT and time.time() - _version["at"] < VERSION_TTL:
+        return _version["value"]
+    if _version["root"] != ROOT:
+        _version["git"] = True
+    value = {"server": None, "commit": None, "date": None, "branch": None}
+    try:
+        digest = hashlib.sha1()
+        for name in ("launch.py", "estimate.py"):
+            with open(P("tools", name), "rb") as f:
+                digest.update(f.read())
+        value["server"] = digest.hexdigest()[:12]
+    except OSError:
+        pass
+    if _version["git"] and os.path.exists(os.path.join(ROOT, ".git")):
+        try:
+            out = subprocess.run(["git", "-C", ROOT, "log", "-1", "--format=%h%n%cs%n%D"], capture_output=True,
+                                 text=True, timeout=5, check=True).stdout.splitlines()
+            refs = (out[2] if len(out) > 2 else "").split(", ")
+            heads = [r[len("HEAD -> "):] for r in refs if r.startswith("HEAD -> ")]
+            value.update(commit=out[0], date=out[1], branch=heads[0] if heads else None)
+        except subprocess.TimeoutExpired:
+            pass
+        except (OSError, subprocess.SubprocessError, IndexError):
+            _version["git"] = False
+    _version.update(root=ROOT, at=time.time(), value=value)
+    return value
+
+
 def engine_tag(backend):
     """Release de sd.cpp installée pour ce moteur (sdcpp/<moteur>/.installed, écrit par setup.py) ; une installation
     antérieure à ce marqueur est la première release épinglée."""
@@ -1043,6 +1083,8 @@ class State:
     q = queue.Queue()
     enqueue = threading.Lock()   # les générations d'un lot entrent dans la file à la suite, sans autre demande entre elles
     current = None
+    started = None           # version du code au lancement du serveur (code_version) : launch.py n'est relu qu'au
+                             # redémarrage, l'interface à chaque requête
 
 
 S = State()
@@ -1905,6 +1947,8 @@ class H(BaseHTTPRequestHandler):
                                                    and not current.get("incognito") else None,
                                     "last_job": public(last) if last else None,
                                     "estimates": coefs,
+                                    # code servi (git) : l'interface maintenant, le serveur à son lancement
+                                    "version": code_version(), "server_version": S.started,
                                     # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
                                     "phone": {"urls": S.lan_urls, "code": S.access_code} if S.access_code and self._local() else None,
                                     # espace privé : existe-t-il, est-on dedans sur cet appareil (sans prolonger la session),
@@ -2157,6 +2201,7 @@ def main():
     a = ap.parse_args()
     S.ui_port = a.port
     setup_state(cfg, a.backend, a.model)
+    S.started = code_version()
     for d in ("outputs", "logs", "jobs"):
         os.makedirs(P(d), exist_ok=True)
     try:                                               # changement de code privé interrompu par un arrêt brutal

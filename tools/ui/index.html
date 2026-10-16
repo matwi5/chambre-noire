@@ -805,7 +805,12 @@ const $ = id => document.getElementById(id);
 let mode='t2i', editImages=[], maskImage=null, paintMode='paint', lastResult=null, estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
 let privState={available:false, exists:false, unlocked:false};   // espace privé vu par cet appareil (/api/status)
 
-function log(m){ const l=$('log'); l.textContent += new Date().toLocaleTimeString()+'  '+m+'\n'; l.scrollTop=l.scrollHeight; }
+// journal du panneau Moteur ; une ligne de l'espace privé (nom prive_…, taille d'une photo) en sort avec lui. priv :
+// l'espace où l'action a commencé, noté avant sa première attente (sinon celui du moment)
+let logLines=[];
+function log(m, priv=inPrivate()){ if(priv && !inPrivate()) return;   // action privée finie hors de l'espace : rien
+  logLines.push({text:new Date().toLocaleTimeString()+'  '+m, priv}); renderLog(); }
+function renderLog(){ const l=$('log'); l.textContent=logLines.map(x=>x.text+'\n').join(''); l.scrollTop=l.scrollHeight; }
 const round32 = v => Math.max(256, Math.round(v/32)*32);
 function singleImage(){ if(mode==='edit' && editImages.length===1) return editImages[0]; if(mode==='mask' && maskImage) return maskImage; return null; }
 function closestRatio(w, h){ const t=Math.log(w/h); let best='1:1', bd=Infinity; for(const r in RATIOS){ const d=Math.abs(Math.log(RATIOS[r][0]/RATIOS[r][1])-t); if(d<bd){ bd=d; best=r; } } return best; }
@@ -976,6 +981,11 @@ document.querySelectorAll('.sheet').forEach(sh=>{ let y0=null, dy=0;
 const esc = t => String(t).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function facts(id, rows){ $(id).innerHTML=rows.filter(r=>r[1]!=null && r[1]!=='').map(([k,v,cls])=>`<dt>${esc(k)}</dt><dd class="${cls||''}">${esc(v)}</dd>`).join(''); }
 let statusTimer=null, queueState=[], queueAt=0;   // file de l'espace de l'appareil reçue de /api/status, et quand
+// version du code servi (git, /api/status) : commit, branche, date ; le serveur est à relancer quand launch.py a
+// changé depuis son lancement (server : empreinte de launch.py et estimate.py ; le reste est en ligne sans relance)
+const fmtVersion = v => v ? [v.commit, v.branch, v.date && v.date.split('-').reverse().join('/')].filter(Boolean).join(' · ') : '';
+const staleServer = s => s.server_version && s.version && s.server_version.server && s.version.server
+  && s.server_version.server!==s.version.server ? 'à relancer : son code a changé depuis son lancement' : '';
 async function refreshStatus(){
   try{ const s=await (await fetch('/api/status')).json(); const el=$('status');
     queueState=s.queue||[]; queueAt=Date.now();
@@ -985,7 +995,8 @@ async function refreshStatus(){
     if(s.sd_ready){ applyEstimates(s.estimates); el.textContent=(s.busy?'En cours':'Prêt')+(ver?' · '+ver:''); el.className='ok'; } else { el.textContent='Non prêt'; el.className='err'; }
     applyPrivate(s.private); if(inPrivate()) adoptPrivate();
     facts('engineFacts', [['État', s.sd_ready ? (s.busy ? 'génération en cours' : 'prêt') : (s.detail||'non prêt')], ['Moteur', s.backend], ['Modèle', s.model],
-      ['File d\'attente', s.queued ? s.queued+' en attente' : ''], ['Estimations', !s.estimates ? '' : calibrated ? 'calibrées sur '+s.estimates.samples+' mesure'+(s.estimates.samples>1?'s':'') : 'non calibrées']]); }
+      ['File d\'attente', s.queued ? s.queued+' en attente' : ''], ['Estimations', !s.estimates ? '' : calibrated ? 'calibrées sur '+s.estimates.samples+' mesure'+(s.estimates.samples>1?'s':'') : 'non calibrées'],
+      ['Version', fmtVersion(s.version)], ['Serveur', staleServer(s)]]); }
   catch(e){ $('status').textContent='Hors ligne'; $('status').className='err'; facts('engineFacts', [['État', 'serveur injoignable']]); }
   renderIsland(); renderQueue();
   clearTimeout(statusTimer);                       // un appel hors du rythme (lancement, île) remplace le suivant prévu
@@ -997,9 +1008,9 @@ refreshStatus();
 function readFile(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
 function loadImg(dataUrl){ return new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=dataUrl; }); }
 function resizeDataUrl(img, w, h){ const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h); return c.toDataURL('image/png'); }
-async function toEntry(name, dataUrl){ let im=await loadImg(dataUrl); let w=im.naturalWidth, h=im.naturalHeight;
+async function toEntry(name, dataUrl, priv=inPrivate()){ let im=await loadImg(dataUrl); let w=im.naturalWidth, h=im.naturalHeight;
   if(Math.max(w,h)>MAX_INPUT_SIDE){ const s=MAX_INPUT_SIDE/Math.max(w,h); const nw=Math.round(w*s), nh=Math.round(h*s);
-    dataUrl=resizeDataUrl(im, nw, nh); im=await loadImg(dataUrl); log(`${name} : ${w}×${h} réduite à ${nw}×${nh}`); w=nw; h=nh; }
+    dataUrl=resizeDataUrl(im, nw, nh); im=await loadImg(dataUrl); log(`${name} : ${w}×${h} réduite à ${nw}×${nh}`, priv); w=nw; h=nh; }
   return {name, dataUrl, w, h, img:im}; }
 // la liste des fichiers est copiée avant la remise à zéro du champ : celle-ci vide la liste du champ elle-même, que le
 // traitement (asynchrone) lit encore après sa première image
@@ -1008,8 +1019,8 @@ function wireDrop(dropId, inputId, handler){ const d=$(dropId), inp=$(inputId); 
   d.addEventListener('drop',e=>{e.preventDefault(); d.classList.remove('over'); handler([...e.dataTransfer.files]);}); inp.addEventListener('change',e=>{ handler([...e.target.files]); e.target.value=''; }); }
 // les images lues vont dans la saisie de l'espace où l'ajout a commencé (list, pris avant toute attente), même s'il
 // change pendant la lecture : une image privée ne tombe jamais dans la saisie publique
-wireDrop('edit_drop','edit_files', async files=>{ let skipped=0; const list=editImages;
-  for(const f of files){ if(list.length>=MAX_REFS){ skipped++; continue; } list.push(await toEntry(f.name, await readFile(f))); }
+wireDrop('edit_drop','edit_files', async files=>{ let skipped=0; const list=editImages, priv=inPrivate();
+  for(const f of files){ if(list.length>=MAX_REFS){ skipped++; continue; } list.push(await toEntry(f.name, await readFile(f), priv)); }
   if(list===editImages){ renderEditThumbs(); suggestRatio(); }
   if(skipped) toast(`${MAX_REFS} ${campaignOn ? 'photos' : 'images'} au maximum : ${skipped} non ajoutée${skipped>1?'s':''}`, 'err'); });
 wireDrop('mask_drop','mask_file', async files=>{ const f=files[0], priv=inPrivate(); if(f) await setMaskImage(f.name, await readFile(f), priv); });
@@ -1030,7 +1041,7 @@ $('brush').addEventListener('input',e=>$('brushVal').textContent=e.target.value+
 $('modePaint').onclick=()=>{paintMode='paint'; $('modePaint').classList.add('on'); $('modeErase').classList.remove('on');};
 $('modeErase').onclick=()=>{paintMode='erase'; $('modeErase').classList.add('on'); $('modePaint').classList.remove('on');};
 // priv : espace où le choix de l'image a commencé ; s'il a changé entre-temps, l'image va dans sa saisie mise de côté
-async function setMaskImage(name, dataUrl, priv=inPrivate()){ const entry=await toEntry(name, dataUrl);
+async function setMaskImage(name, dataUrl, priv=inPrivate()){ const entry=await toEntry(name, dataUrl, priv);
   if(priv!==inPrivate()){ if(asideInput) asideInput.mask={image:entry, pixels:null}; return false; }
   maskImage=entry; showMaskImage(); suggestRatio(); return true; }
 // image à retoucher (maskImage) sur la zone de dessin, avec un masque déjà peint (pixels) ou vierge
@@ -1079,6 +1090,46 @@ function ask(title, text, yes, danger){
   $('askTitle').textContent=title; $('askText').textContent=text; $('askYes').textContent=yes; $('askYes').classList.toggle('danger-fill', !!danger);
   openSheet('askSheet'); return new Promise(res=>{ askResolve=res; }); }
 function answer(v){ const r=askResolve; askResolve=null; closeSheet(); if(r) r(v); }
+// ------------------------------------------------------------ affichage des images
+// Une <img> qui reçoit une autre adresse garde l'image d'avant à l'écran jusqu'à ce que la nouvelle soit chargée :
+// celle d'une autre image, voire de l'autre espace. showImage vide l'élément, puis ne lui donne l'adresse qu'une fois
+// l'image chargée et décodée à part (Chrome la sert alors aussitôt depuis les images de la page, sans nouvelle
+// requête), la miniature d'abord si elle est prête avant. Les dernières images chargées restent prêtes (ready) : la
+// visionneuse y charge en avance les images voisines. À la sortie de l'espace privé, forgetPrivateImages retire de la
+// page toute image privée, même cachée, et abandonne celles qui chargeaient encore.
+const ready=new Map(), READY_MAX=10;              // adresse → { el : Image, im : image décodée (null : illisible), p : promesse }
+const FADE_MS=350;                                // fondu de fermeture de .viewer (CSS, 0,3 s)
+function preload(url){ let e=ready.get(url);
+  if(e) ready.delete(url);                        // la plus récente en dernier : les plus anciennes partent d'abord
+  else { const im=new Image(); im.decoding='async'; im.src=url;
+    e={ el:im, im:undefined, p:im.decode().then(()=>im, ()=>null) };
+    e.p.then(x=>{ e.im=x; if(!x && ready.get(url)===e) ready.delete(url); }); }   // illisible : redemandée la fois suivante
+  ready.set(url, e); while(ready.size>READY_MAX) ready.delete(ready.keys().next().value);
+  return e; }
+// keep : laisser l'image d'avant jusqu'à la nouvelle (aperçu suivant de la même génération), même si la nouvelle est
+// illisible ; sans keep, une image illisible est confiée au navigateur (nouvel essai, ou image cassée comme avant).
+// then(ok) : appelée quand la nouvelle image est à l'écran (ok faux : illisible). once : image servie une seule fois
+// (aperçu), qui ne reste pas dans ready.
+function showImage(img, url, {thumb, keep, then, once}={}){
+  if(img.want===url && img.getAttribute('src')===url && img.complete && img.naturalWidth){ if(then) then(true); return; }   // déjà là
+  img.want=url;                                    // adresse attendue : une image chargée trop tard pour un autre choix est ignorée
+  const put=e=>{ if(once && ready.get(url)===e) ready.delete(url);
+    if(img.want!==url) return; if((e.im || !keep) && img.getAttribute('src')!==url) img.src=url; if(then) then(!!e.im); };
+  const e=preload(url); if(e.im!==undefined) return put(e);   // déjà prête : tout de suite, sans image vide entre les deux
+  if(!keep) img.removeAttribute('src');
+  if(thumb){ const t=preload(thumb), side=()=>{ if(img.want===url && t.im && !img.getAttribute('src')) img.src=thumb; };
+    if(t.im!==undefined) side(); else t.p.then(side); }
+  e.p.then(()=>put(e)); }
+function clearImage(img){ img.want=null; img.removeAttribute('src'); }
+const dropLink = a => { a.removeAttribute('href'); a.removeAttribute('download'); };   // lien de téléchargement retiré
+// aperçus (/api/job/) compris : dans l'espace privé, la page ne montre que ceux des générations privées
+const secretUrl = u => !!u && (u.startsWith('/api/private/') || u.startsWith('/api/job/'));
+function forgetPrivateImages(){
+  for(const [u, e] of [...ready]) if(secretUrl(u)){ ready.delete(u); if(e.im===undefined) e.el.src=''; }   // chargement abandonné
+  document.querySelectorAll('img').forEach(i=>{   // affichée, ou attendue (chargement en cours : ignorée à son arrivée)
+    if(secretUrl(i.getAttribute('src')) || secretUrl(i.want)) clearImage(i); });
+  document.querySelectorAll('[href]').forEach(a=>{   // liens de téléchargement, et leur nom de fichier (prive_<id>)
+    if(secretUrl(a.getAttribute('href'))) dropLink(a); }); }
 
 // ------------------------------------------------------------ générations de la page, zone de résultat, île et file
 // La page suit les générations qu'elle a lancées (ou reprises après un rechargement), dans l'ordre : pageJobs. La zone de
@@ -1118,14 +1169,18 @@ function setMeta(prompt, chips, file){
     + (chips.filter(Boolean).length ? `<div class="m-chips">${chips.filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('')}</div>` : '')
     + (file ? `<p class="m-file">${esc(file)}</p>` : ''); }
 function showLoader(on){ $('stage').style.display='block'; $('resultEmpty').style.display='none'; $('loader').style.display=on?'flex':'none'; $('shimmer').style.display=on?'block':'none'; $('bar').style.display=on?'block':'none'; }
-function showResult(name, w, h, reveal, inc){      // image de outputs/, ou image incognito (inc : {blob, url}) ou privée (inc : {private, item, url})
+// image de outputs/, ou image incognito (inc : {blob, url}) ou privée (inc : {private, item, url}) ; keep : l'aperçu de la
+// même génération reste à l'écran jusqu'à son image finale ; shown : appelée quand l'image est à l'écran
+function showResult(name, w, h, {reveal, inc, keep, shown:onShown}={}){
   const url=inc ? inc.url : '/api/result?name='+encodeURIComponent(name), img=$('stageImg');
   if(w && h) setStageRatio(w, h);
-  showLoader(false); $('stage').classList.remove('has-preview');
-  img.className = reveal ? 'final reveal' : 'final'; img.src=url; img.style.display='block';
+  showLoader(false); img.style.display='block'; if(!keep) $('shimmer').style.display='block';   // reflet jusqu'à l'image
+  showImage(img, url, {keep, then:ok=>{ if(!ok) img.src=url;   // illisible : confiée au navigateur, jamais l'aperçu pour l'image finale
+    img.className = reveal ? 'final reveal' : 'final'; $('stage').classList.remove('has-preview'); $('shimmer').style.display='none';
+    if(onShown) onShown(); }});
   $('dl').href=inc && inc.blob ? url : url+'&download=1'; $('dl').download=name; $('resultActions').style.display='';
   lastResult={url, name, blob:inc ? inc.blob : null, item:inc && inc.item}; if(!inc) setAmbient(name); }   // pas de fond ambiant en incognito : il passerait par une miniature sur le disque
-function hideResult(){ $('stageImg').src=''; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
+function hideResult(){ clearImage($('stageImg')); $('stageImg').job=null; dropLink($('dl')); $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
 const forgetJob = id => fetch('/api/job/'+id+'/forget', {method:'POST', headers:{'Content-Type':'application/json'}}).catch(()=>{});
 // progression d'une génération de la page : part faite (0 à 1), titre, détail, temps restant avant son image
 function progress(p){
@@ -1156,14 +1211,18 @@ function show(p, reveal){                          // met une génération de la
   if(!p){ lastResult=null; return hideResult(); }
   const grid=gridOf(p); if(grid) return showGrid(grid);
   $('lotBadge').hidden=!p.lot; if(p.lot) $('lotBadge').textContent=`${p.tab==='edit' ? 'Photo' : 'Image'} ${p.lot.rank} sur ${p.lot.size}`;
-  if(p.result){ const r=p.result; showResult(r.name, ...(r.dims||[]), reveal, r.blob || r.item ? r : null); setMeta(p.prompt, r.chips, r.file); return markSeen(); }
+  const img=$('stageImg'), was=img.job; img.job=p.id;   // img.job : génération dont la zone montre l'aperçu ou l'image
+  if(p.result){ const r=p.result;   // image incognito vue seulement une fois peinte
+    showResult(r.name, ...(r.dims||[0, 0]), {reveal, inc:r.blob || r.item ? r : null, keep:was===p.id, shown:markSeen});
+    setMeta(p.prompt, r.chips, r.file); return; }
   lastResult=null; if(p.w && p.h) setStageRatio(p.w, p.h);
   showLoader(true); $('resultActions').style.display='none'; setMeta('', [], '');
-  const img=$('stageImg'); img.className=''; img.src=''; img.style.display='none'; $('stage').classList.remove('has-preview'); p.pv=0;
+  if(was!==p.id){ img.className=''; clearImage(img); $('stage').classList.remove('has-preview'); p.pv=0; }
+  else if($('stage').classList.contains('has-preview')) $('shimmer').style.display='none';   // son aperçu reste
   renderProgress(); }
 function showGrid(items){                          // lot terminé : ses images en grille ; un appui ouvre la visionneuse
   const first=items[0], [w,h]=first.result.dims||[1,1], incog=first.incognito, g=$('lotGrid');
-  lastResult=null; $('stageImg').src=''; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultEmpty').style.display='none';
+  lastResult=null; clearImage($('stageImg')); $('stageImg').job=null; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultEmpty').style.display='none';
   g.hidden=false;                                  // chaque case à la forme de son image (une campagne en mélange plusieurs)
   g.innerHTML=items.map((q, i)=>`<div class="cell" style="--ar:${q.result.dims ? q.result.dims[0]/q.result.dims[1] : w/h}"><button data-k="${i}" aria-label="Ouvrir l'image ${q.lot.rank}"><img src="${q.result.blob ? q.result.url : q.result.item ? privThumb(q.result.item) : '/api/thumb?name='+encodeURIComponent(q.result.name)}" alt=""></button><span>${q.lot.rank}</span>`
     + (incog ? `<a href="${q.result.url}" download="${esc(q.result.name)}" aria-label="Télécharger l'image ${q.lot.rank}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg></a>` : '') + '</div>').join('');
@@ -1187,7 +1246,10 @@ function renderProgress(){                         // image en cours dans la zon
   $('stepBig').textContent=pr.title; $('phaseTxt').textContent=pr.sub; $('etaTxt').textContent='≈ '+fmt(pr.remaining);
   $('bar').firstElementChild.style.transform=`scaleX(${pct/100})`; $('ringVal').style.strokeDashoffset=(100-pct).toFixed(1);
   if(j.preview_version && j.preview_version!==p.pv && (!p.private || inPrivate())){ p.pv=j.preview_version; const img=$('stageImg');   // aperçu privé : dans l'espace seulement
-    img.src='/api/job/'+j.id+'/preview?v='+p.pv; img.className='preview'; img.style.display='block'; $('stage').classList.add('has-preview'); $('shimmer').style.display='none'; } }
+    img.style.display='block';                     // l'aperçu d'avant reste jusqu'au suivant, chargé
+    const url='/api/job/'+j.id+'/preview?v='+p.pv;
+    showImage(img, url, {keep:true, once:true, then:ok=>{ if(!ok || shown!==p) return;
+      img.className='preview'; $('stage').classList.add('has-preview'); $('shimmer').style.display='none'; }}); } }
 function syncButtons(){ $('cancel').disabled=!(shown && isActive(shown)); }
 // image incognito : gardée par la page jusqu'à ce qu'elle ait été vue (affichée, application visible, hors galerie) puis
 // quittée par l'utilisateur (autre vignette, autre génération de la file, galerie). Lancer une demande ou la fin d'une
@@ -1309,7 +1371,7 @@ async function finish(p){                          // génération terminée : s
     p.result={...(p.result||{}), name:j.private ? privName(j.item) : j.name, dims:j.dims,
       file:j.incognito ? 'Incognito · non enregistrée : téléchargez-la pour la garder' : j.private ? 'Rangée chiffrée dans l\'espace privé' : j.name,
       chips:[fmt(secs), j.dims?j.dims.join('×'):'', (j.total||'?')+' étapes', j.sec_per_it?j.sec_per_it.toFixed(1)+' s/étape':''] };
-    log('terminé en '+Math.round(secs)+' s → '+(j.incognito ? 'image incognito, non enregistrée' : j.private ? 'image privée' : j.path));
+    log('terminé en '+Math.round(secs)+' s → '+(j.incognito ? 'image incognito, non enregistrée' : j.private ? 'image privée' : j.path), !!j.private);
     if(!ofSpace(p)) return;                        // publique finie dans l'espace privé : à l'écran à la sortie
     const lot=lotOf(p), next=lot.find(isActive);
     toast(!p.lot ? 'Image prête en '+fmt(secs) : next ? `Image ${p.lot.rank} sur ${p.lot.size} prête` : 'Lot terminé');
@@ -1323,7 +1385,7 @@ async function finish(p){                          // génération terminée : s
   drop(p); }
 function drop(p){                                  // retire une génération de la page (annulée, en échec, image supprimée)
   const k=pageJobs.indexOf(p); if(k>=0) pageJobs.splice(k, 1);
-  if(p.result && p.result.blob) URL.revokeObjectURL(p.result.url);
+  if(p.result && p.result.blob){ ready.delete(p.result.url); URL.revokeObjectURL(p.result.url); }   // image incognito : plus rien d'elle
   const lot=lotOf(p);                              // de préférence une autre image de son lot (ou sa grille)
   if(shown===p) show(lot.find(isActive) || lot.find(q=>q.result) || oldestActive() || latestResult());
   else if(sameLot(shown, p) && !isActive(shown)) show(shown); else renderStrip(); }
@@ -1335,11 +1397,11 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   askNotifications();                              // première génération : autorisation demandée une fois (appui en cours)
   if(estSeconds>3600 && !await ask('Génération longue', 'Temps estimé : '+fmt(estSeconds)+'. La lancer quand même ?', 'Lancer')) return;
   if(body.incognito) try{ localStorage.removeItem('qwen-'+tab+'_prompt'); }catch(e){}   // texte incognito : jamais retenu, même refusé
-  log(`${body.mode} ${body.width}x${body.height} ${body.steps} étapes refs=${body.ref_images.length}${body.campaign ? ' campagne='+body.campaign.length : ''} mask=${body.mask_image?'oui':'non'} aperçus=${body.preview?'oui':'non'} estimation=${fmt(estSeconds)}`);
+  log(`${body.mode} ${body.width}x${body.height} ${body.steps} étapes refs=${body.ref_images.length}${body.campaign ? ' campagne='+body.campaign.length : ''} mask=${body.mask_image?'oui':'non'} aperçus=${body.preview?'oui':'non'} estimation=${fmt(estSeconds)}`, priv);
   let r, j; try{ r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=await r.json(); }
   catch(e){ toast('Serveur injoignable', 'err'); return; }
   if(!r.ok){ toast('Erreur : '+(j.error||('HTTP '+r.status)), 'err'); return; }
-  log('demande acceptée');
+  log('demande acceptée', priv);
   const jobs=j.jobs || [j];                         // un lot : une génération par image, suivies une à une
   const camp=body.campaign;                         // campagne : chaque génération a sa photo, ses dimensions et son estimation
   // espace privé quitté pendant l'envoi (fermeture par le Mac) : la génération privée continue sur le Mac, hors de la
@@ -1483,7 +1545,8 @@ async function duplicatePrompt(p, b){ b.disabled=true; const priv=inPrivate();
 // pendant une saisie composée (accents, clavier prédictif)
 $('peTitle').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.isComposing){ e.preventDefault(); if(!$('peSave').disabled) savePrompt(); } });
 // ------------------------------------------------------------ galerie et visionneuse
-let histItems=[], vIndex=-1, vList=[];   // vList : images que parcourt la visionneuse (la galerie, ou les images d'un lot)
+// vList : images que parcourt la visionneuse (la galerie, ou les images d'un lot) ; vStep : sens du dernier passage
+let histItems=[], vIndex=-1, vList=[], vStep=1;
 const MODE_LABELS={ t2i:'Texte → image', edit:'Édition', mask:'Masque', annot:'Annotation' };
 const resultUrl = name => '/api/result?name='+encodeURIComponent(name);
 const thumbUrl = it => '/api/thumb?name='+encodeURIComponent(it.name)+'&t='+it.time;
@@ -1493,10 +1556,10 @@ const srcOf = it => it.private ? privImage(it.id) : it.url || resultUrl(it.name)
 const thumbOf = it => it.private ? privThumb(it.id) : it.url || thumbUrl(it);
 const dlOf = it => it.private ? privImage(it.id)+'&download=1' : it.url || resultUrl(it.name)+'&download=1';
 function goTab(m){ document.querySelector(`#tabbar [data-pane="${m}"]`).click(); }
-async function loadHistory(){
-  try{ const r=await fetch(inPrivate() ? '/api/private/history' : '/api/history'); if(!r.ok) throw new Error();
-    histItems=(await r.json()).map(it=>it.private ? {...it, name:privName(it.id)} : it); }
-  catch(e){ $('histCount').textContent='indisponible'; return; }
+async function loadHistory(){ const priv=inPrivate();   // réponse arrivée après un changement d'espace : ignorée
+  try{ const r=await fetch(priv ? '/api/private/history' : '/api/history'); if(!r.ok) throw new Error();
+    const items=(await r.json()).map(it=>it.private ? {...it, name:privName(it.id)} : it); if(priv!==inPrivate()) return; histItems=items; }
+  catch(e){ if(priv===inPrivate()) $('histCount').textContent='indisponible'; return; }
   renderGallery(); }
 function renderGallery(){
   const g=$('histGrid'); g.innerHTML='';
@@ -1515,10 +1578,14 @@ function renderGallery(){
     b.onclick=()=>openViewer(i, histItems); g.appendChild(b); });
 }
 function openViewer(i, list=vList){
-  const it=list[i]; if(!it) return; vList=list; vIndex=i; resetZoom();
+  const it=list[i]; if(!it) return; clearTimeout(vEmpty); vList=list; vIndex=i; resetZoom();
   const v=$('viewer'), img=$('vImg');
-  img.src=thumbOf(it); $('vBg').src=thumbOf(it);           // miniature tout de suite, image complète dès qu'elle est chargée
-  const full=new Image(); full.onload=()=>{ if(vIndex===i && vList===list) img.src=full.src; }; full.src=srcOf(it);
+  // la miniature en attendant l'image ; une fois l'image là, sa première image d'entrée est chargée en avance
+  showImage(img, srcOf(it), {thumb:thumbOf(it), then:()=>{ if(vList[vIndex]===it && (it.inputs||[]).length) preload(inputUrl(it, it.inputs[0])); }});
+  showImage($('vBg'), thumbOf(it), {keep:true});  // fond flouté : d'une image à l'autre, l'ancien en attendant
+  // voisines : leurs miniatures, et l'image complète de celle vers qui l'on avance (mémoire et données du téléphone)
+  const n=list.length; [list[(i+1)%n], list[(i+n-1)%n]].forEach(x=>{ if(x!==it) preload(thumbOf(x)); });
+  const next=list[(i+vStep+n)%n]; if(next!==it) preload(srcOf(next));
   img.alt=it.prompt||it.name; $('vCount').textContent=`${i+1} / ${list.length}`;
   const date=new Date(it.time*1000).toLocaleString('fr-FR', {dateStyle:'short', timeStyle:'short'});
   $('vChips').innerHTML=[date, MODE_LABELS[it.mode]||it.mode, it.width?it.width+'×'+it.height:'', it.steps?it.steps+' étapes':'', it.model?it.model.toUpperCase():'', it.seconds?fmt(it.seconds):'',
@@ -1534,24 +1601,33 @@ function openViewer(i, list=vList){
   if(!v.classList.contains('on')){ v.classList.remove('immersive'); v.classList.add('on'); document.body.style.overflow='hidden'; }
   syncThemeColor();
 }
-function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor(); }
-function stepViewer(d){ if(vIndex<0 || !vList.length) return; openViewer((vIndex+d+vList.length)%vList.length); }
+let vEmpty=null, ivEmpty=null;                     // vidage prévu après le fondu (annulé si la vue se rouvre)
+function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor();
+  clearTimeout(vEmpty); vEmpty=setTimeout(emptyViewer, FADE_MS); }   // après le fondu de fermeture
+// visionneuse fermée : plus rien de l'image vue dans la page cachée (image, prompt, réglages, rang, lot, lien)
+function emptyViewer(){ clearTimeout(vEmpty); vList=[]; clearImage($('vImg')); clearImage($('vBg'));   // fond compris
+  $('vImg').alt=$('vCount').textContent=$('vLotOpen').textContent=''; $('vChips').innerHTML=$('vInputs').innerHTML='';
+  $('vInputs').hidden=$('vLot').hidden=$('vKeep').hidden=$('vAdopt').hidden=true; dropLink($('vDl'));
+  $('vDelete').querySelector('span').textContent='Supprimer'; }   // « Effacer » dirait qu'elle était incognito
+function stepViewer(d){ if(vIndex<0 || !vList.length) return; vStep=d; openViewer((vIndex+d+vList.length)%vList.length); }
 addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevented) return;
   if(ivIndex>=0){ if(e.key==='Escape') closeInputs(); else if(e.key==='ArrowLeft') showInput(ivIndex-1); else if(e.key==='ArrowRight') showInput(ivIndex+1); return; }
   if(e.key==='Escape') closeViewer(); else if(e.key==='ArrowLeft') stepViewer(-1); else if(e.key==='ArrowRight') stepViewer(1); });
-// visionneuse : pincer pour zoomer (l'image passe au-dessus de tout et revient à sa taille dès qu'on relâche les doigts) ;
-// sur ordinateur, molette pour zoomer et glisser pour déplacer, un clic pour revenir ; sans zoom, glisser à gauche ou
-// à droite : image voisine ; vers le bas : fermer ; un appui : masquer les commandes
-let resetZoom=()=>{};
-(function gestures(){
-  const st=$('vStage'), img=$('vImg'), v=$('viewer'), pts=new Map(), MAX=6;
+// visionneuse et images d'entrée : pincer pour zoomer (l'image passe au-dessus de tout et revient à sa taille dès qu'on
+// relâche les doigts) ; sur ordinateur, molette pour zoomer et glisser pour déplacer, un clic pour revenir ; sans zoom,
+// glisser à gauche ou à droite : image voisine (step) ; vers le bas : fermer (close) ; un appui : masquer les
+// commandes. Renvoie la remise à la taille initiale.
+function zoomable(st, img, v, step, close){
+  const pts=new Map(), MAX=6;
   let z={s:1, x:0, y:0}, one=null, pinch=null, unzoom=null;
   const center=()=>{ const r=st.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2}; };
   function apply(){ img.style.transform = z.s>1 ? `translate(${z.x}px, ${z.y}px) scale(${z.s})` : ''; clearTimeout(unzoom);
     if(z.s>1) v.classList.add('zoomed'); else unzoom=setTimeout(()=>{ if(z.s<=1) v.classList.remove('zoomed'); }, 400); }   // reste au-dessus pendant le retour (0,35 s)
   function zoomAt(s2, px, py, from=z){ const c=center(), k=s2/from.s;   // le point (px, py) de l'écran reste sous les doigts
     z={s:s2, x:(px-c.x)-((px-c.x)-from.x)*k, y:(py-c.y)-((py-c.y)-from.y)*k}; if(s2<=1.01) z={s:1, x:0, y:0}; apply(); }
-  resetZoom=()=>{ st.classList.remove('drag'); z={s:1, x:0, y:0}; apply(); };
+  // taille initiale, et le geste en cours abandonné : sa fin ne fait plus rien (image changée ou vue fermée pendant
+  // le geste) ; les doigts encore posés sont ignorés jusqu'à ce qu'ils se relèvent
+  const reset=()=>{ st.classList.remove('drag'); pts.clear(); one=pinch=null; v.style.opacity=''; z={s:1, x:0, y:0}; apply(); };
   const mid=()=>{ const [a,b]=[...pts.values()]; return {x:(a.x+b.x)/2, y:(a.y+b.y)/2, d:Math.hypot(a.x-b.x, a.y-b.y)}; };
   st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return;
     pts.set(e.pointerId, {x:e.clientX, y:e.clientY}); st.setPointerCapture(e.pointerId); st.classList.add('drag');
@@ -1569,24 +1645,25 @@ let resetZoom=()=>{};
     if(pinch && pts.size===1){ const [q]=[...pts.values()]; pinch=null; one={x0:q.x, y0:q.y, from:{...z}, dx:0, dy:0, pinched:true}; return; }
     if(pts.size) return;
     const was=one; pinch=null; one=null; v.style.opacity='';
-    if(e.pointerType!=='mouse' && (z.s>1 || (was && was.pinched))) return resetZoom();     // doigts relâchés : taille initiale
+    if(e.pointerType!=='mouse' && (z.s>1 || (was && was.pinched))) return reset();     // doigts relâchés : taille initiale
     st.classList.remove('drag'); if(!was) return;
     const {dx, dy}=was;
-    if(Math.abs(dx)<6 && Math.abs(dy)<6){ if(z.s>1) resetZoom(); else { img.style.transform=''; v.classList.toggle('immersive'); } return; }
+    if(Math.abs(dx)<6 && Math.abs(dy)<6){ if(z.s>1) reset(); else { img.style.transform=''; v.classList.toggle('immersive'); } return; }
     if(z.s>1) return;
     img.style.transform='';
-    if(Math.abs(dx)>70 && Math.abs(dx)>Math.abs(dy)) stepViewer(dx<0 ? 1 : -1);
-    else if(dy>110) closeViewer(); };
+    if(Math.abs(dx)>70 && Math.abs(dx)>Math.abs(dy)) step(dx<0 ? 1 : -1);
+    else if(dy>110) close(); };
   st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
   let wheelEnd=null;
   st.addEventListener('wheel', e=>{ e.preventDefault(); st.classList.add('drag'); clearTimeout(wheelEnd); wheelEnd=setTimeout(()=>st.classList.remove('drag'), 150); zoomAt(Math.min(MAX, Math.max(1, z.s*Math.exp(-e.deltaY*0.002))), e.clientX, e.clientY); }, {passive:false});
-})();
+  return reset; }
+const resetZoom=zoomable($('vStage'), $('vImg'), $('viewer'), stepViewer, closeViewer);
 async function dataUrlOf(name, url){ if(lastResult && lastResult.blob && lastResult.name===name) return await readFile(lastResult.blob);
   const own=pageJobs.find(p=>p.result && p.result.blob && p.result.name===name); if(own) return await readFile(own.result.blob);   // image incognito d'un lot
   const b=await (await fetch(url || resultUrl(name))).blob(); return await readFile(b); }
 async function useAsEditInput(name=lastResult && lastResult.name, url=lastResult && lastResult.url){
   if(!name) return; if(editImages.length>=MAX_REFS){ toast(MAX_REFS+' images de référence au maximum', 'err'); return; }
-  const list=editImages; addEditImage(list, await toEntry(name, await dataUrlOf(name, url))); }
+  const list=editImages, priv=inPrivate(); addEditImage(list, await toEntry(name, await dataUrlOf(name, url), priv)); }
 async function useAsMaskInput(name=lastResult && lastResult.name, url=lastResult && lastResult.url){ if(!name) return; const priv=inPrivate();
   if(await setMaskImage(name, await dataUrlOf(name, url), priv)) goTab('mask'); }
 // image reprise dans Éditer : list est la saisie de l'espace où le geste a commencé (prise avant toute attente)
@@ -1615,29 +1692,29 @@ function renderInputsButton(it){
   const b=$('vInputs'), list=it.inputs||[]; b.hidden=!list.length; if(!list.length) return;
   b.innerHTML=`<span class="v-in-thumbs">${list.slice(0,3).map(f=>`<img src="${inputUrl(it, f, '&thumb=1&t='+it.time)}" alt="">`).join('')}</span>`
     + `<span>${list.length>1 ? list.length+" images d'entrée" : "Image d'entrée"}</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>`; }
-function openInputs(i){ const it=vList[vIndex]; if(!it || !(it.inputs||[]).length) return; ivOwner=it; showInput(i); $('iv').classList.add('on'); syncThemeColor(); }
-function showInput(i){
-  const it=ivOwner, n=it.inputs.length; ivIndex=(i+n)%n; const f=it.inputs[ivIndex];
-  $('ivImg').src=inputUrl(it, f); $('ivImg').alt=inputLabel(it, f); $('ivLabel').textContent=inputLabel(it, f);
+function openInputs(i){ const it=vList[vIndex]; if(!it || !(it.inputs||[]).length) return; clearTimeout(ivEmpty); ivOwner=it; showInput(i);
+  $('iv').classList.remove('immersive'); $('iv').classList.add('on'); syncThemeColor(); }
+function showInput(i){ if(!ivOwner) return;       // fermée (boutons et gestes pendant le fondu de fermeture)
+  const it=ivOwner, n=it.inputs.length; ivIndex=(i+n)%n; const f=it.inputs[ivIndex], thumb=g=>inputUrl(it, g, '&thumb=1&t='+it.time);
+  resetInputZoom();
+  showImage($('ivImg'), inputUrl(it, f), {thumb:thumb(f)});   // miniature : celle du bouton de la visionneuse, déjà là
+  if(n>1) [it.inputs[(ivIndex+1)%n], it.inputs[(ivIndex+n-1)%n]].forEach(g=>{ preload(thumb(g)); preload(inputUrl(it, g)); });
+  $('ivImg').alt=inputLabel(it, f); $('ivLabel').textContent=inputLabel(it, f);
   $('ivCount').textContent=`${ivIndex+1} / ${n}`; $('iv').classList.toggle('single', n<2);
   $('ivDl').href=inputUrl(it, f, '&download=1'); $('ivDl').download=it.name.slice(0, -4)+'_'+f; }
-function closeInputs(){ $('iv').classList.remove('on'); ivIndex=-1; syncThemeColor(); }
+function closeInputs(){ resetInputZoom(); $('iv').classList.remove('on'); ivIndex=-1; ivOwner=null; syncThemeColor();
+  clearTimeout(ivEmpty); ivEmpty=setTimeout(emptyInputs, FADE_MS); }   // après le fondu de fermeture
+function emptyInputs(){ clearTimeout(ivEmpty); clearImage($('ivImg'));
+  $('ivImg').alt=$('ivLabel').textContent=$('ivCount').textContent=''; dropLink($('ivDl')); }
 async function inputAction(kind){             // repartir de cette image d'entrée : Éditer (référence) ou Dessiner
+  if(!ivOwner || ivIndex<0) return;               // second appui pendant le fondu de fermeture
   const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f, list=editImages, priv=inPrivate();
   closeInputs(); closeViewer();
   const dataUrl=await readFile(await (await fetch(url)).blob());
   if(kind==='mask'){ if(await setMaskImage(name, dataUrl, priv)) goTab('mask'); return; }
   if(list.length>=MAX_REFS){ toast(MAX_REFS+' images de référence au maximum', 'err'); return; }
-  addEditImage(list, await toEntry(name, dataUrl)); }
-(function inputSwipe(){        // glisser à gauche ou à droite : image d'entrée voisine ; vers le bas : fermer
-  const st=$('ivStage'), img=$('ivImg'); let p=null;
-  st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return; p={x:e.clientX, y:e.clientY, dx:0, dy:0}; st.setPointerCapture(e.pointerId); st.classList.add('drag'); });
-  st.addEventListener('pointermove', e=>{ if(!p) return; p.dx=e.clientX-p.x; p.dy=e.clientY-p.y;
-    img.style.transform = Math.abs(p.dx)>Math.abs(p.dy) ? `translateX(${p.dx}px)` : `translateY(${Math.max(0, p.dy)}px)`; });
-  const end=()=>{ if(!p) return; const {dx, dy}=p; p=null; st.classList.remove('drag'); img.style.transform='';
-    if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)) showInput(ivIndex+(dx<0 ? 1 : -1)); else if(dy>110) closeInputs(); };
-  st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
-})();
+  addEditImage(list, await toEntry(name, dataUrl, priv)); }
+const resetInputZoom=zoomable($('ivStage'), $('ivImg'), $('iv'), d=>showInput(ivIndex+d), closeInputs);   // comme la visionneuse
 async function viewerAction(kind){
   const it=vList[vIndex]; if(!it) return;
   if(kind==='edit' || kind==='mask'){ closeViewer(); return kind==='edit' ? useAsEditInput(it.name, srcOf(it)) : useAsMaskInput(it.name, srcOf(it)); }
@@ -1651,7 +1728,7 @@ async function viewerAction(kind){
     if(!await ask('Supprimer cette image ?', (it.private ? 'Cette image privée' : it.name)+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return;
     const r=it.private ? await postJson('/api/private/delete', {id:it.id}) : await postJson('/api/delete', {name:it.name});
     if(!r.ok){ toast('Suppression impossible : '+((await r.json()).error||r.status), 'err'); return; }
-    log('supprimé : '+it.name); toast('Image supprimée');
+    log('supprimé : '+it.name, !!it.private); toast('Image supprimée');
     forgetResult(it.name); removeFromViewer([it]); }
 }
 function removeFromViewer(gone){                  // images supprimées : hors de la galerie et de la liste de la visionneuse
@@ -1682,7 +1759,7 @@ async function keepThis(){                        // variantes : garder cette im
   if(!await ask('Garder celle-ci ?', `${n===1 ? "L'autre image" : 'Les '+n+' autres images'} du lot ser${n>1?'ont':'a'} supprimée${s} définitivement du Mac.`, 'Garder', true)) return;
   const gone=[];
   for(const o of others){ const r=await (o.private ? postJson('/api/private/delete', {id:o.id}) : postJson('/api/delete', {name:o.name})).catch(()=>null);
-    if(r && r.ok){ gone.push(o); forgetResult(o.name); log('supprimé : '+o.name); } }
+    if(r && r.ok){ gone.push(o); forgetResult(o.name); log('supprimé : '+o.name, !!o.private); } }
   toast(gone.length===n ? 'Image gardée, '+n+' supprimée'+s : 'Suppression incomplète', gone.length===n ? '' : 'err');
   removeFromViewer(gone); const k=vList.indexOf(it); if(k>=0) openViewer(k); }
 function forgetResult(name){                      // image supprimée : elle quitte la zone de résultat et la pellicule
@@ -1690,14 +1767,14 @@ function forgetResult(name){                      // image supprimée : elle qui
   if(p) drop(p); else if(lastResult && lastResult.name===name){ lastResult=null; hideResult(); } }
 async function deleteCurrent(){
   if(!lastResult) return;
-  const name=lastResult.name;
+  const name=lastResult.name, item=lastResult.item, priv=!!item;   // pris avant les attentes (confirmation, envoi)
   if(lastResult.blob){
     if(!await ask('Effacer cette image ?', 'Elle n\'est enregistrée nulle part : sans téléchargement, elle sera perdue.', 'Effacer', true)) return;
     forgetResult(name); toast('Image effacée'); return; }
-  if(!await ask('Supprimer cette image ?', (lastResult.item ? 'Cette image privée' : name)+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return;
-  const r=lastResult.item ? await postJson('/api/private/delete', {id:lastResult.item}) : await postJson('/api/delete', {name});
+  if(!await ask('Supprimer cette image ?', (item ? 'Cette image privée' : name)+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return;
+  const r=item ? await postJson('/api/private/delete', {id:item}) : await postJson('/api/delete', {name});
   if(!r.ok){ toast('Suppression impossible : '+((await r.json()).error||r.status), 'err'); return; }
-  log('supprimé : '+name); forgetResult(name); toast('Image supprimée');
+  log('supprimé : '+name, priv); forgetResult(name); toast('Image supprimée');
   loadHistory();
 }
 // ------------------------------------------------------------ espace privé : galerie chiffrée sur le Mac, ouverte par un
@@ -1729,12 +1806,18 @@ function changedSpace(inside){
   // prompts enregistrés : ceux de l'espace quitté ne restent ni à l'écran ni en mémoire de la page
   // (confirmation de suppression comprise : elle montre le titre du prompt)
   if([$('promptSheet'), $('promptEditSheet'), $('askSheet')].includes(openedSheet)){ closeSheet(); $('askText').textContent=''; }
+  if(openedSheet===$('lotSheet')) closeSheet();      // « Voir le lot » : images de l'espace quitté
+  $('lotSheetGrid').innerHTML=''; $('lotSheetGrid').onclick=null;
   prompts={saved:[], types:prompts.types}; editingPrompt=null; $('peTitle').value=$('peText').value=''; renderPrompts();
+  if(ivIndex>=0 && !!ivOwner.private!==inside) closeInputs();
   if(vIndex>=0 && vList.some(x=>!!x.private!==inside)) closeViewer();
+  if(!inside){ forgetPrivateImages();               // rien de l'espace quitté dans la page, même caché ou chargé en avance
+    logLines=logLines.filter(x=>!x.priv); renderLog();
+    if(ivIndex<0) emptyInputs(); if(vIndex<0) emptyViewer(); }   // vues fermées : vidées sans attendre le fondu
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
     resumeOwn(queueState); }
   show(oldestActive() || latestResult());
-  if(mode==='hist') loadHistory(); else histItems=[];
+  histItems=[]; $('histGrid').innerHTML=''; $('histCount').textContent=''; if(mode==='hist') loadHistory();
   syncThemeColor(); }
 // Saisie propre à chaque espace (texte, images d'Éditer, image à retoucher et masque de Dessiner, onglet par onglet) :
 // celle de l'espace affiché est dans les champs, celle de l'autre espace est mise de côté en mémoire de la page
@@ -1818,7 +1901,7 @@ let adoptItem=null;
 function openAdopt(){ adoptItem=vList[vIndex]; if(adoptItem) openPrivSheet('adoptSheet'); }
 async function adoptImage(){ const it=adoptItem; if(!it || !$('paCode').value) return;
   if(!await privPost('/api/private/adopt', {name:it.name, code:$('paCode').value}, $('paGo'), 'paErr')) return $('paCode').select();
-  closeSheet(); toast('Image rendue privée'); log('rendue privée : '+it.name); forgetResult(it.name); removeFromViewer([it]); }
+  closeSheet(); toast('Image rendue privée'); log('image rendue privée'); forgetResult(it.name); removeFromViewer([it]); }
 // application installable sur le téléphone (le navigateur n'accepte le service worker qu'en HTTPS ou sur le Mac)
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 </script>

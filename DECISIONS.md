@@ -4,6 +4,20 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-16 · Images affichées sans l'image d'avant, page vide de tout privé après la sortie
+
+- **Contexte** : sur le téléphone, une image d'entrée vue dans l'espace privé réapparaissait un instant dans l'espace
+  public, la galerie privée aussi en revenant à la Galerie : une `<img>` qui reçoit une autre adresse garde l'image
+  d'avant à l'écran jusqu'au chargement de la nouvelle, et la page gardait des images, textes et liens privés cachés.
+- **Décision** (correction demandée par le porteur, approche choisie sans lui) : toute image affichée passe par
+  `showImage` (vidée, puis remplie une fois l'image décodée à part ; `check.py` refuse l'affectation à la main) ; les
+  dernières images décodées sont gardées **en mémoire de la page** (`ready`), pas en cache HTTP du navigateur, qui
+  garderait sur le téléphone une copie d'une image ensuite rendue privée ; les réponses restent en `no-store`. À la
+  sortie de l'espace privé, la page retire toute image, tout lien et toute ligne de journal privés, et les vues
+  fermées se vident ; `tests/ui/etancheite.test.mjs` fouille la page entière après un parcours privé.
+- **Version servie** : `/api/status` donne le commit du dossier servi et l'empreinte du code que le serveur charge au
+  lancement (`launch.py`, `estimate.py`) ; le panneau Moteur dit « à relancer » seulement quand celle-ci a changé.
+
 ## 2026-10-15 · Espaces public et privé étanches
 
 - **Contexte** : en essayant l'espace privé sur le téléphone, le porteur voit passer d'un espace à l'autre ce qui

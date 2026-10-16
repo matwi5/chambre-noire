@@ -2,7 +2,7 @@
 
 ## État
 
-Mis à jour le 15/10/2026.
+Mis à jour le 16/10/2026.
 
 - **Fonctionnel** sur Windows (Vulkan, CPU, CUDA en option ; sd.cpp `master-890`) et sur Mac Apple Silicon (Metal ;
   sd.cpp `master-959`, encodeur GGUF). Modèles Q4_K_M et Q8_0. Trois usages (texte → image, édition, dessin guidé),
@@ -11,14 +11,16 @@ Mis à jour le 15/10/2026.
   Créer) et campagnes (mode Éditer) avec lots dans la galerie, prompts enregistrés et prompts types, espace privé
   chiffré (entrée par le cadenas de la Galerie), étanche à l'espace public (galerie, file, saisie et prompts
   enregistrés propres à chaque espace). Banc de test permanent sans GPU :
-  `venv/bin/python -m unittest discover -s tests` (162 tests, ≈ 1 min 20) ; tests d'interface `tests/check.py --ui`
-  (26 tests).
+  `venv/bin/python -m unittest discover -s tests` (168 tests, ≈ 1 min 20) ; tests d'interface `tests/check.py --ui`
+  (41 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
-- **En cours** : parcours « Cloisonnement espace privé, file et saisie » (spécification
-  `docs/specs/2026-10-15_espaces-etanches.md`) : les 9 tickets des groupes A, B et C sont faits, revus et fusionnés
-  dans `dev` ; reste la livraison (push, PR vers `main`, mise à jour du dossier principal), après validation du compte
-  rendu.
+- **En cours** : livraison de la correction de la fuite et des glitchs d'affichage des images (affichage par
+  `showImage`, rien de privé dans la page après la sortie, zoom et chargement anticipé des images d'entrée) et de la
+  rétrospective qui a suivi (contrôles de `check.py`, test d'étanchéité, relais des tests, version dans le panneau
+  Moteur) : PR de `dev` vers `main`, puis `git pull --ff-only` dans le dossier principal et relance du service
+  (`tools/launch.py` a changé), puis essais sur le téléphone. Le parcours « Cloisonnement espace privé, file et
+  saisie » est livré (PR #4).
 - **Fait avant** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
   prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), découpée en 13 tickets Asana (liste et ordre dans
   `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types validée par le porteur. Groupes A (banc, robustesse, file visible, incognito dans la file) et
@@ -76,6 +78,54 @@ Mis à jour le 15/10/2026.
   `.claude/worktrees/dev`.
 
 ## Journal
+
+### 2026-10-16
+
+- Rétrospective de la session (fuite et affichage des images), appliquée en entier à la demande du porteur :
+  `check.py` contrôle aussi les fichiers nouveaux pas encore ajoutés à git et refuse une adresse donnée à la main à une
+  image affichée (`d77e1aa`) ; relais façon `tailscale serve` dans le pilote des tests d'interface et test
+  `relais.test.mjs` (`fe25f85`) ; version du code servi et serveur « à relancer » dans le panneau Moteur, et règle du
+  compte rendu « en ligne ou seulement sur `dev` » (`a4f5e62`) ; contrôle rapide pendant les corrections
+  (`7c81c9b`) ; test d'étanchéité `etancheite.test.mjs` (parcours privé complet, sortie par « Sortir » et par le Mac,
+  fouille de toute la page), qui a trouvé un reste de plus : le journal du panneau Moteur gardait le nom `prive_…`
+  d'une image privée supprimée (ses lignes écrites dans l'espace en sortent maintenant avec lui). Revue de ces commits
+  (sous-agent Opus, effort xhigh) : ligne du journal rattachée à l'espace où l'action a commencé, « rendue privée »
+  sans nom d'image, git appelé seulement dans un dépôt et jamais après un échec (Mac sans outils de développement),
+  « à relancer » seulement quand `tools/launch.py` a changé, délai maximal du relais (`2361c10`) ; puis, après la revue
+  de ce commit : une ligne privée finie hors de l'espace n'entre plus du tout au journal, les lignes de la demande et
+  de fin de génération portent leur espace, l'empreinte compte aussi `estimate.py`, un délai dépassé de git est
+  retenté, test d'étanchéité sur le nombre exact d'images.
+
+- Retours du porteur sur le téléphone, qui tourne encore sur `main` (sans `d3169f8`) : image d'entrée privée revue un
+  instant dans l'espace public, et galerie privée revue un instant en revenant à la galerie publique après une sortie
+  faite depuis un autre onglet (même cause que la fuite : la grille gardait ses images, corrigée par `d3169f8`, test
+  ajouté, rouge sur `main`). Ajouté : zoom au pincement (et à la molette) sur les images d'entrée, par les gestes de la
+  visionneuse mis en commun (`zoomable`) ; première image d'entrée chargée en avance dès l'image affichée, pour
+  qu'elle s'ouvre sans attente. Aperçus privés : le Mac écrit bien `preview_000.png` pendant une génération privée
+  (observé dans son dossier de travail) et le porteur les a vus s'afficher à ce dernier essai ; problème non reproduit,
+  laissé ouvert s'il revient. Revue de sécurité du diff (`b547a4f..3591b85`) : rien de bloquant ; corrigés aussi, à
+  la sortie, un geste des images d'entrée qui pouvait rouvrir une entrée privée cachée, et le prompt, les réglages,
+  la liste et les liens de téléchargement privés restés dans la page cachée (antérieurs au diff ; `9f9e269`), puis,
+  après la revue de ce commit, la feuille « Voir le lot » d'un lot privé fermée et vidée à la sortie, tout lien vers
+  une route privée retiré de la page (nom `prive_<id>` compris) et le geste en cours abandonné à la fermeture
+  (`d5334b2`) ; puis visionneuse et images d'entrée vidées par leur propre fermeture, après le fondu (`emptyViewer`,
+  `emptyInputs`), sans erreur sur un appui pendant ce fondu (`a4f49ac`) ; puis vidage annulé si la vue se rouvre pendant
+  le fondu, geste abandonné à chaque changement d'image, tests du vidage immédiat à la sortie et du lien de la zone
+  de résultat (revues en sous-agent Opus, effort xhigh, à la demande du porteur) ; fond flouté de la visionneuse de
+  nouveau vidé à la fermeture (sinon une image incognito effacée, ou une publique dans l'espace privé, restait en
+  fond). Dernière revue (`8d81b13`) : aucun vrai bogue ; vidage des vues à l'entrée dans l'espace privé retiré (il
+  coupait le fondu sans rien protéger), test et commentaires précisés.
+  À reporter dans Asana (accord du porteur) : un ticket pour la fuite et les glitchs d'affichage (`d3169f8`,
+  `9f9e269`), un pour le zoom et le préchargement des images d'entrée (`3591b85`).
+- Fuite de l'espace privé à l'écran corrigée (signalée par le porteur) : une `<img>` qui reçoit une autre adresse garde
+  l'image d'avant à l'écran jusqu'au chargement de la nouvelle, donc l'image d'entrée privée vue avant réapparaissait
+  un instant dans l'espace public (et les « glitchs » entre deux images). Toute image passe désormais par
+  `showImage` (vidée, puis remplie une fois l'image décodée, miniature d'abord, voisines chargées en avance) ; la
+  sortie de l'espace retire de la page toute image privée, même cachée (galerie, vignettes des entrées, grille d'un lot)
+  ou encore en chargement ; une galerie privée reçue après la sortie est ignorée. Aperçu suivant affiché seulement une
+  fois chargé (plus d'image cassée ni de cadre vide). Test d'interface `tests/ui/images.test.mjs`, rouge avant le
+  correctif. Aperçus de l'espace privé « qui ne marchent pas » : non reproduits au banc (ils s'affichent, en vue du
+  téléphone, depuis le Mac) ; à observer sur le téléphone (suite dans l'entrée ci-dessus).
 
 ### 2026-10-15
 

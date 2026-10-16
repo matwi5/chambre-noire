@@ -316,15 +316,15 @@ test('espaces : une demande privée acceptée après la fermeture par le Mac ne 
   await type('t2i', 'demande privée');
   refusal = 'hold'; held = Promise.withResolvers();
   await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/generate', requestStage: 'Response' }] });
-  const accepted = () => page.eval(`$('log').textContent.split('demande acceptée').length - 1`);
-  const acceptedBefore = await accepted();
   await page.click('#go');
   const requestId = await held.promise;            // le Mac a accepté la demande privée, la page n'a pas encore sa réponse
   await closedByMac();                             // pendant l'attente : la saisie publique revient à l'écran
   await page.send('Fetch.continueRequest', { requestId });
   await page.send('Fetch.disable');
   refusal = null;
-  await page.waitFor(`$('log').textContent.split('demande acceptée').length - 1 > ${acceptedBefore}`, { what: 'demande acceptée' });
+  // demande acceptée : sa saisie privée, mise de côté par la fermeture, est vidée de ce qui est parti (le journal n'en
+  // dit rien : une ligne privée finie hors de l'espace n'y entre pas)
+  await page.waitFor(`asideInput && asideInput.text.t2i === ''`, { what: 'demande acceptée' });
   assert.equal(await page.eval(`pageJobs.some(p => p.private)`), false, 'hors de l\'espace, la page ne suit pas la génération privée');
   assert.equal(await value('t2i'), 'texte public', 'la saisie publique reste');
   assert.equal(await draft('t2i'), 'texte public', 'son brouillon aussi');

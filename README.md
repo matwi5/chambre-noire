@@ -140,7 +140,10 @@ Options : `--port 7860` (changer de port), `--model q4|q8` (modèle Q4_K_M par d
 `setup.py --q8`), `--backend vulkan|cuda|cpu` (Windows : forcer un moteur ; par défaut CUDA s'il est installé, sinon
 Vulkan ; sur Mac, le moteur est toujours Metal), `--no-browser`. Pour lancer Q8_0 par le raccourci, ajoutez
 `"model": "q8"` dans `tools/config.json`. La pastille d'état en haut à droite indique le modèle utilisé ; un appui ouvre
-le panneau **Moteur** (moteur, modèle, calibration des estimations, journal).
+le panneau **Moteur** (moteur, modèle, calibration des estimations, version du code servi, journal) : la ligne
+**Version** dit quel commit tourne (utile pour savoir si un correctif est en ligne sur le téléphone), et **Serveur**
+« à relancer » apparaît quand `tools/launch.py` ou `tools/estimate.py` a changé depuis le lancement du serveur (le
+reste est en ligne sans relance).
 
 Par défaut, l'interface n'écoute que sur `127.0.0.1` : elle n'est pas accessible depuis le réseau.
 
@@ -330,6 +333,13 @@ et un clic la remet à sa taille. En haut à droite : **Partager**, **Copier** e
 correspondant) et **Supprimer** (définitif, après confirmation, images d'entrée comprises). La zone de génération est
 masquée dans la galerie.
 
+Une image ne s'affiche qu'une fois chargée : sa miniature d'abord, puis l'image complète, sans jamais laisser voir un
+instant l'image vue avant (ni celle d'une autre image, ni celle de l'autre espace). Les images voisines de la
+visionneuse et des images d'entrée sont chargées en avance, pour que glisser de l'une à l'autre soit immédiat, comme
+la première image d'entrée dès que l'image est affichée ; en revenant à la galerie, celle de l'autre espace ne
+réapparaît pas le temps du chargement. Pendant une génération, chaque aperçu reste à l'écran jusqu'à ce que le
+suivant soit prêt.
+
 Les images d'un même lot (variantes) portent un repère « 2/4 » (leur rang dans le lot) tant qu'il en reste au moins
 deux dans la galerie. Dans la visionneuse, **Voir le lot** montre les images du lot côte à côte ; un appui en ouvre une
 en grand, et l'on passe de l'une à l'autre en glissant. **Tout télécharger** enchaîne le téléchargement de chaque
@@ -337,7 +347,8 @@ image du lot (une par fichier, pas d'archive ; le navigateur peut demander d'aut
 **Garder celle-ci** supprime les autres images du lot après confirmation.
 
 Pour une édition ou un dessin guidé, le bouton **Image d'entrée** (ou **N images d'entrée**) ouvre les images de
-départ en grand, une par une : glisser à gauche ou à droite passe de l'une à l'autre, vers le bas ferme. Chacune peut
+départ en grand, une par une, avec les mêmes gestes que la visionneuse : pincer pour zoomer (molette sur ordinateur),
+glisser à gauche ou à droite pour passer de l'une à l'autre, vers le bas pour fermer. Chacune peut
 être téléchargée, ou reprise dans **Éditer** ou **Dessiner** pour repartir d'elle. Les images d'entrée sont conservées
 depuis le 13/10/2026 ; pour les images plus anciennes, elles ont été récupérées tant que leur dossier de travail
 existait encore (les 20 derniers).
@@ -427,12 +438,15 @@ du Mac, ne suffit pas pour voir les images privées.
   la première fois) ; en sortant, la saisie publique revient intacte. La saisie privée n'est jamais retenue par le
   navigateur, brouillons compris : elle ne survit pas à la fermeture de l'application. L'interrupteur **Campagne** et
   les Réglages sont communs aux deux espaces.
-- **Sortir vide l'écran** : la saisie privée est effacée, comme les images privées de la zone de résultat, de la grille
-  et de la visionneuse (si le Mac est injoignable, un message le dit et l'on reste dans l'espace). Les générations
-  privées en file ou en cours quittent aussi l'écran et la page (progression, aperçu, prompt, vignette, ligne de la
-  file) : elles continuent sur le Mac et sont rangées dans l'espace, mais une page sortie ne peut plus ni les suivre,
-  ni les prévisualiser, ni les annuler. Les générations publiques de la page, cachées pendant qu'on était dans l'espace
-  privé (elles y restent suivies, hors de l'écran), reviennent, avec leur image si elles ont fini entre-temps.
+- **Sortir vide l'écran** : la saisie privée est effacée, comme les images privées de la zone de résultat, de la grille,
+  de la galerie, de la visionneuse, des images d'entrée et de la feuille « Voir le lot » (fermée), même cachées, et les
+  lignes du journal du panneau Moteur écrites dans l'espace : la page ne les garde plus prêtes à l'affichage, et celles
+  qui chargeaient encore sont abandonnées (si le Mac est injoignable, un message le dit et l'on reste dans l'espace).
+  Les générations privées en file ou en cours quittent aussi l'écran et la page (progression, aperçu, prompt, vignette,
+  ligne de la file) : elles continuent sur le Mac et sont rangées dans l'espace, mais une page sortie ne peut plus ni
+  les suivre, ni les prévisualiser, ni les annuler. Les générations publiques de la page, cachées pendant qu'on était
+  dans l'espace privé (elles y restent suivies, hors de l'écran), reviennent, avec leur image si elles ont fini
+  entre-temps.
 - **Retour dans l'espace privé** : la page suit toutes les générations privées encore en file ou en cours, avec leur
   prompt et leur progression, qu'elle les ait lancées ou non, aussi après un rechargement ou depuis un autre appareil
   (aucun identifiant privé n'est gardé par le navigateur) ; la dernière image de l'espace public n'y est pas montrée.
@@ -698,8 +712,11 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   envoyé dans `/api/generate` (`"page"`, 1 à 64 lettres, chiffres, `-` ou `_`), pour qu'elle y reconnaisse ses
   lignes : il n'ouvre aucune route ; `queued` : générations en attente de l'espace ; `current_job` : la génération en
   cours si elle est de l'espace et n'est pas incognito, sinon `null` ; `last_job` : dernière génération normale,
-  `null` dans l'espace privé ; `busy` : le Mac calcule, quel que soit l'espace) ; lots : `"count"` de 2 à 4 dans `/api/generate` (mode
-  Créer, `"mode": "t2i"` ; 1 : génération seule) crée autant de générations ; `"campaign": [{"image": <data URL>, "width",
+  `null` dans l'espace privé ; `busy` : le Mac calcule, quel que soit l'espace ; `version` : `commit`, `date` et
+  `branch` du dernier commit du dossier servi (`null` hors git) et `server`, empreinte de `tools/launch.py` et
+  `tools/estimate.py`, relus toutes les 30 s ; `server_version` : la même chose au lancement du serveur, `null` sans
+  `main()`) ; lots : `"count"` de 2 à 4 dans `/api/generate` (mode Créer, `"mode": "t2i"` ; 1 : génération seule) crée
+  autant de générations ; `"campaign": [{"image": <data URL>, "width",
   "height"}, …]` (1 à 10 photos, mode Éditer, `"mode": "edit"`, sans `ref_images`) crée une édition par photo, avec
   cette seule photo en référence et à ses dimensions (une seule photo : génération seule) ; les générations d'un lot
   passent à la suite dans la file, et la réponse devient
