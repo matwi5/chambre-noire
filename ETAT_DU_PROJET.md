@@ -86,7 +86,9 @@ Mis à jour le 16/10/2026.
   visionneuse mis en commun (`zoomable`) ; première image d'entrée chargée en avance dès l'image affichée, pour
   qu'elle s'ouvre sans attente. Aperçus privés : le Mac écrit bien `preview_000.png` pendant une génération privée
   (observé dans son dossier de travail) et le porteur les a vus s'afficher à ce dernier essai ; problème non reproduit,
-  laissé ouvert s'il revient.
+  laissé ouvert s'il revient. Revue de sécurité du diff (`b547a4f..3591b85`) : rien de bloquant ; corrigés aussi, à
+  la sortie, un geste des images d'entrée qui pouvait rouvrir une entrée privée cachée, et le prompt, les réglages,
+  la liste et les liens de téléchargement privés restés dans la page cachée (antérieurs au diff).
 - Fuite de l'espace privé à l'écran corrigée (signalée par le porteur) : une `<img>` qui reçoit une autre adresse garde
   l'image d'avant à l'écran jusqu'au chargement de la nouvelle, donc l'image d'entrée privée vue avant réapparaissait
   un instant dans l'espace public (et les « glitchs » entre deux images). Toute image passe désormais par

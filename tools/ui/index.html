@@ -1167,7 +1167,7 @@ function showResult(name, w, h, {reveal, inc, keep, shown:onShown}={}){
     if(onShown) onShown(); }});
   $('dl').href=inc && inc.blob ? url : url+'&download=1'; $('dl').download=name; $('resultActions').style.display='';
   lastResult={url, name, blob:inc ? inc.blob : null, item:inc && inc.item}; if(!inc) setAmbient(name); }   // pas de fond ambiant en incognito : il passerait par une miniature sur le disque
-function hideResult(){ clearImage($('stageImg')); $('stageImg').job=null; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
+function hideResult(){ clearImage($('stageImg')); $('stageImg').job=null; $('dl').removeAttribute('href'); $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
 const forgetJob = id => fetch('/api/job/'+id+'/forget', {method:'POST', headers:{'Content-Type':'application/json'}}).catch(()=>{});
 // progression d'une génération de la page : part faite (0 à 1), titre, détail, temps restant avant son image
 function progress(p){
@@ -1681,7 +1681,7 @@ function showInput(i){
   $('ivImg').alt=inputLabel(it, f); $('ivLabel').textContent=inputLabel(it, f);
   $('ivCount').textContent=`${ivIndex+1} / ${n}`; $('iv').classList.toggle('single', n<2);
   $('ivDl').href=inputUrl(it, f, '&download=1'); $('ivDl').download=it.name.slice(0, -4)+'_'+f; }
-function closeInputs(){ resetInputZoom(); $('iv').classList.remove('on'); ivIndex=-1; syncThemeColor();
+function closeInputs(){ resetInputZoom(); $('iv').classList.remove('on'); ivIndex=-1; ivOwner=null; syncThemeColor();
   clearLater($('ivImg'), ()=>ivIndex<0); }
 async function inputAction(kind){             // repartir de cette image d'entrée : Éditer (référence) ou Dessiner
   const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f, list=editImages, priv=inPrivate();
@@ -1690,7 +1690,8 @@ async function inputAction(kind){             // repartir de cette image d'entr�
   if(kind==='mask'){ if(await setMaskImage(name, dataUrl, priv)) goTab('mask'); return; }
   if(list.length>=MAX_REFS){ toast(MAX_REFS+' images de référence au maximum', 'err'); return; }
   addEditImage(list, await toEntry(name, dataUrl)); }
-const resetInputZoom=zoomable($('ivStage'), $('ivImg'), $('iv'), d=>showInput(ivIndex+d), closeInputs);   // comme la visionneuse
+// comme la visionneuse ; un geste qui s'achève après la fermeture (sortie de l'espace pendant le geste) ne rouvre rien
+const resetInputZoom=zoomable($('ivStage'), $('ivImg'), $('iv'), d=>{ if(ivIndex>=0) showInput(ivIndex+d); }, closeInputs);
 async function viewerAction(kind){
   const it=vList[vIndex]; if(!it) return;
   if(kind==='edit' || kind==='mask'){ closeViewer(); return kind==='edit' ? useAsEditInput(it.name, srcOf(it)) : useAsMaskInput(it.name, srcOf(it)); }
@@ -1785,7 +1786,9 @@ function changedSpace(inside){
   prompts={saved:[], types:prompts.types}; editingPrompt=null; $('peTitle').value=$('peText').value=''; renderPrompts();
   if(ivIndex>=0 && !!ivOwner.private!==inside) closeInputs();
   if(vIndex>=0 && vList.some(x=>!!x.private!==inside)) closeViewer();
-  if(!inside) forgetPrivateImages();                // rien de l'espace quitté dans la page, même caché ou chargé en avance
+  if(!inside){ forgetPrivateImages();               // rien de l'espace quitté dans la page, même caché ou chargé en avance
+    if(vIndex<0){ vList=[]; $('vImg').alt=$('ivImg').alt=''; $('vChips').innerHTML=$('ivLabel').textContent='';   // prompt, réglages
+      ['vDl', 'ivDl'].forEach(id=>$(id).removeAttribute('href')); } }   // liens vers l'image ou l'entrée privée
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
     resumeOwn(queueState); }
   show(oldestActive() || latestResult());

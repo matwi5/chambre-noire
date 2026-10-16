@@ -68,6 +68,10 @@ test('espace privé : après la sortie, ni visionneuse ni images d\'entrée ne m
   const left = await page.eval(`(() => { showImage($('vImg'), ${JSON.stringify(late)});
     applyPrivate({ ...privState, unlocked: false }); return ${PRIVATE_IMAGES}; })()`);
   assert.deepEqual(left, [], 'images privées restées dans la page');
+  // ni lien vers une route privée, ni texte de l'image privée (prompt en texte de remplacement), ni liste privée
+  assert.deepEqual(await page.eval(`({ links: [...document.querySelectorAll('[href*="/api/private/"]')].map(a => a.id),
+    prompt: document.documentElement.outerHTML.includes('zq3 privée'), list: vList.length })`),
+  { links: [], prompt: false, list: 0 }, 'données privées restées dans la page');
   // la même adresse redemandée à part : sa réponse arrivée, celle de l'image abandonnée l'aurait été aussi
   await page.eval(`fetch(${JSON.stringify(late)}).then(r => r.blob())
     .then(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))`);
