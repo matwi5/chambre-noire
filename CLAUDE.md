@@ -55,7 +55,9 @@ ou un nom en `.ts.net` autre que ceux du banc.
 `--quick` (en local, jamais en CI) saute le banc quand aucun `.py` n'a changé depuis la base, sauf
 `tests/test_public_repo.py`. `--ui` tourne en même temps que le banc (ports libres et dossiers temporaires
 distincts) ; suivi de fichiers, il ne lance que ceux-là. Un avis « zone sensible : passe bogues /code-review requise »
-(sans échec) signale une ligne de code ajoutée qui touche l'incognito ou l'espace privé.
+(sans échec) signale une ligne de code ajoutée qui touche l'incognito ou l'espace privé. Pendant une correction
+(tours de revue compris), `--quick --ui <fichiers touchés>` suffit ; le contrôle complet (`--ui` seul) se lance une
+fois, avant le commit.
 
 - **Banc** (sans GPU, ≈ 1 min) : `venv/bin/python -m unittest discover -s tests` ; un seul fichier :
   `venv/bin/python -m unittest discover -s tests -p test_x.py`. `tests/bench.py` sert `tools/launch.py` sur un port
