@@ -12,7 +12,7 @@ Mis à jour le 16/10/2026.
   chiffré (entrée par le cadenas de la Galerie), étanche à l'espace public (galerie, file, saisie et prompts
   enregistrés propres à chaque espace). Banc de test permanent sans GPU :
   `venv/bin/python -m unittest discover -s tests` (162 tests, ≈ 1 min 20) ; tests d'interface `tests/check.py --ui`
-  (35 tests).
+  (36 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
 - **En cours** : parcours « Cloisonnement espace privé, file et saisie » (spécification
@@ -90,7 +90,9 @@ Mis à jour le 16/10/2026.
   la sortie, un geste des images d'entrée qui pouvait rouvrir une entrée privée cachée, et le prompt, les réglages,
   la liste et les liens de téléchargement privés restés dans la page cachée (antérieurs au diff ; `9f9e269`), puis,
   après la revue de ce commit, la feuille « Voir le lot » d'un lot privé fermée et vidée à la sortie, tout lien vers
-  une route privée retiré de la page (nom `prive_<id>` compris) et le geste en cours abandonné à la fermeture.
+  une route privée retiré de la page (nom `prive_<id>` compris) et le geste en cours abandonné à la fermeture
+  (`d5334b2`) ; puis visionneuse et images d'entrée vidées par leur propre fermeture, après le fondu (`emptyViewer`,
+  `emptyInputs`), sans erreur sur un appui pendant ce fondu.
   À reporter dans Asana (accord du porteur) : un ticket pour la fuite et les glitchs d'affichage (`d3169f8`,
   `9f9e269`), un pour le zoom et le préchargement des images d'entrée (`3591b85`).
 - Fuite de l'espace privé à l'écran corrigée (signalée par le porteur) : une `<img>` qui reçoit une autre adresse garde

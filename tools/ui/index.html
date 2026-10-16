@@ -1110,7 +1110,6 @@ function showImage(img, url, {thumb, keep, then, once}={}){
     if(t.im!==undefined) side(); else t.p.then(side); }
   e.p.then(()=>put(e)); }
 function clearImage(img){ img.want=null; img.removeAttribute('src'); }
-function clearLater(img, still){ setTimeout(()=>{ if(still()) clearImage(img); }, FADE_MS); }   // après le fondu de fermeture
 // aperçus (/api/job/) compris : dans l'espace privé, la page ne montre que ceux des générations privées
 const secretUrl = u => !!u && (u.startsWith('/api/private/') || u.startsWith('/api/job/'));
 function forgetPrivateImages(){
@@ -1169,7 +1168,7 @@ function showResult(name, w, h, {reveal, inc, keep, shown:onShown}={}){
     if(onShown) onShown(); }});
   $('dl').href=inc && inc.blob ? url : url+'&download=1'; $('dl').download=name; $('resultActions').style.display='';
   lastResult={url, name, blob:inc ? inc.blob : null, item:inc && inc.item}; if(!inc) setAmbient(name); }   // pas de fond ambiant en incognito : il passerait par une miniature sur le disque
-function hideResult(){ clearImage($('stageImg')); $('stageImg').job=null; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
+function hideResult(){ clearImage($('stageImg')); $('stageImg').job=null; $('dl').removeAttribute('href'); $('dl').removeAttribute('download'); $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
 const forgetJob = id => fetch('/api/job/'+id+'/forget', {method:'POST', headers:{'Content-Type':'application/json'}}).catch(()=>{});
 // progression d'une génération de la page : part faite (0 à 1), titre, détail, temps restant avant son image
 function progress(p){
@@ -1590,8 +1589,12 @@ function openViewer(i, list=vList){
   if(!v.classList.contains('on')){ v.classList.remove('immersive'); v.classList.add('on'); document.body.style.overflow='hidden'; }
   syncThemeColor();
 }
-function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor();
-  clearLater($('vImg'), ()=>vIndex<0); clearLater($('vBg'), ()=>vIndex<0); }
+function closeViewer(){ resetZoom(true); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor();
+  setTimeout(()=>{ if(vIndex<0) emptyViewer(); }, FADE_MS); }   // après le fondu de fermeture
+// visionneuse fermée : plus rien de l'image vue dans la page cachée (image, prompt, réglages, rang, lot, lien)
+function emptyViewer(){ vList=[]; clearImage($('vImg')); clearImage($('vBg'));
+  $('vImg').alt=$('vCount').textContent=$('vLotOpen').textContent=''; $('vChips').innerHTML=$('vInputs').innerHTML='';
+  $('vInputs').hidden=true; $('vDl').removeAttribute('href'); $('vDl').removeAttribute('download'); }
 function stepViewer(d){ if(vIndex<0 || !vList.length) return; vStep=d; openViewer((vIndex+d+vList.length)%vList.length); }
 addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevented) return;
   if(ivIndex>=0){ if(e.key==='Escape') closeInputs(); else if(e.key==='ArrowLeft') showInput(ivIndex-1); else if(e.key==='ArrowRight') showInput(ivIndex+1); return; }
@@ -1608,8 +1611,9 @@ function zoomable(st, img, v, step, close){
     if(z.s>1) v.classList.add('zoomed'); else unzoom=setTimeout(()=>{ if(z.s<=1) v.classList.remove('zoomed'); }, 400); }   // reste au-dessus pendant le retour (0,35 s)
   function zoomAt(s2, px, py, from=z){ const c=center(), k=s2/from.s;   // le point (px, py) de l'écran reste sous les doigts
     z={s:s2, x:(px-c.x)-((px-c.x)-from.x)*k, y:(py-c.y)-((py-c.y)-from.y)*k}; if(s2<=1.01) z={s:1, x:0, y:0}; apply(); }
-  // taille initiale ; le geste en cours est abandonné (fermeture pendant le geste : sa fin ne fait plus rien)
-  const reset=()=>{ st.classList.remove('drag'); pts.clear(); one=pinch=null; v.style.opacity=''; z={s:1, x:0, y:0}; apply(); };
+  // taille initiale ; cancel (fermeture) : le geste en cours est aussi abandonné, sa fin ne fait plus rien
+  const reset=cancel=>{ st.classList.remove('drag'); if(cancel){ pts.clear(); one=pinch=null; v.style.opacity=''; }
+    z={s:1, x:0, y:0}; apply(); };
   const mid=()=>{ const [a,b]=[...pts.values()]; return {x:(a.x+b.x)/2, y:(a.y+b.y)/2, d:Math.hypot(a.x-b.x, a.y-b.y)}; };
   st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return;
     pts.set(e.pointerId, {x:e.clientX, y:e.clientY}); st.setPointerCapture(e.pointerId); st.classList.add('drag');
@@ -1676,7 +1680,7 @@ function renderInputsButton(it){
     + `<span>${list.length>1 ? list.length+" images d'entrée" : "Image d'entrée"}</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>`; }
 function openInputs(i){ const it=vList[vIndex]; if(!it || !(it.inputs||[]).length) return; ivOwner=it; showInput(i);
   $('iv').classList.remove('immersive'); $('iv').classList.add('on'); syncThemeColor(); }
-function showInput(i){
+function showInput(i){ if(!ivOwner) return;       // fermée (boutons et gestes pendant le fondu de fermeture)
   const it=ivOwner, n=it.inputs.length; ivIndex=(i+n)%n; const f=it.inputs[ivIndex], thumb=g=>inputUrl(it, g, '&thumb=1&t='+it.time);
   resetInputZoom();
   showImage($('ivImg'), inputUrl(it, f), {thumb:thumb(f)});   // miniature : celle du bouton de la visionneuse, déjà là
@@ -1684,8 +1688,10 @@ function showInput(i){
   $('ivImg').alt=inputLabel(it, f); $('ivLabel').textContent=inputLabel(it, f);
   $('ivCount').textContent=`${ivIndex+1} / ${n}`; $('iv').classList.toggle('single', n<2);
   $('ivDl').href=inputUrl(it, f, '&download=1'); $('ivDl').download=it.name.slice(0, -4)+'_'+f; }
-function closeInputs(){ resetInputZoom(); $('iv').classList.remove('on'); ivIndex=-1; ivOwner=null; syncThemeColor();
-  clearLater($('ivImg'), ()=>ivIndex<0); }
+function closeInputs(){ resetInputZoom(true); $('iv').classList.remove('on'); ivIndex=-1; ivOwner=null; syncThemeColor();
+  setTimeout(()=>{ if(ivIndex<0) emptyInputs(); }, FADE_MS); }   // après le fondu de fermeture
+function emptyInputs(){ clearImage($('ivImg')); $('ivImg').alt=$('ivLabel').textContent=$('ivCount').textContent='';
+  $('ivDl').removeAttribute('href'); $('ivDl').removeAttribute('download'); }
 async function inputAction(kind){             // repartir de cette image d'entrée : Éditer (référence) ou Dessiner
   if(!ivOwner || ivIndex<0) return;               // second appui pendant le fondu de fermeture
   const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f, list=editImages, priv=inPrivate();
@@ -1792,9 +1798,7 @@ function changedSpace(inside){
   if(ivIndex>=0 && !!ivOwner.private!==inside) closeInputs();
   if(vIndex>=0 && vList.some(x=>!!x.private!==inside)) closeViewer();
   if(!inside){ forgetPrivateImages();               // rien de l'espace quitté dans la page, même caché ou chargé en avance
-    $('ivImg').alt=$('ivLabel').textContent=$('ivCount').textContent='';   // images d'entrée (fermées juste avant)
-    if(vIndex<0){ vList=[]; $('vImg').alt=$('vCount').textContent=$('vLotOpen').textContent='';   // prompt, rang, lot
-      $('vChips').innerHTML=$('vInputs').innerHTML=''; $('vInputs').hidden=true; } }   // réglages, images d'entrée
+    if(ivIndex<0) emptyInputs(); if(vIndex<0) emptyViewer(); }   // vues fermées : vidées sans attendre le fondu
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
     resumeOwn(queueState); }
   show(oldestActive() || latestResult());

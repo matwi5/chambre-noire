@@ -166,6 +166,8 @@ test('images d\'entrée : pincer zoome, relâcher rend la taille initiale', asyn
   await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.waitFor(`!$('iv').classList.contains('on') && $('viewer').classList.contains('on')`,
     { what: 'images d\'entrée fermées' });
+  await page.eval(`$('iv').querySelector('.v-nav.next').click()`);   // appui pendant le fondu : rien ne se rouvre
+  assert.equal(await page.eval(`ivIndex`), -1, 'images d\'entrée restées fermées');
   await page.eval(`closeViewer()`);
   page.assertNoErrors();
 });
@@ -184,11 +186,10 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
   await page.eval(`openViewer(histItems.findIndex(it => it.lot), histItems); openLot()`);
   await page.waitFor(`openedSheet === $('lotSheet') && $('lotSheetGrid').querySelectorAll('img').length === 2`,
     { what: 'feuille du lot ouverte' });
-  const after = await page.eval(`(() => { applyPrivate({ ...privState, unlocked: false });
-    return { open: openedSheet === $('lotSheet'), cells: $('lotSheetGrid').children.length,
-      images: ${PRIVATE_IMAGES} }; })()`);
+  await page.click('#privExit');                   // « Sortir », la feuille du lot ouverte
+  await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  const after = await page.eval(`({ open: openedSheet === $('lotSheet'), cells: $('lotSheetGrid').children.length,
+    images: ${PRIVATE_IMAGES} })`);
   assert.deepEqual(after, { open: false, cells: 0, images: [] }, 'lot privé resté dans la page');
-  await page.eval(`postJson('/api/private/lock', {})`);
-  await page.eval(`refreshStatus()`);
   page.assertNoErrors();
 });
