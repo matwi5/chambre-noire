@@ -57,10 +57,12 @@ test('feuille de la file, puis annulation depuis la file', async () => {
   page.assertNoErrors();
 });
 
-test('panneau Moteur : version du code servi, et serveur à relancer quand il tourne sur un autre commit', async () => {
+test('panneau Moteur : version du code servi, et serveur à relancer quand launch.py a changé', async () => {
   const shown = await page.eval(`({ v: fmtVersion({ commit: 'abc1234', branch: 'main', date: '2026-10-16' }),
-    none: fmtVersion(undefined), same: staleServer({ version: { commit: 'a1' }, server_version: { commit: 'a1' } }),
-    stale: staleServer({ version: { commit: 'abc1234' }, server_version: { commit: 'def5678' } }) })`);
+    none: fmtVersion(undefined),
+    same: staleServer({ version: { commit: 'b2', server: 'f1' }, server_version: { commit: 'a1', server: 'f1' } }),
+    stale: staleServer({ version: { commit: 'abc1234', server: 'f2' },
+      server_version: { commit: 'def5678', server: 'f1' } }) })`);
   assert.deepEqual(shown,
     { v: 'abc1234 · main · 16/10/2026', none: '', same: '', stale: 'lancé sur def5678 : à relancer' });
   page.assertNoErrors();

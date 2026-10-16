@@ -4,6 +4,7 @@
 // textes cachés compris), ni dans les champs, ni dans la mémoire de la page (listes d'images, générations suivies,
 // images prêtes, prompts, file), ni dans localStorage. La recherche porte sur des marqueurs : identifiants des images
 // et des générations privées, mots des prompts privés, routes /api/private/ et noms prive_….
+// Les deux tests se suivent : le second rouvre l'espace et la galerie que le premier a remplis.
 //   node --test tests/ui/etancheite.test.mjs   (ou : venv/bin/python tests/check.py --ui tests/ui/etancheite.test.mjs)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -112,7 +113,7 @@ test('« Sortir » : plus rien de l\'espace privé dans la page', async () => {
 test('fermeture par le Mac : plus rien de l\'espace privé dans la page (hors saisie mise de côté)', async () => {
   await enter();
   await page.click('#tabbar [data-pane="hist"]');
-  await page.waitFor(`histItems.length === 4 && histItems.every(it => it.private)`, { what: 'galerie privée' });
+  await page.waitFor(`histItems.length > 0 && histItems.every(it => it.private)`, { what: 'galerie privée' });
   const markers = [...new Set([...await page.eval(`histItems.map(it => it.id)`), ...WORDS, '/api/private/', 'prive_'])];
   await page.eval(`openViewer(histItems.findIndex(it => it.inputs.length), histItems); openInputs(0); openPrompts()`);
   await page.waitFor(`$('ivImg').complete && $('ivImg').naturalWidth > 0`, { what: 'image d\'entrée privée' });

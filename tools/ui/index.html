@@ -805,9 +805,10 @@ const $ = id => document.getElementById(id);
 let mode='t2i', editImages=[], maskImage=null, paintMode='paint', lastResult=null, estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
 let privState={available:false, exists:false, unlocked:false};   // espace privé vu par cet appareil (/api/status)
 
-// journal du panneau Moteur ; une ligne écrite dans l'espace privé (nom prive_…, taille d'une photo) en sort avec lui
+// journal du panneau Moteur ; une ligne de l'espace privé (nom prive_…, taille d'une photo) en sort avec lui. priv :
+// l'espace où l'action a commencé, noté avant sa première attente (sinon celui du moment)
 let logLines=[];
-function log(m){ logLines.push({text:new Date().toLocaleTimeString()+'  '+m, priv:inPrivate()}); renderLog(); }
+function log(m, priv=inPrivate()){ logLines.push({text:new Date().toLocaleTimeString()+'  '+m, priv}); renderLog(); }
 function renderLog(){ const l=$('log'); l.textContent=logLines.map(x=>x.text+'\n').join(''); l.scrollTop=l.scrollHeight; }
 const round32 = v => Math.max(256, Math.round(v/32)*32);
 function singleImage(){ if(mode==='edit' && editImages.length===1) return editImages[0]; if(mode==='mask' && maskImage) return maskImage; return null; }
@@ -979,10 +980,11 @@ document.querySelectorAll('.sheet').forEach(sh=>{ let y0=null, dy=0;
 const esc = t => String(t).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function facts(id, rows){ $(id).innerHTML=rows.filter(r=>r[1]!=null && r[1]!=='').map(([k,v,cls])=>`<dt>${esc(k)}</dt><dd class="${cls||''}">${esc(v)}</dd>`).join(''); }
 let statusTimer=null, queueState=[], queueAt=0;   // file de l'espace de l'appareil reçue de /api/status, et quand
-// version du code servi (git, /api/status) : commit, branche, date ; le serveur lancé sur un autre commit est à relancer
+// version du code servi (git, /api/status) : commit, branche, date ; le serveur est à relancer quand launch.py a
+// changé depuis son lancement (server : empreinte du fichier ; un autre changement est en ligne sans relance)
 const fmtVersion = v => v ? [v.commit, v.branch, v.date && v.date.split('-').reverse().join('/')].filter(Boolean).join(' · ') : '';
-const staleServer = s => s.server_version && s.version && s.server_version.commit!==s.version.commit
-  ? `lancé sur ${s.server_version.commit} : à relancer` : '';
+const staleServer = s => s.server_version && s.version && s.server_version.server && s.version.server
+  && s.server_version.server!==s.version.server ? `lancé sur ${s.server_version.commit || 'une version plus ancienne'} : à relancer` : '';
 async function refreshStatus(){
   try{ const s=await (await fetch('/api/status')).json(); const el=$('status');
     queueState=s.queue||[]; queueAt=Date.now();
@@ -1005,9 +1007,9 @@ refreshStatus();
 function readFile(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
 function loadImg(dataUrl){ return new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=dataUrl; }); }
 function resizeDataUrl(img, w, h){ const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h); return c.toDataURL('image/png'); }
-async function toEntry(name, dataUrl){ let im=await loadImg(dataUrl); let w=im.naturalWidth, h=im.naturalHeight;
+async function toEntry(name, dataUrl, priv=inPrivate()){ let im=await loadImg(dataUrl); let w=im.naturalWidth, h=im.naturalHeight;
   if(Math.max(w,h)>MAX_INPUT_SIDE){ const s=MAX_INPUT_SIDE/Math.max(w,h); const nw=Math.round(w*s), nh=Math.round(h*s);
-    dataUrl=resizeDataUrl(im, nw, nh); im=await loadImg(dataUrl); log(`${name} : ${w}×${h} réduite à ${nw}×${nh}`); w=nw; h=nh; }
+    dataUrl=resizeDataUrl(im, nw, nh); im=await loadImg(dataUrl); log(`${name} : ${w}×${h} réduite à ${nw}×${nh}`, priv); w=nw; h=nh; }
   return {name, dataUrl, w, h, img:im}; }
 // la liste des fichiers est copiée avant la remise à zéro du champ : celle-ci vide la liste du champ elle-même, que le
 // traitement (asynchrone) lit encore après sa première image
@@ -1016,8 +1018,8 @@ function wireDrop(dropId, inputId, handler){ const d=$(dropId), inp=$(inputId); 
   d.addEventListener('drop',e=>{e.preventDefault(); d.classList.remove('over'); handler([...e.dataTransfer.files]);}); inp.addEventListener('change',e=>{ handler([...e.target.files]); e.target.value=''; }); }
 // les images lues vont dans la saisie de l'espace où l'ajout a commencé (list, pris avant toute attente), même s'il
 // change pendant la lecture : une image privée ne tombe jamais dans la saisie publique
-wireDrop('edit_drop','edit_files', async files=>{ let skipped=0; const list=editImages;
-  for(const f of files){ if(list.length>=MAX_REFS){ skipped++; continue; } list.push(await toEntry(f.name, await readFile(f))); }
+wireDrop('edit_drop','edit_files', async files=>{ let skipped=0; const list=editImages, priv=inPrivate();
+  for(const f of files){ if(list.length>=MAX_REFS){ skipped++; continue; } list.push(await toEntry(f.name, await readFile(f), priv)); }
   if(list===editImages){ renderEditThumbs(); suggestRatio(); }
   if(skipped) toast(`${MAX_REFS} ${campaignOn ? 'photos' : 'images'} au maximum : ${skipped} non ajoutée${skipped>1?'s':''}`, 'err'); });
 wireDrop('mask_drop','mask_file', async files=>{ const f=files[0], priv=inPrivate(); if(f) await setMaskImage(f.name, await readFile(f), priv); });
@@ -1038,7 +1040,7 @@ $('brush').addEventListener('input',e=>$('brushVal').textContent=e.target.value+
 $('modePaint').onclick=()=>{paintMode='paint'; $('modePaint').classList.add('on'); $('modeErase').classList.remove('on');};
 $('modeErase').onclick=()=>{paintMode='erase'; $('modeErase').classList.add('on'); $('modePaint').classList.remove('on');};
 // priv : espace où le choix de l'image a commencé ; s'il a changé entre-temps, l'image va dans sa saisie mise de côté
-async function setMaskImage(name, dataUrl, priv=inPrivate()){ const entry=await toEntry(name, dataUrl);
+async function setMaskImage(name, dataUrl, priv=inPrivate()){ const entry=await toEntry(name, dataUrl, priv);
   if(priv!==inPrivate()){ if(asideInput) asideInput.mask={image:entry, pixels:null}; return false; }
   maskImage=entry; showMaskImage(); suggestRatio(); return true; }
 // image à retoucher (maskImage) sur la zone de dessin, avec un masque déjà peint (pixels) ou vierge
@@ -1660,7 +1662,7 @@ async function dataUrlOf(name, url){ if(lastResult && lastResult.blob && lastRes
   const b=await (await fetch(url || resultUrl(name))).blob(); return await readFile(b); }
 async function useAsEditInput(name=lastResult && lastResult.name, url=lastResult && lastResult.url){
   if(!name) return; if(editImages.length>=MAX_REFS){ toast(MAX_REFS+' images de référence au maximum', 'err'); return; }
-  const list=editImages; addEditImage(list, await toEntry(name, await dataUrlOf(name, url))); }
+  const list=editImages, priv=inPrivate(); addEditImage(list, await toEntry(name, await dataUrlOf(name, url), priv)); }
 async function useAsMaskInput(name=lastResult && lastResult.name, url=lastResult && lastResult.url){ if(!name) return; const priv=inPrivate();
   if(await setMaskImage(name, await dataUrlOf(name, url), priv)) goTab('mask'); }
 // image reprise dans Éditer : list est la saisie de l'espace où le geste a commencé (prise avant toute attente)
@@ -1710,7 +1712,7 @@ async function inputAction(kind){             // repartir de cette image d'entr�
   const dataUrl=await readFile(await (await fetch(url)).blob());
   if(kind==='mask'){ if(await setMaskImage(name, dataUrl, priv)) goTab('mask'); return; }
   if(list.length>=MAX_REFS){ toast(MAX_REFS+' images de référence au maximum', 'err'); return; }
-  addEditImage(list, await toEntry(name, dataUrl)); }
+  addEditImage(list, await toEntry(name, dataUrl, priv)); }
 const resetInputZoom=zoomable($('ivStage'), $('ivImg'), $('iv'), d=>showInput(ivIndex+d), closeInputs);   // comme la visionneuse
 async function viewerAction(kind){
   const it=vList[vIndex]; if(!it) return;
@@ -1725,7 +1727,7 @@ async function viewerAction(kind){
     if(!await ask('Supprimer cette image ?', (it.private ? 'Cette image privée' : it.name)+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return;
     const r=it.private ? await postJson('/api/private/delete', {id:it.id}) : await postJson('/api/delete', {name:it.name});
     if(!r.ok){ toast('Suppression impossible : '+((await r.json()).error||r.status), 'err'); return; }
-    log('supprimé : '+it.name); toast('Image supprimée');
+    log('supprimé : '+it.name, !!it.private); toast('Image supprimée');
     forgetResult(it.name); removeFromViewer([it]); }
 }
 function removeFromViewer(gone){                  // images supprimées : hors de la galerie et de la liste de la visionneuse
@@ -1756,7 +1758,7 @@ async function keepThis(){                        // variantes : garder cette im
   if(!await ask('Garder celle-ci ?', `${n===1 ? "L'autre image" : 'Les '+n+' autres images'} du lot ser${n>1?'ont':'a'} supprimée${s} définitivement du Mac.`, 'Garder', true)) return;
   const gone=[];
   for(const o of others){ const r=await (o.private ? postJson('/api/private/delete', {id:o.id}) : postJson('/api/delete', {name:o.name})).catch(()=>null);
-    if(r && r.ok){ gone.push(o); forgetResult(o.name); log('supprimé : '+o.name); } }
+    if(r && r.ok){ gone.push(o); forgetResult(o.name); log('supprimé : '+o.name, !!o.private); } }
   toast(gone.length===n ? 'Image gardée, '+n+' supprimée'+s : 'Suppression incomplète', gone.length===n ? '' : 'err');
   removeFromViewer(gone); const k=vList.indexOf(it); if(k>=0) openViewer(k); }
 function forgetResult(name){                      // image supprimée : elle quitte la zone de résultat et la pellicule
@@ -1764,14 +1766,14 @@ function forgetResult(name){                      // image supprimée : elle qui
   if(p) drop(p); else if(lastResult && lastResult.name===name){ lastResult=null; hideResult(); } }
 async function deleteCurrent(){
   if(!lastResult) return;
-  const name=lastResult.name;
+  const name=lastResult.name, item=lastResult.item, priv=!!item;   // pris avant les attentes (confirmation, envoi)
   if(lastResult.blob){
     if(!await ask('Effacer cette image ?', 'Elle n\'est enregistrée nulle part : sans téléchargement, elle sera perdue.', 'Effacer', true)) return;
     forgetResult(name); toast('Image effacée'); return; }
-  if(!await ask('Supprimer cette image ?', (lastResult.item ? 'Cette image privée' : name)+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return;
-  const r=lastResult.item ? await postJson('/api/private/delete', {id:lastResult.item}) : await postJson('/api/delete', {name});
+  if(!await ask('Supprimer cette image ?', (item ? 'Cette image privée' : name)+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return;
+  const r=item ? await postJson('/api/private/delete', {id:item}) : await postJson('/api/delete', {name});
   if(!r.ok){ toast('Suppression impossible : '+((await r.json()).error||r.status), 'err'); return; }
-  log('supprimé : '+name); forgetResult(name); toast('Image supprimée');
+  log('supprimé : '+name, priv); forgetResult(name); toast('Image supprimée');
   loadHistory();
 }
 // ------------------------------------------------------------ espace privé : galerie chiffrée sur le Mac, ouverte par un
@@ -1898,7 +1900,7 @@ let adoptItem=null;
 function openAdopt(){ adoptItem=vList[vIndex]; if(adoptItem) openPrivSheet('adoptSheet'); }
 async function adoptImage(){ const it=adoptItem; if(!it || !$('paCode').value) return;
   if(!await privPost('/api/private/adopt', {name:it.name, code:$('paCode').value}, $('paGo'), 'paErr')) return $('paCode').select();
-  closeSheet(); toast('Image rendue privée'); log('rendue privée : '+it.name); forgetResult(it.name); removeFromViewer([it]); }
+  closeSheet(); toast('Image rendue privée'); log('image rendue privée'); forgetResult(it.name); removeFromViewer([it]); }
 // application installable sur le téléphone (le navigateur n'accepte le service worker qu'en HTTPS ou sur le Mac)
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 </script>

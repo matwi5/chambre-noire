@@ -28,7 +28,7 @@ class Relay(http.server.BaseHTTPRequestHandler):
             headers["Origin"] = "https://" + HOST
         request = urllib.request.Request(TARGET + self.path, data=body, headers=headers, method=self.command)
         try:
-            reply = urllib.request.urlopen(request)
+            reply = urllib.request.urlopen(request, timeout=30)   # serveur bloqué : le test échoue, sans attendre
         except urllib.error.HTTPError as e:                  # 4xx et 5xx : relayés tels quels
             reply = e
         data = reply.read()

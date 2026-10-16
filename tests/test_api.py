@@ -1,5 +1,5 @@
 """Comportement de base de l'API locale, sur le banc à faux moteur (voir bench.py)."""
-import os, subprocess, unittest
+import hashlib, os, subprocess, unittest
 from unittest import mock
 
 import bench
@@ -125,11 +125,21 @@ class VersionTest(bench.BenchCase):
 
     def test_version_is_the_last_commit_of_the_folder(self):
         repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        head = subprocess.run(["git", "-C", repo, "log", "-1", "--format=%h %cs"], capture_output=True, text=True,
+        head = subprocess.run(["git", "-C", repo, "log", "-1", "--format=%h %H %cs"], capture_output=True, text=True,
                               check=True).stdout.split()
+        with open(os.path.join(repo, "tools", "launch.py"), "rb") as f:
+            server = hashlib.sha1(f.read()).hexdigest()[:12]
         with mock.patch.object(bench.launch, "ROOT", repo), mock.patch.dict(bench.launch._version, root=None):
             version = bench.launch.code_version()
-        self.assertEqual([version["commit"], version["date"]], head)
+        self.assertEqual([version["commit"], version["hash"], version["date"], version["server"]], head + [server])
+
+    def test_git_is_not_called_outside_a_repository(self):
+        """Sur un Mac sans outils de développement, /usr/bin/git ouvre une fenêtre : jamais hors d'un dépôt git."""
+        with mock.patch.object(bench.launch.subprocess, "run") as run, \
+                mock.patch.dict(bench.launch._version, root=None):
+            version = bench.launch.code_version()           # le banc sert un dossier temporaire, sans .git
+        run.assert_not_called()
+        self.assertIsNone(version["commit"])
 
 
 if __name__ == "__main__":
