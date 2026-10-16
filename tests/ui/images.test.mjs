@@ -166,8 +166,12 @@ test('images d\'entrée : pincer zoome, relâcher rend la taille initiale', asyn
   await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.waitFor(`!$('iv').classList.contains('on') && $('viewer').classList.contains('on')`,
     { what: 'images d\'entrée fermées' });
-  await page.eval(`$('iv').querySelector('.v-nav.next').click()`);   // appui pendant le fondu : rien ne se rouvre
-  assert.equal(await page.eval(`ivIndex`), -1, 'images d\'entrée restées fermées');
+  // appui sur une flèche juste après une fermeture, dans le même tour (donc pendant le fondu) : rien ne se rouvre, et
+  // la vue se vide une fois le fondu passé
+  assert.equal(await page.eval(`(() => { openInputs(0); closeInputs(); $('iv').querySelector('.v-nav.next').click();
+    return ivIndex; })()`), -1, 'images d\'entrée restées fermées');
+  await page.waitFor(`!$('ivImg').getAttribute('src') && !$('ivLabel').textContent && !$('ivDl').hasAttribute('href')`,
+    { what: 'images d\'entrée vidées après le fondu' });
   await page.eval(`closeViewer()`);
   page.assertNoErrors();
 });
@@ -188,8 +192,19 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
     { what: 'feuille du lot ouverte' });
   await page.click('#privExit');                   // « Sortir », la feuille du lot ouverte
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  // la visionneuse, ouverte sur l'image privée à la sortie, est vidée sans attendre son fondu
   const after = await page.eval(`({ open: openedSheet === $('lotSheet'), cells: $('lotSheetGrid').children.length,
-    images: ${PRIVATE_IMAGES} })`);
-  assert.deepEqual(after, { open: false, cells: 0, images: [] }, 'lot privé resté dans la page');
+    images: ${PRIVATE_IMAGES}, list: vList.length, alt: $('vImg').alt, chips: $('vChips').children.length,
+    prompt: document.documentElement.outerHTML.includes('zq7 lot privé') })`);
+  assert.deepEqual(after, { open: false, cells: 0, images: [], list: 0, alt: '', chips: 0, prompt: false },
+    'lot privé resté dans la page');
+  page.assertNoErrors();
+});
+
+test('zone de résultat : son image retirée, son lien de téléchargement part avec elle', async () => {
+  await page.waitFor(`!inPrivate() && histItems.length === 2`, { what: 'galerie publique' });
+  const kept = await page.eval(`(() => { showResult(histItems[0].name, 512, 512); hideResult();
+    return { href: $('dl').hasAttribute('href'), name: $('dl').hasAttribute('download') }; })()`);
+  assert.deepEqual(kept, { href: false, name: false }, 'lien vers l\'image retirée resté dans la page');
   page.assertNoErrors();
 });
