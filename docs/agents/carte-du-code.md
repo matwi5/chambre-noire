@@ -111,13 +111,13 @@ dernier bloc, après le HTML.
   - « affichage des images » : `showImage` (toute image qui change d'adresse : vidée, puis remplie une fois l'image
     chargée et décodée à part, miniature d'abord ; `img.want` : adresse attendue, une image arrivée trop tard est
     ignorée ; `keep` : l'aperçu d'avant reste jusqu'au suivant ; `once` : aperçu servi une fois ; `fit`, `dims` :
-    miniature des visionneuses à la taille de l'image complète, par `fitSize`), `preload` et `ready` (les 10 dernières
-    images décodées : miniatures des voisines de la visionneuse, image complète de la suivante dans le sens du parcours
-    `vStep`, première image d'entrée ; une image incognito en sort à son oubli), `clearImage`, `forgetPrivateImages`
-    (sortie de l'espace privé : images privées et aperçus affichés, attendus ou chargés en avance, chargements en cours
-    abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne jamais réaffecter `src` d'une image
-    visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement de la nouvelle (`tests/check.py`
-    refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
+    miniature des visionneuses à la taille de l'image complète, par `fitThumb`, en unités de la scène `cqw`, `cqh`),
+    `preload` et `ready` (les 10 dernières images décodées : miniatures des voisines de la visionneuse, image complète
+    de la suivante dans le sens du parcours `vStep`, première image d'entrée ; une image incognito en sort à son oubli),
+    `clearImage`, `forgetPrivateImages` (sortie de l'espace privé : images privées et aperçus affichés, attendus ou
+    chargés en avance, chargements en cours abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne
+    jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
+    de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
   - « générations de la page, zone de résultat, île et file » : `pageJobs` (générations lancées par cette page),
     `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `lotOf`, `gridOf`, `show`,
     `showGrid`, `renderStrip`, `renderIsland`, `onIsland` (file non vide : `#queueSheet`, sinon `#engineSheet`),

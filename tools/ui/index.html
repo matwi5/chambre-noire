@@ -331,7 +331,8 @@
   .v-top .btn-icon { width:44px; height:44px; }
   .v-top a.btn-icon { color:var(--ink); }
   .v-top .chipbtn { cursor:default; font-variant-numeric:tabular-nums; }
-  .v-stage { position:relative; flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:10px 12px; touch-action:none; user-select:none; }
+  .v-stage { position:relative; flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:10px 12px; touch-action:none; user-select:none;
+    container-type:size; }                         /* cqw, cqh : taille de la miniature en attendant l'image (fitThumb) */
   .v-stage img { max-width:100%; max-height:100%; border-radius:18px; box-shadow:0 30px 80px -20px rgba(0,0,0,.85); -webkit-user-drag:none;
     transform:scale(.96); opacity:.4; transition:transform .35s var(--ease), opacity .3s; }
   .viewer.on .v-stage img { transform:none; opacity:1; }
@@ -1099,26 +1100,31 @@ function preload(url){ let e=ready.get(url);
 // illisible ; sans keep, une image illisible est confiée au navigateur (nouvel essai, ou image cassée comme avant).
 // then(ok) : appelée quand la nouvelle image est à l'écran (ok faux : illisible). once : image servie une seule fois
 // (aperçu), qui ne reste pas dans ready. fit : la miniature prend la taille où s'affichera l'image complète (visionneuses :
-// sinon elle s'affiche à ses 320 px, puis l'image saute) ; dims : dimensions de l'image complète, si connues.
+// sinon elle s'affiche à ses 320 px, puis l'image saute) ; dims : dimensions de l'image complète, si connues (sinon
+// devinées : une miniature plus petite que THUMB_SIDE est l'image elle-même, une autre vient d'une image plus grande que
+// l'écran).
 function showImage(img, url, {thumb, keep, then, once, fit, dims}={}){
   if(img.want===url && img.getAttribute('src')===url && img.complete && img.naturalWidth){ if(then) then(true); return; }   // déjà là
   img.want=url;                                    // adresse attendue : une image chargée trop tard pour un autre choix est ignorée
   const put=e=>{ if(once && ready.get(url)===e) ready.delete(url);
-    if(img.want!==url) return; if((e.im || !keep) && img.getAttribute('src')!==url){ img.src=url; img.style.width=img.style.height=''; }
+    if(img.want!==url) return; if((e.im || !keep) && img.getAttribute('src')!==url){ img.src=url; unfit(img); }
     if(then) then(!!e.im); };
   const e=preload(url); if(e.im!==undefined) return put(e);   // déjà prête : tout de suite, sans image vide entre les deux
   if(!keep) img.removeAttribute('src');
   if(thumb){ const t=preload(thumb), side=()=>{ if(img.want!==url || !t.im || img.getAttribute('src')) return;
-      if(fit) fitSize(img, dims || [t.im.naturalWidth, t.im.naturalHeight], !dims); img.src=thumb; };
+      if(fit){ const tw=t.im.naturalWidth, th=t.im.naturalHeight;   // dimensions inconnues : celles que dit la miniature
+        fitThumb(img, dims || (Math.max(tw, th)<THUMB_SIDE ? [tw, th] : [tw*1e3, th*1e3])); }   // plus petite : l'image
+      img.src=thumb; };
     if(t.im!==undefined) side(); else t.p.then(side); }
   e.p.then(()=>put(e)); }
-function clearImage(img){ img.want=null; img.removeAttribute('src'); img.style.width=img.style.height=''; }
-// taille d'affichage d'une image de dimensions [w, h] dans la scène de la visionneuse (sans agrandir, sauf large : forme
-// seule connue, image supposée plus grande que l'écran)
-function fitSize(img, [w, h], large){ const st=img.parentElement, cs=getComputedStyle(st);
-  const bw=st.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight), bh=st.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom);
-  const k=large ? Math.min(bw/w, bh/h) : Math.min(1, bw/w, bh/h);
-  img.style.width=Math.round(w*k)+'px'; img.style.height=Math.round(h*k)+'px'; }
+function clearImage(img){ img.want=null; img.removeAttribute('src'); unfit(img); }
+// miniature affichée à la taille de l'image complète de dimensions [w, h] dans la scène de la visionneuse : sa forme, et
+// la plus petite largeur entre la sienne, celle de la scène et celle que permet la hauteur de la scène. Taille en unités
+// de la scène (cqw, cqh) : recalculée par le navigateur quand la scène change (panneau, rotation).
+function fitThumb(img, [w, h]){ img.style.aspectRatio=`${w} / ${h}`; img.style.height='auto';
+  img.style.width=`min(${w}px, 100cqw, ${(w/h*100).toFixed(3)}cqh)`; }
+function unfit(img){ img.style.width=img.style.height=img.style.aspectRatio=''; }
+const THUMB_SIDE = 320;                           // côté le plus long des miniatures du Mac (thumb_jpeg) : jamais agrandies
 const dropLink = a => { a.removeAttribute('href'); a.removeAttribute('download'); };   // lien de téléchargement retiré
 // aperçus (/api/job/) compris : dans l'espace privé, la page ne montre que ceux des générations privées
 const secretUrl = u => !!u && (u.startsWith('/api/private/') || u.startsWith('/api/job/'));

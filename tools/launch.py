@@ -832,7 +832,9 @@ def output_path(name):
     return fp if os.path.isfile(fp) else None
 
 
-JOURNAL_LOCK = threading.Lock()       # écriture du journal des images (une ligne à la fois)
+# écriture du journal des images : un seul écrivain aujourd'hui (fin de génération), verrou gardé pour qu'une future
+# écriture ne se mêle pas à celle-ci
+JOURNAL_LOCK = threading.Lock()
 
 
 def journal_entries():

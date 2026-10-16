@@ -84,9 +84,10 @@ Mis à jour le 16/10/2026.
 - Après la livraison (PR #5, `abbb3ec`, service relancé), essais du porteur sur le téléphone : version servie, plus de
   fuite des images d'entrée ni de la galerie privée, zoom des images d'entrée : bons. Restait un saut des images
   d'entrée privées à leur arrivée : la miniature (320 px) s'affichait à sa taille avant l'image complète ; elle prend
-  maintenant la taille de l'image complète (`showImage`, `fit`), test ajouté. « Rendre privée » retiré à la demande du
-  porteur (bouton, feuille, route `/api/private/adopt`, `adopt_output`, `drop_from_journal`, `tests/test_adopt.py`) :
-  une image reste dans son espace (`DECISIONS.md`).
+  maintenant la taille de l'image complète, en unités de la scène pour suivre le panneau et la rotation (`showImage`,
+  `fit`, `fitThumb` ; revue : une première version en pixels figés déformait la miniature), tests ajoutés. « Rendre
+  privée » retiré à la demande du porteur (bouton, feuille, route `/api/private/adopt`, `adopt_output`,
+  `drop_from_journal`, `tests/test_adopt.py`) : une image reste dans son espace (`DECISIONS.md`).
 
 - Rétrospective de la session (fuite et affichage des images), appliquée en entier à la demande du porteur :
   `check.py` contrôle aussi les fichiers nouveaux pas encore ajoutés à git et refuse une adresse donnée à la main à une

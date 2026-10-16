@@ -21,7 +21,9 @@ les messages de commit.
 - **Décision** (correction demandée par le porteur, approche choisie sans lui) : toute image affichée passe par
   `showImage` (vidée, puis remplie une fois l'image décodée à part ; `check.py` refuse l'affectation à la main) ; les
   dernières images décodées sont gardées **en mémoire de la page** (`ready`), pas en cache HTTP du navigateur, qui
-  garderait sur le téléphone une copie d'une image ensuite rendue privée ; les réponses restent en `no-store`. À la
+  garderait sur le téléphone une copie des images vues (celles de l'espace privé comprises, après sa fermeture) ; les
+  réponses restent en `no-store`. En attendant l'image, sa miniature prend déjà sa taille à l'écran (`fitThumb`, en
+  unités de la scène : la taille suit le panneau et la rotation). À la
   sortie de l'espace privé, la page retire toute image, tout lien et toute ligne de journal privés, et les vues
   fermées se vident ; `tests/ui/etancheite.test.mjs` fouille la page entière après un parcours privé.
 - **Version servie** : `/api/status` donne le commit du dossier servi et l'empreinte du code que le serveur charge au
