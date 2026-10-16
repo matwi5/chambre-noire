@@ -62,13 +62,17 @@ class PrivateOverHttpsOnlyTest(bench.BenchCase):
         self.assertEqual(call("GET", path, private=session)[0], 200)
         wait_job(job["id"], private=session)
 
-    def test_change_code_and_make_private_over_wifi_are_refused(self):
+    def test_change_code_over_wifi_is_refused(self):
         bench.create_private(CODE)
         self.assert_refused("POST", "/api/private/code", {"old": CODE, "new": "Nouveau-code"}, wifi=True)
-        job = wait_job(bench.generate("an image to hide")["id"])
-        self.assert_refused("POST", "/api/private/adopt", {"name": job["name"], "code": CODE}, wifi=True)
-        self.assertEqual(len(files("outputs", "*.png")), 1)
         self.assertEqual(call("POST", "/api/private/unlock", {"code": CODE})[0], 200)   # code inchangé
+
+    def test_a_public_image_cannot_be_made_private(self):
+        """« Rendre privée » retiré (porteur, 16/10/2026) : une image ne passe pas d'un espace à l'autre."""
+        bench.create_private(CODE)
+        job = wait_job(bench.generate("an image that stays public")["id"])
+        self.assertEqual(call("POST", "/api/private/adopt", {"name": job["name"], "code": CODE})[0], 404)
+        self.assertEqual(len(files("outputs", "*.png")), 1)
 
 
 if __name__ == "__main__":

@@ -40,7 +40,7 @@ Mis à jour le 16/10/2026.
   - la feuille des prompts (bouton « Prompts » sous le champ de texte) ;
   - l'espace privé : entrée par le cadenas de la Galerie, thème, sortie, verrouillage à la fermeture (inconstant dans
     Chrome sans écran ; l'expiration après 15 min reste le filet), cookie `SameSite=Strict` avec l'application
-    installée, « Rendre privée » ;
+    installée ;
   - après la livraison du parcours des espaces étanches : plusieurs photos d'un coup avec le sélecteur Google Photos,
     vidage après « Générer », saisie propre à chaque espace, message quand l'espace se ferme seul, file sans les
     générations de l'autre espace, génération privée retrouvée après un rechargement (cas « page rechargée espace
@@ -80,6 +80,13 @@ Mis à jour le 16/10/2026.
 ## Journal
 
 ### 2026-10-16
+
+- Après la livraison (PR #5, `abbb3ec`, service relancé), essais du porteur sur le téléphone : version servie, plus de
+  fuite des images d'entrée ni de la galerie privée, zoom des images d'entrée : bons. Restait un saut des images
+  d'entrée privées à leur arrivée : la miniature (320 px) s'affichait à sa taille avant l'image complète ; elle prend
+  maintenant la taille de l'image complète (`showImage`, `fit`), test ajouté. « Rendre privée » retiré à la demande du
+  porteur (bouton, feuille, route `/api/private/adopt`, `adopt_output`, `drop_from_journal`, `tests/test_adopt.py`) :
+  une image reste dans son espace (`DECISIONS.md`).
 
 - Rétrospective de la session (fuite et affichage des images), appliquée en entier à la demande du porteur :
   `check.py` contrôle aussi les fichiers nouveaux pas encore ajoutés à git et refuse une adresse donnée à la main à une

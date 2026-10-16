@@ -554,7 +554,7 @@ def store_private(public, meta, image, inputs):
     """Range une image dans l'espace privé : private/items/<128 bits au hasard>/ avec meta (réglages, en JSON), image,
     thumb (miniature fabriquée en mémoire) et input_<k> (images d'entrée), chacun scellé à part. Écrit dans un dossier
     caché puis renommé : la galerie privée ne voit jamais une image à moitié rangée. Renvoie son identifiant.
-    public : la clé publique notée au lancement de la génération (ou lue pour « Rendre privée ») ; si le code a changé
+    public : la clé publique notée au lancement de la génération ; si le code a changé
     depuis, l'image est scellée avec la clé qui l'a remplacée ; si l'espace a été supprimé ou recréé entre-temps, elle
     est abandonnée (RuntimeError) plutôt que rangée avec une clé disparue. Jamais pendant un changement de code."""
     with PRIVATE_LOCK:
@@ -832,7 +832,7 @@ def output_path(name):
     return fp if os.path.isfile(fp) else None
 
 
-JOURNAL_LOCK = threading.Lock()       # ajout d'une ligne au journal des images et sa réécriture sans une image
+JOURNAL_LOCK = threading.Lock()       # écriture du journal des images (une ligne à la fois)
 
 
 def journal_entries():
@@ -853,36 +853,10 @@ def journal_entries():
 
 
 def append_journal(meta):
-    """Ajoute la ligne d'une image au journal, sous le verrou de « Rendre privée », qui le réécrit."""
+    """Ajoute la ligne d'une image au journal, sous JOURNAL_LOCK."""
     with JOURNAL_LOCK:
         with open(P("outputs", "journal.jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps(meta, ensure_ascii=False) + "\n")
-
-
-def write_journal(lines):
-    """Remplace le journal des images par ces lignes : fichier temporaire puis renommage, jamais à moitié écrit."""
-    fp = P("outputs", "journal.jsonl")
-    with open(fp + ".tmp", "w", encoding="utf-8") as f:
-        f.writelines(lines)
-    os.replace(fp + ".tmp", fp)
-
-
-def drop_from_journal(name):
-    """Retire du journal les lignes d'une image, sous le verrou partagé avec l'ajout fait en fin de génération : une
-    génération qui se termine pendant la réécriture attend, et sa ligne n'est pas perdue."""
-    with JOURNAL_LOCK:
-        try:
-            with open(P("outputs", "journal.jsonl"), encoding="utf-8") as f:
-                lines = f.readlines()
-        except FileNotFoundError:
-            return
-
-        def other(line):
-            try:
-                return os.path.basename(json.loads(line).get("file") or "") != name
-            except (ValueError, AttributeError):
-                return True                   # ligne illisible : gardée telle quelle
-        write_journal([line for line in lines if other(line)])
 
 
 def delete_output(fp):
@@ -906,47 +880,6 @@ def read_inputs(d):
         with open(os.path.join(d, n), "rb") as f:
             inputs.append((n, f.read()))
     return inputs
-
-
-def adopt_output(fp, public):
-    """« Rendre privée » : l'image, ses images d'entrée et ses réglages (tirés du journal) sont rangés chiffrés dans
-    l'espace privé, puis l'image quitte outputs/ (miniatures et entrées comprises), sa ligne quitte le journal, et sa
-    génération quitte jobs/ et la mémoire du serveur. Renvoie son identifiant dans l'espace privé."""
-    name = os.path.basename(fp)
-    m = journal_entries().get(name, {})
-    with open(fp, "rb") as f:
-        image = f.read()
-    meta = {k: m.get(k) for k in ("mode", "prompt", "width", "height", "steps", "seed", "seconds", "model", "lot")}
-    meta["time"] = int(os.path.getmtime(fp))
-    item = store_private(public, meta, image, read_inputs(os.path.join(INPUTS, name[:-4])))
-    # journal d'abord, puis l'image : en cas d'échec, l'original reste entier (sa ligne remise au journal) et la copie
-    # privée est retirée (pas de doublon à un nouvel essai)
-    # (copie retirée sous PRIVATE_LOCK : un changement de code ne la recopie pas pour la remettre ensuite en place)
-    try:
-        drop_from_journal(name)
-    except BaseException:
-        with PRIVATE_LOCK:
-            shutil.rmtree(os.path.join(PRIVATE, "items", item), ignore_errors=True)
-        raise
-    try:
-        os.remove(fp)
-    except BaseException:
-        with PRIVATE_LOCK:
-            shutil.rmtree(os.path.join(PRIVATE, "items", item), ignore_errors=True)
-        if m:
-            append_journal(m)
-        raise
-    # l'image a quitté outputs/ : la copie privée est désormais la seule, gardée même si le ménage qui suit échoue
-    try:
-        delete_extras(name[:-4])
-    except OSError:
-        print("[historique] miniatures ou images d'entrée non supprimées", flush=True)   # rien qui nomme l'espace privé
-    jid = name[:-4].rsplit("_", 1)[0]          # sa génération : dossier de travail (prompt dans sd-cli.log) et mémoire
-    if re.fullmatch(r"\d{8}_\d{6}_\w+", jid):  # nom donné par le serveur ; sinon (image copiée à la main) rien à retirer
-        shutil.rmtree(P("jobs", jid), ignore_errors=True)
-        if (S.jobs.get(jid) or {}).get("status") not in ACTIVE:
-            S.jobs.pop(jid, None)
-    return item
 
 
 def history():
@@ -1270,7 +1203,7 @@ def run_job(job):
                     "sec_per_it": job.get("sec_per_it"), "file": job["out"], "size": job["size"], "backend": S.backend, "model": S.model}
             if job.get("lot"):
                 meta["lot"] = job["lot"]
-            append_journal(meta)                 # « Rendre privée » réécrit le journal : jamais en même temps
+            append_journal(meta)
             try:
                 save_inputs(job["dir"], job["out"])
             except OSError as e:
@@ -1810,7 +1743,7 @@ class H(BaseHTTPRequestHandler):
         return self._send(200, raw, ctype, extra)
 
     def _private_post(self, path, raw):
-        """Routes POST de l'espace privé : create, unlock, lock, code, reset, delete, adopt. Rien n'en va dans les journaux."""
+        """Routes POST de l'espace privé : create, unlock, lock, code, reset, delete. Rien n'en va dans les journaux."""
         if not HAVE_CRYPTO:
             return self._send(503, {"error": "espace privé indisponible : bibliothèque cryptography non installée"})
         try:
@@ -1863,13 +1796,8 @@ class H(BaseHTTPRequestHandler):
                 except OSError as e:
                     return self._send(500, {"error": f"espace privé non supprimé en entier : {e}"})
             return self._send_private(200, {"ok": True})
-        if action not in ("create", "unlock", "code", "adopt"):
+        if action not in ("create", "unlock", "code"):
             return self._send(404, {"error": "not found"})
-        fp = output_path(body.get("name")) if action == "adopt" else None   # « Rendre privée » : une image de outputs/
-        if action == "adopt" and not fp:
-            return self._send(404, {"error": "image inconnue"})
-        if action == "adopt" and S.current == os.path.basename(fp)[:-4].rsplit("_", 1)[0]:   # journal et entrées pas encore écrits
-            return self._send(409, {"error": "génération en train de se terminer : réessayez dans un instant"})
         new = body.get("new" if action == "code" else "code")
         error = private_code_error(new) if action in ("create", "code") else None
         if error:
@@ -1903,12 +1831,6 @@ class H(BaseHTTPRequestHandler):
             # session ouverte sous le verrou : un changement de code ne peut pas se glisser entre la vérification du code
             # et l'ouverture, qui laisserait une session avec l'ancienne clé après S.private_sessions.clear()
             token = self._open_session(key) if key and action in ("create", "unlock") else ""
-        if key and action == "adopt":           # le code prouvé, sans ouvrir de session : la clé publique suffit
-            try:
-                item = adopt_output(fp, space["public"])
-            except Exception as e:
-                return self._send(500, {"error": f"image non rendue privée : {e}"})
-            return self._send(200, {"ok": True, "id": item})
         if not key:
             time.sleep(1)                       # freine les essais en série (hors du verrou : n'en bloque pas d'autres)
             return self._send(403, {"error": "code privé incorrect"})

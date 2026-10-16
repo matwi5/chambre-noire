@@ -5,7 +5,7 @@
 //   node --test tests/ui/images.test.mjs   (ou : venv/bin/python tests/check.py --ui tests/ui/images.test.mjs)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome } from './driver.mjs';
+import { startBench, launchChrome, waitUntil } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -213,5 +213,39 @@ test('zone de résultat : son image retirée, son lien de téléchargement part 
     showResult(h[0].name, 512, 512); show(null);   // comme une image supprimée ou effacée : zone vidée
     return { href: $('dl').hasAttribute('href'), name: $('dl').hasAttribute('download') }; })`);
   assert.deepEqual(kept, { href: false, name: false }, 'lien vers l\'image retirée resté dans la page');
+  page.assertNoErrors();
+});
+
+test('images d\'entrée : la miniature, en attendant l\'image complète, a déjà sa taille à l\'écran', async () => {
+  await page.waitFor(`!inPrivate()`, { what: 'espace public' });
+  // photo plus grande que sa miniature (320 px) et que l'écran : la miniature doit s'afficher agrandie
+  assert.equal(await page.eval(`postJson('/api/generate', { mode: 'edit', prompt: 'zq9 miniature',
+    width: 512, height: 512,
+    steps: 2, cfg: 1, seed: -1, preview: false, ref_images: [(() => { const c = document.createElement('canvas');
+      c.width = 1200; c.height = 900; const x = c.getContext('2d');
+      x.fillStyle = '#3080a0'; x.fillRect(0, 0, 1200, 900);
+      return c.toDataURL('image/png'); })()] }).then(r => r.status)`), 202);
+  await idle();
+  await page.eval(`goTab('t2i'); goTab('hist')`);
+  await page.waitFor(`histItems.some(it => it.prompt === 'zq9 miniature')`, { what: 'image dans la galerie' });
+  // image complète retenue (jamais demandée : rien dans les images de la page) : seule la miniature peut s'afficher
+  const held = [];
+  page.on('Fetch.requestPaused', p => held.push(p.requestId));
+  await page.send('Fetch.enable',
+    { patterns: [{ urlPattern: '*/api/input?*file=ref_1.png', requestStage: 'Request' }] });
+  await page.eval(`openViewer(histItems.findIndex(it => it.prompt === 'zq9 miniature'), histItems); openInputs(0)`);
+  await page.waitFor(`$('ivImg').src.includes('thumb=1') && $('ivImg').complete && $('ivImg').naturalWidth > 0`,
+    { what: 'miniature affichée' });
+  const size = `[$('ivImg').offsetWidth, $('ivImg').offsetHeight]`;   // taille posée, hors animation d'ouverture
+  const thumb = await page.eval(size);
+  await waitUntil(() => held.length > 0, { what: 'image complète demandée' });
+  for (const requestId of held) await page.send('Fetch.continueRequest', { requestId });
+  await page.send('Fetch.disable');
+  await page.waitFor(`!$('ivImg').src.includes('thumb=1') && $('ivImg').complete && $('ivImg').naturalWidth > 0`,
+    { what: 'image complète affichée' });
+  const full = await page.eval(size);
+  assert.ok(Math.abs(thumb[0] - full[0]) <= 2 && Math.abs(thumb[1] - full[1]) <= 2,
+    `taille de la miniature ${thumb} au lieu de ${full} : l'image saute à l'arrivée de l'image complète`);
+  await page.eval(`closeInputs(); closeViewer()`);
   page.assertNoErrors();
 });
