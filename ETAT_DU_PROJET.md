@@ -15,12 +15,11 @@ Mis à jour le 16/10/2026.
   (41 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
-- **En cours** : livraison de la correction de la fuite et des glitchs d'affichage des images (affichage par
-  `showImage`, rien de privé dans la page après la sortie, zoom et chargement anticipé des images d'entrée) et de la
-  rétrospective qui a suivi (contrôles de `check.py`, test d'étanchéité, relais des tests, version dans le panneau
-  Moteur) : PR de `dev` vers `main`, puis `git pull --ff-only` dans le dossier principal et relance du service
-  (`tools/launch.py` a changé), puis essais sur le téléphone. Le parcours « Cloisonnement espace privé, file et
-  saisie » est livré (PR #4).
+- **En cours** : livraison de la miniature des visionneuses à la taille de l'image complète et du retrait de
+  « Rendre privée » (`1664321`, `fd94cbd`) : PR de `dev` vers `main`, `git pull --ff-only` dans le dossier principal,
+  relance du service (`tools/launch.py` a changé), puis essai sur le téléphone de l'arrivée des images d'entrée
+  privées. Livrés avant : la correction de la fuite et des glitchs d'affichage et la rétrospective qui a suivi (PR #5,
+  essais du porteur bons), le parcours « Cloisonnement espace privé, file et saisie » (PR #4).
 - **Fait avant** : file d'attente, lots (variantes, campagne), prompts enregistrés et espace privé chiffré. Spécification
   prête (`docs/specs/2026-10-14_lots-espace-prive-prompts.md`), découpée en 13 tickets Asana (liste et ordre dans
   `travail/tasks/2026-10-14_lots-espace-prive-prompts.md`) ; liste des prompts types validée par le porteur. Groupes A (banc, robustesse, file visible, incognito dans la file) et
