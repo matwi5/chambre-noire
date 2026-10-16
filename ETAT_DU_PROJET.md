@@ -2,7 +2,7 @@
 
 ## État
 
-Mis à jour le 15/10/2026.
+Mis à jour le 16/10/2026.
 
 - **Fonctionnel** sur Windows (Vulkan, CPU, CUDA en option ; sd.cpp `master-890`) et sur Mac Apple Silicon (Metal ;
   sd.cpp `master-959`, encodeur GGUF). Modèles Q4_K_M et Q8_0. Trois usages (texte → image, édition, dessin guidé),
@@ -12,7 +12,7 @@ Mis à jour le 15/10/2026.
   chiffré (entrée par le cadenas de la Galerie), étanche à l'espace public (galerie, file, saisie et prompts
   enregistrés propres à chaque espace). Banc de test permanent sans GPU :
   `venv/bin/python -m unittest discover -s tests` (162 tests, ≈ 1 min 20) ; tests d'interface `tests/check.py --ui`
-  (26 tests).
+  (32 tests).
 - **Chez le porteur** : service macOS lancé avec `--lan`, utilisé depuis le téléphone par le Wi-Fi et par Tailscale
   (application installée en HTTPS via `tailscale serve`). Modèle Q8_0 par défaut (`tools/config.json`).
 - **En cours** : parcours « Cloisonnement espace privé, file et saisie » (spécification
@@ -76,6 +76,19 @@ Mis à jour le 15/10/2026.
   `.claude/worktrees/dev`.
 
 ## Journal
+
+### 2026-10-16
+
+- Fuite de l'espace privé à l'écran corrigée (signalée par le porteur) : une `<img>` qui reçoit une autre adresse garde
+  l'image d'avant à l'écran jusqu'au chargement de la nouvelle, donc l'image d'entrée privée vue avant réapparaissait
+  un instant dans l'espace public (et les « glitchs » entre deux images). Toute image passe désormais par
+  `showImage` (vidée, puis remplie une fois l'image décodée, miniature d'abord, voisines chargées en avance) ; la
+  sortie de l'espace retire de la page toute image privée, même cachée (galerie, vignettes des entrées, grille d'un lot)
+  ou encore en chargement ; une galerie privée reçue après la sortie est ignorée. Aperçu suivant affiché seulement une
+  fois chargé (plus d'image cassée ni de cadre vide). Test d'interface `tests/ui/images.test.mjs`, rouge avant le
+  correctif. Aperçus de l'espace privé « qui ne marchent pas » : non reproduits au banc (ils s'affichent, en vue du
+  téléphone, depuis le Mac) ; à observer sur le téléphone. À reporter dans Asana (accord du porteur) : un ticket pour
+  ce correctif et, si besoin, un pour les aperçus privés.
 
 ### 2026-10-15
 

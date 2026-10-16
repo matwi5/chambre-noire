@@ -1079,6 +1079,38 @@ function ask(title, text, yes, danger){
   $('askTitle').textContent=title; $('askText').textContent=text; $('askYes').textContent=yes; $('askYes').classList.toggle('danger-fill', !!danger);
   openSheet('askSheet'); return new Promise(res=>{ askResolve=res; }); }
 function answer(v){ const r=askResolve; askResolve=null; closeSheet(); if(r) r(v); }
+// ------------------------------------------------------------ affichage des images
+// Une <img> qui reçoit une autre adresse garde l'image d'avant à l'écran jusqu'à ce que la nouvelle soit chargée :
+// celle d'une autre image, voire de l'autre espace. showImage vide l'élément, puis ne lui donne l'adresse qu'une fois
+// l'image chargée et décodée à part (Chrome la sert alors aussitôt depuis les images de la page, sans nouvelle
+// requête), la miniature d'abord si elle est prête avant. Les dernières images chargées restent prêtes (ready) : la
+// visionneuse y charge en avance les images voisines. À la sortie de l'espace privé, forgetPrivateImages retire de la
+// page toute image privée, même cachée.
+const ready=new Map(), READY_MAX=8, FADE_MS=350;   // FADE_MS : fondu de .viewer (CSS, 0,3 s)              // adresse → { im : image décodée (null : illisible), p : promesse }
+function preload(url){ let e=ready.get(url);
+  if(e) ready.delete(url);                        // la plus récente en dernier : les plus anciennes partent d'abord
+  else { const im=new Image(); im.decoding='async'; im.src=url;
+    e={ im:undefined, p:im.decode().then(()=>im, ()=>null) };
+    e.p.then(x=>{ e.im=x; if(!x && ready.get(url)===e) ready.delete(url); }); }   // illisible : redemandée la fois suivante
+  ready.set(url, e); while(ready.size>READY_MAX) ready.delete(ready.keys().next().value);
+  return e; }
+// keep : laisser l'image d'avant jusqu'à la nouvelle (aperçu suivant de la même génération), même si la nouvelle est
+// illisible ; sans keep, une image illisible est confiée au navigateur (nouvel essai, ou image cassée comme avant).
+// then(ok) : appelée quand la nouvelle image est à l'écran (ok faux : illisible).
+function showImage(img, url, {thumb, keep, then}={}){
+  img.want=url;                                    // adresse attendue : une image chargée trop tard pour un autre choix est ignorée
+  const put=e=>{ if(img.want!==url) return; if((e.im || !keep) && img.getAttribute('src')!==url) img.src=url; if(then) then(!!e.im); };
+  const e=preload(url); if(e.im!==undefined) return put(e);   // déjà prête : tout de suite, sans image vide entre les deux
+  if(!keep) img.removeAttribute('src');
+  if(thumb){ const t=preload(thumb), side=()=>{ if(img.want===url && t.im && !img.getAttribute('src')) img.src=thumb; };
+    if(t.im!==undefined) side(); else t.p.then(side); }
+  e.p.then(()=>put(e)); }
+function clearImage(img){ img.want=null; img.removeAttribute('src'); }
+function clearLater(img, still){ setTimeout(()=>{ if(still()) clearImage(img); }, FADE_MS); }   // après le fondu de fermeture
+function forgetPrivateImages(){
+  for(const u of [...ready.keys()]) if(u.startsWith('/api/private/') || u.startsWith('/api/job/')) ready.delete(u);   // aperçus compris
+  document.querySelectorAll('img').forEach(i=>{   // affichée, ou attendue (chargement en cours : ignorée à son arrivée)
+    if([i.getAttribute('src'), i.want].some(u=>u && u.startsWith('/api/private/'))) clearImage(i); }); }
 
 // ------------------------------------------------------------ générations de la page, zone de résultat, île et file
 // La page suit les générations qu'elle a lancées (ou reprises après un rechargement), dans l'ordre : pageJobs. La zone de
@@ -1118,14 +1150,16 @@ function setMeta(prompt, chips, file){
     + (chips.filter(Boolean).length ? `<div class="m-chips">${chips.filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('')}</div>` : '')
     + (file ? `<p class="m-file">${esc(file)}</p>` : ''); }
 function showLoader(on){ $('stage').style.display='block'; $('resultEmpty').style.display='none'; $('loader').style.display=on?'flex':'none'; $('shimmer').style.display=on?'block':'none'; $('bar').style.display=on?'block':'none'; }
-function showResult(name, w, h, reveal, inc){      // image de outputs/, ou image incognito (inc : {blob, url}) ou privée (inc : {private, item, url})
+// keep : l'aperçu de la même génération reste à l'écran jusqu'à son image finale
+function showResult(name, w, h, reveal, inc, keep){   // image de outputs/, ou image incognito (inc : {blob, url}) ou privée (inc : {private, item, url})
   const url=inc ? inc.url : '/api/result?name='+encodeURIComponent(name), img=$('stageImg');
   if(w && h) setStageRatio(w, h);
-  showLoader(false); $('stage').classList.remove('has-preview');
-  img.className = reveal ? 'final reveal' : 'final'; img.src=url; img.style.display='block';
+  showLoader(false); img.style.display='block';
+  showImage(img, url, {keep, then:ok=>{ if(!ok) img.src=url;   // illisible : confiée au navigateur, jamais l'aperçu pour l'image finale
+    img.className = reveal ? 'final reveal' : 'final'; $('stage').classList.remove('has-preview'); }});
   $('dl').href=inc && inc.blob ? url : url+'&download=1'; $('dl').download=name; $('resultActions').style.display='';
   lastResult={url, name, blob:inc ? inc.blob : null, item:inc && inc.item}; if(!inc) setAmbient(name); }   // pas de fond ambiant en incognito : il passerait par une miniature sur le disque
-function hideResult(){ $('stageImg').src=''; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
+function hideResult(){ clearImage($('stageImg')); $('stageImg').job=null; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
 const forgetJob = id => fetch('/api/job/'+id+'/forget', {method:'POST', headers:{'Content-Type':'application/json'}}).catch(()=>{});
 // progression d'une génération de la page : part faite (0 à 1), titre, détail, temps restant avant son image
 function progress(p){
@@ -1156,14 +1190,17 @@ function show(p, reveal){                          // met une génération de la
   if(!p){ lastResult=null; return hideResult(); }
   const grid=gridOf(p); if(grid) return showGrid(grid);
   $('lotBadge').hidden=!p.lot; if(p.lot) $('lotBadge').textContent=`${p.tab==='edit' ? 'Photo' : 'Image'} ${p.lot.rank} sur ${p.lot.size}`;
-  if(p.result){ const r=p.result; showResult(r.name, ...(r.dims||[]), reveal, r.blob || r.item ? r : null); setMeta(p.prompt, r.chips, r.file); return markSeen(); }
+  const img=$('stageImg'), was=img.job; img.job=p.id;   // img.job : génération dont la zone montre l'aperçu ou l'image
+  if(p.result){ const r=p.result; showResult(r.name, ...(r.dims||[0, 0]), reveal, r.blob || r.item ? r : null, was===p.id);
+    setMeta(p.prompt, r.chips, r.file); return markSeen(); }
   lastResult=null; if(p.w && p.h) setStageRatio(p.w, p.h);
   showLoader(true); $('resultActions').style.display='none'; setMeta('', [], '');
-  const img=$('stageImg'); img.className=''; img.src=''; img.style.display='none'; $('stage').classList.remove('has-preview'); p.pv=0;
+  if(was!==p.id){ img.className=''; clearImage(img); $('stage').classList.remove('has-preview'); p.pv=0; }
+  else if($('stage').classList.contains('has-preview')) $('shimmer').style.display='none';   // son aperçu reste
   renderProgress(); }
 function showGrid(items){                          // lot terminé : ses images en grille ; un appui ouvre la visionneuse
   const first=items[0], [w,h]=first.result.dims||[1,1], incog=first.incognito, g=$('lotGrid');
-  lastResult=null; $('stageImg').src=''; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultEmpty').style.display='none';
+  lastResult=null; clearImage($('stageImg')); $('stageImg').job=null; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultEmpty').style.display='none';
   g.hidden=false;                                  // chaque case à la forme de son image (une campagne en mélange plusieurs)
   g.innerHTML=items.map((q, i)=>`<div class="cell" style="--ar:${q.result.dims ? q.result.dims[0]/q.result.dims[1] : w/h}"><button data-k="${i}" aria-label="Ouvrir l'image ${q.lot.rank}"><img src="${q.result.blob ? q.result.url : q.result.item ? privThumb(q.result.item) : '/api/thumb?name='+encodeURIComponent(q.result.name)}" alt=""></button><span>${q.lot.rank}</span>`
     + (incog ? `<a href="${q.result.url}" download="${esc(q.result.name)}" aria-label="Télécharger l'image ${q.lot.rank}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg></a>` : '') + '</div>').join('');
@@ -1187,7 +1224,10 @@ function renderProgress(){                         // image en cours dans la zon
   $('stepBig').textContent=pr.title; $('phaseTxt').textContent=pr.sub; $('etaTxt').textContent='≈ '+fmt(pr.remaining);
   $('bar').firstElementChild.style.transform=`scaleX(${pct/100})`; $('ringVal').style.strokeDashoffset=(100-pct).toFixed(1);
   if(j.preview_version && j.preview_version!==p.pv && (!p.private || inPrivate())){ p.pv=j.preview_version; const img=$('stageImg');   // aperçu privé : dans l'espace seulement
-    img.src='/api/job/'+j.id+'/preview?v='+p.pv; img.className='preview'; img.style.display='block'; $('stage').classList.add('has-preview'); $('shimmer').style.display='none'; } }
+    img.style.display='block';                     // l'aperçu d'avant reste jusqu'au suivant, chargé
+    const url='/api/job/'+j.id+'/preview?v='+p.pv;
+    showImage(img, url, {keep:true, then:ok=>{ ready.delete(url); if(!ok || shown!==p) return;   // aperçu : servi une fois
+      img.className='preview'; $('stage').classList.add('has-preview'); $('shimmer').style.display='none'; }}); } }
 function syncButtons(){ $('cancel').disabled=!(shown && isActive(shown)); }
 // image incognito : gardée par la page jusqu'à ce qu'elle ait été vue (affichée, application visible, hors galerie) puis
 // quittée par l'utilisateur (autre vignette, autre génération de la file, galerie). Lancer une demande ou la fin d'une
@@ -1323,7 +1363,7 @@ async function finish(p){                          // génération terminée : s
   drop(p); }
 function drop(p){                                  // retire une génération de la page (annulée, en échec, image supprimée)
   const k=pageJobs.indexOf(p); if(k>=0) pageJobs.splice(k, 1);
-  if(p.result && p.result.blob) URL.revokeObjectURL(p.result.url);
+  if(p.result && p.result.blob){ ready.delete(p.result.url); URL.revokeObjectURL(p.result.url); }   // image incognito : plus rien d'elle
   const lot=lotOf(p);                              // de préférence une autre image de son lot (ou sa grille)
   if(shown===p) show(lot.find(isActive) || lot.find(q=>q.result) || oldestActive() || latestResult());
   else if(sameLot(shown, p) && !isActive(shown)) show(shown); else renderStrip(); }
@@ -1493,10 +1533,10 @@ const srcOf = it => it.private ? privImage(it.id) : it.url || resultUrl(it.name)
 const thumbOf = it => it.private ? privThumb(it.id) : it.url || thumbUrl(it);
 const dlOf = it => it.private ? privImage(it.id)+'&download=1' : it.url || resultUrl(it.name)+'&download=1';
 function goTab(m){ document.querySelector(`#tabbar [data-pane="${m}"]`).click(); }
-async function loadHistory(){
-  try{ const r=await fetch(inPrivate() ? '/api/private/history' : '/api/history'); if(!r.ok) throw new Error();
-    histItems=(await r.json()).map(it=>it.private ? {...it, name:privName(it.id)} : it); }
-  catch(e){ $('histCount').textContent='indisponible'; return; }
+async function loadHistory(){ const priv=inPrivate();   // réponse arrivée après un changement d'espace : ignorée
+  try{ const r=await fetch(priv ? '/api/private/history' : '/api/history'); if(!r.ok) throw new Error();
+    const items=(await r.json()).map(it=>it.private ? {...it, name:privName(it.id)} : it); if(priv!==inPrivate()) return; histItems=items; }
+  catch(e){ if(priv===inPrivate()) $('histCount').textContent='indisponible'; return; }
   renderGallery(); }
 function renderGallery(){
   const g=$('histGrid'); g.innerHTML='';
@@ -1517,8 +1557,8 @@ function renderGallery(){
 function openViewer(i, list=vList){
   const it=list[i]; if(!it) return; vList=list; vIndex=i; resetZoom();
   const v=$('viewer'), img=$('vImg');
-  img.src=thumbOf(it); $('vBg').src=thumbOf(it);           // miniature tout de suite, image complète dès qu'elle est chargée
-  const full=new Image(); full.onload=()=>{ if(vIndex===i && vList===list) img.src=full.src; }; full.src=srcOf(it);
+  showImage(img, srcOf(it), {thumb:thumbOf(it)}); showImage($('vBg'), thumbOf(it));   // la miniature en attendant l'image
+  const n=list.length; [list[(i+1)%n], list[(i+n-1)%n]].forEach(x=>{ if(x!==it){ preload(thumbOf(x)); preload(srcOf(x)); } });   // voisines
   img.alt=it.prompt||it.name; $('vCount').textContent=`${i+1} / ${list.length}`;
   const date=new Date(it.time*1000).toLocaleString('fr-FR', {dateStyle:'short', timeStyle:'short'});
   $('vChips').innerHTML=[date, MODE_LABELS[it.mode]||it.mode, it.width?it.width+'×'+it.height:'', it.steps?it.steps+' étapes':'', it.model?it.model.toUpperCase():'', it.seconds?fmt(it.seconds):'',
@@ -1534,7 +1574,8 @@ function openViewer(i, list=vList){
   if(!v.classList.contains('on')){ v.classList.remove('immersive'); v.classList.add('on'); document.body.style.overflow='hidden'; }
   syncThemeColor();
 }
-function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor(); }
+function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor();
+  clearLater($('vImg'), ()=>vIndex<0); clearLater($('vBg'), ()=>vIndex<0); }
 function stepViewer(d){ if(vIndex<0 || !vList.length) return; openViewer((vIndex+d+vList.length)%vList.length); }
 addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevented) return;
   if(ivIndex>=0){ if(e.key==='Escape') closeInputs(); else if(e.key==='ArrowLeft') showInput(ivIndex-1); else if(e.key==='ArrowRight') showInput(ivIndex+1); return; }
@@ -1617,11 +1658,14 @@ function renderInputsButton(it){
     + `<span>${list.length>1 ? list.length+" images d'entrée" : "Image d'entrée"}</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>`; }
 function openInputs(i){ const it=vList[vIndex]; if(!it || !(it.inputs||[]).length) return; ivOwner=it; showInput(i); $('iv').classList.add('on'); syncThemeColor(); }
 function showInput(i){
-  const it=ivOwner, n=it.inputs.length; ivIndex=(i+n)%n; const f=it.inputs[ivIndex];
-  $('ivImg').src=inputUrl(it, f); $('ivImg').alt=inputLabel(it, f); $('ivLabel').textContent=inputLabel(it, f);
+  const it=ivOwner, n=it.inputs.length; ivIndex=(i+n)%n; const f=it.inputs[ivIndex], thumb=g=>inputUrl(it, g, '&thumb=1&t='+it.time);
+  showImage($('ivImg'), inputUrl(it, f), {thumb:thumb(f)});   // miniature : celle du bouton de la visionneuse, déjà là
+  if(n>1) [it.inputs[(ivIndex+1)%n], it.inputs[(ivIndex+n-1)%n]].forEach(g=>{ preload(thumb(g)); preload(inputUrl(it, g)); });
+  $('ivImg').alt=inputLabel(it, f); $('ivLabel').textContent=inputLabel(it, f);
   $('ivCount').textContent=`${ivIndex+1} / ${n}`; $('iv').classList.toggle('single', n<2);
   $('ivDl').href=inputUrl(it, f, '&download=1'); $('ivDl').download=it.name.slice(0, -4)+'_'+f; }
-function closeInputs(){ $('iv').classList.remove('on'); ivIndex=-1; syncThemeColor(); }
+function closeInputs(){ $('iv').classList.remove('on'); ivIndex=-1; syncThemeColor();
+  clearLater($('ivImg'), ()=>ivIndex<0); }
 async function inputAction(kind){             // repartir de cette image d'entrée : Éditer (référence) ou Dessiner
   const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f, list=editImages, priv=inPrivate();
   closeInputs(); closeViewer();
@@ -1730,11 +1774,13 @@ function changedSpace(inside){
   // (confirmation de suppression comprise : elle montre le titre du prompt)
   if([$('promptSheet'), $('promptEditSheet'), $('askSheet')].includes(openedSheet)){ closeSheet(); $('askText').textContent=''; }
   prompts={saved:[], types:prompts.types}; editingPrompt=null; $('peTitle').value=$('peText').value=''; renderPrompts();
+  if(ivIndex>=0 && !!ivOwner.private!==inside) closeInputs();
   if(vIndex>=0 && vList.some(x=>!!x.private!==inside)) closeViewer();
+  if(!inside) forgetPrivateImages();                // rien de l'espace quitté dans la page, même caché ou chargé en avance
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
     resumeOwn(queueState); }
   show(oldestActive() || latestResult());
-  if(mode==='hist') loadHistory(); else histItems=[];
+  histItems=[]; $('histGrid').innerHTML=''; $('histCount').textContent=''; if(mode==='hist') loadHistory();
   syncThemeColor(); }
 // Saisie propre à chaque espace (texte, images d'Éditer, image à retoucher et masque de Dessiner, onglet par onglet) :
 // celle de l'espace affiché est dans les champs, celle de l'autre espace est mise de côté en mémoire de la page

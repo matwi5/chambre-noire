@@ -104,6 +104,12 @@ dernier bloc, après le HTML.
     `exportMask`.
   - « requête & loader » : `buildRequest` ; « messages et confirmations » : `toast`, `ask` et `answer` (feuille
     `#askSheet`, jamais `confirm()`).
+  - « affichage des images » : `showImage` (toute image qui change d'adresse : vidée, puis remplie une fois l'image
+    chargée et décodée à part, miniature d'abord ; `img.want` : adresse attendue, une image arrivée trop tard est
+    ignorée ; `keep` : l'aperçu d'avant reste jusqu'au suivant), `preload` et `ready` (les 8 dernières images
+    décodées, voisines de la visionneuse comprises ; un aperçu en sort une fois affiché, une image incognito à son oubli), `clearImage`, `clearLater`, `forgetPrivateImages` (sortie de l'espace privé :
+    images privées affichées, attendues ou chargées en avance). Ne jamais réaffecter `src` d'une image visible à la
+    main : elle garderait l'image d'avant à l'écran jusqu'au chargement de la nouvelle.
   - « générations de la page, zone de résultat, île et file » : `pageJobs` (générations lancées par cette page),
     `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `lotOf`, `gridOf`, `show`,
     `showGrid`, `renderStrip`, `renderIsland`, `onIsland` (file non vide : `#queueSheet`, sinon `#engineSheet`),

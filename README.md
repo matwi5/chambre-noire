@@ -330,6 +330,11 @@ et un clic la remet à sa taille. En haut à droite : **Partager**, **Copier** e
 correspondant) et **Supprimer** (définitif, après confirmation, images d'entrée comprises). La zone de génération est
 masquée dans la galerie.
 
+Une image ne s'affiche qu'une fois chargée : sa miniature d'abord, puis l'image complète, sans jamais laisser voir un
+instant l'image vue avant (ni celle d'une autre image, ni celle de l'autre espace). Les images voisines de la
+visionneuse et des images d'entrée sont chargées en avance, pour que glisser de l'une à l'autre soit immédiat ; pendant
+une génération, chaque aperçu reste à l'écran jusqu'à ce que le suivant soit prêt.
+
 Les images d'un même lot (variantes) portent un repère « 2/4 » (leur rang dans le lot) tant qu'il en reste au moins
 deux dans la galerie. Dans la visionneuse, **Voir le lot** montre les images du lot côte à côte ; un appui en ouvre une
 en grand, et l'on passe de l'une à l'autre en glissant. **Tout télécharger** enchaîne le téléchargement de chaque
@@ -427,8 +432,9 @@ du Mac, ne suffit pas pour voir les images privées.
   la première fois) ; en sortant, la saisie publique revient intacte. La saisie privée n'est jamais retenue par le
   navigateur, brouillons compris : elle ne survit pas à la fermeture de l'application. L'interrupteur **Campagne** et
   les Réglages sont communs aux deux espaces.
-- **Sortir vide l'écran** : la saisie privée est effacée, comme les images privées de la zone de résultat, de la grille
-  et de la visionneuse (si le Mac est injoignable, un message le dit et l'on reste dans l'espace). Les générations
+- **Sortir vide l'écran** : la saisie privée est effacée, comme les images privées de la zone de résultat, de la grille,
+  de la galerie, de la visionneuse et des images d'entrée, y compris celles gardées en mémoire par la page ou encore en
+  chargement (si le Mac est injoignable, un message le dit et l'on reste dans l'espace). Les générations
   privées en file ou en cours quittent aussi l'écran et la page (progression, aperçu, prompt, vignette, ligne de la
   file) : elles continuent sur le Mac et sont rangées dans l'espace, mais une page sortie ne peut plus ni les suivre,
   ni les prévisualiser, ni les annuler. Les générations publiques de la page, cachées pendant qu'on était dans l'espace
