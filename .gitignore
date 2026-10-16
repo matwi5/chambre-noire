@@ -24,12 +24,9 @@ tools/hf_*.json
 tools/hf_README.md
 tools/sdcpp_release.json
 
-# modèles de workflow tiers (Comfy-Org) : voir les liens dans le README
-workflows/comfyui/
-tools/adapt_comfy_workflows.py
-
-# mesures de vitesse propres à chaque machine
+# mesures de vitesse et réglages propres à chaque machine
 tools/calibration.json
+tools/config.local.json
 
 # raccourci macOS généré par setup.py
 Qwen-Image.command
@@ -44,3 +41,13 @@ tools/saved_prompts.json
 tools/saved_prompts.json.tmp
 # fichiers du Finder
 .DS_Store
+
+# worktrees de travail
+.claude/worktrees/
+# notes de travail locales (gardées sur le disque, hors du dépôt public)
+/CLAUDE.md
+/ETAT_DU_PROJET.md
+/travail/
+/docs/specs/
+/docs/agents/*
+!/docs/agents/carte-du-code.md

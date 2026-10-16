@@ -4,6 +4,7 @@ Windows : venv\Scripts\python.exe setup.py [options]   ·   macOS (Apple Silicon
 
     setup.py              # installation complète (≈ 15 Go à télécharger)
     setup.py --q8         # + modèle Q8_0, plus fidèle que Q4_K_M (≈ 7,6 Go de plus)
+    setup.py --uc         # + variante communautaire du modèle (uc-q4, et uc-q8 avec --q8)
     setup.py --cuda       # Windows : + moteur CUDA pour carte NVIDIA (≈ 900 Mo de plus)
     setup.py --no-cpu     # Windows : sans le moteur de secours CPU
     setup.py --no-calibrate  # sans les générations de calibration de fin d'installation
@@ -37,15 +38,22 @@ SDCPP = {   # backend -> (release, archives à extraire dans sdcpp/<backend>/ ; 
 SDCPP_URL = "https://github.com/leejet/stable-diffusion.cpp/releases/download/{tag}/{name}"
 
 # --- modèle : fichiers épinglés sur un commit de leur dépôt Hugging Face, vérifiés par SHA256 ----
-# Diffusion : variante « Uncensored » (UC) de abenzerps/Qwen-Image-2.1-Uncensored-Quantized (ex-Qwen-Image-2.1-GGUF).
-# Encodeur et VAE : dépôt Comfy-Org/Qwen-Image-2.1 (fichiers identiques à ceux du dépôt abenzerps).
-UC = "https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized/resolve/7959e658915f52274897fb573ffeda49de8dc16b/"
+# Diffusion : quantifications GGUF des poids officiels de Qwen/Qwen-Image-2.1, branche « base » du dépôt
+# abenzerps/Qwen-Image-2.1-Uncensored-Quantized ; sa branche principale porte la variante communautaire, en option
+# (--uc). Encodeur et VAE : dépôt Comfy-Org/Qwen-Image-2.1 (fichiers identiques à ceux du dépôt abenzerps).
+ABENZERPS = "https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-Quantized/resolve/"
+BASE = ABENZERPS + "4db8efdbe3426175988fca2ac50670f35ccb7ec9/"   # branche base
+UC = ABENZERPS + "7959e658915f52274897fb573ffeda49de8dc16b/"     # branche main
 COMFY = "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/df94239739eef7205973a145ffa6f441f7b64e84/"
-DIFFUSION = {   # version -> (url, chemin local, taille, sha256)
-    "q4": (UC + "qwen-image-2.1-UC-Q4_K_M.gguf", "models/diffusion_models/qwen-image-2.1-UC-Q4_K_M.gguf", 4604558112,
-           "e79c8a009f2ecbdb6c70fd663d9aea9ee304a0d91f347e4169a756b8ad141b41"),
-    "q8": (UC + "qwen-image-2.1-UC-Q8_0.gguf", "models/diffusion_models/qwen-image-2.1-UC-Q8_0.gguf", 7591557920,
-           "cde456c72ea3ecebfc1be783300e972711d875e0c5f1bed33d42b66b156affa8"),
+DIFFUSION = {   # version -> (url, chemin local, taille, sha256) ; mêmes clés que DIFFUSION de tools/launch.py
+    "q4": (BASE + "qwen-image-2.1-Q4_K_M.gguf", "models/diffusion_models/qwen-image-2.1-Q4_K_M.gguf", 4604557984,
+           "833439e91bc1152d28f37aa198c7f6f4218b7de95754c2f7a318a2422ab4b2f8"),
+    "q8": (BASE + "qwen-image-2.1-Q8_0.gguf", "models/diffusion_models/qwen-image-2.1-Q8_0.gguf", 7591557792,
+           "9a7ec02f4c9d5cf5b78e8efa6ccd81ec0c35a898defbf8e77ac7c02a32fe0d7e"),
+    "uc-q4": (UC + "qwen-image-2.1-UC-Q4_K_M.gguf", "models/diffusion_models/qwen-image-2.1-UC-Q4_K_M.gguf",
+              4604558112, "e79c8a009f2ecbdb6c70fd663d9aea9ee304a0d91f347e4169a756b8ad141b41"),
+    "uc-q8": (UC + "qwen-image-2.1-UC-Q8_0.gguf", "models/diffusion_models/qwen-image-2.1-UC-Q8_0.gguf",
+              7591557920, "cde456c72ea3ecebfc1be783300e972711d875e0c5f1bed33d42b66b156affa8"),
 }
 TE = (COMFY + "text_encoders/qwen3vl_8b_int8_convrot.safetensors", "models/text_encoders/qwen3vl_8b_int8_convrot.safetensors",
       9350798360, "8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f")
@@ -285,6 +293,8 @@ def step_calibrate(versions, check_only, skip):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--q8", action="store_true", help="installer aussi le modèle Q8_0, plus fidèle (≈ 7,6 Go)")
+    ap.add_argument("--uc", action="store_true", help="installer aussi la variante communautaire du modèle (uc-q4, "
+                    "et uc-q8 avec --q8)")
     ap.add_argument("--cuda", action="store_true", help="Windows : installer aussi le moteur CUDA (cartes NVIDIA, ≈ 900 Mo)")
     ap.add_argument("--no-cpu", action="store_true", help="Windows : ne pas installer le moteur de secours CPU")
     ap.add_argument("--no-calibrate", action="store_true", help="ne pas lancer les générations de calibration")
@@ -300,8 +310,10 @@ def main():
         backends = ["vulkan"] + ([] if a.no_cpu else ["cpu"]) + (["cuda"] if a.cuda else [])
         if a.check and os.path.exists(P("sdcpp", "cuda")) and "cuda" not in backends:
             backends.append("cuda")
-    q8 = DIFFUSION["q8"][1]
-    versions = ["q4"] + (["q8"] if a.q8 or (a.check and os.path.exists(P(*q8.split("/")))) else [])
+    asked = {"q8": a.q8, "uc-q4": a.uc, "uc-q8": a.uc and a.q8}
+    # --check vérifie aussi les versions déjà installées sans avoir été demandées
+    versions = ["q4"] + [v for v in DIFFUSION if v != "q4" and (asked.get(v) or (a.check and os.path.exists(
+        P(*DIFFUSION[v][1].split("/")))))]
     ok = step_engine(backends, a.check)
     ok = step_models(versions, a.check) and ok
     ok = step_fix(a.check) and ok
@@ -315,8 +327,8 @@ def main():
     else:
         print(f"\nInstallation terminée. Démarrage : double-clic sur {SHORTCUT},")
         print(f"ou : {launch}   puis http://127.0.0.1:7860/")
-        if "q8" in versions:
-            print(f"Modèle Q8_0 : {launch} --model q8   (ou \"model\": \"q8\" dans tools/config.json)")
+        for v in versions[1:]:
+            print(f"Modèle {v} : {launch} --model {v}   (ou \"model\": \"{v}\" dans tools/config.local.json)")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # Contrôles du projet sur chaque pull request vers main et chaque push sur dev : la même commande qu'en local
 # (tests/check.py : compilation, JavaScript de l'interface, longueur des lignes ajoutées, banc de test sans GPU).
-# Les tests d'interface (--ui) demandent Chrome et restent en local. macOS, comme le poste du porteur : le banc y suit les mêmes branches
+# Les tests d'interface (--ui) demandent Chrome et restent en local. macOS, comme le poste de référence : le banc y suit les mêmes branches
 # (moteur Metal, écritures F_FULLFSYNC) ; minutes gratuites pour un dépôt public.
 name: Contrôles
 

@@ -4,6 +4,26 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-16 · Modèle officiel par défaut, variante communautaire en option
+
+- **Contexte** : le dépôt est public. Depuis le renommage du dépôt Hugging Face d'abenzerps (12/10/2026), `setup.py`
+  installait par défaut la variante communautaire affinée de sa branche principale, et le README la présentait comme
+  le modèle du projet. Les quantifications GGUF des poids officiels de Qwen/Qwen-Image-2.1 sont restées sur la branche
+  `base` de ce même dépôt : c'est le fichier Q4_K_M (même taille, même empreinte) qu'installait le premier commit.
+- **Décision** (porteur, 16/10/2026) : `q4` et `q8` installent les fichiers de la branche `base` (commit `4db8efd`),
+  la variante communautaire devient les versions `uc-q4` et `uc-q8`, installées seulement par `setup.py --uc`. Le
+  choix propre à une machine passe par `tools/config.local.json`, non suivi, lu par-dessus `tools/config.json`, qui
+  ne garde plus de préférence personnelle.
+- **Alternatives écartées** : le dépôt `Qwen/Qwen-Image-2.1` lui-même (poids bf16 en deux fichiers, 14,2 Go ; une
+  quantification devrait se faire sur la machine par `sd-cli -M convert`, jamais essayée) ; les GGUF de
+  `leejet/Qwen-Image-2.1-GGUF` (cités par la documentation de stable-diffusion.cpp, mais jamais exécutés dans ce
+  projet) ; retirer la variante communautaire du code.
+- **Conséquences** : mêmes quantifications et mêmes tailles qu'avant, donc mêmes durées (estimations et mesures du
+  README inchangées). Une machine qui gardait la variante la choisit par `"model": "uc-q8"` (ou `uc-q4`) dans
+  `tools/config.local.json` ; ses mesures de calibration, rangées sous `q8`, sont à déplacer sous `uc-q8` dans son
+  `tools/calibration.json`, sinon `q8` part de mesures faites avec l'autre fichier. Les notes de travail (`CLAUDE.md`,
+  `ETAT_DU_PROJET.md`, `travail/`, `docs/specs/`, `docs/agents/` sauf la carte du code) sortent du suivi git : un
+  worktree neuf ne les contient plus.
 ## 2026-10-16 · Une image reste dans son espace : « Rendre privée » retiré
 
 - **Contexte** : en essayant la livraison sur le téléphone, le porteur demande d'abord un « Rendre publique » en
