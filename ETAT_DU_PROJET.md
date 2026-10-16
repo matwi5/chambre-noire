@@ -80,6 +80,11 @@ Mis à jour le 16/10/2026.
 
 ### 2026-10-16
 
+- PR #6 livrée (`51f1437`, service relancé). Sur le téléphone, l'image d'entrée privée « glitche » encore un peu à son
+  arrivée : à reprendre dans une prochaine conversation (ticket Asana « [code] Supprimer le saut des images d'entrée
+  privées à leur arrivée », avec les pistes). Tickets Asana de la session créés : fuite des images privées, zoom et
+  chargement anticipé, rétrospective, retrait de « Rendre privée » (cochés), et ce glitch restant (à faire).
+
 - Après la livraison (PR #5, `abbb3ec`, service relancé), essais du porteur sur le téléphone : version servie, plus de
   fuite des images d'entrée ni de la galerie privée, zoom des images d'entrée : bons. Restait un saut des images
   d'entrée privées à leur arrivée : la miniature (320 px) s'affichait à sa taille avant l'image complète ; elle prend
@@ -122,7 +127,7 @@ Mis à jour le 16/10/2026.
   nouveau vidé à la fermeture (sinon une image incognito effacée, ou une publique dans l'espace privé, restait en
   fond). Dernière revue (`8d81b13`) : aucun vrai bogue ; vidage des vues à l'entrée dans l'espace privé retiré (il
   coupait le fondu sans rien protéger), test et commentaires précisés.
-  À reporter dans Asana (accord du porteur) : un ticket pour la fuite et les glitchs d'affichage (`d3169f8`,
+  À reporter dans Asana (reporté le 16/10/2026) : un ticket pour la fuite et les glitchs d'affichage (`d3169f8`,
   `9f9e269`), un pour le zoom et le préchargement des images d'entrée (`3591b85`).
 - Fuite de l'espace privé à l'écran corrigée (signalée par le porteur) : une `<img>` qui reçoit une autre adresse garde
   l'image d'avant à l'écran jusqu'au chargement de la nouvelle, donc l'image d'entrée privée vue avant réapparaissait
