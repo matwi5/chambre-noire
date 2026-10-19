@@ -102,9 +102,25 @@ class IncognitoHardeningTest(bench.BenchCase):
         q = call("GET", "/api/status", remote=True)[1]["queue"]
         self.assertEqual(q[1]["page"], "pageB2")
         self.assertNotIn(b, str(q))
-        self.assertEqual(set(q[1]), {"status", "position", "ahead", "lot", "kind", "page", "estimate", "elapsed"})
+        self.assertEqual(set(q[1]),
+                         {"status", "position", "ahead", "lot", "kind", "page", "tag", "estimate", "elapsed"})
         call("POST", f"/api/job/{a}/cancel")
         call("POST", f"/api/job/{b}/cancel")
+
+    def test_each_incognito_generation_carries_its_own_tag_that_follows_a_move(self):
+        a = generate("HOLD visible", page="pageA1")["id"]
+        wait_job(a, ("running",))
+        b, c = (generate(f"zq7marker secret {k}", incognito=True, page="pageB2") for k in range(2))
+        self.assertNotIn("tag", generate("normal", page="pageA1"))
+        self.assertTrue(b["tag"] and c["tag"] and b["tag"] != c["tag"])
+        self.assertNotIn(b["tag"], (b["id"], c["id"]))
+        self.assertEqual(call("POST", f"/api/job/{c['id']}/first", {}), (200, {"ok": True}))
+        q = call("GET", "/api/status", remote=True)[1]["queue"]
+        self.assertEqual([e.get("tag") for e in q[1:3]], [c["tag"], b["tag"]])
+        self.assertNotIn(b["id"], str(q))
+        self.assertNotIn(c["id"], str(q))
+        bench.release()
+        wait_job(b["id"])
 
     def test_page_token_must_be_a_short_text(self):
         for page in (12, "x" * 65, ["a"]):

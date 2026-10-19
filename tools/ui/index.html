@@ -1158,7 +1158,11 @@ const isActive = p => ['queued','running'].includes(p.j.status);
 // publiques de la page restent suivies en mémoire, hors de l'écran ; les privées quittent la page à la sortie.
 const ofSpace = p => !!p.private===inPrivate();
 const spaceActive = () => pageJobs.some(p=>ofSpace(p) && isActive(p));
-const oldestActive = () => pageJobs.find(p=>ofSpace(p) && isActive(p));
+// génération active à montrer parmi list : celle qui tourne, sinon la prochaine dans l'ordre de calcul (une génération
+// passée en tête passe devant celles lancées avant elle), à rang égal la plus ancienne
+const firstActive = list => list.filter(isActive).sort((a, b)=>turnOf(a)-turnOf(b))[0];
+const turnOf = p => p.j.status==='running' ? -1 : p.j.queue_position ?? Infinity;
+const oldestActive = () => firstActive(pageJobs.filter(ofSpace));
 const latestResult = () => [...pageJobs].reverse().find(p=>ofSpace(p) && p.result);
 // lot : générations de la page lancées d'une même demande (p.lot : id, rang, taille). Lot terminé avec au moins deux
 // images : la zone de résultat montre leur grille.
@@ -1198,12 +1202,14 @@ function progress(p){
       remaining:(j.total-j.step)*spi + p.vaeSec*(1+previewsLeft) }; }
   return { frac:Math.min(0.12, elapsed/Math.max(p.est,1)), title:'Préparation', sub:(j.phase||'chargement')+'…', remaining:Math.max(0, p.est-elapsed) }; }
 // file de l'espace : génération de cette page derrière une entrée (par identifiant ; une génération incognito, qui n'en
-// montre pas, par le jeton de la page : ses lignes à ce jeton et ses générations incognito actives sont dans le même
-// ordre, celui du lancement ; une file reçue un peu plus tôt peut encore avoir en tête une génération que la page sait
-// finie (lignes en trop : comptées depuis la fin), ou pas encore la dernière lancée (lignes en moins : depuis le début)),
+// montre pas, par son étiquette tag, rendue à la seule page qui l'a lancée ; serveur d'avant l'étiquette : par le jeton
+// de la page, ses lignes à ce jeton et ses générations incognito actives étant dans l'ordre du lancement ; une file
+// reçue un peu plus tôt peut encore avoir en tête une génération que la page sait finie (lignes en trop : comptées
+// depuis la fin), ou pas encore la dernière lancée (lignes en moins : depuis le début)),
 // temps restant d'une entrée, attente des lignes devant une position (le travail caché de l'autre espace s'y ajoute :
 // ahead de l'entrée)
 function ownOf(e){ if(e.id) return pageJobs.find(p=>p.id===e.id);
+  if(e.tag) return pageJobs.find(p=>p.tag===e.tag);
   if(e.page!==PAGE_TOKEN) return undefined;
   const rows=queueState.filter(x=>!x.id && x.page===PAGE_TOKEN), mine=pageJobs.filter(p=>p.incognito && isActive(p));
   return mine[rows.indexOf(e)-Math.max(0, rows.length-mine.length)]; }
@@ -1296,9 +1302,9 @@ function renderIsland(){
 function onIsland(){                               // file non vide : sa liste ; sinon : panneau Moteur
   if(!queueState.length && !spaceActive()) return openSheet('engineSheet');
   openSheet('queueSheet'); renderQueue(); refreshStatus(); }
-// feuille de la file : une ligne par génération, de la génération en cours à la dernière arrivée, avec le temps restant
-// avant son image ; annulation là où l'appareil y a droit (génération normale ou privée : partout dans son espace ;
-// incognito : sa page seulement)
+// feuille de la file : une ligne par génération, de la génération en cours à la dernière, dans l'ordre de calcul, avec le temps restant
+// avant son image ; annulation, et « Passer en tête » d'une génération en attente, là où l'appareil y a droit
+// (génération normale ou privée : partout dans son espace ; incognito : sa page seulement)
 const QICON = {
   t2i:'<path d="M11 3.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7Z"/>',
   edit:'<rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/>',
@@ -1308,27 +1314,31 @@ const QICON = {
 // le temps restant avant une image compte les lignes devant elle et le travail caché de l'autre espace (ahead, cumulé)
 function renderQueue(){
   if(openedSheet!==$('queueSheet')) return;
-  const q=queueState, lots=new Set(); let wait=0;
+  const q=queueState; let wait=0, prevLot=null;
   $('queueNote').textContent = q.length ? `${q.length} génération${q.length>1?'s':''}, une à la fois · file vide dans ≈ ${fmt(q.reduce((t, e)=>t+entryLeft(e), 0)+(q.at(-1).ahead||0))}` : 'Rien en cours.';
   $('queueList').innerHTML=q.map(e=>{ const p=ownOf(e), incog=e.kind==='incognito'; wait+=entryLeft(e);
     const pic = p && p.thumb ? `<img src="${p.thumb}" alt="">`
       : `<span class="qicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${QICON[incog ? 'incognito' : tabOf(e.mode)]}</svg></span>`;
     const camp=e.mode==='edit' || !!(p && p.tab==='edit');   // lot du mode Éditer : une campagne (incognito : connue de sa page)
     const sub=[e.status==='running' ? 'En cours' : ordinal(e.position)+' en attente', incog || e.lot ? '' : MODE_LABELS[e.mode]||e.mode, e.lot ? `${camp ? 'photo' : 'image'} ${e.lot.rank}/${e.lot.size}` : '', 'prête dans ≈ '+fmt(wait+(e.ahead||0)), p && !p.adopted ? 'cet appareil' : ''];
-    // lot : un en-tête avant sa première image de la file, avec l'annulation de tout le lot là où l'appareil y a droit
-    // (lot normal ou privé : partout dans son espace ; lot incognito : sa page seulement, seule à connaître son
-    // identifiant)
-    const lot=e.lot && (e.lot.id || (p && p.lot && p.lot.id)), head=lot && !lots.has(lot) ? (lots.add(lot), `<div class="qlot"><span>${camp ? 'Campagne de '+e.lot.size+' photos' : 'Lot de '+e.lot.size+' images'}</span><button class="btn secondary small" data-cancel-lot="${esc(lot)}">Annuler le lot</button></div>`) : '';
+    // lot : un en-tête avant chaque suite de ses images dans la file (une image passée en tête l'en sépare), avec
+    // l'annulation de tout le lot là où l'appareil y a droit (lot normal ou privé : partout dans son espace ; lot
+    // incognito : sa page seulement, seule à connaître son identifiant)
+    const lot=e.lot && (e.lot.id || (p && p.lot && p.lot.id)), head=lot && lot!==prevLot ? (`<div class="qlot"><span>${camp ? 'Campagne de '+e.lot.size+' photos' : 'Lot de '+e.lot.size+' images'}</span><button class="btn secondary small" data-cancel-lot="${esc(lot)}">Annuler le lot</button></div>`) : ''; prevLot=lot;
     // l'identifiant de la ligne est fixé à l'affichage : la file peut avancer avant l'appui
     return head + `<div class="qrow${p?' own':''}" data-id="${esc(e.id || (p && p.id) || '')}">${pic}<div class="qtxt"><b>${esc(incog ? 'Génération incognito' : e.prompt)}</b><span>${sub.filter(Boolean).map(esc).join(' · ')}</span></div>`
+      + ((e.id || p) && e.status==='queued' ? '<button class="qx" data-first aria-label="Passer en tête" title="Passer en tête"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12"/><path d="M12 20V9"/><path d="m7 13 5-5 5 5"/></svg></button>' : '')
       + (e.id || p ? '<button class="qx" data-cancel aria-label="Annuler cette génération"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>' : '') + '</div>'; }).join(''); }
 $('queueList').addEventListener('click', async ev=>{
   const lot=ev.target.closest('[data-cancel-lot]');
   if(lot){ lot.disabled=true; log('annulation du lot demandée'); await postJson('/api/lot/'+lot.dataset.cancelLot+'/cancel', {}).catch(()=>{}); return refreshStatus(); }
   const row=ev.target.closest('.qrow'), id=row && row.dataset.id; if(!id) return;
-  const p=pageJobs.find(q=>q.id===id), x=ev.target.closest('[data-cancel]');
+  const p=pageJobs.find(q=>q.id===id), x=ev.target.closest('[data-cancel]'), first=ev.target.closest('[data-first]');
   if(x){ x.disabled=true; log('annulation demandée');
     await postJson('/api/job/'+id+'/cancel', {}).catch(()=>{}); return refreshStatus(); }
+  // 404 ou 409 (la file a pu avancer) : la file rafraîchie suffit, sans message
+  if(first){ first.disabled=true; log('passage en tête demandé');
+    await postJson('/api/job/'+id+'/first', {}).catch(()=>{}); return refreshStatus(); }
   if(p){ closeSheet(); if(mode==='hist') goTab(p.tab); pick(p); $('stage').scrollIntoView({behavior:'smooth', block:'center'}); } });
 // suivi des générations de la page : une interrogation par seconde de chacune tant qu'elle n'est pas terminée
 function track(j, info){
@@ -1336,7 +1346,7 @@ function track(j, info){
   // ici si info le dit (elle passe alors dans la zone de résultat comme une génération qui vient d'être lancée)
   let p=pageJobs.find(q=>q.id===j.id);
   if(p){ ['prompt','tab','w','h','thumb','est'].forEach(k=>{ if(info[k]) p[k]=info[k]; }); p.adopted=p.adopted && !!info.adopted; }
-  else { pageJobs.push(p={ id:j.id, j, incognito:!!j.incognito, private:!!j.private, lot:j.lot||null, prompt:info.prompt||'', tab:info.tab||'t2i', w:info.w, h:info.h, thumb:info.thumb||null,
+  else { pageJobs.push(p={ id:j.id, j, incognito:!!j.incognito, private:!!j.private, lot:j.lot||null, tag:j.tag||null, prompt:info.prompt||'', tab:info.tab||'t2i', w:info.w, h:info.h, thumb:info.thumb||null,
       est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0,
       adopted:!!info.adopted });                    // adopted : reprise de la file (espace privé), pas lancée ici
     while(pageJobs.length>MAX_PAGE_JOBS){ const k=pageJobs.findIndex(q=>q.result && !q.result.blob && q!==shown && !sameLot(q, shown)); if(k<0) break; pageJobs.splice(k, 1); }
@@ -1377,7 +1387,7 @@ async function finish(p){                          // génération terminée : s
       chips:[fmt(secs), j.dims?j.dims.join('×'):'', (j.total||'?')+' étapes', j.sec_per_it?j.sec_per_it.toFixed(1)+' s/étape':''] };
     log('terminé en '+Math.round(secs)+' s → '+(j.incognito ? 'image incognito, non enregistrée' : j.private ? 'image privée' : j.path), !!j.private);
     if(!ofSpace(p)) return;                        // publique finie dans l'espace privé : à l'écran à la sortie
-    const lot=lotOf(p), next=lot.find(isActive);
+    const lot=lotOf(p), next=firstActive(lot);
     toast(!p.lot ? 'Image prête en '+fmt(secs) : next ? `Image ${p.lot.rank} sur ${p.lot.size} prête` : 'Lot terminé');
     if(mode==='hist') loadHistory();
     // lot en cours : la zone de résultat passe à son image suivante ; à la fin du lot, sa grille
@@ -1391,7 +1401,7 @@ function drop(p){                                  // retire une génération de
   const k=pageJobs.indexOf(p); if(k>=0) pageJobs.splice(k, 1);
   if(p.result && p.result.blob){ ready.delete(p.result.url); URL.revokeObjectURL(p.result.url); }   // image incognito : plus rien d'elle
   const lot=lotOf(p);                              // de préférence une autre image de son lot (ou sa grille)
-  if(shown===p) show(lot.find(isActive) || lot.find(q=>q.result) || oldestActive() || latestResult());
+  if(shown===p) show(firstActive(lot) || lot.find(q=>q.result) || oldestActive() || latestResult());
   else if(sameLot(shown, p) && !isActive(shown)) show(shown); else renderStrip(); }
 function inputThumb(){ return mode==='edit' && editImages.length ? editImages[0].dataUrl : mode==='mask' && maskImage ? maskImage.dataUrl : null; }
 $('go').onclick=async()=>{                         // toujours actif : la demande rejoint la file avec les réglages du moment

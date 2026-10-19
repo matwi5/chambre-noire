@@ -1,5 +1,6 @@
 // File d'attente cloisonnée par espace, dans la vue du téléphone : la file et la pastille ne montrent que les générations
-// de l'espace où l'on est.
+// de l'espace où l'on est ; « Passer en tête » d'une ligne réordonne la file, les lignes incognito de la page restant
+// reconnues.
 //   node --test tests/ui/file.test.mjs   (ou : venv/bin/python tests/check.py --ui)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -195,5 +196,70 @@ test('espace public : une génération privée en cours n\'allume pas la pastill
   assert.equal((await post(`/api/job/${priv.id}/cancel`)).status, 200);
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  page.assertNoErrors();
+});
+
+// ------------------------------------------------------------ « Passer en tête »
+test('« Passer en tête » : juste après la génération en cours, incognito de la page reconnues', async () => {
+  await page.goto(bench.url + '/');
+  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  const held = await launch('HOLD=tete zq9 d\'un autre appareil');
+  await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`, { what: 'génération en cours' });
+  await page.eval(`setIncog(true)`);
+  for (const [k, text] of [[1, 'zq9 incognito un'], [2, 'zq9 incognito deux']]) {
+    await type(text);
+    await page.click('#go');
+    await page.waitFor(`pageJobs.filter(p => p.incognito && isActive(p)).length === ${k}`,
+      { what: `incognito ${k} suivie` });
+  }
+  await page.eval(`setIncog(false)`);
+  await page.eval(`refreshStatus()`);
+  await page.click('#island');
+  await page.waitFor(`$('queueSheet').classList.contains('on')
+    && $('queueList').querySelectorAll('.qrow').length === 3`, { what: 'feuille de la file avec trois lignes' });
+  // génération de la page derrière chaque ligne (état lu, pas l'écran), et identifiant porté par chaque ligne affichée
+  const owners = () => page.eval(`queueState.map(e => ownOf(e) ? ownOf(e).prompt : e.id ? 'autre appareil' : '?')`);
+  const shownIds = () => page.eval(`[...$('queueList').querySelectorAll('.qrow')].map(r => r.dataset.id)`);
+  const idOf = word => page.eval(`pageJobs.find(p => p.prompt === 'zq9 incognito ${word}').id`);
+  assert.deepEqual(await owners(), ['autre appareil', 'zq9 incognito un', 'zq9 incognito deux']);
+  const firsts = `[...$('queueList').querySelectorAll('.qrow')].map(r => !!r.querySelector('[data-first]'))`;
+  assert.deepEqual(await page.eval(firsts), [false, true, true], 'rien à passer en tête sur la génération en cours');
+  await page.eval(`$('queueList').querySelectorAll('.qrow')[2].querySelector('[data-first]').click()`);
+  await page.waitFor(`queueState.length === 3 && ownOf(queueState[1])?.prompt === 'zq9 incognito deux'`,
+    { what: 'file réordonnée' });
+  assert.deepEqual(await owners(), ['autre appareil', 'zq9 incognito deux', 'zq9 incognito un']);
+  assert.deepEqual(await shownIds(), [held.id, await idOf('deux'), await idOf('un')]);
+  await page.eval(`closeSheet()`);
+  for (const id of await page.eval(`pageJobs.filter(isActive).map(p => p.id)`)) {
+    assert.equal((await post(`/api/job/${id}/cancel`)).status, 200);
+  }
+  assert.equal((await post(`/api/job/${held.id}/cancel`)).status, 200);
+  bench.release('tete');
+  await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)`,
+    { what: 'Mac au repos' });
+  page.assertNoErrors();
+});
+
+test('« Passer en tête » d\'une image d\'un lot : chaque suite de ses images garde l\'en-tête du lot', async () => {
+  const held = await launch('HOLD=entete zq9 en cours');
+  await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`, { what: 'génération en cours' });
+  const other = await launch('zq9 avant le lot');
+  const lot = await launch('zq9 lot', { count: 3 });
+  await page.eval(`refreshStatus()`);
+  await page.click('#island');
+  await page.waitFor(`$('queueList').querySelectorAll('.qrow').length === 5`, { what: 'file de cinq lignes' });
+  assert.equal(await page.eval(`$('queueList').querySelectorAll('.qlot').length`), 1);
+  await page.eval(`$('queueList').querySelector('.qrow[data-id="${lot.jobs[2].id}"] [data-first]').click()`);
+  await page.waitFor(`queueState[1]?.id === ${JSON.stringify(lot.jobs[2].id)}`, { what: 'image 3 du lot en tête' });
+  // en cours, image 3, génération d'avant le lot, images 1 et 2 : un en-tête devant chaque suite d'images du lot
+  const order = `[...$('queueList').children].map(x => x.classList.contains('qlot') ? 'lot' : x.dataset.id)`;
+  await page.waitFor(`${order}.join() === ${JSON.stringify([held.id, 'lot', lot.jobs[2].id, other.id, 'lot',
+    lot.jobs[0].id, lot.jobs[1].id].join())}`, { what: 'en-têtes du lot redessinés' });
+  await page.eval(`closeSheet()`);
+  assert.equal((await post(`/api/lot/${lot.lot.id}/cancel`)).status, 200);
+  for (const id of [other.id, held.id]) assert.equal((await post(`/api/job/${id}/cancel`)).status, 200);
+  bench.release('entete');
+  await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)`,
+    { what: 'Mac au repos' });
   page.assertNoErrors();
 });

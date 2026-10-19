@@ -39,7 +39,8 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   tools/push_vapid.pem, appareils abonnés dans tools/push_subscriptions.json (non versionnés). Jamais le prompt.
 Aucun droit administrateur, aucune modification système : tout reste dans ce dossier.
 """
-import argparse, base64, datetime, glob, hashlib, hmac, io, json, math, os, queue, re, secrets, shutil, socket, subprocess, sys, threading, time, uuid, webbrowser
+import argparse, base64, datetime, glob, hashlib, hmac, io, json, math, os, re, secrets, shutil, socket, subprocess, sys
+import threading, time, uuid, webbrowser
 from http.cookies import SimpleCookie
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlsplit
@@ -1021,8 +1022,10 @@ class State:
     private_sessions = {}    # sessions de l'espace privé : {jeton du cookie : {"key": clé privée, "seen": dernière requête privée}}
     rekeyed = {}             # clé publique remplacée par un changement de code → la suivante : une génération privée lancée
                              # avant le changement est rangée avec la nouvelle clé (store_private)
-    q = queue.Queue()
-    enqueue = threading.Lock()   # les générations d'un lot entrent dans la file à la suite, sans autre demande entre elles
+    pending = []             # générations en attente, dans l'ordre de calcul : seule source de l'ordre de la file ; une
+                             # génération annulée y reste jusqu'à ce que worker() la saute
+    turn = threading.Condition()   # protège pending : un lot y entre d'un bloc, « Passer en tête » y réordonne,
+                                   # worker() y prend la tête et la pose dans current en une seule opération
     current = None
     started = None           # version du code au lancement du serveur (code_version) : launch.py n'est relu qu'au
                              # redémarrage, l'interface à chaque requête
@@ -1332,12 +1335,16 @@ def worker():
     """Thread de calcul : une génération à la fois, dans l'ordre de la file. Aucune exception ne l'arrête : la
     génération en cause échoue et la suivante démarre."""
     while True:
-        job = S.q.get()
+        with S.turn:                               # tête de la file, et génération en cours, en une seule opération
+            while not S.pending:
+                S.turn.wait()
+            job = S.pending.pop(0)
+            if job.get("status") != "cancelled":
+                S.current = job["id"]
         try:
             if job.get("status") == "cancelled":       # annulée avant de démarrer
                 discard_cancelled(job)
                 continue
-            S.current = job["id"]
             try:
                 run_job(job)
             except Exception as e:
@@ -1456,9 +1463,28 @@ def draw_seeds(seed, n):
 
 
 def active_jobs():
-    """Générations de la file : celle en cours d'abord, puis les autres dans l'ordre d'arrivée (S.jobs garde l'ordre
-    d'insertion, qui est celui de S.q)."""
-    return sorted((j for j in list(S.jobs.values()) if j.get("status") in ACTIVE), key=lambda j: j.get("status") != "running")
+    """Générations de la file : celle en cours d'abord, puis les autres dans l'ordre de calcul (S.pending)."""
+    with S.turn:
+        jobs = [S.jobs.get(S.current)] + S.pending
+    return [j for j in jobs if j and j.get("status") in ACTIVE]
+
+
+def move_first(jobs):
+    """« Passer en tête » : celles de jobs encore en attente (dans S.pending) passent juste après la génération en
+    cours, dans l'ordre de jobs ; False si aucune n'attend plus (en cours, finie ou annulée)."""
+    with S.turn:
+        waiting = {j["id"] for j in S.pending if j.get("status") == "queued"}
+        moved = [j for j in jobs if j["id"] in waiting]
+        if not moved:
+            return False
+        moved_ids = {j["id"] for j in moved}
+        S.pending[:] = moved + [j for j in S.pending if j["id"] not in moved_ids]
+    return True
+
+
+def moved_first(jobs, error):
+    """Réponse d'une route « Passer en tête » : 200, ou 409 avec error si rien de jobs n'attend plus."""
+    return (200, {"ok": True}) if move_first(jobs) else (409, {"error": error})
 
 
 def in_space(job, private):
@@ -1510,10 +1536,11 @@ def job_estimate(job, r, coefs):
 
 def queue_entry(job, position, ahead, coefs):
     """Entrée de la liste de la file (/api/status), vue depuis l'espace de la génération. Une génération incognito
-    (espace public) n'y montre que son genre et le jeton de sa page : ni identifiant (seule la page qui l'a lancée peut
-    la suivre ou l'annuler), ni prompt, ni mode. Une génération privée n'est vue que depuis l'espace privé, où elle a
-    une entrée complète comme une génération normale, genre « private ». ahead : durée restante estimée des générations
-    de l'autre espace placées devant elle. None si la génération vient de finir."""
+    (espace public) n'y montre que son genre, le jeton de sa page et son étiquette (tag) : ni identifiant (seule la page
+    qui l'a lancée peut la suivre, l'annuler ou la faire passer en tête), ni prompt, ni mode. Une génération privée
+    n'est vue que depuis l'espace privé, où elle a une entrée complète comme une génération normale, genre « private ».
+    ahead : durée restante estimée des générations de l'autre espace placées devant elle. None si la génération vient
+    de finir."""
     r = job.get("req")
     if r is None:
         return None
@@ -1524,8 +1551,9 @@ def queue_entry(job, position, ahead, coefs):
          "estimate": round(est, 1),
          "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None}
     if job.get("incognito"):
-        # jeton de la page qui l'a lancée : elle y reconnaît ses lignes ; il n'ouvre aucune route (ni suivi, ni annulation)
-        e.update(kind="incognito", page=job.get("page"))
+        # jeton de la page qui l'a lancée et étiquette de la génération, que sa page seule connaît : elle y reconnaît
+        # sa ligne ; ni l'un ni l'autre n'ouvre de route (ni suivi, ni annulation)
+        e.update(kind="incognito", page=job.get("page"), tag=job.get("tag"))
     else:
         prompt = " ".join(r["prompt"].split())
         e.update(kind="private" if job.get("private") else "normal", id=job["id"], mode=job["mode"],
@@ -1565,6 +1593,8 @@ def new_job(req, inputs, lot=None):
     return {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
             "incognito": incognito, "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot,
             "page": req.get("page") if incognito else None,   # jeton de la page, montré dans queue à la place de l'id
+            # étiquette d'une incognito, montrée dans queue : sa page y reconnaît sa ligne même après un déplacement
+            "tag": secrets.token_hex(8) if incognito else None,
             "public": private and (read_space() or {}).get("public")}    # clé publique de l'espace au lancement
 
 
@@ -1586,9 +1616,16 @@ def public(job):
     return d
 
 
+def launched(job):
+    """Génération telle que /api/generate la rend à la page qui l'a lancée : son suivi (public), plus l'étiquette d'une
+    génération incognito, qui ne se lit nulle part ailleurs que dans sa ligne de queue."""
+    return {**public(job), "tag": job["tag"]} if job.get("tag") else public(job)
+
+
 def quiet_request(msg):
     """Requêtes tues dans le journal du serveur : interrogations répétées (état, suivi des générations) et tout ce qui
-    peut toucher à l'espace privé (rien n'en va dans logs/), annulation d'un lot comprise (son identifiant)."""
+    peut toucher à l'espace privé (rien n'en va dans logs/), annulation et passage en tête d'une génération ou d'un lot
+    compris (leur identifiant)."""
     return "/api/status" in msg or "/api/job/" in msg or "/api/private/" in msg or "/api/lot/" in msg
 
 
@@ -1865,15 +1902,18 @@ class H(BaseHTTPRequestHandler):
             # un job incognito n'est jamais repris après un rechargement de la page : il est perdu avec elle
             last = None if inside else max((j for j in list(S.jobs.values()) if not secret(j)), key=lambda j: j["created"],
                                            default=None)
-            coefs, current = S.store.coefficients(S.backend, S.model, S.engine), S.jobs.get(S.current) or {}
+            # génération en cours lue une seule fois : relu plus bas, S.current pourrait déjà désigner la suivante (une
+            # incognito, dont l'identifiant partirait dans current_job)
+            current_id = S.current
+            coefs, current = S.store.coefficients(S.backend, S.model, S.engine), S.jobs.get(current_id) or {}
             queue = queue_view(inside, coefs)
-            return self._send(200, {"sd_ready": not missing, "backend": S.backend, "busy": S.current is not None,
+            return self._send(200, {"sd_ready": not missing, "backend": S.backend, "busy": current_id is not None,
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model,
                                     "queued": sum(e["status"] == "queued" for e in queue),
                                     "queue": queue,
                                     # identifiant d'une génération incognito : connu de sa seule page
-                                    "current_job": S.current if current and in_space(current, inside)
+                                    "current_job": current_id if current and in_space(current, inside)
                                                    and not current.get("incognito") else None,
                                     "last_job": public(last) if last else None,
                                     "estimates": coefs,
@@ -2047,11 +2087,12 @@ class H(BaseHTTPRequestHandler):
             jobs = [new_job(r, request_inputs(r), lot and {"id": lot["id"], "rank": k + 1, "size": n}) for k, r in enumerate(reqs)]
             if lot:
                 S.lots[lot["id"]] = {"jobs": jobs, "incognito": jobs[0]["incognito"], "private": jobs[0]["private"]}
-            with S.enqueue:                      # générations d'un lot : à la suite dans la file, dans l'ordre
+            with S.turn:                         # générations d'un lot : à la suite dans la file, dans l'ordre
                 for job in jobs:
                     S.jobs[job["id"]] = job
-                    S.q.put(job)
-            return self._send(202, {"lot": lot, "jobs": [public(j) for j in jobs]} if lot else public(jobs[0]))
+                    S.pending.append(job)
+                S.turn.notify()
+            return self._send(202, {"lot": lot, "jobs": [launched(j) for j in jobs]} if lot else launched(jobs[0]))
         if path == "/api/forget":                # page fermée ou rechargée : ses générations incognito, en un seul envoi
             try:
                 ids = json.loads(raw).get("ids")
@@ -2063,22 +2104,26 @@ class H(BaseHTTPRequestHandler):
             for job in jobs:
                 forget_job(job)
             return self._send(200, {"forgotten": len(jobs)})
-        m = re.match(r"^/api/lot/([\w-]+)/cancel$", path)
-        if m:                                    # toutes les générations non terminées du lot
+        m = re.match(r"^/api/lot/([\w-]+)/(cancel|first)$", path)
+        if m:                                    # toutes les générations non terminées du lot, ou celles qui attendent
             lot = S.lots.get(m.group(1))
             if not lot or self._hidden(lot["jobs"][0], touch=True):
                 return self._send(404, {"error": "lot inconnu"})
+            if m.group(2) == "first":            # testé après _hidden : l'état d'un lot privé ne se devine pas
+                return self._send(*moved_first(lot["jobs"], "plus rien n'attend dans ce lot"))
             active = [j for j in lot["jobs"] if j.get("status") in ACTIVE]
             for job in active:
                 cancel_job(job)
             return self._send(200, {"cancelled": len(active)})
-        m = re.match(r"^/api/job/([\w-]+)/(cancel|forget)$", path)
+        m = re.match(r"^/api/job/([\w-]+)/(cancel|forget|first)$", path)
         if m:
             job = S.jobs.get(m.group(1))
-            # l'annulation est un geste dans l'espace (session prolongée) ; l'oubli, envoyé seul par la page à la fin
-            # d'une génération, ne la prolonge pas
-            if not job or self._hidden(job, touch=m.group(2) == "cancel"):
+            # l'annulation et le passage en tête sont des gestes dans l'espace (session prolongée) ; l'oubli, envoyé
+            # seul par la page à la fin d'une génération, ne la prolonge pas
+            if not job or self._hidden(job, touch=m.group(2) != "forget"):
                 return self._send(404, {"error": "job inconnu"})
+            if m.group(2) == "first":            # testé après _hidden : l'état d'une génération privée ne se devine pas
+                return self._send(*moved_first([job], "génération plus en attente"))
             if m.group(2) == "forget" and not secret(job):
                 return self._send(400, {"error": "seul un job incognito ou privé peut être oublié"})
             if m.group(2) == "forget":            # image récupérée par l'interface, ou page quittée : plus rien en mémoire

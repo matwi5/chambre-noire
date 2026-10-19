@@ -34,6 +34,84 @@ class QueueOrderTest(bench.BenchCase):
         wait_job(a)
 
 
+class MoveFirstTest(bench.BenchCase):
+    """« Passer en tête » : une génération en attente, ou ce qui attend d'un lot, passe juste après celle en cours."""
+
+    def held_queue(self, *prompts):
+        """Une génération retenue en cours (HOLD), puis les prompts en attente ; renvoie leurs identifiants."""
+        a = generate("HOLD running")["id"]
+        wait_job(a, ("running",))
+        return [a] + [generate(p)["id"] for p in prompts]
+
+    def order(self):
+        return [e["id"] for e in queue()]
+
+    def test_moving_a_waiting_generation_puts_it_right_after_the_running_one(self):
+        a, b, c, d = self.held_queue("b", "c", "d")
+        self.assertEqual([bench.job(i)["queue_position"] for i in (b, c, d)], [1, 2, 3])
+        self.assertEqual(call("POST", f"/api/job/{d}/first", {}), (200, {"ok": True}))
+        self.assertEqual(self.order(), [a, d, b, c])
+        self.assertEqual([bench.job(i)["queue_position"] for i in (d, b, c)], [1, 2, 3])
+        bench.release()
+        done = [wait_job(i) for i in (a, b, c, d)]
+        self.assertEqual([j["id"] for j in sorted(done, key=lambda j: j["started"])], [a, d, b, c])
+
+    def test_first_in_line_running_finished_or_unknown(self):
+        a, b, c = self.held_queue("b", "c")
+        self.assertEqual(call("POST", f"/api/job/{b}/first", {}), (200, {"ok": True}))
+        self.assertEqual(self.order(), [a, b, c], "déjà en tête : rien ne bouge")
+        self.assertEqual(call("POST", f"/api/job/{a}/first", {})[0], 409)
+        self.assertEqual(call("POST", "/api/job/inconnu/first", {})[0], 404)
+        self.assertEqual(call("POST", "/api/lot/inconnu/first", {})[0], 404)
+        bench.release()
+        wait_job(c)
+        self.assertEqual(call("POST", f"/api/job/{c}/first", {})[0], 409)
+
+    def test_moving_a_lot_moves_what_still_waits_in_its_order(self):
+        a, b = self.held_queue("b")
+        lot = generate("lot", count=3)
+        ids = [j["id"] for j in lot["jobs"]]
+        call("POST", f"/api/job/{ids[0]}/cancel")
+        self.assertEqual(call("POST", f"/api/lot/{lot['lot']['id']}/first", {}), (200, {"ok": True}))
+        self.assertEqual(self.order(), [a, ids[1], ids[2], b])
+        self.assertEqual([bench.job(i)["queue_position"] for i in (ids[1], ids[2], b)], [1, 2, 3])
+        bench.release()
+        done = [wait_job(i) for i in (a, b, ids[1], ids[2])]
+        self.assertEqual([j["id"] for j in sorted(done, key=lambda j: j["started"])], [a, ids[1], ids[2], b])
+
+    def test_a_lot_where_nothing_waits_any_more_cannot_move(self):
+        a, b = self.held_queue("b")
+        lot = generate("lot", count=2)
+        call("POST", f"/api/lot/{lot['lot']['id']}/cancel")
+        self.assertEqual(call("POST", f"/api/lot/{lot['lot']['id']}/first", {})[0], 409)
+        bench.release()
+        wait_job(b)
+
+    def test_cancelling_after_a_move_lets_the_others_run_and_notifies_the_lot_once(self):
+        with bench.capture_push() as sent:
+            a, b = self.held_queue("b")
+            lot = generate("lot", count=3)
+            ids = [j["id"] for j in lot["jobs"]]
+            call("POST", f"/api/job/{ids[2]}/first", {})
+            call("POST", f"/api/job/{ids[2]}/cancel")
+            bench.release()
+            self.assertEqual([wait_job(i)["status"] for i in (a, b, *ids)],
+                             ["done", "done", "done", "done", "cancelled"])
+            bench.wait_idle()
+            lots = [m for m in sent.decided if m["body"].startswith("Lot de 3 images")]
+            self.assertEqual((len(lots), lots[0]["title"]), (1, "2 images prêtes"), sent.decided)
+
+    def test_a_move_writes_nothing_to_the_server_logs(self):
+        a, b, c = self.held_queue("b", "c")
+        lot = generate("lot", count=2)["lot"]["id"]
+        before = len(bench.LOG)
+        call("POST", f"/api/job/{c}/first", {})
+        call("POST", f"/api/lot/{lot}/first", {})
+        self.assertEqual(bench.LOG[before:], [])
+        bench.release()
+        wait_job(b)
+
+
 class QueueListTest(bench.BenchCase):
     def test_status_lists_the_queue_running_first(self):
         a = generate("SLOW=0.2 the running one with a rather long prompt that goes on and on and on, far beyond eighty characters")["id"]
@@ -144,6 +222,44 @@ class SpacesQueueTest(bench.BenchCase):
         self.assertEqual([(e["kind"], e["position"]) for e in pub["queue"]], [("incognito", 1), ("normal", 2)])
         for j in (p1["id"], p2["id"]):
             call("POST", f"/api/job/{j}/cancel", private=self.session)
+
+    def test_moving_a_private_generation_needs_the_private_space_and_public_ones_pass_hidden_work(self):
+        a = generate("HOLD zq9public running")["id"]
+        wait_job(a, ("running",))
+        p1 = self.private("zq9secret first")["id"]
+        i = generate("zq9incognito", incognito=True)["id"]
+        p2 = self.private("zq9secret second")["id"]
+        n = generate("zq9public waiting")["id"]
+        for kw in ({}, {"remote": True}):            # hors de l'espace privé : inconnue
+            self.assertEqual(call("POST", f"/api/job/{p1}/first", {}, **kw)[0], 404)
+        self.assertEqual(call("POST", f"/api/job/{n}/first", {})[0], 200)
+        hidden = [e["estimate"] for e in self.status(private=True)["queue"]]
+        pub = self.status()["queue"]
+        self.assertEqual([(e.get("id"), e["position"]) for e in pub], [(a, 0), (n, 1), (None, 2)])
+        self.assertEqual(pub[1]["ahead"], 0, "plus rien de caché devant la normale passée en tête")
+        self.assertAlmostEqual(pub[2]["ahead"], hidden[0], delta=0.2)
+        priv = self.status(private=True)["queue"]
+        self.assertEqual([(e["id"], e["position"]) for e in priv], [(p1, 1), (p2, 2)])
+        self.assertAlmostEqual(priv[0]["ahead"], pub[1]["estimate"] + pub[0]["estimate"] - pub[0]["elapsed"], delta=1.5)
+        self.assertEqual(call("POST", f"/api/job/{p2}/first", {}, private=self.session)[0], 200)
+        self.assertEqual([e["id"] for e in self.status(private=True)["queue"]], [p2, p1])
+        self.assertEqual([e.get("id") for e in self.status()["queue"]], [a, n, None])
+        bench.release()
+        for j in (p1, p2):
+            wait_job(j, private=self.session)
+        self.assertEqual(wait_job(i)["status"], "done")
+
+    def test_outside_the_private_space_a_running_private_generation_is_unknown_not_busy(self):
+        p = self.private("HOLD zq9secret running")["id"]
+        wait_job(p, ("running",), private=self.session)
+        lot = self.private("zq9secret lot", count=2)["lot"]["id"]
+        self.assertEqual(call("POST", f"/api/job/{p}/first", {})[0], 404)
+        self.assertEqual(call("POST", f"/api/lot/{lot}/first", {})[0], 404)
+        self.assertEqual(call("POST", f"/api/job/{p}/first", {}, private=self.session)[0], 409)
+        self.assertEqual(call("POST", f"/api/lot/{lot}/first", {}, private=self.session)[0], 200)
+        call("POST", f"/api/lot/{lot}/cancel", private=self.session)
+        bench.release()
+        wait_job(p, private=self.session)
 
     def test_private_lot_shows_its_id_in_the_private_space_only(self):
         a = generate("SLOW=1 zq9public running", steps=20)["id"]

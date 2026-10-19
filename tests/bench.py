@@ -311,7 +311,7 @@ def idle():
     rangé les fichiers et décidé la notification d'un lot), et dossiers de travail des générations annulées ou
     incognito déjà supprimés."""
     jobs = list(S.jobs.values())
-    return (S.current is None and S.q.empty() and not any(j.get("status") in ("queued", "running") for j in jobs)
+    return (S.current is None and not S.pending and not any(j.get("status") in ("queued", "running") for j in jobs)
             and not any(os.path.exists(j["dir"]) for j in jobs if j.get("status") == "cancelled" or j.get("incognito")))
 
 
