@@ -4,6 +4,48 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-19 · Une seule page Créer, une page En cours pour la file et les résultats
+
+- **Contexte** : trois onglets (Créer, Éditer, Dessiner) font la même chose à une image d'entrée près ; l'image en
+  cours et le résultat s'affichent sous le compositeur ; la file d'attente, dans une feuille ouverte par la pastille du
+  haut, répète chaque image d'un lot sur sa propre ligne, donne des durées cumulées sans heure et une rangée de cercles
+  « #1 #2… » sans contenu. Demandes du porteur : « Je veux regrouper les pages créer, editer et dessiner en un »,
+  « Améliore la file d'attente sur la page En cours car avant c'était pas terrible », et « garder les promptes
+  sauvegardé dans les gategorie editer, créer, dessiner... C'est utile ».
+- **Décision** (porteur, 19/10/2026, toutes les recommandations du cadrage acceptées) : trois onglets, dans l'ordre
+  « En cours », « Créer », « Galerie » ; l'application s'ouvre sur Créer.
+  - **Créer** : un seul champ de texte (exemple selon la saisie) et un seul brouillon par espace (celui de Créer, à
+    défaut le premier non vide d'Éditer puis de Dessiner). Sans image d'entrée, génération à partir du texte ; avec
+    1 à 10, édition ; images ajoutées par le choix, le glisser-déposer ou le collage. Bouton « Dessiner » sur une seule
+    image (sans image : choix d'une image ; à plusieurs : grisé et expliqué), masque et annotation inchangés.
+    Campagne proposée dès 2 images, dessin éteint. Variantes avec ou sans image d'entrée, dessin compris, jamais en
+    campagne (le serveur lève la restriction au mode t2i). Aucune image de résultat sur la page : « Générer » mène à
+    En cours ; la saisie se vide comme avant.
+  - **En cours** : la génération en cours en grand, une seule fois (aperçus, progression, annuler) ; la file en cartes,
+    une par demande (un lot ou une campagne sur une carte, une case par image, annulation de la carte ou d'une image
+    dépliée), « prête vers HH h MM » et l'heure de fin de la file, vignette (image d'entrée, cadre aux proportions
+    demandées, icône incognito), ligne des réglages, seul « autre appareil » signalé ; « Passer en tête » (génération
+    ou lot), offert à qui peut l'annuler. Puis les terminées de la page (au plus 12, lots en grille, « × » et « Tout
+    retirer », échecs avec leur message et « Relancer », vidées au rechargement). Message « Image prête » ou « Lot
+    prêt » quand on est ailleurs dans l'application.
+  - **Navigation** : pastille sur l'onglet En cours (nombre en cours et en attente, anneau de progression) ; la
+    pastille du haut mène à En cours quand une génération tourne, sinon au panneau Moteur ; la feuille « File
+    d'attente » et la rangée « #1 #2… » disparaissent.
+  - **Gestes** : « Éditer » ajoute l'image à la saisie ; « Dessiner » et « Reprendre » (désormais texte, images
+    d'entrée et dessin, sans le tracé, qui n'est pas gardé) remplacent la saisie, après confirmation si elle n'est pas
+    vide ; « Relancer » refait la même demande avec une nouvelle graine.
+  - **Prompts** : catégories « Créer », « Éditer », « Dessiner » gardées ; la feuille s'ouvre filtrée sur celle de la
+    saisie (sans image, avec images, dessin actif), « Tous » à un geste ; un nouveau prompt prend la catégorie de la
+    saisie ; choisir un prompt d'une autre catégorie ne remplit que le texte.
+- **Écarté** : dessiner sur une image parmi plusieurs, les autres servant de références (jamais essayé avec le
+  moteur) ; réordonner la file par glisser (« Passer en tête » couvre le cas utile, un essai rapide bloqué derrière
+  une campagne) ; garder la saisie après « Générer » ; garder les terminées après un rechargement (la Galerie les a).
+- **Conséquences** : la file du serveur (`queue.Queue`) devient réordonnable. Une génération publique peut passer
+  devant une génération privée cachée : seule la durée d'attente de cette dernière change. La saisie n'est plus
+  propre à chaque onglet mais à chaque espace : remplace, dans « Espaces public et privé étanches » (15/10/2026), la
+  saisie « onglet par onglet » ; l'étanchéité, l'incognito et le calcul d'une seule génération à la fois ne changent
+  pas.
+
 ## 2026-10-16 · Modèle officiel par défaut, variante communautaire en option
 
 - **Contexte** : le dépôt est public. Depuis le renommage du dépôt Hugging Face d'abenzerps (12/10/2026), `setup.py`
