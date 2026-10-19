@@ -202,8 +202,7 @@
   .ratios { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
   .chips5 { display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; }
   .chips4 { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
-  body:not(.m-t2i) #countRow { display:none; }
-  #setSheet.camp :is(#fmtHead, #ratioOpts) { display:none; }   /* campagne : chaque photo a son format */
+  #setSheet.camp :is(#fmtHead, #ratioOpts, #countRow) { display:none; }   /* campagne : chaque photo a son format, et pas de variantes */
   .pane-head b { font-weight:inherit; }
   .opt { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; min-width:0; padding:10px 2px 9px;
     border-radius:16px; border:1px solid var(--rim); background:var(--field); color:var(--ink2); cursor:pointer; transition:background .2s, color .2s, border-color .2s; }
@@ -810,7 +809,7 @@ function dimsExact(iw, ih, scale){ const px=MAX_PIXELS*scale*scale, r=iw/ih, h0=
   return [best.w, best.h]; }
 function dimsFor(key, scale){ const im=singleImage(); if(key==='image' && im) return dimsExact(im.w, im.h, scale); const [w,h]=RATIOS[key in RATIOS ? key : '1:1']; return [round32(w*scale), round32(h*scale)]; }
 // réglages choisis, retenus par ce navigateur d'une visite à l'autre
-const opt = { ratio:'1:1', res:'high', steps:'max', count:1 };   // count : images d'un lot de variantes (mode Créer)
+const opt = { ratio:'1:1', res:'high', steps:'max', count:1 };   // count : images d'un lot de variantes (hors campagne)
 const savedOpt = (()=>{ try{ const o=JSON.parse(localStorage.getItem('qwen-opt')||'{}');
   if(o.v!==2){ delete o.res; delete o.steps; delete o.preview; }   // retenus avant les défauts High, 40 étapes et aperçus : remis une fois à ces défauts
   return o; }catch(e){ return {}; } })();
@@ -821,8 +820,9 @@ function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt
 const resSel = () => RES.find(p=>p.k===opt.res) || RES[1];
 const stepsSel = () => STEPS.find(p=>p.k===opt.steps) || STEPS[1];
 function currentDims(){ return dimsFor(opt.ratio, resSel().scale); }
-const variants = () => mode==='t2i' ? opt.count : 1;   // images de la prochaine demande
-const inCampaign = () => mode==='edit' && campaignOn && editImages.length>0;
+const campaignMode = () => mode==='edit' && campaignOn;   // saisie en campagne (Éditer, interrupteur actif)
+const variants = () => campaignMode() ? 1 : opt.count;   // images de la prochaine demande (une campagne : une par photo)
+const inCampaign = () => campaignMode() && editImages.length>0;
 // campagne : chaque photo est éditée seule, au format pris en charge le plus proche de sa forme, à la résolution choisie
 function photoDims(im){ const [rw,rh]=RATIOS[closestRatio(im.w, im.h)], sc=resSel().scale; return [round32(rw*sc), round32(rh*sc)]; }
 function campaignPlan(){ return editImages.map(im=>{ const [w,h]=photoDims(im); return { im, w, h, inp:{ refs:[refPx(im.w, im.h, w, h)], init:0 } }; }); }
@@ -855,7 +855,7 @@ function refreshChoices(){
   const steps=stepsSel().steps; const [w,h]=currentDims(); const inp=inputsFor(w, h); const n=variants();
   const plan=inCampaign() ? campaignPlan() : null;  // campagne : estimation photo par photo
   const total=(st, prev)=>plan ? plan.reduce((t, x)=>t+parts(x.w, x.h, st, x.inp, prev).total, 0) : n*parts(w, h, st, inp, prev).total;
-  const campMode=mode==='edit' && campaignOn; $('setSheet').classList.toggle('camp', campMode);
+  const campMode=campaignMode(); $('setSheet').classList.toggle('camp', campMode);
   $('resOpts').innerHTML = RES.map(p=>{ const on=p.k===opt.res;
     return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}"><b>${p.label}</b></button>`; }).join('');
   const approx = s => E ? '≈ '+fmt(s) : '…';     // avant le premier /api/status, pas de coefficients
@@ -1060,7 +1060,7 @@ function paintedReference(w,h,opaque){ const a=document.createElement('canvas');
 function buildRequest(){
   const [w,h]=currentDims(); const steps=stepsSel().steps;
   const body={ mode, prompt:'', width:w, height:h, steps, cfg:CFG, seed:-1, preview:$("previewChk").checked, preview_interval:PREVIEW_EVERY, ref_images:[], init_image:null, mask_image:null, strength:1.0, incognito:incogOn, page:PAGE_TOKEN };
-  if(mode==='t2i'){ body.prompt=$('t2i_prompt').value.trim(); if(opt.count>1) body.count=opt.count; }   // variantes : un lot
+  if(mode==='t2i') body.prompt=$('t2i_prompt').value.trim();
   else if(mode==='edit'){ if(!editImages.length) throw new Error(campaignOn ? 'Ajoutez au moins une photo.' : 'Ajoutez au moins une image de référence.'); body.prompt=$('edit_prompt').value.trim();
     if(campaignOn){ body.campaign=campaignPlan().map(x=>({image:x.im.dataUrl, width:x.w, height:x.h})); body.width=body.campaign[0].width; body.height=body.campaign[0].height; }
     else body.ref_images=editImages.map(x=>x.dataUrl); }
@@ -1068,6 +1068,7 @@ function buildRequest(){
     if(maskMode()==='annotation'){ body.mode='annot'; body.ref_images=[paintedReference(w,h,true)]; }
     else { body.init_image=resizeDataUrl(maskImage.img,w,h); body.mask_image=exportMask(w,h); body.ref_images=[paintedReference(w,h,false)]; } }
   if(!body.prompt) throw new Error('Le texte est vide.');
+  if(variants()>1) body.count=variants();          // variantes : un lot, dans tous les modes sauf la campagne
   if(inPrivate()){ body.private=true; body.incognito=false; }   // dans l'espace privé, tout part en privé
   return body;
 }
@@ -1153,6 +1154,9 @@ function saveOwn(){ const inQueue=new Set(queueState.map(e=>e.id).filter(Boolean
   const ids=[...new Set([...(inPrivate() ? ownIds() : ownIds().filter(id=>inQueue.has(id))), ...pageJobs.filter(p=>!p.incognito && !p.private && isActive(p)).map(p=>p.id)])];
   try{ localStorage.setItem('qwen-own', JSON.stringify(ids)); }catch(e){} }
 const isActive = p => ['queued','running'].includes(p.j.status);
+// lot d'une campagne (une image par photo) ou de variantes : son marqueur campaign ; un lot d'avant le marqueur (journal
+// ancien, serveur pas encore relancé) : campagne s'il est du mode Éditer
+const isCampaignLot = (lot, lotMode) => !!lot && (lot.campaign ?? lotMode==='edit');
 // génération de l'espace affiché (privée dans l'espace privé, normale ou incognito hors de lui) : la zone de résultat,
 // la pellicule, la file et l'île ne parlent que de celles-là, comme /api/status. Dans l'espace privé, les générations
 // publiques de la page restent suivies en mémoire, hors de l'écran ; les privées quittent la page à la sortie.
@@ -1220,7 +1224,7 @@ function show(p, reveal){                          // met une génération de la
   shown=p||null; renderStrip(); syncButtons(); $('lotGrid').hidden=true;
   if(!p){ lastResult=null; return hideResult(); }
   const grid=gridOf(p); if(grid) return showGrid(grid);
-  $('lotBadge').hidden=!p.lot; if(p.lot) $('lotBadge').textContent=`${p.tab==='edit' ? 'Photo' : 'Image'} ${p.lot.rank} sur ${p.lot.size}`;
+  $('lotBadge').hidden=!p.lot; if(p.lot) $('lotBadge').textContent=`${isCampaignLot(p.lot, p.tab) ? 'Photo' : 'Image'} ${p.lot.rank} sur ${p.lot.size}`;
   const img=$('stageImg'), was=img.job; img.job=p.id;   // img.job : génération dont la zone montre l'aperçu ou l'image
   if(p.result){ const r=p.result;   // image incognito vue seulement une fois peinte
     showResult(r.name, ...(r.dims||[0, 0]), {reveal, inc:r.blob || r.item ? r : null, keep:was===p.id, shown:markSeen});
@@ -1236,7 +1240,7 @@ function showGrid(items){                          // lot terminé : ses images 
   g.hidden=false;                                  // chaque case à la forme de son image (une campagne en mélange plusieurs)
   g.innerHTML=items.map((q, i)=>`<div class="cell" style="--ar:${q.result.dims ? q.result.dims[0]/q.result.dims[1] : w/h}"><button data-k="${i}" aria-label="Ouvrir l'image ${q.lot.rank}"><img src="${q.result.blob ? q.result.url : q.result.item ? privThumb(q.result.item) : '/api/thumb?name='+encodeURIComponent(q.result.name)}" alt=""></button><span>${q.lot.rank}</span>`
     + (incog ? `<a href="${q.result.url}" download="${esc(q.result.name)}" aria-label="Télécharger l'image ${q.lot.rank}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg></a>` : '') + '</div>').join('');
-  const secs=items.reduce((t, q)=>t+(q.j.seconds||0), 0), size=first.lot.size, camp=first.tab==='edit';
+  const secs=items.reduce((t, q)=>t+(q.j.seconds||0), 0), size=first.lot.size, camp=isCampaignLot(first.lot, first.tab);
   const dims=new Set(items.map(q=>(q.result.dims||[]).join('×')));
   setMeta(first.prompt, [items.length+(items.length<size ? ' sur '+size : '')+' images', fmt(secs), dims.size===1 ? [...dims][0] : '', (first.j.total||'?')+' étapes'],
     incog ? 'Incognito · non enregistrées : téléchargez celles à garder' : (first.private ? 'Rangées chiffrées dans l\'espace privé · ' : '')
@@ -1319,8 +1323,8 @@ function renderQueue(){
   $('queueList').innerHTML=q.map(e=>{ const p=ownOf(e), incog=e.kind==='incognito'; wait+=entryLeft(e);
     const pic = p && p.thumb ? `<img src="${p.thumb}" alt="">`
       : `<span class="qicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${QICON[incog ? 'incognito' : tabOf(e.mode)]}</svg></span>`;
-    const camp=e.mode==='edit' || !!(p && p.tab==='edit');   // lot du mode Éditer : une campagne (incognito : connue de sa page)
-    const sub=[e.status==='running' ? 'En cours' : ordinal(e.position)+' en attente', incog || e.lot ? '' : MODE_LABELS[e.mode]||e.mode, e.lot ? `${camp ? 'photo' : 'image'} ${e.lot.rank}/${e.lot.size}` : '', 'prête dans ≈ '+fmt(wait+(e.ahead||0)), p && !p.adopted ? 'cet appareil' : ''];
+    const camp=isCampaignLot(e.lot, e.mode || (p && p.tab));
+    const sub=[e.status==='running' ? 'En cours' : ordinal(e.position)+' en attente', incog ? '' : MODE_LABELS[e.mode]||e.mode, e.lot ? `${camp ? 'photo' : 'image'} ${e.lot.rank}/${e.lot.size}` : '', 'prête dans ≈ '+fmt(wait+(e.ahead||0)), p && !p.adopted ? 'cet appareil' : ''];
     // lot : un en-tête avant chaque suite de ses images dans la file (une image passée en tête l'en sépare), avec
     // l'annulation de tout le lot là où l'appareil y a droit (lot normal ou privé : partout dans son espace ; lot
     // incognito : sa page seulement, seule à connaître son identifiant)
@@ -1606,9 +1610,10 @@ function openViewer(i, list=vList){
     it.lot ? `image ${it.lot.rank}/${it.lot.size}` : '', it.seed!=null && it.seed>=0 ? 'graine '+it.seed : '']
     .filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('');
   $('vDl').href=dlOf(it); $('vDl').download=it.name; renderInputsButton(it);
-  // garder la meilleure de variantes : seulement s'il en reste d'autres sur le Mac (ni campagne, ni image incognito)
+  // garder la meilleure de variantes, de tout mode : seulement s'il en reste d'autres sur le Mac (ni campagne, ni
+  // image incognito)
   const members=lotMembers(it);
-  $('vKeep').hidden=!(it.lot && it.mode==='t2i' && !it.url && members.length>1);
+  $('vKeep').hidden=!(it.lot && !isCampaignLot(it.lot, it.mode) && !it.url && members.length>1);
   $('vLot').hidden=members.length<2; $('vLotOpen').textContent=`Voir le lot (${members.length})`;
   $('vDelete').querySelector('span').textContent = it.url ? 'Effacer' : 'Supprimer';
   if(!v.classList.contains('on')){ v.classList.remove('immersive'); v.classList.add('on'); document.body.style.overflow='hidden'; }
@@ -1754,7 +1759,7 @@ function lotMembers(it){ if(!it || !it.lot) return [];
   return (it.page ? vList : histItems).filter(x=>x.lot && x.lot.id===it.lot.id).sort((a, b)=>a.lot.rank-b.lot.rank); }
 function openLot(){                               // « Voir le lot » : ses images côte à côte, un appui en ouvre une en grand
   const items=lotMembers(vList[vIndex]); if(!items.length) return; const n=items.length, s=n>1 ? 's' : '';
-  $('lotTitle').textContent = items[0].mode==='edit' ? `Campagne de ${n} photo${s}` : `Lot de ${n} image${s}`;
+  $('lotTitle').textContent = isCampaignLot(items[0].lot, items[0].mode) ? `Campagne de ${n} photo${s}` : `Lot de ${n} image${s}`;
   const g=$('lotSheetGrid');                       // chaque vignette à la forme de son image (une campagne en mélange plusieurs)
   g.innerHTML=items.map((x, i)=>`<button data-k="${i}" style="--ar:${x.width && x.height ? x.width/x.height : 1}" aria-label="Ouvrir l'image ${x.lot.rank}"><img src="${thumbOf(x)}" alt=""><b>${x.lot.rank}/${x.lot.size}</b></button>`).join('');
   g.onclick=e=>{ const b=e.target.closest('[data-k]'); if(!b) return; closeSheet(); openViewer(+b.dataset.k, items); };

@@ -37,6 +37,7 @@ class PrivateLotTest(bench.BenchCase):
         self.assertNotIn("priv", str(sent).lower())
         items = self.history()
         self.assertEqual(sorted(i["lot"]["rank"] for i in items), [1, 2, 3])
+        self.assertFalse(any(i["lot"]["campaign"] for i in items))
         self.assertEqual(len({i["seed"] for i in items}), 3)
         self.assertEqual((files("outputs", "*.png"), bench.journal(), files("jobs", "*")), ([], [], []))
         for fp in all_files():
@@ -61,6 +62,7 @@ class PrivateLotTest(bench.BenchCase):
         self.assertEqual(sent[0]["title"], "2 images prêtes")
         items = sorted(self.history(), key=lambda i: i["lot"]["rank"])
         self.assertEqual([i["inputs"] for i in items], [["ref_1.png"], ["ref_1.png"]])
+        self.assertEqual([i["lot"]["campaign"] for i in items], [True, True])
         for item, photo in zip(items, photos):
             self.assertEqual(call("GET", f"/api/private/input?id={item['id']}&file=ref_1.png", private=self.session)[1], photo)
 

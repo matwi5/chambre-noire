@@ -121,6 +121,7 @@ class QueueListTest(bench.BenchCase):
         self.assertEqual([(e["id"], e["status"], e["position"]) for e in q], [(a, "running", 0), (b, "queued", 1)])
         self.assertEqual(q[1]["mode"], "edit")
         self.assertEqual(q[1]["prompt"], "the waiting one")
+        self.assertEqual([(e["width"], e["height"], e["steps"]) for e in q], [(512, 512, 4)] * 2)
         self.assertLessEqual(len(q[0]["prompt"]), 81)
         self.assertTrue(all(e["estimate"] > 0 for e in q))
         self.assertIsNone(q[0]["lot"])
@@ -266,7 +267,8 @@ class SpacesQueueTest(bench.BenchCase):
         wait_job(a, ("running",))
         lot = self.private("zq9lot", count=2)["lot"]
         q = self.status(private=True)["queue"]
-        self.assertEqual([e["lot"] for e in q], [{"id": lot["id"], "rank": 1, "size": 2}, {"id": lot["id"], "rank": 2, "size": 2}])
+        self.assertEqual([e["lot"] for e in q],
+                         [{"id": lot["id"], "rank": k, "size": 2, "campaign": False} for k in (1, 2)])
         self.assertNotIn(lot["id"], str(self.status()))
         self.assertEqual(call("POST", f"/api/lot/{lot['id']}/cancel", private=self.session)[1]["cancelled"], 2)
         call("POST", f"/api/job/{a}/cancel")

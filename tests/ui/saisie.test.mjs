@@ -1,5 +1,5 @@
 // Saisie, dans la vue du téléphone : photos choisies d'un coup en Éditer, champs vidés après « Générer », saisie propre
-// à chaque espace (public, privé).
+// à chaque espace (public, privé), variantes en Éditer et en Dessiner hors campagne.
 //   node --test tests/ui/saisie.test.mjs   (ou : venv/bin/python tests/check.py --ui)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -163,6 +163,43 @@ test('Éditer en campagne : photos vidées, interrupteur Campagne inchangé', as
   assert.equal(await page.eval(`editImages.length + $('edit_thumbs').children.length`), 0);
   assert.equal(await page.eval(`campaignOn && $('campChk').checked`), true);
   await page.click('#campChk');                    // réglage retenu par le navigateur : remis comme avant
+  page.assertNoErrors();
+});
+
+test('Variantes : proposées en Éditer et en Dessiner hors campagne, la demande part en lot', async () => {
+  const countShown = () => page.eval(`getComputedStyle($('countRow')).display !== 'none'`);
+  const pick = k => page.eval(`$('countOpts').querySelector('[data-k="${k}"]').click()`);
+  // lot de la dernière demande : sa taille et son marqueur de campagne
+  const lastLot = () => page.eval(`(({ size, campaign }) => ({ size, campaign }))(pageJobs.at(-1).lot)`);
+  await freshEdit();
+  await page.setFiles('#edit_files', photos(1));
+  await page.waitFor(`editImages.length === 1`, { what: 'une image' });
+  assert.equal(await countShown(), true, 'rangée des images en Éditer');
+  await pick(2);
+  await type('edit', 'deux essais d\'un chapeau');
+  await generate();
+  assert.deepEqual(await lastLot(), { size: 2, campaign: false });
+  // campagne : la rangée disparaît et le nombre choisi est ignoré (une image par photo)
+  await page.click('#campChk');
+  await page.waitFor(`campaignOn`, { what: 'campagne activée' });
+  assert.equal(await countShown(), false, 'pas de variantes en campagne');
+  await page.setFiles('#edit_files', photos(3));
+  await page.waitFor(`editImages.length === 3`, { what: 'trois photos' });
+  await type('edit', 'voiture bleue');
+  await generate();
+  assert.deepEqual(await lastLot(), { size: 3, campaign: true });
+  await fresh('mask');
+  await page.setFiles('#mask_file', photos(1));
+  await page.waitFor(`!!maskImage`, { what: 'image à retoucher chargée' });
+  assert.equal(await countShown(), true, 'rangée des images en Dessiner');
+  await pick(3);
+  await paint();
+  await type('mask', 'une fenêtre ouverte');
+  await generate();
+  assert.deepEqual(await lastLot(), { size: 3, campaign: false });
+  const masks = `pageJobs.slice(-3)`;
+  assert.equal(await page.eval(`${masks}.length === 3 && ${masks}.every(p => p.tab === 'mask' && p.lot.size === 3)`),
+    true);
   page.assertNoErrors();
 });
 

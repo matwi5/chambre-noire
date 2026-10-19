@@ -125,8 +125,8 @@ dernier bloc, après le HTML.
     jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
     de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
   - « générations de la page, zone de résultat, île et file » : `pageJobs` (générations lancées par cette page),
-    `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `lotOf`, `gridOf`, `show`,
-    `showGrid`, `renderStrip`, `renderIsland`, `onIsland` (file non vide : `#queueSheet`, sinon `#engineSheet`),
+    `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `isCampaignLot`, `lotOf`, `gridOf`,
+    `show`, `showGrid`, `renderStrip`, `renderIsland`, `onIsland` (file non vide : `#queueSheet`, sinon `#engineSheet`),
     `renderQueue` (annulation et « Passer en tête » par ligne), `ownOf` (ligne de `queue` → génération de la page :
     par identifiant, ou par l'étiquette `tag` d'une incognito), `ofSpace`, `spaceActive`, `firstActive` (celle qui
     tourne, sinon la prochaine dans l'ordre de calcul) et `oldestActive` (la même, parmi les générations de l'espace
@@ -183,13 +183,15 @@ invariants ».
   (`delete_output`). Toute écriture du journal passe sous `JOURNAL_LOCK` (`append_journal`, en fin de génération). Une
   génération annulée (en cours ou en file) ne laisse rien : `discard_cancelled` supprime son dossier de travail et une
   image finale déjà écrite. Le statut `cancelled` est posé avant que le moteur soit arrêté.
-- **Lots** (variantes : `count` de 2 à 4, mode Créer ; campagne : `campaign`, 2 à 10 photos avec leurs dimensions,
-  mode Éditer) : `expand_request` en tire une demande par image, `/api/generate` une génération par demande
-  (`new_job`), reliées par `job["lot"]` (`id`, `rank`, `size`) et gardées dans `S.lots` même quand une génération
-  incognito quitte `S.jobs`. Les graines à -1 sont tirées par le serveur (`draw_seeds`) pour être écrites au journal.
-  Une seule notification par lot (`notify_lot`), envoyée par `end_of_lot` depuis le `finally` de `worker()` quand plus
-  aucune génération du lot n'est active ; le lot quitte alors `S.lots`, ce qui empêche un doublon quand une génération
-  annulée en file passe ensuite.
+- **Lots** (variantes : `count` de 2 à 4, tous les modes, jamais avec une campagne ; campagne : `campaign`, 2 à 10
+  photos avec leurs dimensions, mode Éditer) : `expand_request` en tire une demande par image, `/api/generate` une
+  génération par demande (`new_job`), reliées par `job["lot"]` (`id`, `rank`, `size`, et `campaign`, le marqueur qui
+  distingue une campagne de variantes, posé par `/api/generate` : le mode ne le dit plus) et gardées dans `S.lots`
+  même quand une génération incognito quitte `S.jobs`. Côté interface, `isCampaignLot` lit le marqueur (un lot d'avant
+  lui : campagne s'il est du mode `edit`) pour le titre d'un lot, son repère et « Garder celle-ci ». Les graines à -1
+  sont tirées par le serveur (`draw_seeds`) pour être écrites au journal. Une seule notification par lot (`notify_lot`),
+  envoyée par `end_of_lot` depuis le `finally` de `worker()` quand plus aucune génération du lot n'est active ; le lot
+  quitte alors `S.lots`, ce qui empêche un doublon quand une génération annulée en file passe ensuite.
 - **Notifications** : `notify_job` part de `worker()`, dans un thread, à la fin d'un job hors lot terminé ou en échec,
   vers chaque abonnement de `tools/push_subscriptions.json`. Le service worker (`tools/ui/sw.js`) n'affiche la
   notification que si aucune fenêtre de l'application n'est visible. Tester sans réseau : `bench.capture_push()`, ou

@@ -228,7 +228,7 @@ Sous le texte, trois pastilles résument le format, la résolution et les étape
 | **Format** | 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16, et « Image » (les proportions de l'image) quand une seule image est chargée | Proportions de l'image produite |
 | **Résolution** | 360p (512×512) · 540p (768×768) · **720p** (1024×1024, par défaut) · 1080p (1536×1536) · 1440p (2048×2048, 2K natif du modèle) | Nombre de pixels, nommé d'après le format vidéo qui en compte autant (720p : ≈ 0,9 à 1 million de pixels) ; les dimensions exactes, qui dépendent du format, s'affichent en bas du panneau |
 | **Étapes** | Low 8 · Medium 12 · High 20 · XHigh 30 · **Max 40** (par défaut, réglage officiel du modèle) | Finesse des détails ; chaque option affiche le **temps estimé** |
-| **Images** (Créer seulement) | **1**, 2, 3 ou 4 | Nombre de variantes du même prompt, chacune avec sa graine (voir [Créer](#créer-texte--image)) ; le temps affiché est celui de toutes les images |
+| **Images** (hors campagne) | **1**, 2, 3 ou 4 | Nombre de variantes du même prompt, chacune avec sa graine, en Créer, Éditer ou Dessiner (voir [Créer](#créer-texte--image)) ; le temps affiché est celui de toutes les images |
 | **Aperçu toutes les 5 étapes** | interrupteur, activé par défaut | Montre l'image en cours de formation ; coût affiché à côté |
 
 Le bouton **Générer** affiche le temps estimé ; à sa droite, le bouton **Incognito** (icône de chapeau et lunettes)
@@ -288,6 +288,8 @@ de l'image en cours n'annule que celle-ci, et une image en échec n'arrête pas 
 remplace l'image unique : un appui ouvre une image en grand, avec sa graine, et **Garder celle-ci** supprime les autres
 images du lot après confirmation. Sans choix, toutes les images restent dans la galerie. En incognito, la grille n'a
 pas **Garder celle-ci** : chaque image a son bouton de téléchargement, et elles sont perdues une fois la grille quittée.
+Les variantes marchent de la même façon en Éditer (hors campagne) et en Dessiner : plusieurs essais de la même
+édition, chacun avec sa graine, à départager par **Garder celle-ci**.
 
 ### Éditer
 
@@ -309,8 +311,9 @@ du format, et le choix du format disparaît des Réglages : chaque image prend l
 charge le plus proche, à la résolution choisie, côtés multiples de 32 ; une photo en portrait reste en portrait). Le
 temps estimé additionne les photos une à une. La campagne est un lot comme les variantes : suivie image par image
 (« Photo 2 sur 6 »), annulable en entier depuis la file d'attente, une seule notification à la fin, une grille des
-images, et chaque image garde sa photo comme image d'entrée dans la galerie. Interrupteur désactivé, l'édition reste
-celle d'avant (1 à 10 références combinées en une image).
+images, et chaque image garde sa photo comme image d'entrée dans la galerie ; elle n'a pas de variantes (le choix du
+nombre d'images disparaît) ni de **Garder celle-ci**, chaque image venant d'une photo différente. Interrupteur
+désactivé, l'édition reste celle d'avant (1 à 10 références combinées en une image).
 
 ### Dessiner (dessin guidé)
 
@@ -344,11 +347,11 @@ la première image d'entrée dès que l'image est affichée ; en revenant à la 
 réapparaît pas le temps du chargement. Pendant une génération, chaque aperçu reste à l'écran jusqu'à ce que le
 suivant soit prêt.
 
-Les images d'un même lot (variantes) portent un repère « 2/4 » (leur rang dans le lot) tant qu'il en reste au moins
-deux dans la galerie. Dans la visionneuse, **Voir le lot** montre les images du lot côte à côte ; un appui en ouvre une
-en grand, et l'on passe de l'une à l'autre en glissant. **Tout télécharger** enchaîne le téléchargement de chaque
-image du lot (une par fichier, pas d'archive ; le navigateur peut demander d'autoriser plusieurs téléchargements), et
-**Garder celle-ci** supprime les autres images du lot après confirmation.
+Les images d'un même lot (variantes ou campagne) portent un repère « 2/4 » (leur rang dans le lot) tant qu'il en reste
+au moins deux dans la galerie. Dans la visionneuse, **Voir le lot** montre les images du lot côte à côte ; un appui en
+ouvre une en grand, et l'on passe de l'une à l'autre en glissant. **Tout télécharger** enchaîne le téléchargement de
+chaque image du lot (une par fichier, pas d'archive ; le navigateur peut demander d'autoriser plusieurs
+téléchargements), et **Garder celle-ci** (variantes seulement) supprime les autres images du lot après confirmation.
 
 Pour une édition ou un dessin guidé, le bouton **Image d'entrée** (ou **N images d'entrée**) ouvre les images de
 départ en grand, une par une, avec les mêmes gestes que la visionneuse : pincer pour zoomer (molette sur ordinateur),
@@ -716,7 +719,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `private.unlocked` ; chaque entrée porte `status`, `position` (rang dans l'espace, comme `queue_position`), `ahead`
   (durée restante estimée, en secondes, des générations de l'autre espace placées devant elle : ce qui reste de celle en
   cours, l'estimation des autres ; 0 sans travail caché), `lot`, `estimate` et `elapsed` en secondes, `kind` (`normal`,
-  `incognito` ou `private`), et pour une génération normale ou privée `id`, `mode` et le début du `prompt` ; une
+  `incognito` ou `private`), et pour une génération normale ou privée `id`, `mode`, le début du `prompt`, et `width`,
+  `height` et `steps` de la demande ; une
   génération incognito porte à la place `page`, le jeton opaque que sa page a envoyé dans `/api/generate` (`"page"`, 1 à
   64 lettres, chiffres, `-` ou `_`), pour qu'elle y reconnaisse ses lignes, et `tag`, son étiquette tirée au hasard
   (distincte de son identifiant), que seule la réponse de `/api/generate` donne à sa page (elle y reconnaît sa ligne
@@ -725,12 +729,15 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   dernière génération normale, `null` dans l'espace privé ; `busy` : le Mac calcule, quel que soit l'espace ; `version`
   : `commit`, `date` et `branch` du dernier commit du dossier servi (`null` hors git) et `server`, empreinte de
   `tools/launch.py` et `tools/estimate.py`, relus toutes les 30 s ; `server_version` : la même chose au lancement du
-  serveur, `null` sans `main()`) ; lots : `"count"` de 2 à 4 dans `/api/generate` (mode Créer, `"mode": "t2i"` ; 1 :
-  génération seule) crée autant de générations ; `"campaign": [{"image": <data URL>, "width", "height"}, …]` (1 à 10
-  photos, mode Éditer, `"mode": "edit"`, sans `ref_images`) crée une édition par photo, avec cette seule photo en
-  référence et à ses dimensions (une seule photo : génération seule) ; les générations d'un lot passent à la suite dans
-  la file, et la réponse devient `{"lot": {"id", "size"}, "jobs": [...]}` ; chaque génération porte `lot` (`id`, `rank`,
-  `size`), aussi écrit dans `outputs/journal.jsonl` (un lot incognito ne montre dans `queue` que `rank` et `size`) ;
+  serveur, `null` sans `main()`) ; lots : `"count"` de 2 à 4 dans `/api/generate` (tous les modes ; 1 : génération seule
+  ; 400 « count : pas de variantes dans une campagne » au-delà de 1 avec `campaign`) crée autant de générations ;
+  `"campaign": [{"image": <data URL>, "width", "height"}, …]` (1 à 10 photos, mode Éditer, `"mode": "edit"`, sans
+  `ref_images`) crée une édition par photo, avec cette seule photo en référence et à ses dimensions (une seule photo :
+  génération seule) ; les générations d'un lot passent à la suite dans la file, et la réponse devient `{"lot": {"id",
+  "size", "campaign"}, "jobs": [...]}` ; chaque génération porte `lot` (`id`, `rank`, `size` et `campaign` : vrai pour
+  une campagne, faux pour des variantes, quel que soit le mode ; une image d'avant ce marqueur n'en a pas et un lot du
+  mode `edit` y compte comme une campagne), aussi écrit dans `outputs/journal.jsonl`, dans la galerie et dans les
+  réglages d'une image privée (un lot incognito ne montre dans `queue` que `rank`, `size` et `campaign`) ;
   `POST /api/lot/<id>/cancel` annule toutes ses générations non terminées (404 une fois le lot fini). Graine `-1` : le
   serveur la tire lui-même (distincte pour chaque image d'un lot) et l'écrit au journal ; graine choisie avec `count` :
   graine, graine + 1… ; incognito (`"incognito": true` dans `/api/generate` ; identifiant de 32 caractères hexadécimaux
@@ -738,7 +745,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   après la fin de la génération si elle n'est jamais récupérée), `POST /api/job/<id>/forget` (l'oublier, ou arrêter la
   génération), `POST /api/forget {"ids": […]}` (toutes les générations incognito d'une page, à sa fermeture ;
   `current_job` de `/api/status` reste vide pendant une génération incognito) ; historique : `GET /api/history` (une
-  entrée par image, avec ses réglages, sa `seed` et son `lot` : `id`, `rank`, `size`, ou `null` pour une image seule),
+  entrée par image, avec ses réglages, sa `seed` et son `lot` : `id`, `rank`, `size`, `campaign`, ou `null` pour une
+  image seule),
   `GET /api/thumb?name=…` (miniatures gardées dans `outputs/.thumbs/`), `GET /api/result?name=…&download=1`, `POST
   /api/delete` ; images d'entrée d'une image : `GET /api/input?name=…&file=init.png|ref_N.png[&thumb=1][&download=1]`
   (gardées dans `outputs/.inputs/<image>/`) ; prompts enregistrés : `GET /api/prompts` (`{"saved": [...], "types":

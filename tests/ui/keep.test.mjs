@@ -1,6 +1,7 @@
 // Régression « Garder celle-ci » (corrigée en 8ce12d4) : la galerie rechargée pendant que la visionneuse est ouverte
 // (une génération de la page qui se termine) ne doit pas faire supprimer l'image gardée avec les autres du lot.
 // La comparaison se fait par nom ; par identité d'objet, l'image gardée ne correspondait plus et partait aussi.
+// « Garder celle-ci » est offert pour des variantes de tout mode (édition comprise), jamais pour une campagne.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome } from './driver.mjs';
@@ -48,5 +49,38 @@ test('garder l\'image 2 d\'un lot de variantes après un rechargement de la gale
     { what: 'suppression terminée' });
 
   assert.deepEqual(await lotNames(lot), [names[1]], 'seule l\'image gardée reste');
+  page.assertNoErrors();
+});
+
+// lot lancé hors de l'interface (comme depuis un autre appareil), terminé ; renvoie l'identifiant du lot
+async function launchLot(extra) {
+  const image = await page.eval(`(() => { const c = document.createElement('canvas'); c.width = c.height = 64;
+    return c.toDataURL('image/png'); })()`);
+  const body = { prompt: 'à départager', width: 512, height: 512, steps: 2, cfg: 1, seed: -1, preview: false,
+    preview_interval: 5, init_image: null, mask_image: null, strength: 1, ...extra(image) };
+  const reply = await page.eval(`postJson('/api/generate', ${JSON.stringify(body)}).then(r => r.json())`);
+  await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)`,
+    { what: 'lot terminé' });
+  return reply.lot.id;
+}
+// « Garder celle-ci » offert sur la première image du lot, ouverte depuis la galerie
+async function keepOffered(lot) {
+  const [name] = await lotNames(lot);
+  await page.eval(`goTab('t2i'); goTab('hist')`);
+  await page.waitFor(`!!$('histGrid').querySelector('button[data-name="${name}"]')`, { what: 'image dans la galerie' });
+  await page.click(`#histGrid button[data-name="${name}"]`);
+  await page.waitFor(`$('viewer').classList.contains('on') && vList[vIndex].name === '${name}'`,
+    { what: 'visionneuse ouverte' });
+  const offered = await page.eval(`!$('vKeep').hidden`);
+  await page.eval(`closeViewer()`);
+  return offered;
+}
+
+test('« Garder celle-ci » sur des variantes d\'édition, pas sur une campagne', async () => {
+  const variants = await launchLot(image => ({ mode: 'edit', ref_images: [image], count: 2 }));
+  assert.equal(await keepOffered(variants), true, 'variantes d\'édition : garder la meilleure');
+  const campaign = await launchLot(image => ({ mode: 'edit', ref_images: [],
+    campaign: [{ image, width: 512, height: 512 }, { image, width: 512, height: 512 }] }));
+  assert.equal(await keepOffered(campaign), false, 'campagne : une image par photo, rien à départager');
   page.assertNoErrors();
 });
