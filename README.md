@@ -791,10 +791,11 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   fichier illisible (modifié à la main) n'est jamais écrasé : les routes répondent 500 tant qu'il n'est pas réparé.
 - `POST /api/generate` refuse (code 400, avec un message) une demande dont le prompt n'est pas un texte non vide, dont
   la largeur ou la hauteur n'est pas un entier de 64 à 4096, les étapes un entier de 1 à 200, ou la graine un entier
-  (-1 : au hasard), ou `count` qui n'est pas un entier de 1 à 4 ou qui accompagne un autre mode que Créer, ou une `campaign` hors du
-  mode Éditer, de plus de 10 photos, ou dont une photo n'a pas d'image ou de dimensions valides ; les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Une
-  génération qui ne peut pas se préparer (image d'entrée illisible, par exemple) échoue seule,
-  avec un message, et la file passe à la suivante.
+  (-1 : au hasard), ou `count` qui n'est pas un entier de 1 à 4 ou qui dépasse 1 avec une `campaign`, ou une
+  `campaign` hors du mode Éditer, de plus de 10 photos, ou dont une photo n'a pas d'image ou de dimensions valides ;
+  les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Une génération qui ne
+  peut pas se préparer (image d'entrée illisible, par exemple) échoue seule, avec un message, et la file passe à la
+  suivante.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés
   sous Windows (ROCm Windows ne couvre que les cartes RDNA3/RDNA4, DirectML est limité à d'anciennes versions) :
   il tournerait en CPU pur. Si vous avez une carte NVIDIA, les workflows officiels Comfy-Org

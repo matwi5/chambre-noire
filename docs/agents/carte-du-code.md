@@ -129,7 +129,7 @@ dernier bloc, après le HTML.
     `show`, `showGrid`, `renderStrip`, `renderIsland`, `onIsland` (file non vide : `#queueSheet`, sinon `#engineSheet`),
     `renderQueue` (annulation et « Passer en tête » par ligne), `ownOf` (ligne de `queue` → génération de la page :
     par identifiant, ou par l'étiquette `tag` d'une incognito), `ofSpace`, `spaceActive`, `firstActive` (celle qui
-    tourne, sinon la prochaine dans l'ordre de calcul) et `oldestActive` (la même, parmi les générations de l'espace
+    tourne, sinon la prochaine dans l'ordre de calcul) et `nextActive` (la même, parmi les générations de l'espace
     affiché), `latestResult` (générations de l'espace affiché), `track` (suit une génération, `pollJobs` chaque seconde
     ; une privée « inconnue » quitte la page sans message), `finish` (image terminée : dans la page, ou recharge la
     galerie ; une publique finie pendant qu'on est dans l'espace privé garde son image hors de l'écran), `drop` ; bouton

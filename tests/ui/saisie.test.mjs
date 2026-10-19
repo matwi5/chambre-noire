@@ -172,6 +172,7 @@ test('Variantes : proposées en Éditer et en Dessiner hors campagne, la demande
   // lot de la dernière demande : sa taille et son marqueur de campagne
   const lastLot = () => page.eval(`(({ size, campaign }) => ({ size, campaign }))(pageJobs.at(-1).lot)`);
   await freshEdit();
+  await watchToasts();
   await page.setFiles('#edit_files', photos(1));
   await page.waitFor(`editImages.length === 1`, { what: 'une image' });
   assert.equal(await countShown(), true, 'rangée des images en Éditer');
@@ -188,6 +189,12 @@ test('Variantes : proposées en Éditer et en Dessiner hors campagne, la demande
   await type('edit', 'voiture bleue');
   await generate();
   assert.deepEqual(await lastLot(), { size: 3, campaign: true });
+  // fin de chaque image avant la dernière : « Image » pour des variantes d'édition, « Photo » pour une campagne
+  // derrière les générations des tests précédents, toutes les pages d'interface et le banc tournant en même temps
+  await page.waitFor(`pageJobs.length === 5 && pageJobs.every(p => p.result)`,
+    { what: 'deux lots terminés', timeout: 60000 });
+  const ends = await page.eval(`seenToasts.filter(t => / sur \\d prête$/.test(t))`);
+  assert.deepEqual(ends, ['Image 1 sur 2 prête', 'Photo 1 sur 3 prête', 'Photo 2 sur 3 prête']);
   await fresh('mask');
   await page.setFiles('#mask_file', photos(1));
   await page.waitFor(`!!maskImage`, { what: 'image à retoucher chargée' });

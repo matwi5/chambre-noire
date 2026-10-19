@@ -1166,7 +1166,7 @@ const spaceActive = () => pageJobs.some(p=>ofSpace(p) && isActive(p));
 // passée en tête passe devant celles lancées avant elle), à rang égal la plus ancienne
 const firstActive = list => list.filter(isActive).sort((a, b)=>turnOf(a)-turnOf(b))[0];
 const turnOf = p => p.j.status==='running' ? -1 : p.j.queue_position ?? Infinity;
-const oldestActive = () => firstActive(pageJobs.filter(ofSpace));
+const nextActive = () => firstActive(pageJobs.filter(ofSpace));
 const latestResult = () => [...pageJobs].reverse().find(p=>ofSpace(p) && p.result);
 // lot : générations de la page lancées d'une même demande (p.lot : id, rang, taille). Lot terminé avec au moins deux
 // images : la zone de résultat montre leur grille.
@@ -1358,7 +1358,7 @@ function track(j, info){
   // l'image incognito affichée le reste ; une génération reprise de la file (adopted) ne remplace pas ce qui est montré,
   // ni une génération de l'autre espace (demande publique acceptée après l'entrée dans l'espace privé : hors de l'écran)
   if((shown && shown.incognito && shown.result) || (info.adopted && shown) || !ofSpace(p)) renderStrip();
-  else show(oldestActive());
+  else show(nextActive());
   renderIsland(); pollJobs(); }
 async function pollJobs(){
   if(polling) return; polling=true;
@@ -1392,7 +1392,7 @@ async function finish(p){                          // génération terminée : s
     log('terminé en '+Math.round(secs)+' s → '+(j.incognito ? 'image incognito, non enregistrée' : j.private ? 'image privée' : j.path), !!j.private);
     if(!ofSpace(p)) return;                        // publique finie dans l'espace privé : à l'écran à la sortie
     const lot=lotOf(p), next=firstActive(lot);
-    toast(!p.lot ? 'Image prête en '+fmt(secs) : next ? `Image ${p.lot.rank} sur ${p.lot.size} prête` : 'Lot terminé');
+    toast(!p.lot ? 'Image prête en '+fmt(secs) : next ? `${isCampaignLot(p.lot, p.tab) ? 'Photo' : 'Image'} ${p.lot.rank} sur ${p.lot.size} prête` : 'Lot terminé');
     if(mode==='hist') loadHistory();
     // lot en cours : la zone de résultat passe à son image suivante ; à la fin du lot, sa grille
     if(shown===p) show(next || p, !next); else if(sameLot(shown, p) && !next) show(shown); else renderStrip();
@@ -1405,7 +1405,7 @@ function drop(p){                                  // retire une génération de
   const k=pageJobs.indexOf(p); if(k>=0) pageJobs.splice(k, 1);
   if(p.result && p.result.blob){ ready.delete(p.result.url); URL.revokeObjectURL(p.result.url); }   // image incognito : plus rien d'elle
   const lot=lotOf(p);                              // de préférence une autre image de son lot (ou sa grille)
-  if(shown===p) show(firstActive(lot) || lot.find(q=>q.result) || oldestActive() || latestResult());
+  if(shown===p) show(firstActive(lot) || lot.find(q=>q.result) || nextActive() || latestResult());
   else if(sameLot(shown, p) && !isActive(shown)) show(shown); else renderStrip(); }
 function inputThumb(){ return mode==='edit' && editImages.length ? editImages[0].dataUrl : mode==='mask' && maskImage ? maskImage.dataUrl : null; }
 $('go').onclick=async()=>{                         // toujours actif : la demande rejoint la file avec les réglages du moment
@@ -1834,7 +1834,7 @@ function changedSpace(inside){
     if(ivIndex<0) emptyInputs(); if(vIndex<0) emptyViewer(); }   // vues fermées : vidées sans attendre le fondu
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
     resumeOwn(queueState); }
-  show(oldestActive() || latestResult());
+  show(nextActive() || latestResult());
   histItems=[]; $('histGrid').innerHTML=''; $('histCount').textContent=''; if(mode==='hist') loadHistory();
   syncThemeColor(); }
 // Saisie propre à chaque espace (texte, images d'Éditer, image à retoucher et masque de Dessiner, onglet par onglet) :

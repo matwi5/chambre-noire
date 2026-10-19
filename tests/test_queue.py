@@ -99,7 +99,7 @@ class MoveFirstTest(bench.BenchCase):
                              ["done", "done", "done", "done", "cancelled"])
             bench.wait_idle()
             lots = [m for m in sent.decided if m["body"].startswith("Lot de 3 images")]
-            self.assertEqual((len(lots), lots[0]["title"]), (1, "2 images prêtes"), sent.decided)
+            self.assertEqual([m["title"] for m in lots], ["2 images prêtes"], sent.decided)
 
     def test_a_move_writes_nothing_to_the_server_logs(self):
         a, b, c = self.held_queue("b", "c")

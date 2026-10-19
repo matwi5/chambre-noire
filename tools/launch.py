@@ -2096,8 +2096,8 @@ class H(BaseHTTPRequestHandler):
             lot = {"id": secrets.token_hex(16) if secret_lot else uuid.uuid4().hex[:12], "size": n,
                    "campaign": campaign} if n > 1 else None
             # variantes : mêmes images d'entrée et dimensions pour toutes, lues une fois ; campagne : une photo chacune
-            same = None if campaign else request_inputs(reqs[0])
-            jobs = [new_job(r, same or request_inputs(r), lot and {**lot, "rank": k + 1}) for k, r in enumerate(reqs)]
+            inputs = [request_inputs(r) for r in reqs] if campaign else [request_inputs(reqs[0])] * n
+            jobs = [new_job(r, inputs[k], lot and {**lot, "rank": k + 1}) for k, r in enumerate(reqs)]
             if lot:
                 S.lots[lot["id"]] = {"jobs": jobs, "incognito": jobs[0]["incognito"], "private": jobs[0]["private"],
                                      "campaign": campaign}
