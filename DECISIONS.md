@@ -35,6 +35,10 @@ les messages de commit.
     après confirmation s'il y en avait ; « Reprendre » (désormais texte, images d'entrée et dessin, sans le tracé, qui
     n'est pas gardé) remplace la saisie, après confirmation si elle n'est pas vide ; « Relancer » refait la même
     demande avec une nouvelle graine.
+  - **Incognito dans les terminées** (porteur, 19/10/2026, réponse « oui » à la proposition) : une image incognito
+    reste dans les terminées de la page jusqu'à son « × », « Tout retirer », « Supprimer » ou la fermeture de la
+    page ; remplace la garde « jusqu'à ce qu'elle ait été vue puis quittée » de la modification du 14/10/2026 (elle
+    l'aurait fait disparaître dès qu'on quitte En cours). Rien d'autre de l'incognito ne change.
   - **Prompts** : catégories « Créer », « Éditer », « Dessiner » gardées ; la feuille s'ouvre filtrée sur celle de la
     saisie (sans image, avec images, dessin actif), « Tous » à un geste ; un nouveau prompt prend la catégorie de la
     saisie ; choisir un prompt d'une autre catégorie ne remplit que le texte.
@@ -44,8 +48,9 @@ les messages de commit.
 - **Conséquences** : la file du serveur (`queue.Queue`) devient réordonnable. Une génération publique peut passer
   devant une génération privée cachée : seule la durée d'attente de cette dernière change. La saisie n'est plus
   propre à chaque onglet mais à chaque espace : remplace, dans « Espaces public et privé étanches » (15/10/2026), la
-  saisie « onglet par onglet » ; l'étanchéité, l'incognito et le calcul d'une seule génération à la fois ne changent
-  pas.
+  saisie « onglet par onglet » ; l'étanchéité, l'incognito (sauf sa garde dans les terminées) et le calcul d'une
+  seule génération à la fois ne changent pas. Le serveur gagne aussi un marqueur de campagne dans les lots et une
+  étiquette pour les entrées incognito de la file (spécification `docs/specs/2026-10-19_page-creer-en-cours.md`).
 
 ## 2026-10-16 · Modèle officiel par défaut, variante communautaire en option
 
