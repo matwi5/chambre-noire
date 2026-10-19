@@ -31,9 +31,10 @@ les messages de commit.
   - **Navigation** : pastille sur l'onglet En cours (nombre en cours et en attente, anneau de progression) ; la
     pastille du haut mène à En cours quand une génération tourne, sinon au panneau Moteur ; la feuille « File
     d'attente » et la rangée « #1 #2… » disparaissent.
-  - **Gestes** : « Éditer » ajoute l'image à la saisie ; « Dessiner » et « Reprendre » (désormais texte, images
-    d'entrée et dessin, sans le tracé, qui n'est pas gardé) remplacent la saisie, après confirmation si elle n'est pas
-    vide ; « Relancer » refait la même demande avec une nouvelle graine.
+  - **Gestes** : « Éditer » ajoute l'image à la saisie ; « Dessiner » remplace les images de la saisie par la sienne,
+    après confirmation s'il y en avait ; « Reprendre » (désormais texte, images d'entrée et dessin, sans le tracé, qui
+    n'est pas gardé) remplace la saisie, après confirmation si elle n'est pas vide ; « Relancer » refait la même
+    demande avec une nouvelle graine.
   - **Prompts** : catégories « Créer », « Éditer », « Dessiner » gardées ; la feuille s'ouvre filtrée sur celle de la
     saisie (sans image, avec images, dessin actif), « Tous » à un geste ; un nouveau prompt prend la catégorie de la
     saisie ; choisir un prompt d'une autre catégorie ne remplit que le texte.
