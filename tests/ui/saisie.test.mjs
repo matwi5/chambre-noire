@@ -171,6 +171,10 @@ test('Variantes : proposées en Éditer et en Dessiner hors campagne, la demande
   const pick = k => page.eval(`$('countOpts').querySelector('[data-k="${k}"]').click()`);
   // lot de la dernière demande : sa taille et son marqueur de campagne
   const lastLot = () => page.eval(`(({ size, campaign }) => ({ size, campaign }))(pageJobs.at(-1).lot)`);
+  // générations des tests précédents finies d'abord : sinon la page neuve les reprend (lancées par ce navigateur),
+  // ce qui ajoute des générations et des messages de fin à ceux comptés plus bas (banc chargé : --ui complet)
+  await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queued)`,
+    { what: 'file du banc vide', timeout: 60000 });
   await freshEdit();
   await watchToasts();
   await page.setFiles('#edit_files', photos(1));
