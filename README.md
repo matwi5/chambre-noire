@@ -252,13 +252,12 @@ viennent de l'ordinateur ou du téléphone.
 
 La page **En cours** montre en haut, en grand, la génération en cours. Lancée par la page : l'étape, le temps restant,
 les aperçus et un bouton d'annulation (une génération annulée ne laisse aucun fichier : ni image, ni images d'entrée, ni
-aperçus, ni journal du moteur), puis son image une fois prête ; une génération de la page qui attend affiche sa place
-dans la file et le temps avant son image. Lancée par un autre appareil : son texte (« Génération incognito » pour une
-génération incognito), un cadre aux proportions demandées, ses réglages et une progression estimée, sans aperçu, avec
-l'annulation là où l'appareil y a droit. Quand le Mac calcule une génération que l'espace où l'on est ne voit pas, le
-haut de la page dit « En attente » et le temps avant le début de la première génération de l'espace. Quand rien ne
-tourne et que la page n'a rien montré, elle dit « Rien en cours », avec un bouton vers Créer ; après un rechargement,
-elle repart ainsi (les images sont dans la galerie). Sous la génération en cours, la **file d'attente** de l'espace :
+aperçus, ni journal du moteur) ; une génération de la page qui attend affiche sa place dans la file et le temps avant
+son image. Lancée par un autre appareil : son texte (« Génération incognito » pour une génération incognito), un cadre
+aux proportions demandées, ses réglages et une progression estimée, sans aperçu, avec l'annulation là où l'appareil y a
+droit. Quand le Mac calcule une génération que l'espace où l'on est ne voit pas, le haut de la page dit « En attente »
+et le temps avant le début de la première génération de l'espace. Quand rien ne tourne et qu'il n'y a aucune terminée,
+elle dit « Rien en cours », avec un bouton vers Créer. Sous la génération en cours, la **file d'attente** de l'espace :
 pour chaque génération, sa place, le début de son prompt et le temps avant son image, avec un bouton pour l'annuler et,
 pour une génération en attente, un bouton **Passer en tête** qui la fait passer juste après celle en cours (pour un
 essai rapide bloqué derrière une campagne). Une génération normale s'annule ou passe en tête depuis n'importe quel
@@ -278,10 +277,22 @@ générations privées en cours (voir « Espace privé »). Une génération ain
 l'image, et pour **Reprendre** depuis la visionneuse), pas seulement le début qu'en montre la file. Les lignes lancées
 par l'appareil y sont marquées « cet appareil ». Le bouton Incognito se change à tout moment : chaque génération garde
 le mode choisi à son lancement. Chaque image est enregistrée en PNG dans **`outputs\`**, avec ses images d'entrée
-(références, image d'origine, zone peinte) dans `outputs\.inputs\`. Sous le résultat : **Télécharger**, **Partager** et
-**Copier** (dans le presse-papiers), puis **Éditer** et **Dessiner**, qui le réutilisent comme point de départ, et
-**Supprimer**. Partager et Copier ne sont proposés que là où le navigateur les permet : sur l'ordinateur lui-même, ou
-sur le téléphone par l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du Wi-Fi).
+(références, image d'origine, zone peinte) dans `outputs\.inputs\`.
+
+Sous la file, les **terminées** : les générations finies de la page, la plus récente en premier. Une image a sa vignette
+(un appui l'ouvre en grand, avec ses images d'entrée), son texte, ses réglages et ses actions : **Télécharger**,
+**Partager** et **Copier** (dans le presse-papiers), **Éditer** et **Dessiner**, qui la réutilisent comme point de
+départ, et **Supprimer** (**Effacer** pour une image incognito). Un lot fini s'y montre en grille, une case par image en
+échec avec son message ; une génération en échec garde son message ; une génération annulée n'y laisse rien. Le « × »
+d'une carte la retire de la liste sans la supprimer de la galerie, **Tout retirer** vide la liste (après confirmation
+quand une image incognito, qu'on perdrait, en fait partie). La liste garde au plus 12 générations qui ne sont pas
+incognito (les deux espaces comptent ensemble) : au-delà, la plus ancienne en sort d'elle-même, échecs compris ; les
+images incognito restent jusqu'à leur retrait. Elle repart vide après un rechargement de la page (les images sont dans
+la galerie) ; les générations reprises y arrivent à leur fin. Quand une génération de la page finit pendant qu'on est
+sur un autre onglet, un message le dit (« Image prête », « Lot prêt · 3 images », avec « , 1 en échec » s'il y en a, «
+Échec de la génération », « Échec du lot ») et mène à En cours quand on le touche ; rien pour une génération annulée.
+Partager et Copier ne sont proposés que là où le navigateur les permet : sur l'ordinateur lui-même, ou sur le téléphone
+par l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du Wi-Fi).
 
 ### Créer (texte → image)
 
@@ -291,11 +302,11 @@ Pour obtenir plusieurs propositions du même prompt, choisir 2, 3 ou 4 **Images*
 « 3 images » le rappelle sous le texte ; le choix est retenu). Une seule demande lance alors un **lot de variantes** :
 une génération par image, à la suite dans la file (jamais en même temps), chacune avec sa propre graine. Le bouton
 **Générer** affiche le temps de tout le lot. Pendant le calcul, l'image en cours porte « Image 2 sur 3 » et la file
-d'attente montre les suivantes, sous l'en-tête du lot avec **Annuler le lot** (le bouton
-de l'image en cours n'annule que celle-ci, et une image en échec n'arrête pas les autres). À la fin, une **grille**
-remplace l'image unique : un appui ouvre une image en grand, avec sa graine, et **Garder celle-ci** supprime les autres
-images du lot après confirmation. Sans choix, toutes les images restent dans la galerie. En incognito, la grille n'a
-pas **Garder celle-ci** : chaque image a son bouton de téléchargement, et elles sont perdues une fois la grille quittée.
+d'attente montre les suivantes, sous l'en-tête du lot avec **Annuler le lot** (le bouton de l'image en cours n'annule
+que celle-ci, et une image en échec n'arrête pas les autres). À la fin, le lot entre dans les terminées en **grille** :
+un appui ouvre une image en grand, avec sa graine, et **Garder celle-ci** supprime les autres images du lot après
+confirmation. Sans choix, toutes les images restent dans la galerie. En incognito, la grille n'a pas **Garder
+celle-ci** : chaque image a son bouton de téléchargement, et elles sont perdues une fois retirées de la liste.
 Les variantes marchent de la même façon en Éditer (hors campagne) et en Dessiner : plusieurs essais de la même
 édition, chacun avec sa graine, à départager par **Garder celle-ci**.
 
@@ -393,16 +404,15 @@ privés, chiffrés avec l'espace (voir [Espace privé](#espace-privé)) ; les pr
 
 ### Mode incognito
 
-Avec le bouton **Incognito**, à droite de **Générer**, l'image produite peut être téléchargée mais n'est gardée nulle part sur
-le Mac : ni dans `outputs\`, ni dans la galerie, ni dans le journal des générations, ni dans `logs\`. La page la garde
-tant qu'on ne l'a pas vue puis quittée : lancer d'autres générations, ou en voir une autre se terminer, ne la fait pas
-disparaître. Elle est perdue pour de bon une fois affichée sur la page **En cours** puis quittée (onglet **Galerie**),
-quand on l'efface, ou
-quand la page est rechargée ou fermée : toutes les générations incognito de la page sont alors arrêtées et oubliées, y
-compris celles qui attendaient dans la file. Pensez à la **télécharger** avant. Les autres appareils ne voient d'elle,
-dans la file, que « Génération incognito » ; ils ne peuvent ni la suivre ni l'annuler. Le texte tapé n'est pas retenu par le
-navigateur, et la génération n'entre pas dans les mesures de calibration. Les boutons **Éditer** et **Dessiner** la
-réutilisent comme d'habitude.
+Avec le bouton **Incognito**, à droite de **Générer**, l'image produite peut être téléchargée mais n'est gardée nulle
+part sur le Mac : ni dans `outputs\`, ni dans la galerie, ni dans le journal des générations, ni dans `logs\`. La page
+la garde dans les terminées de la page **En cours** jusqu'à ce qu'on la retire (« × », **Tout retirer**, qui demande
+confirmation) ou l'efface : lancer d'autres générations, en voir une autre se terminer ou changer d'onglet ne la fait
+pas disparaître. Elle est perdue pour de bon une fois retirée ou effacée, ou quand la page est rechargée ou fermée :
+toutes les générations incognito de la page sont alors arrêtées et oubliées, y compris celles qui attendaient dans la
+file. Pensez à la **télécharger** avant. Les autres appareils ne voient d'elle, dans la file, que « Génération incognito
+» ; ils ne peuvent ni la suivre ni l'annuler. Le texte tapé n'est pas retenu par le navigateur, et la génération n'entre
+pas dans les mesures de calibration. Les boutons **Éditer** et **Dessiner** la réutilisent comme d'habitude.
 
 Ce que cela garantit, et ses limites :
 
@@ -713,7 +723,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   espace, public ou privé, 0 pour celle qui tourne, sinon les générations de l'espace en attente devant elle, plus une
   si une génération tourne ; recalculé à chaque lecture ; `seed` : graine utilisée ; `lot` ; `prompt` : le prompt
   complet, tant que la demande est en mémoire, `null` pour une génération incognito et pour une privée une fois
-  finie, rangée, en échec ou annulée),
+  finie, rangée, en échec ou annulée ; `mode` ; `inputs` : noms des images d'entrée gardées avec l'image, `init.png`
+  puis `ref_1.png`…, ceux qu'attend `/api/input`),
   `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel` (sans effet sur une génération déjà terminée, réussie, en
   échec ou annulée), `POST /api/job/<id>/first` (« Passer en tête » : la génération passe en tête des générations en
   attente, juste après celle en cours, tous espaces confondus ; 200 `{"ok": true}`, aussi quand elle y est déjà ; 404
@@ -870,7 +881,8 @@ Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python t
 que le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier. Ils ouvrent
 l'interface servie par le banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur
 de la console du navigateur. Ils couvrent les écrans principaux, la page En cours (onglets, pastilles, génération d'un
-autre appareil ou cachée, rien qui dépasse à la largeur du téléphone), « Garder celle-ci » après un rechargement de la
+autre appareil ou cachée, rien qui dépasse à la largeur du téléphone), les terminées (cartes, grille d'un lot,
+échecs, « × » et « Tout retirer », plafond, message « Image prête »), « Garder celle-ci » après un rechargement de la
 galerie, la saisie (plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque espace), l'en-tête
 (cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés, la reprise d'une génération, le
 suivi d'une génération privée devenue inconnue (sans faux « Échec ») et l'absence de brouillon incognito ou privé

@@ -1,7 +1,7 @@
-// Affichage des images (visionneuse, images d'entrée, zone de résultat, galerie), dans la vue du téléphone : jamais
-// l'image d'avant le temps d'un chargement, rien de l'espace privé à l'écran ni dans la page après en être sorti
-// (galerie privée comprise, sortie faite depuis un autre onglet), image voisine et image d'entrée montrées sans
-// attente, zoom au pincement sur les images d'entrée comme sur les images générées.
+// Affichage des images (visionneuse, images d'entrée, terminées de la page En cours, galerie), dans la vue du
+// téléphone : jamais l'image d'avant le temps d'un chargement, rien de l'espace privé à l'écran ni dans la page après
+// en être sorti (galerie privée comprise, sortie faite depuis un autre onglet), image voisine et image d'entrée
+// montrées sans attente, zoom au pincement sur les images d'entrée comme sur les images générées.
 //   node --test tests/ui/images.test.mjs   (ou : venv/bin/python tests/check.py --ui tests/ui/images.test.mjs)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -206,13 +206,18 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
   page.assertNoErrors();
 });
 
-test('zone de résultat : son image retirée, son lien de téléchargement part avec elle', async () => {
+test('terminées : une image retirée de la liste, son lien de téléchargement part avec elle', async () => {
   await page.waitFor(`!inPrivate()`, { what: 'espace public' });
-  const kept = await page.eval(`fetch('/api/history').then(r => r.json()).then(h => {
-    if (!h.length) throw new Error('aucune image publique au banc');
-    showResult(h[0].name, 512, 512); show(null);   // comme une image supprimée ou effacée : zone vidée
-    return { href: $('dl').hasAttribute('href'), name: $('dl').hasAttribute('download') }; })`);
-  assert.deepEqual(kept, { href: false, name: false }, 'lien vers l\'image retirée resté dans la page');
+  await page.eval(`goTab('t2i'); (() => { const t = $('t2i_prompt'); t.value = 'zq3 retirée';
+    t.dispatchEvent(new Event('input')); })()`);
+  await page.click('#go');
+  await page.waitFor(`!!$('doneList').querySelector('.dcard a[download]')`,
+    { what: 'carte de l\'image finie', timeout: 30000 });
+  const name = await page.eval(`$('doneList').querySelector('.dcard a[download]').getAttribute('download')`);
+  await page.click('#doneList .dcard [data-remove]');
+  await page.waitFor(`!$('doneList').querySelector('.dcard')`, { what: 'carte retirée' });
+  assert.equal(await page.eval(`!!document.querySelector('[href*="${name}"], [download="${name}"]')`), false,
+    'lien vers l\'image retirée resté dans la page');
   page.assertNoErrors();
 });
 

@@ -159,7 +159,8 @@ test('une seconde génération de la page prend le haut d\'En cours quand elle d
   await page.waitFor(`shown && shown.prompt.endsWith('seconde') && shown.j.status === 'running'
     && $('loader').style.display === 'flex'`, { what: 'la seconde en haut, avec sa progression' });
   bench.release('seconde');
-  await page.waitFor(`shown && shown.prompt.endsWith('seconde') && !!shown.result`, { what: 'image de la seconde' });
+  await page.waitFor(`!shown && $('doneList').textContent.includes('zq5 seconde')`,
+    { what: 'la seconde dans les terminées' });
   page.assertNoErrors();
 });
 
@@ -175,24 +176,5 @@ test('grand écran : Créer et En cours sont une colonne centrée', async () => 
     assert.ok(Math.abs(left - right) < 1, `${pane} : centrée (${left} / ${right})`);
   }
   await page.send('Emulation.setDeviceMetricsOverride', PHONE);
-  page.assertNoErrors();
-});
-
-test('incognito : l\'image n\'est marquée vue qu\'une fois affichée sur la page En cours', async () => {
-  await page.click('#tabbar [data-pane="t2i"]');
-  await page.eval(`setIncog(true)`);
-  await type('HOLD=vue zq5 incognito');
-  await page.click('#go');
-  await page.waitFor(`mode === 'run' && pageJobs.some(p => p.incognito && isActive(p))`, { what: 'incognito suivie' });
-  await page.click('#tabbar [data-pane="t2i"]');   // l'image arrive pendant qu'on est sur Créer
-  bench.release('vue');
-  await page.waitFor(`pageJobs.some(p => p.incognito && p.result) && $('stageImg').complete`,
-    { what: 'image incognito reçue' });
-  assert.equal(await page.eval(`pageJobs.find(p => p.incognito).seen`), undefined, 'pas vue depuis Créer');
-  await page.click('#tabbar [data-pane="run"]');
-  await page.waitFor(`pageJobs.find(p => p.incognito).seen === true`, { what: 'vue sur En cours' });
-  await page.click('#tabbar [data-pane="hist"]');  // quittée : elle sort de la page
-  await page.waitFor(`!pageJobs.some(p => p.incognito)`, { what: 'image incognito oubliée' });
-  await page.eval(`setIncog(false)`);
   page.assertNoErrors();
 });

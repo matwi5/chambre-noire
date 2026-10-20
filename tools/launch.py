@@ -1628,6 +1628,10 @@ def new_job(req, inputs, lot=None):
     out = os.path.join(d, f"{jid}_{mode}.png") if incognito or private else P("outputs", f"{jid}_{mode}.png")
     return {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
             "incognito": incognito, "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot,
+            # noms des images d'entrée que build_cmd écrit et que save_inputs garde (init.png, puis ref_N.png) : la page
+            # qui suit la génération les montre, même après l'oubli de la demande
+            "input_names": (["init.png"] if req.get("init_image") else [])
+            + [f"ref_{i + 1}.png" for i in range(len(req.get("ref_images") or []))],
             "page": req.get("page") if incognito else None,   # jeton de la page, montré dans queue à la place de l'id
             # étiquette d'une incognito, montrée dans queue : sa page y reconnaît sa ligne même après un déplacement
             "tag": secrets.token_hex(8) if incognito else None,
@@ -1643,6 +1647,7 @@ def public(job):
     d["incognito"], d["private"] = bool(job.get("incognito")), bool(job.get("private"))
     d["item"] = job.get("item")                   # image privée rangée : identifiant dans la galerie privée
     d["lot"], d["seed"] = job.get("lot"), job.get("seed")
+    d["mode"], d["inputs"] = job.get("mode"), job.get("input_names") or []   # vrai mode, images d'entrée gardées
     # prompt complet, pour la page qui reprend une génération (la file n'en montre que le début) : tant que la demande
     # est en mémoire (une privée l'oublie à sa fin), jamais pour une incognito (sa seule page le connaît déjà) ; une
     # privée n'est suivie que dans l'espace privé (_hidden)

@@ -370,7 +370,6 @@
   .v-panel .m-chips::-webkit-scrollbar { display:none; }
   .v-panel .m-chips span { flex:none; }
   .v-right { display:flex; align-items:center; gap:8px; }
-  #resultActions { grid-template-columns:repeat(3, 1fr); }
   .v-inputs { display:flex; align-items:center; gap:12px; width:100%; margin-top:14px; padding:9px 12px 9px 9px; border-radius:18px;
     background:var(--field); border:1px solid var(--rim); color:var(--ink); font-size:14px; font-weight:600; cursor:pointer; text-align:left; }
   .v-inputs .chev { width:18px; height:18px; margin-left:auto; color:var(--ink3); }
@@ -399,6 +398,30 @@
   .empty svg { width:44px; height:44px; color:var(--ink3); }
   .empty p { margin:0; max-width:24ch; }
   #resultEmpty { aspect-ratio:auto; padding:56px 24px; }
+  #resultEmpty[hidden] { display:none; }
+  /* terminées : une carte par image (vignette, texte, actions) ou par lot (grille), « × » pour la retirer de la liste */
+  .done-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px; }
+  .done-head .runq-head { margin-top:0; }
+  .dcard { position:relative; display:flex; flex-wrap:wrap; gap:8px 12px; padding:8px; border-radius:20px; background:var(--field); border:1px solid var(--rim); min-width:0; }
+  .dcard.dlot { flex-direction:column; }
+  .dhead { display:flex; gap:8px; align-items:flex-start; min-width:0; }
+  .dthumb { flex:none; align-self:flex-start; width:88px; aspect-ratio:var(--ar, 1); max-height:132px; padding:0; border:0; border-radius:14px; overflow:hidden;
+    background:var(--glass-hi); cursor:pointer; }
+  .dthumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .dbody { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; padding-right:40px; }
+  .dhead .dbody { padding-right:0; }
+  .dprompt { margin:2px 0 0; font-size:14.5px; font-weight:600; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    overflow:hidden; overflow-wrap:anywhere; }
+  .dmeta { margin:0; font-size:12.5px; color:var(--ink2); font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+  .dmeta.err { color:var(--err); }
+  .dacts { flex-basis:100%; display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px; }
+  .dacts .qx { text-decoration:none; }
+  .qx.danger { color:var(--err); }
+  .dx { position:absolute; top:8px; right:8px; }
+  .dhead .dx { position:static; }
+  .dcard.fail > .qicon { color:var(--err); }
+  .cell.fail { display:grid; place-items:center; aspect-ratio:1; padding:28px 10px 10px; }
+  .cell.fail p { margin:0; font-size:12px; color:var(--err); text-align:center; overflow-wrap:anywhere; }
   .stage { position:relative; display:none; width:min(100%, calc(72svh * var(--ar, 1))); margin-inline:auto; aspect-ratio:1/1; border-radius:26px; overflow:hidden;
     background:var(--field); box-shadow:0 30px 70px -30px rgba(0,0,0,.85), 0 0 0 1px rgba(255,255,255,.08); }
   .stage img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
@@ -503,6 +526,7 @@
     width:max-content; max-width:calc(100% - 32px); padding:12px 18px; border-radius:20px; font-size:15px; font-weight:600; text-align:center;
     transition:transform .5s var(--spring), opacity .25s; }
   .toast.on { opacity:1; transform:translate(-50%, 0); }
+  .toast.on.go { pointer-events:auto; cursor:pointer; }   /* message qui mène à la page En cours */
   .toast.err { color:#fff; background:linear-gradient(180deg, color-mix(in srgb, var(--err) 78%, transparent), color-mix(in srgb, var(--err) 58%, transparent)); }
   .ask-text { color:var(--ink2); margin:8px 2px 20px; overflow-wrap:anywhere; }
   .ask-acts { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
@@ -556,16 +580,6 @@
         </div>
         <div class="bar" id="bar"><i></i></div>
       </div>
-      <div class="lotgrid" id="lotGrid" hidden></div>
-      <div id="resultMeta" class="meta"></div>
-      <div class="acts" id="resultActions" style="display:none">
-        <a class="act glass" id="dl" download><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg><span>Télécharger</span></a>
-        <button class="act glass" data-share onclick="shareResult()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3.5"/><path d="m7.5 8 4.5-4.5L16.5 8"/><path d="M8 11H6.5A2.5 2.5 0 0 0 4 13.5v5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-5a2.5 2.5 0 0 0-2.5-2.5H16"/></svg><span>Partager</span></button>
-        <button class="act glass" data-copy onclick="copyResult()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="12" height="12" rx="2.8"/><path d="M15.5 8.5V6.3a2.8 2.8 0 0 0-2.8-2.8H6.3a2.8 2.8 0 0 0-2.8 2.8v6.4a2.8 2.8 0 0 0 2.8 2.8h2.2"/></svg><span>Copier</span></button>
-        <button class="act glass" onclick="useAsEditInput()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/></svg><span>Éditer</span></button>
-        <button class="act glass" onclick="useAsMaskInput()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg><span>Dessiner</span></button>
-        <button class="act glass danger" onclick="deleteCurrent()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="m6.5 7 1 12.5h9l1-12.5"/></svg><span>Supprimer</span></button>
-      </div>
     </div>
     <div id="runNow">
       <div class="nowframe" id="nowFrame">
@@ -583,6 +597,7 @@
       <p class="m-prompt" id="nowPrompt"></p>
     </div>
     <div class="runq" id="runQueue" hidden><h2 class="runq-head" id="queueNote"></h2><div class="qlist" id="queueList"></div></div>
+    <div class="runq" id="runDone" hidden><div class="done-head"><h2 class="runq-head">Terminées</h2><button class="btn secondary small" id="doneClear">Tout retirer</button></div><div class="qlist" id="doneList"></div></div>
   </div>
 
   <div class="pane active" id="pane-t2i"></div>
@@ -811,7 +826,7 @@ function applyEstimates(est){
 }
 
 const $ = id => document.getElementById(id);
-let mode='t2i', editImages=[], maskImage=null, paintMode='paint', lastResult=null, estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
+let mode='t2i', editImages=[], maskImage=null, paintMode='paint', estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
 let privState={available:false, exists:false, unlocked:false};   // espace privé vu par cet appareil (/api/status)
 
 // journal du panneau Moteur ; une ligne de l'espace privé (nom prive_…, taille d'une photo) en sort avec lui. priv :
@@ -961,8 +976,7 @@ TABS.forEach(b=>b.addEventListener('click',()=>{
   TABS.forEach(x=>x.classList.toggle('active', x===b));
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active')); mode=b.dataset.pane; $('pane-'+mode).classList.add('active');
   document.body.className='m-'+mode; placeLens(); if(mode==='hist') loadHistory(); suggestRatio();
-  renderRun();                                     // image incognito : vue sur En cours seulement (renderRun, markSeen)
-  if(mode==='hist' && shown) leftBehind(shown); }));
+  renderRun(); }));
 document.body.className='m-'+mode; placeLens();     // ouverture sur Créer, deuxième onglet
 (function tabSwipe(){          // glisser horizontalement sur la page : onglet voisin (sauf sur le dessin, les rangées qui défilent, un texte en cours de saisie)
   const main=document.querySelector('main'), SKIP='#paintWrap, .opts, .ratios, .chips5, .thumbs, input, select, button.pill';
@@ -1096,8 +1110,11 @@ function buildRequest(){
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 // ------------------------------------------------------------ messages et confirmations intégrés
 let toastTimer=null, askResolve=null;
-function toast(msg, kind){ const t=$('toast'); t.textContent=msg; t.className='toast glass on'+(kind?' '+kind:'');
+// go : le message mène à la page En cours quand on le touche
+function toast(msg, kind, go){ const t=$('toast'); t.textContent=msg; t.className='toast glass on'+(kind?' '+kind:'')+(go?' go':'');
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('on'), kind==='err' ? 6500 : 3000); }
+$('toast').onclick=()=>{ const t=$('toast'); if(!t.classList.contains('go')) return; t.classList.remove('on', 'go');
+  if(ivIndex>=0) closeInputs(); if(vIndex>=0) closeViewer(); closeSheet(); goTab('run'); };   // la page, pas sous une vue
 function ask(title, text, yes, danger){
   $('askTitle').textContent=title; $('askText').textContent=text; $('askYes').textContent=yes; $('askYes').classList.toggle('danger-fill', !!danger);
   openSheet('askSheet'); return new Promise(res=>{ askResolve=res; }); }
@@ -1163,7 +1180,7 @@ function forgetPrivateImages(){
 // une génération d'un autre appareil de l'espace qui tourne y prend sa place (renderRun), et la file de l'espace suit.
 // L'île et l'onglet En cours résument la file de l'espace où l'on est, tous appareils confondus (queue de /api/status) ;
 // un appui sur l'île mène à la page. Chaque génération garde les réglages de son lancement.
-const pageJobs=[], MAX_PAGE_JOBS=12;
+const pageJobs=[];
 let shown=null, polling=false;
 // jeton opaque de cette page, envoyé avec chaque demande : les lignes incognito de la file le portent (et rien qui
 // identifie la génération), pour que la page reconnaisse les siennes ; il n'ouvre rien côté serveur
@@ -1189,32 +1206,14 @@ const spaceActive = () => pageJobs.some(p=>ofSpace(p) && isActive(p));
 const firstActive = list => list.filter(isActive).sort((a, b)=>turnOf(a)-turnOf(b))[0];
 const turnOf = p => p.j.status==='running' ? -1 : p.j.queue_position ?? Infinity;
 const nextActive = () => firstActive(pageJobs.filter(ofSpace));
-const latestResult = () => [...pageJobs].reverse().find(p=>ofSpace(p) && p.result);
-// lot : générations de la page lancées d'une même demande (p.lot : id, rang, taille). Lot terminé avec au moins deux
-// images : la page En cours montre leur grille.
+// lot : générations de la page lancées d'une même demande (p.lot : id, rang, taille)
 const lotOf = p => p && p.lot ? pageJobs.filter(q=>q.lot && q.lot.id===p.lot.id) : [];
-const sameLot = (a, b) => !!(a && b && a.lot && b.lot && a.lot.id===b.lot.id);
-const gridOf = p => { const l=lotOf(p); return !l.some(isActive) && l.filter(q=>q.result).length>1 ? l.filter(q=>q.result) : null; };
 const ordinal = n => n===1 ? '1re' : n+'e';
 const tabOf = m => m==='edit' ? 'edit' : (m==='mask' || m==='annot') ? 'mask' : 't2i';
+const isDone = p => !!p.result || p.j.status==='failed';     // terminée : image prête, ou échec gardé avec son message
 function setStageRatio(w, h){ $('stage').style.aspectRatio=w+'/'+h; $('stage').style.setProperty('--ar', w/h); }
-function setMeta(prompt, chips, file){
-  $('resultMeta').innerHTML = (prompt ? `<p class="m-prompt">${esc(prompt)}</p>` : '')
-    + (chips.filter(Boolean).length ? `<div class="m-chips">${chips.filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('')}</div>` : '')
-    + (file ? `<p class="m-file">${esc(file)}</p>` : ''); }
-function showLoader(on){ $('stage').style.display='block'; $('resultEmpty').style.display='none'; $('loader').style.display=on?'flex':'none'; $('shimmer').style.display=on?'block':'none'; $('bar').style.display=on?'block':'none'; }
-// image de outputs/, ou image incognito (inc : {blob, url}) ou privée (inc : {private, item, url}) ; keep : l'aperçu de la
-// même génération reste à l'écran jusqu'à son image finale ; shown : appelée quand l'image est à l'écran
-function showResult(name, w, h, {reveal, inc, keep, shown:onShown}={}){
-  const url=inc ? inc.url : '/api/result?name='+encodeURIComponent(name), img=$('stageImg');
-  if(w && h) setStageRatio(w, h);
-  showLoader(false); img.style.display='block'; if(!keep) $('shimmer').style.display='block';   // reflet jusqu'à l'image
-  showImage(img, url, {keep, then:ok=>{ if(!ok) img.src=url;   // illisible : confiée au navigateur, jamais l'aperçu pour l'image finale
-    img.className = reveal ? 'final reveal' : 'final'; $('stage').classList.remove('has-preview'); $('shimmer').style.display='none';
-    if(onShown) onShown(); }});
-  $('dl').href=inc && inc.blob ? url : url+'&download=1'; $('dl').download=name; $('resultActions').style.display='';
-  lastResult={url, name, blob:inc ? inc.blob : null, item:inc && inc.item}; if(!inc) setAmbient(name); }   // pas de fond ambiant en incognito : il passerait par une miniature sur le disque
-function hideResult(){ clearImage($('stageImg')); $('stageImg').job=null; dropLink($('dl')); $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultMeta').innerHTML=''; $('resultEmpty').style.display=''; }
+function showLoader(){ $('stage').style.display='block'; $('loader').style.display='flex'; $('shimmer').style.display='block'; $('bar').style.display='block'; }
+function hideStage(){ clearImage($('stageImg')); $('stageImg').job=null; $('stage').style.display='none'; }
 const forgetJob = id => fetch('/api/job/'+id+'/forget', {method:'POST', headers:{'Content-Type':'application/json'}}).catch(()=>{});
 // progression d'une génération de la page : part faite (0 à 1), titre, détail, temps restant avant son image
 function progress(p){
@@ -1242,41 +1241,24 @@ function ownOf(e){ if(e.id) return pageJobs.find(p=>p.id===e.id);
 function entryLeft(e){ const p=ownOf(e); if(p && p.j.status==='running') return progress(p).remaining;
   return e.status==='running' ? Math.max(0, e.estimate-(e.elapsed||0)-(Date.now()-queueAt)/1000) : e.estimate; }
 function waitBefore(n){ return queueState.filter(e=>e.position<n).reduce((t, e)=>t+entryLeft(e), 0); }
-// met une génération de la page en haut de la page En cours (ou rien), puis le haut de la page suit (renderRun)
-function show(p, reveal){ showOwn(p, reveal); renderRun(); }
-function showOwn(p, reveal){
-  shown=p||null; $('lotGrid').hidden=true;
-  if(!p){ lastResult=null; return hideResult(); }
-  const grid=gridOf(p); if(grid) return showGrid(grid);
-  $('lotBadge').hidden=!p.lot; if(p.lot) $('lotBadge').textContent=`${isCampaignLot(p.lot, p.tab) ? 'Photo' : 'Image'} ${p.lot.rank} sur ${p.lot.size}`;
-  const img=$('stageImg'), was=img.job; img.job=p.id;   // img.job : génération dont la zone montre l'aperçu ou l'image
-  if(p.result){ const r=p.result;   // image incognito vue seulement une fois peinte
-    showResult(r.name, ...(r.dims||[0, 0]), {reveal, inc:r.blob || r.item ? r : null, keep:was===p.id, shown:markSeen});
-    setMeta(p.prompt, r.chips, r.file); return; }
-  lastResult=null; if(p.w && p.h) setStageRatio(p.w, p.h);
-  showLoader(true); $('resultActions').style.display='none'; setMeta('', [], '');
+// met une génération active de la page en haut de la page En cours (ou rien), puis le haut de la page suit (renderRun)
+function show(p){ showOwn(p); renderRun(); }
+function showOwn(p){                               // étape, temps restant, aperçus et annulation ; une terminée n'y va pas
+  shown=p && isActive(p) ? p : null; if(!shown) return hideStage();
+  $('lotBadge').hidden=!p.lot; if(p.lot) $('lotBadge').textContent=`${isCampaignLot(p.lot, p.j.mode) ? 'Photo' : 'Image'} ${p.lot.rank} sur ${p.lot.size}`;
+  const img=$('stageImg'), was=img.job; img.job=p.id;   // img.job : génération dont la zone montre l'aperçu
+  if(p.w && p.h) setStageRatio(p.w, p.h);
+  showLoader();
   if(was!==p.id){ img.className=''; clearImage(img); $('stage').classList.remove('has-preview'); p.pv=0; }
   else if($('stage').classList.contains('has-preview')) $('shimmer').style.display='none';   // son aperçu reste
   renderProgress(); }
-function showGrid(items){                          // lot terminé : ses images en grille ; un appui ouvre la visionneuse
-  const first=items[0], [w,h]=first.result.dims||[1,1], incog=first.incognito, g=$('lotGrid');
-  lastResult=null; clearImage($('stageImg')); $('stageImg').job=null; $('stage').style.display='none'; $('resultActions').style.display='none'; $('resultEmpty').style.display='none';
-  g.hidden=false;                                  // chaque case à la forme de son image (une campagne en mélange plusieurs)
-  g.innerHTML=items.map((q, i)=>`<div class="cell" style="--ar:${q.result.dims ? q.result.dims[0]/q.result.dims[1] : w/h}"><button data-k="${i}" aria-label="Ouvrir l'image ${q.lot.rank}"><img src="${q.result.blob ? q.result.url : q.result.item ? privThumb(q.result.item) : '/api/thumb?name='+encodeURIComponent(q.result.name)}" alt=""></button><span>${q.lot.rank}</span>`
-    + (incog ? `<a href="${q.result.url}" download="${esc(q.result.name)}" aria-label="Télécharger l'image ${q.lot.rank}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg></a>` : '') + '</div>').join('');
-  const secs=items.reduce((t, q)=>t+(q.j.seconds||0), 0), size=first.lot.size, camp=isCampaignLot(first.lot, first.tab);
-  const dims=new Set(items.map(q=>(q.result.dims||[]).join('×')));
-  setMeta(first.prompt, [items.length+(items.length<size ? ' sur '+size : '')+' images', fmt(secs), dims.size===1 ? [...dims][0] : '', (first.j.total||'?')+' étapes'],
-    incog ? 'Incognito · non enregistrées : téléchargez celles à garder' : (first.private ? 'Rangées chiffrées dans l\'espace privé · ' : '')
-      + (camp ? 'Touchez une image pour la voir en grand' : 'Touchez une image pour la voir en grand et garder la meilleure'));
-  if(!incog && !first.private) setAmbient(first.result.name); }   // vue : par renderRun, qui suit show
-$('lotGrid').addEventListener('click', e=>{ const b=e.target.closest('button[data-k]'); if(!b || !shown) return;
-  const items=gridOf(shown); if(items) openViewer(+b.dataset.k, items.map(pageItem)); });
-// image de la page telle que la visionneuse l'attend (même forme qu'une entrée de /api/history ; url : image incognito)
+// image de la page telle que la visionneuse l'attend (même forme qu'une entrée de /api/history ; url : image incognito) :
+// son vrai mode et toutes ses images d'entrée, que dit son suivi (aucune pour une incognito, qui n'en garde pas ;
+// serveur pas encore relancé : texte → image, sans images d'entrée)
 function pageItem(p){ const r=p.result;
-  return { name:r.name, time:Math.round(p.j.finished||Date.now()/1000), mode:p.tab==='edit' ? 'edit' : 't2i', prompt:p.prompt, width:r.dims&&r.dims[0], height:r.dims&&r.dims[1],
+  return { name:r.name, time:Math.round(p.j.finished||Date.now()/1000), mode:p.j.mode||'t2i', prompt:p.prompt, width:r.dims&&r.dims[0], height:r.dims&&r.dims[1],
     steps:p.j.total, seconds:p.j.seconds, seed:p.j.seed, lot:p.lot, url:r.blob ? r.url : null, page:p,
-    private:!!r.item, id:r.item, inputs:p.tab==='edit' && !r.blob ? ['ref_1.png'] : [] }; }   // photo d'une campagne, gardée avec son image
+    private:!!r.item, id:r.item, inputs:r.blob ? [] : p.j.inputs||[] }; }
 function renderProgress(){                         // image en cours sur la page En cours : étape, temps restant, aperçu
   const p=shown; if(!p || !isActive(p)) return;
   const j=p.j, pr=progress(p), pct=Math.max(pr.frac, 0.02)*100;
@@ -1287,16 +1269,98 @@ function renderProgress(){                         // image en cours sur la page
     const url='/api/job/'+j.id+'/preview?v='+p.pv;
     showImage(img, url, {keep:true, once:true, then:ok=>{ if(!ok || shown!==p) return;
       img.className='preview'; $('stage').classList.add('has-preview'); $('shimmer').style.display='none'; }}); } }
-// image incognito : gardée par la page jusqu'à ce qu'elle ait été vue (affichée sur la page En cours, application
-// visible) puis quittée par l'utilisateur (galerie). Lancer une demande ou la fin d'une autre génération ne la fait
-// pas disparaître.
-// Un lot incognito ne compte comme quitté que quand on passe à autre chose que ses propres images ; sa grille montre
-// toutes ses images à la fois.
-function markSeen(){ if(!shown || !shown.incognito || mode!=='run' || $('pane-run').classList.contains('other')
-  || document.visibilityState!=='visible') return;
-  (gridOf(shown) || [shown]).forEach(q=>{ if(q.result) q.seen=true; }); }
-function leftBehind(p){ (p.lot ? lotOf(p) : [p]).forEach(q=>{ if(q.incognito && q.result && q.seen) drop(q); }); }
-addEventListener('visibilitychange', markSeen);
+// Terminées de la page, sous la file : les générations finies de l'espace affiché, une entrée par génération seule ou
+// par lot fini (plus rien d'actif dans le lot ; en grille, une case par échec avec son message), la plus récente en
+// premier. Une image incognito y reste jusqu'à son « × », « Tout retirer », « Effacer » ou la fermeture de la page.
+// doneView : leurs images dans l'ordre affiché, que parcourt la visionneuse.
+const MAX_DONE=12;                                 // au-delà, la plus ancienne non incognito sort d'elle-même
+let doneView=[];
+const DICON = {
+  dl:'<path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/>',
+  share:'<path d="M12 15V3.5"/><path d="m7.5 8 4.5-4.5L16.5 8"/><path d="M8 11H6.5A2.5 2.5 0 0 0 4 13.5v5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-5a2.5 2.5 0 0 0-2.5-2.5H16"/>',
+  copy:'<rect x="8.5" y="8.5" width="12" height="12" rx="2.8"/><path d="M15.5 8.5V6.3a2.8 2.8 0 0 0-2.8-2.8H6.3a2.8 2.8 0 0 0-2.8 2.8v6.4a2.8 2.8 0 0 0 2.8 2.8h2.2"/>',
+  edit:'<rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/>',
+  mask:'<path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/>',
+  del:'<path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="m6.5 7 1 12.5h9l1-12.5"/>',
+  fail:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5.5"/><path d="M12 16.3v.2"/>',
+  x:'<path d="M6 6l12 12M18 6 6 18"/>' };
+const dicon = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DICON[k]}</svg>`;
+const removeBtn = '<button class="qx dx" data-remove aria-label="Retirer de la liste">'+dicon('x')+'</button>';
+const failText = p => 'Échec : '+(p.j.error||'génération impossible');
+function doneEntries(){
+  const lots=new Set(), out=[];
+  for(const p of pageJobs.filter(q=>ofSpace(q) && isDone(q))){
+    if(!p.lot){ out.push({one:p, at:p.doneAt||0}); continue; }
+    if(lots.has(p.lot.id)) continue; lots.add(p.lot.id);
+    const l=lotOf(p); if(l.some(isActive)) continue;   // lot en cours : ses images attendent la fin du lot
+    const items=l.filter(isDone).sort((a, b)=>a.lot.rank-b.lot.rank);
+    out.push({lot:items, at:Math.max(...items.map(q=>q.doneAt||0))}); }
+  return out.sort((a, b)=>b.at-a.at); }
+function doneCard(p, k){
+  const r=p.result, it=pageItem(p), [w, h]=r.dims||[1, 1];
+  const meta=[fmt(p.j.seconds||0), r.dims ? r.dims.join('×') : '', (p.j.total||'?')+' étapes'].filter(Boolean).join(' · ');
+  return `<article class="dcard" data-id="${esc(p.id)}"><button class="dthumb" data-open="${k}" style="--ar:${w/h}" aria-label="Voir l'image en grand"><img src="${esc(thumbOf(it))}" alt=""></button>`
+    + `<div class="dbody"><p class="dprompt">${esc(p.prompt)}</p><p class="dmeta">${esc(meta)}</p>${p.incognito ? '<p class="dmeta">Incognito · non enregistrée : téléchargez-la pour la garder</p>' : ''}</div>`
+    + `<div class="dacts"><a class="qx" data-dl href="${esc(dlOf(it))}" download="${esc(it.name)}" aria-label="Télécharger">${dicon('dl')}</a>`
+    + (canShare ? `<button class="qx" data-act="share" aria-label="Partager">${dicon('share')}</button>` : '')
+    + (canCopy ? `<button class="qx" data-act="copy" aria-label="Copier">${dicon('copy')}</button>` : '')
+    + `<button class="qx" data-act="edit" aria-label="Éditer">${dicon('edit')}</button><button class="qx" data-act="mask" aria-label="Dessiner">${dicon('mask')}</button>`
+    + `<button class="qx danger" data-act="del" aria-label="${p.incognito ? 'Effacer' : 'Supprimer'}">${dicon('del')}</button></div>${removeBtn}</article>`; }
+function failCard(p){
+  return `<article class="dcard fail" data-id="${esc(p.id)}"><span class="qicon">${dicon('fail')}</span><div class="dbody"><p class="dprompt">${esc(p.incognito ? 'Génération incognito' : p.prompt)}</p>`
+    + `<p class="dmeta err">${esc(failText(p))}</p></div>${removeBtn}</article>`; }
+function lotCard(items, addToView){                // lot fini : ses images en grille, chaque case à la forme de son image
+  const first=items[0], size=first.lot.size, ok=items.filter(q=>q.result), incog=first.incognito;
+  const meta=[isCampaignLot(first.lot, first.j.mode) ? `Campagne · ${size} photos` : `${size} variantes`, fmt(ok.reduce((t, q)=>t+(q.j.seconds||0), 0)),
+    (first.j.total||'?')+' étapes'].join(' · ');
+  const cells=items.map(q=>{ if(!q.result) return `<div class="cell fail"><span>${q.lot.rank}</span><p>${esc(failText(q))}</p></div>`;
+    const r=q.result, [w, h]=r.dims||[1, 1], k=addToView(q);
+    return `<div class="cell" style="--ar:${w/h}"><button data-open="${k}" aria-label="Ouvrir l'image ${q.lot.rank}"><img src="${esc(thumbOf(doneView[k]))}" alt=""></button><span>${q.lot.rank}</span>`
+      + (incog ? `<a href="${esc(r.url)}" download="${esc(r.name)}" aria-label="Télécharger l'image ${q.lot.rank}">${dicon('dl')}</a>` : '') + '</div>'; }).join('');
+  return `<article class="dcard dlot" data-lot="${esc(first.lot.id)}"><div class="dhead"><div class="dbody"><p class="dprompt">${esc(first.prompt)}</p><p class="dmeta">${esc(meta)}</p>`
+    + `${incog ? '<p class="dmeta">Incognito · non enregistrées : téléchargez celles à garder</p>' : ''}</div>${removeBtn}</div><div class="lotgrid">${cells}</div></article>`; }
+function renderDone(){
+  const entries=doneEntries(); doneView=[];
+  const addToView = p => doneView.push(pageItem(p))-1;   // rang de l'image dans doneView
+  $('doneList').innerHTML=entries.map(e=>e.lot ? lotCard(e.lot, addToView) : e.one.result ? doneCard(e.one, addToView(e.one)) : failCard(e.one)).join('');
+  $('runDone').hidden=!entries.length; renderRun(); }
+// génération ou lot d'une carte, par identifiant (la liste a pu être redessinée depuis l'affichage)
+function cardJobs(card){ return card.dataset.lot ? pageJobs.filter(q=>q.lot && q.lot.id===card.dataset.lot && ofSpace(q) && isDone(q))
+  : pageJobs.filter(q=>q.id===card.dataset.id); }
+$('doneList').addEventListener('click', e=>{
+  const open=e.target.closest('[data-open]'); if(open) return openViewer(+open.dataset.open, doneView);
+  const card=e.target.closest('.dcard'); if(!card) return;
+  if(e.target.closest('[data-remove]')){ cardJobs(card).forEach(p=>drop(p, true)); return renderDone(); }
+  const act=e.target.closest('[data-act]'), p=cardJobs(card)[0]; if(!act || !p || !p.result) return;
+  const it=pageItem(p), k=act.dataset.act;
+  if(k==='share') shareImage(srcOf(it), it.name); else if(k==='copy') copyImage(srcOf(it));
+  else if(k==='edit') useAsEditInput(it.name, srcOf(it)); else if(k==='mask') useAsMaskInput(it.name, srcOf(it));
+  else if(k==='del') deleteItem(it); });
+// « Tout retirer » : les terminées de l'espace affiché, notées par identifiant avant la confirmation (demandée quand une
+// image incognito, qui sera perdue, en fait partie) ; rien si l'espace a changé entre-temps
+$('doneClear').onclick=async ()=>{
+  const priv=inPrivate(), ids=new Set(doneEntries().flatMap(e=>e.lot || [e.one]).map(p=>p.id));
+  if(!ids.size) return;
+  if(pageJobs.some(p=>ids.has(p.id) && p.incognito && p.result) && !await ask('Tout retirer ?',
+    'Les images incognito de la liste ne sont enregistrées nulle part : sans téléchargement, elles seront perdues.', 'Tout retirer', true)) return;
+  if(priv!==inPrivate()) return;
+  pageJobs.filter(p=>ids.has(p.id)).forEach(p=>drop(p, true)); renderDone(); };
+// plafond des terminées (tous espaces), échecs compris : les images incognito, qui restent jusqu'à leur retrait, ne
+// comptent pas (sinon douze d'entre elles feraient sortir chaque nouvelle image dès sa fin) ; une image d'un lot encore en
+// cours ne sort pas avant la fin de son lot
+function evictDone(){
+  for(;;){ const done=pageJobs.filter(p=>isDone(p) && !p.incognito); if(done.length<=MAX_DONE) return;
+    const old=done.filter(p=>!(p.lot && lotOf(p).some(isActive))).sort((a, b)=>(a.doneAt||0)-(b.doneAt||0))[0];
+    if(!old) return; drop(old, true); } }
+// fin d'une génération de la page (ou d'un lot, une fois plus rien d'actif dans le lot), quand la page affichée n'est pas
+// En cours : un message qui y mène quand on le touche ; rien pour une annulée, ni pour une génération de l'autre espace
+function notifyDone(p){
+  if(mode==='run' || !ofSpace(p)) return;
+  if(!p.lot){ if(p.result) toast('Image prête', '', true); else if(p.j.status==='failed') toast('Échec de la génération', 'err', true); return; }
+  const l=lotOf(p); if(l.some(isActive)) return;
+  const ok=l.filter(q=>q.result).length, ko=l.filter(q=>q.j.status==='failed').length;
+  if(ok) toast(`Lot prêt · ${ok} image${ok>1 ? 's' : ''}${ko ? `, ${ko} en échec` : ''}`, '', true);
+  else if(ko) toast('Échec du lot', 'err', true); }
 // état de l'espace pour l'île et l'onglet En cours : génération en cours de l'espace (de cette page : ses étapes ; d'un
 // autre appareil : estimation), sinon « En attente » et la durée jusqu'au début de la première (travail caché compris)
 const entryFrac = e => Math.min(.97, 1-entryLeft(e)/Math.max(e.estimate, 1));   // progression estimée d'une entrée
@@ -1335,14 +1399,14 @@ function onIsland(){                               // file non vide : la page En
 let nowKey='';
 function renderRun(){
   const ownRun=pageJobs.find(p=>ofSpace(p) && p.j.status==='running');
-  if(ownRun && shown!==ownRun && !(shown && shown.j.status==='running') && !(shown && shown.incognito && shown.result))
-    return show(ownRun);                           // show rappelle renderRun
+  if(ownRun && shown!==ownRun && !(shown && shown.j.status==='running')) return show(ownRun);   // show rappelle renderRun
   const run=queueState.find(e=>e.status==='running'), next=queueState.find(e=>e.status==='queued');
   const other=!ownRun && (run ? !ownOf(run) : !!(next && next.ahead));
   $('pane-run').classList.toggle('other', other);
+  $('resultEmpty').hidden=!!shown || other || doneEntries().length>0;   // « Rien en cours » : ni génération ni terminée
   if(!other){ if(nowKey){ nowKey=''; $('nowFrame').style.removeProperty('--ar'); $('nowIco').innerHTML='';
       ['nowTitle', 'nowSub', 'nowEta', 'nowPrompt'].forEach(id=>$(id).textContent=''); $('nowCancel').dataset.id=''; }
-    return markSeen(); }                           // image incognito de la page de nouveau visible
+    return; }
   const e=run, isIncog=e && e.kind==='incognito', key=e ? (e.id || e.tag || 'incognito')+(e.width||'')+'×'+(e.height||'') : 'wait';
   if(key!==nowKey){ nowKey=key;                    // cadre et icône redessinés seulement quand la génération change
     $('nowFrame').style.setProperty('--ar', e ? (e.width||1)/(e.height||1) : 1);
@@ -1405,11 +1469,10 @@ function track(j, info){
   else { pageJobs.push(p={ id:j.id, j, incognito:!!j.incognito, private:!!j.private, lot:j.lot||null, tag:j.tag||null, prompt:info.prompt||'', tab:info.tab||'t2i', w:info.w, h:info.h, thumb:info.thumb||null,
       est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0,
       adopted:!!info.adopted });                    // adopted : reprise de la file (espace privé), pas lancée ici
-    while(pageJobs.length>MAX_PAGE_JOBS){ const k=pageJobs.findIndex(q=>q.result && !q.result.blob && q!==shown && !sameLot(q, shown)); if(k<0) break; pageJobs.splice(k, 1); }
     if(!j.incognito && !j.private) saveOwn(); }
-  // l'image incognito affichée le reste ; une génération reprise de la file (adopted) ne remplace pas ce qui est montré,
-  // ni une génération de l'autre espace (demande publique acceptée après l'entrée dans l'espace privé : hors de l'écran)
-  if((shown && shown.incognito && shown.result) || (info.adopted && shown) || !ofSpace(p)) renderRun();
+  // une génération reprise de la file (adopted) ne remplace pas ce qui est montré, ni une génération de l'autre espace
+  // (demande publique acceptée après l'entrée dans l'espace privé : hors de l'écran)
+  if((info.adopted && shown) || !ofSpace(p)) renderRun();
   else show(nextActive());
   renderIsland(); pollJobs(); }
 async function pollJobs(){
@@ -1426,7 +1489,7 @@ async function pollJobs(){
       if(ended){ saveOwn(); refreshStatus(); }     // l'île et la file suivent tout de suite (la suivante a démarré)
       renderProgress(); renderIsland(); renderRun(); } }
   finally{ polling=false; } }
-async function finish(p){                          // génération terminée : son image entre dans la page, ou elle en sort
+async function finish(p){                          // génération terminée : elle entre dans les terminées, ou sort de la page
   const j=p.j;
   if(j.incognito){                                 // image gardée en mémoire par le serveur : récupérée une fois ; puis la
     if(j.status==='done')                          // génération est oubliée, qu'elle ait réussi, échoué ou été annulée
@@ -1437,28 +1500,23 @@ async function finish(p){                          // génération terminée : s
     if(!p.adopted) forgetJob(j.id);                // (seule la page qui l'a lancée : les autres la suivent encore)
     if(!inPrivate()) return drop(p);         // sorti entre-temps : rien à l'écran ni rien qui signale l'espace (l'image y est rangée)
     if(j.status==='done') p.result={item:j.item, url:privImage(j.item)}; }
-  if(j.status==='done'){ const secs=j.seconds||0;
-    p.result={...(p.result||{}), name:j.private ? privName(j.item) : j.name, dims:j.dims,
-      file:j.incognito ? 'Incognito · non enregistrée : téléchargez-la pour la garder' : j.private ? 'Rangée chiffrée dans l\'espace privé' : j.name,
-      chips:[fmt(secs), j.dims?j.dims.join('×'):'', (j.total||'?')+' étapes', j.sec_per_it?j.sec_per_it.toFixed(1)+' s/étape':''] };
-    log('terminé en '+Math.round(secs)+' s → '+(j.incognito ? 'image incognito, non enregistrée' : j.private ? 'image privée' : j.path), !!j.private);
-    if(!ofSpace(p)) return;                        // publique finie dans l'espace privé : à l'écran à la sortie
-    const lot=lotOf(p), next=firstActive(lot);
-    toast(!p.lot ? 'Image prête en '+fmt(secs) : next ? `${isCampaignLot(p.lot, p.tab) ? 'Photo' : 'Image'} ${p.lot.rank} sur ${p.lot.size} prête` : 'Lot terminé');
-    if(mode==='hist') loadHistory();
-    // lot en cours : la page En cours passe à son image suivante ; à la fin du lot, sa grille
-    if(shown===p) show(next || p, !next); else if(sameLot(shown, p) && !next) show(shown); else renderRun();
-    return; }
-  if(!ofSpace(p)) return drop(p);                  // publique annulée ou en échec dans l'espace privé : sans message
-  if(j.status==='cancelled'){ log('génération annulée'); toast('Génération annulée'); }
-  else { log('ERREUR '+(j.error||j.status)); toast('Échec : '+(j.error||j.status), 'err'); }
-  drop(p); }
-function drop(p){                                  // retire une génération de la page (annulée, en échec, image supprimée)
+  if(j.status==='cancelled'){ log('génération annulée', !!j.private); drop(p, true); }   // annulée : elle sort, sans message
+  else { p.doneAt=Date.now();
+    if(j.status==='done'){ const secs=j.seconds||0;
+      p.result={...(p.result||{}), name:j.private ? privName(j.item) : j.name, dims:j.dims};
+      log('terminé en '+Math.round(secs)+' s → '+(j.incognito ? 'image incognito, non enregistrée' : j.private ? 'image privée' : j.path), !!j.private);
+      if(!j.incognito && !j.private && !inPrivate() && mode==='run') setAmbient(j.name);   // vue sur En cours ; jamais secrète
+      if(mode==='hist' && ofSpace(p)) loadHistory(); }
+    else log('ERREUR '+(j.error||j.status), !!j.private); }
+  if(shown===p) showOwn(nextActive());
+  notifyDone(p); evictDone(); renderDone(); }
+// retire une génération de la page (annulée, retirée de la liste, image supprimée) ; quiet : sans redessiner (l'appelant
+// le fait une fois pour plusieurs)
+function drop(p, quiet){
   const k=pageJobs.indexOf(p); if(k>=0) pageJobs.splice(k, 1);
   if(p.result && p.result.blob){ ready.delete(p.result.url); URL.revokeObjectURL(p.result.url); }   // image incognito : plus rien d'elle
-  const lot=lotOf(p);                              // de préférence une autre image de son lot (ou sa grille)
-  if(shown===p) show(firstActive(lot) || lot.find(q=>q.result) || nextActive() || latestResult());
-  else if(sameLot(shown, p) && !isActive(shown)) show(shown); else renderRun(); }
+  if(shown===p) showOwn(nextActive());
+  if(!quiet) renderDone(); }
 function inputThumb(){ return mode==='edit' && editImages.length ? editImages[0].dataUrl : mode==='mask' && maskImage ? maskImage.dataUrl : null; }
 $('go').onclick=async()=>{                         // toujours actif : la demande rejoint la file avec les réglages du moment
   let body; try{ body=buildRequest(); }catch(e){ toast(e.message, 'err'); return; }
@@ -1634,7 +1692,6 @@ function renderGallery(){
   const inLot={};                                  // images de chaque lot encore dans la galerie
   histItems.forEach(it=>{ if(it.lot) inLot[it.lot.id]=(inLot[it.lot.id]||0)+1; });
   histItems.forEach((it, i)=>{ const b=document.createElement('button'); b.dataset.name=it.name; b.setAttribute('aria-label', it.prompt||it.name);
-    if(lastResult && lastResult.name===it.name) b.classList.add('sel');
     const im=document.createElement('img'); im.loading='lazy'; im.decoding='async'; im.alt='';
     im.onerror=()=>{ if(!im.dataset.retry){ im.dataset.retry=1; setTimeout(()=>{ im.src=thumbOf(it)+'&retry=1'; }, 700); } };   // coupure passagère : une seconde tentative
     im.src=thumbOf(it); b.appendChild(im);
@@ -1724,13 +1781,13 @@ function zoomable(st, img, v, step, close){
   st.addEventListener('wheel', e=>{ e.preventDefault(); st.classList.add('drag'); clearTimeout(wheelEnd); wheelEnd=setTimeout(()=>st.classList.remove('drag'), 150); zoomAt(Math.min(MAX, Math.max(1, z.s*Math.exp(-e.deltaY*0.002))), e.clientX, e.clientY); }, {passive:false});
   return reset; }
 const resetZoom=zoomable($('vStage'), $('vImg'), $('viewer'), stepViewer, closeViewer);
-async function dataUrlOf(name, url){ if(lastResult && lastResult.blob && lastResult.name===name) return await readFile(lastResult.blob);
+async function dataUrlOf(name, url){
   const own=pageJobs.find(p=>p.result && p.result.blob && p.result.name===name); if(own) return await readFile(own.result.blob);   // image incognito d'un lot
   const b=await (await fetch(url || resultUrl(name))).blob(); return await readFile(b); }
-async function useAsEditInput(name=lastResult && lastResult.name, url=lastResult && lastResult.url){
+async function useAsEditInput(name, url){
   if(!name) return; if(editImages.length>=MAX_REFS){ toast(MAX_REFS+' images de référence au maximum', 'err'); return; }
   const list=editImages, priv=inPrivate(); addEditImage(list, await toEntry(name, await dataUrlOf(name, url), priv)); }
-async function useAsMaskInput(name=lastResult && lastResult.name, url=lastResult && lastResult.url){ if(!name) return; const priv=inPrivate();
+async function useAsMaskInput(name, url){ if(!name) return; const priv=inPrivate();
   if(await setMaskImage(name, await dataUrlOf(name, url), priv)) goTab('mask'); }
 // image reprise dans Éditer : list est la saisie de l'espace où le geste a commencé (prise avant toute attente)
 function addEditImage(list, entry){ list.push(entry); if(list!==editImages) return;
@@ -1746,8 +1803,6 @@ async function shareImage(url, name){
 async function copyImage(url){
   try{ await navigator.clipboard.write([new ClipboardItem({'image/png': fetch(url).then(r=>r.blob()).then(b=>new Blob([b], {type:'image/png'}))})]); toast('Image copiée'); }
   catch(e){ toast('Copie impossible : '+e.message, 'err'); } }
-function shareResult(){ if(lastResult) shareImage(lastResult.url, lastResult.name); }
-function copyResult(){ if(lastResult) copyImage(lastResult.url); }
 function viewerShare(){ const it=vList[vIndex]; if(it) shareImage(srcOf(it), it.name); }
 function viewerCopy(){ const it=vList[vIndex]; if(it) copyImage(srcOf(it)); }
 // ------------------------------------------------------------ images d'entrée d'une image de la galerie
@@ -1787,16 +1842,19 @@ async function viewerAction(kind){
   if(kind==='prompt'){ const tab = tabOf(it.mode);
     if(!it.prompt){ toast('Pas de texte enregistré pour cette image', 'err'); return; }
     const t=$(tab+'_prompt'); t.value=it.prompt; t.dispatchEvent(new Event('input')); closeViewer(); goTab(tab); toast('Texte repris'); return; }
-  if(kind==='delete'){
-    if(it.url){                                    // image incognito d'un lot : gardée par la page seulement
-      if(!await ask('Effacer cette image ?', 'Elle n\'est enregistrée nulle part : sans téléchargement, elle sera perdue.', 'Effacer', true)) return;
-      forgetResult(it.name); toast('Image effacée'); return removeFromViewer([it]); }
-    if(!await ask('Supprimer cette image ?', (it.private ? 'Cette image privée' : it.name)+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return;
-    const r=it.private ? await postJson('/api/private/delete', {id:it.id}) : await postJson('/api/delete', {name:it.name});
-    if(!r.ok){ toast('Suppression impossible : '+((await r.json()).error||r.status), 'err'); return; }
-    log('supprimé : '+it.name, !!it.private); toast('Image supprimée');
-    forgetResult(it.name); removeFromViewer([it]); }
+  if(kind==='delete' && await deleteItem(it)) removeFromViewer([it]);
 }
+// « Supprimer » (visionneuse, terminées) : une image incognito de la page est effacée de la page (« Effacer ») ; une autre
+// est supprimée du Mac, après confirmation ; elle quitte alors la page. Vrai si l'image n'est plus là.
+async function deleteItem(it){
+  if(it.url){                                      // image incognito : gardée par la page seulement
+    if(!await ask('Effacer cette image ?', 'Elle n\'est enregistrée nulle part : sans téléchargement, elle sera perdue.', 'Effacer', true)) return false;
+    forgetResult(it.name); toast('Image effacée'); return true; }
+  if(!await ask('Supprimer cette image ?', (it.private ? 'Cette image privée' : it.name)+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return false;
+  const r=it.private ? await postJson('/api/private/delete', {id:it.id}) : await postJson('/api/delete', {name:it.name});
+  if(!r.ok){ toast('Suppression impossible : '+((await r.json()).error||r.status), 'err'); return false; }
+  log('supprimé : '+it.name, !!it.private); toast('Image supprimée');
+  forgetResult(it.name); return true; }
 function removeFromViewer(gone){                  // images supprimées : hors de la galerie et de la liste de la visionneuse
   const names=new Set(gone.map(x=>x.name)), keep=x=>!names.has(x.name);
   const list=vList.filter(keep), at=Math.min(vIndex, list.length-1);
@@ -1830,19 +1888,7 @@ async function keepThis(){                        // variantes : garder cette im
   removeFromViewer(gone); const k=vList.indexOf(it); if(k>=0) openViewer(k); }
 function forgetResult(name){                      // image supprimée : elle quitte la page En cours
   const p=pageJobs.find(q=>q.result && q.result.name===name);
-  if(p) drop(p); else if(lastResult && lastResult.name===name){ lastResult=null; hideResult(); } }
-async function deleteCurrent(){
-  if(!lastResult) return;
-  const name=lastResult.name, item=lastResult.item, priv=!!item;   // pris avant les attentes (confirmation, envoi)
-  if(lastResult.blob){
-    if(!await ask('Effacer cette image ?', 'Elle n\'est enregistrée nulle part : sans téléchargement, elle sera perdue.', 'Effacer', true)) return;
-    forgetResult(name); toast('Image effacée'); return; }
-  if(!await ask('Supprimer cette image ?', (item ? 'Cette image privée' : name)+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return;
-  const r=item ? await postJson('/api/private/delete', {id:item}) : await postJson('/api/delete', {name});
-  if(!r.ok){ toast('Suppression impossible : '+((await r.json()).error||r.status), 'err'); return; }
-  log('supprimé : '+name, priv); forgetResult(name); toast('Image supprimée');
-  loadHistory();
-}
+  if(p) drop(p); }
 // ------------------------------------------------------------ espace privé : galerie chiffrée sur le Mac, ouverte par un
 // code privé propre à chaque appareil (session du serveur, cookie HttpOnly). Entrée discrète, un cadenas dans l'en-tête
 // de la galerie (rien à côté de Générer à l'arrivée : décision du porteur) ; masquée si le serveur ne le propose pas.
@@ -1882,7 +1928,7 @@ function changedSpace(inside){
     if(ivIndex<0) emptyInputs(); if(vIndex<0) emptyViewer(); }   // vues fermées : vidées sans attendre le fondu
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
     resumeOwn(queueState); }
-  show(nextActive() || latestResult());
+  show(nextActive()); renderDone();
   histItems=[]; $('histGrid').innerHTML=''; $('histCount').textContent=''; if(mode==='hist') loadHistory();
   syncThemeColor(); }
 // Saisie propre à chaque espace (texte, images d'Éditer, image à retoucher et masque de Dessiner, onglet par onglet) :

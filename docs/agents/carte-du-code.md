@@ -65,15 +65,16 @@ Dans l'ordre du fichier :
   attente est sautée, une annulée après sa prise en tête ne lance pas le moteur (`run_job`) ; une exception fait
   échouer ce job seul ; dans son `finally`, fichiers d'une génération secrète supprimés, fin de lot, puis
   `S.current` rendu en dernier), `end_of_lot`.
-- **Demandes** : `request_error` (400 pour tout champ que `build_cmd` utilise tel quel), `expand_request` (une
-  demande par image d'un lot : variantes `count`, campagne `campaign`), `draw_seeds` (graines -1 tirées par le serveur
-  pour être écrites au journal), `active_jobs` (génération en cours puis `S.pending`, lus sous `S.turn`), `move_first`
-  (« Passer en tête » : routes `/api/job/<id>/first` et `/api/lot/<id>/first`, réponse par `moved_first`), `in_space`
-  (génération de l'espace public ou privé), `queue_ranks` (rang dans l'espace), `queue_position`, `request_inputs`,
-  `job_estimate` (estimation par `estimate.predict`, seule source), `queue_entry` (ligne de `queue` dans `/api/status` ;
-  une incognito y porte le jeton de sa page et son étiquette `tag`), `queue_view` (file vue depuis un espace, `ahead` :
-  travail caché de l'autre espace devant chaque entrée), `new_job`, `public(job)` (ce que `/api/job/<id>` montre),
-  `launched` (réponse de `/api/generate` : `public` plus l'étiquette d'une incognito), `quiet_request`.
+- **Demandes** : `request_error` (400 pour tout champ que `build_cmd` utilise tel quel), `expand_request` (une demande
+  par image d'un lot : variantes `count`, campagne `campaign`), `draw_seeds` (graines -1 tirées par le serveur pour être
+  écrites au journal), `active_jobs` (génération en cours puis `S.pending`, lus sous `S.turn`), `move_first` (« Passer
+  en tête » : routes `/api/job/<id>/first` et `/api/lot/<id>/first`, réponse par `moved_first`), `in_space` (génération
+  de l'espace public ou privé), `queue_ranks` (rang dans l'espace), `queue_position`, `request_inputs`, `job_estimate`
+  (estimation par `estimate.predict`, seule source), `queue_entry` (ligne de `queue` dans `/api/status` ; une incognito
+  y porte le jeton de sa page et son étiquette `tag`), `queue_view` (file vue depuis un espace, `ahead` : travail caché
+  de l'autre espace devant chaque entrée), `new_job` (`input_names` : noms des images d'entrée gardées), `public(job)`
+  (ce que `/api/job/<id>` montre, `mode` et `inputs` compris), `launched` (réponse de `/api/generate` : `public` plus
+  l'étiquette d'une incognito), `quiet_request`.
 - **HTTP** : `class Server` (file de 128 connexions : la galerie en ouvre une par miniature), `class H` : `log_message`
   (tait `/api/private/`), `_send` ; contrôles dans l'ordre `_host_ok` (liste blanche de `Host`), `_post_refused`
   (POST : `Sec-Fetch-Site`, `Origin`, `Content-Type: application/json`), `_allowed` (le Mac passe, les autres
@@ -98,14 +99,14 @@ dernier bloc, après le HTML.
   bas », « compositeur », « panneau Réglages », « Éditer et Dessiner », « visionneuse plein écran », « résultat »,
   « île », « liste de la file (page En cours) », « prompts enregistrés », « espace privé », « messages et
   confirmations », « téléphone (html.lite) ».
-- **HTML** : onglets `#pane-run` (page En cours : zone de la page `#ownZone` avec `#stage`, `#lotGrid`,
-  `#resultMeta`, `#resultActions` et « Rien en cours » `#resultEmpty` ; génération d'un autre appareil ou attente
-  `#runNow` ; file `#runQueue`), `#pane-t2i`, `#pane-edit`, `#pane-mask`, `#pane-hist` (galerie `#histGrid`) ;
-  compositeur `#composer` (prompts `#t2i_prompt`, `#edit_prompt`, `#mask_prompt`, bouton `#go`) ; barre d'onglets
-  `#tabbar` (onglet En cours : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vKeep` : « Garder
-  celle-ci ») ; images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`, `#engineSheet`, `#lotSheet`,
-  `#promptSheet`,
-  `#promptEditSheet` et celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`, `#privCodeSheet`…).
+- **HTML** : onglets `#pane-run` (page En cours : zone de la page `#ownZone` avec `#stage` et « Rien en cours »
+  `#resultEmpty` ; génération d'un autre appareil ou attente `#runNow` ; file `#runQueue` ; terminées `#runDone`, liste
+  `#doneList`, « Tout retirer » `#doneClear`), `#pane-t2i`, `#pane-edit`, `#pane-mask`, `#pane-hist` (galerie
+  `#histGrid`) ; compositeur `#composer` (prompts `#t2i_prompt`, `#edit_prompt`, `#mask_prompt`, bouton `#go`) ; barre
+  d'onglets `#tabbar` (onglet En cours : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vKeep` :
+  « Garder celle-ci ») ; images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`, `#engineSheet`,
+  `#lotSheet`, `#promptSheet`, `#promptEditSheet` et celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`,
+  `#privCodeSheet`…).
 - **JavaScript**, sections dans l'ordre :
   - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
     privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
@@ -130,32 +131,37 @@ dernier bloc, après le HTML.
     jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
     de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
   - « générations de la page, page En cours, île et file » : `pageJobs` (générations lancées par cette page),
-    `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `isCampaignLot`, `lotOf`, `gridOf`,
-    `show` (`showOwn`, puis `renderRun`) et `showGrid` (zone de la page), `spaceNow` (état de l'espace pour l'île et
+    `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `isDone` (image prête ou échec),
+    `isCampaignLot`, `lotOf`, `show` (`showOwn` : une génération active de la page, ou rien ; puis `renderRun`),
+    `pageItem` (image de la page pour la visionneuse : vrai mode et images d'entrée, `mode` et `inputs` de son
+    suivi), `spaceNow` (état de l'espace pour l'île et
     l'onglet ; `entryFrac`, `firstWait`, `ringOffset`), `renderIsland` (île) et `renderRunTab` (nombre et anneau de
     l'onglet En cours), `onIsland` (file non vide : page En cours, sinon `#engineSheet`), `renderRun` (haut de la
     page : génération de la page qui tourne, sinon d'un autre appareil, ou attente d'une génération cachée, classe
-    `other` ; image incognito marquée vue par `markSeen`),
+    `other` ; « Rien en cours » sans terminée), terminées : `renderDone` (`doneEntries`, cartes `doneCard`,
+    `failCard`, `lotCard` en grille ; `doneView` : leurs images pour la visionneuse), `evictDone` (`MAX_DONE`),
+    `notifyDone` (message « Image prête », « Lot prêt » hors de la page En cours, `toast(…, go)`),
     `renderQueue` (file de la page ; annulation et « Passer en tête » par ligne), `ownOf` (ligne de `queue` →
     génération de la page :
     par identifiant, ou par l'étiquette `tag` d'une incognito), `ofSpace`, `spaceActive`, `firstActive` (celle qui
     tourne, sinon la prochaine dans l'ordre de calcul) et `nextActive` (la même, parmi les générations de l'espace
-    affiché), `latestResult` (générations de l'espace affiché), `track` (suit une génération, `pollJobs` chaque seconde
-    ; une privée « inconnue » quitte la page sans message), `finish` (image terminée : dans la page, ou recharge la
-    galerie ; une publique finie pendant qu'on est dans l'espace privé garde son image hors de l'écran), `drop` ; bouton
+    affiché), `track` (suit une génération, `pollJobs` chaque seconde ; une privée « inconnue » quitte la page sans
+    message), `finish` (fin d'une génération : terminée gardée, échec compris, ou annulée retirée), `drop` (retire
+    une génération de la page ; image incognito révoquée) ; bouton
     `#go` ; reprise : `followQueue` (suit des entrées de la file), `resumeOwn` (générations normales de ce navigateur,
     après un rechargement et au retour dans l'espace public), `resume`, `adoptPrivate` (dans l'espace privé, toutes les
     générations privées actives de la file, `adopted` : pas lancées par la page, qui ne les fait pas oublier).
   - « notifications » : `pushSubscribe`, `askNotifications`.
   - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts`, `renderPrompts`,
     `usePrompt`, `savePrompt`.
-  - « galerie et visionneuse » : `histItems`, `vList` (ce que parcourt la visionneuse : la galerie ou les images d'un
-    lot de la page), `loadHistory`, `renderGallery`, `openViewer`, `stepViewer`, `closeViewer` et `emptyViewer` (contenu
+  - « galerie et visionneuse » : `histItems`, `vList` (ce que parcourt la visionneuse : la galerie ou les terminées
+    de la page), `loadHistory`, `renderGallery`, `openViewer`, `stepViewer`, `closeViewer` et `emptyViewer` (contenu
     vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace privé), gestes : `zoomable` (pincer,
     molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les images d'entrée).
   - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
     `inputAction`, `addEditImage` ; actions de la visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`,
-    `keepThis` (« Garder celle-ci »), `deleteCurrent`.
+    `keepThis` (« Garder celle-ci »), `deleteItem` (« Supprimer », ou « Effacer » une image incognito : visionneuse
+    et terminées), `forgetResult`.
   - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
     `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,
     `putInput`, `swapInput`, `emptyTab` (vidage après « Générer », dans l'espace d'où la demande est partie) ; un ajout
@@ -163,10 +169,10 @@ dernier bloc, après le HTML.
     `privCreate`, `privUnlock`, `privLock`, `privChangeCode`, `privReset`.
 
 Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
-« Dessiner », « Reprendre » (reprend le texte du prompt) et « Supprimer » → `viewerAction('edit' | 'mask' | 'prompt'
-| 'delete')`, avec l'image décrite par `pageItem` pour une image de la page ; texte sous l'image de la page En
-cours → `setMeta` ; « Garder celle-ci » → `keepThis` ; cadenas de la Galerie → `#privEntry`, « Sortir » →
-`privLock` ; pastille du haut → `#island`, `renderIsland`.
+« Dessiner », « Reprendre » (reprend le texte du prompt) et « Supprimer » → `viewerAction('edit' | 'mask' | 'prompt' |
+'delete')`, avec l'image décrite par `pageItem` pour une image de la page ; carte d'une terminée → `doneCard`, ses
+boutons → `data-act` dans l'écouteur de `#doneList` ; « Garder celle-ci » → `keepThis` ; cadenas de la Galerie →
+`#privEntry`, « Sortir » → `privLock` ; pastille du haut → `#island`, `renderIsland`.
 
 Deux boucles suivent les générations sans se synchroniser : `pollJobs` (`/api/job/<id>`, chaque seconde) et
 `refreshStatus` (`/api/status`, toutes les 2 à 5 s). Une réponse de l'une peut arriver avant celle de l'autre :
@@ -213,20 +219,19 @@ invariants ».
   espace a sa liste : dans l'espace privé, la feuille passe par `/api/private/prompts` (`private_prompts`, chiffrée) ;
   `changedSpace` ferme ses feuilles (confirmation comprise) et vide la liste de l'espace quitté ; une réponse reçue
   après un changement d'espace est ignorée.
-- **Interface et serveur** : l'interface suit les générations qu'elle a lancées (`pageJobs`) en interrogeant chacune
-  par `/api/job/<id>` chaque seconde, et la file de son espace (`queue` de `/api/status`, entrées produites par
-  `queue_view`) toutes les 2 s tant qu'elle n'est pas vide ; la file et l'île ne parlent que des générations de
-  l'espace affiché (`ofSpace`, `spaceActive`), le temps d'attente ajoute `ahead` ; après un rechargement, elle se
-  rattache aux seules générations normales lancées depuis ce navigateur (identifiants dans `localStorage`,
-  `qwen-own`), et dans l'espace privé à toutes les générations privées actives (`adoptPrivate`), avec le prompt
-  complet que donne leur suivi (`followQueue` ; `public(job)` le tait pour l'incognito). À la sortie de
-  l'espace privé, `changedSpace` retire de la page ses générations privées ; dans l'espace privé, les publiques restent
-  suivies hors de l'écran. Ses lignes
+- **Interface et serveur** : l'interface suit les générations qu'elle a lancées (`pageJobs`) en interrogeant chacune par
+  `/api/job/<id>` chaque seconde, et la file de son espace (`queue` de `/api/status`, entrées produites par
+  `queue_view`) toutes les 2 s tant qu'elle n'est pas vide ; la file et l'île ne parlent que des générations de l'espace
+  affiché (`ofSpace`, `spaceActive`), le temps d'attente ajoute `ahead` ; après un rechargement, elle se rattache aux
+  seules générations normales lancées depuis ce navigateur (identifiants dans `localStorage`, `qwen-own`), et dans
+  l'espace privé à toutes les générations privées actives (`adoptPrivate`), avec le prompt complet que donne leur suivi
+  (`followQueue` ; `public(job)` le tait pour l'incognito). À la sortie de l'espace privé, `changedSpace` retire de la
+  page ses générations privées ; dans l'espace privé, les publiques restent suivies hors de l'écran. Ses lignes
   incognito de `queue` se reconnaissent à l'étiquette `tag` que la réponse de `/api/generate` donne à la page, même
-  après un passage en tête (à défaut, serveur plus ancien : au jeton de la page, `PAGE_TOKEN`, et au rang). Un lot
-  terminé s'affiche en grille (`gridOf`) ; la visionneuse parcourt `vList` (la galerie, ou les images d'un lot de la
-  page, incognito comprises par leur adresse `blob:`). Réglages, brouillons de la saisie publique et générations à
-  reprendre dans `localStorage` (`qwen-opt`, `qwen-<onglet>_prompt`, `qwen-own`).
+  après un passage en tête (à défaut, serveur plus ancien : au jeton de la page, `PAGE_TOKEN`, et au rang). Les
+  générations finies vont dans les terminées (`renderDone`, un lot fini en grille) ; la visionneuse parcourt `vList` (la
+  galerie, ou les terminées de la page, incognito comprises par leur adresse `blob:`). Réglages, brouillons de la saisie
+  publique et générations à reprendre dans `localStorage` (`qwen-opt`, `qwen-<onglet>_prompt`, `qwen-own`).
 - **Contrôle d'accès** : `_host_ok` (liste blanche de `Host` contre le rebinding DNS, noms du Wi-Fi et de Tailscale
   figés au démarrage), `_post_refused` (tout POST : `Sec-Fetch-Site`, `Origin` égal à l'origine du `Host`,
   `Content-Type: application/json` exigé, sinon 403/415), puis `_allowed` (le Mac lui-même passe ; les autres

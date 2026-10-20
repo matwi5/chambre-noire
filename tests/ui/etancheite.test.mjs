@@ -55,12 +55,12 @@ async function privateTour() {
   assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE2lot', count: 2 }`), 202);
   assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE7supprimee' }`), 202);
   await idle();
-  // une génération de la page jusqu'à la zone de résultat, puis une autre gardée en file
+  // une génération de la page jusqu'aux terminées de la page En cours, puis une autre gardée en file
   await page.click('#tabbar [data-pane="t2i"]');
   await type('zqE3resultat');
   await page.click('#go');
-  await page.waitFor(`shown && shown.result && $('stageImg').complete && $('stageImg').naturalWidth > 0`,
-    { what: 'image privée dans la zone de résultat', timeout: 30000 });
+  await page.waitFor(`(img => img && img.complete && img.naturalWidth > 0)($('doneList').querySelector('img'))`,
+    { what: 'image privée dans les terminées', timeout: 30000 });
   assert.equal(await generate(`{ mode: 't2i', prompt: 'HOLD=etanche zqE4file' }`), 202);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`pageJobs.some(p => p.private && p.adopted)`, { what: 'génération privée suivie en file' });
@@ -97,7 +97,7 @@ const scan = (markers, aside) => page.eval(`((m) => {
   doc.querySelectorAll('script').forEach(s => s.remove());
   const places = { page: doc.outerHTML,
     champs: [...document.querySelectorAll('input, textarea')].map(e => e.value).join('\\n'),
-    mémoire: text({ vList, histItems, pageJobs, ready: [...ready.keys()], prompts, queueState, lastResult, shown,
+    mémoire: text({ vList, histItems, pageJobs, ready: [...ready.keys()], prompts, queueState, doneView, shown,
       ivOwner, editImages: editImages.map(x => x.name)${aside ? ', asideInput' : ''} }),
     localStorage: store };
   return Object.entries(places).flatMap(([where, t]) => m.filter(k => t.includes(k)).map(k => where + ' : ' + k));

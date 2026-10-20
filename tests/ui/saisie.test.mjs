@@ -187,7 +187,8 @@ test('Variantes : proposées en Éditer et en Dessiner hors campagne, la demande
   await page.waitFor(`editImages.length === 1`, { what: 'une image' });
   assert.equal(await countShown(), true, 'rangée des images en Éditer');
   await pick(2);
-  await type('edit', 'deux essais d\'un chapeau');
+  // HOLD : chaque lot ne finit qu'une fois la page revenue sur Éditer (fini sur En cours, il n'aurait pas de message)
+  await type('edit', 'HOLD=chapeau deux essais d\'un chapeau');
   await generate();
   assert.deepEqual(await lastLot(), { size: 2, campaign: false });
   // campagne : la rangée disparaît et le nombre choisi est ignoré (une image par photo)
@@ -196,15 +197,17 @@ test('Variantes : proposées en Éditer et en Dessiner hors campagne, la demande
   assert.equal(await countShown(), false, 'pas de variantes en campagne');
   await page.setFiles('#edit_files', photos(3));
   await page.waitFor(`editImages.length === 3`, { what: 'trois photos' });
-  await type('edit', 'voiture bleue');
+  await type('edit', 'HOLD=voiture voiture bleue');
   await generate();
+  bench.release('chapeau');                        // les deux lots, une fois revenu sur Éditer
+  bench.release('voiture');
   assert.deepEqual(await lastLot(), { size: 3, campaign: true });
-  // fin de chaque image avant la dernière : « Image » pour des variantes d'édition, « Photo » pour une campagne
-  // derrière les générations des tests précédents, toutes les pages d'interface et le banc tournant en même temps
+  // fin de chaque lot, vue depuis Éditer : un message par lot, une fois toutes ses images finies ; derrière les
+  // générations des tests précédents, toutes les pages d'interface et le banc tournant en même temps
   await page.waitFor(`pageJobs.length === 5 && pageJobs.every(p => p.result)`,
     { what: 'deux lots terminés', timeout: 60000 });
-  const ends = await page.eval(`seenToasts.filter(t => / sur \\d prête$/.test(t))`);
-  assert.deepEqual(ends, ['Image 1 sur 2 prête', 'Photo 1 sur 3 prête', 'Photo 2 sur 3 prête']);
+  const ends = await page.eval(`seenToasts.filter(t => t.startsWith('Lot prêt'))`);
+  assert.deepEqual(ends, ['Lot prêt · 2 images', 'Lot prêt · 3 images']);
   await fresh('mask');
   await page.setFiles('#mask_file', photos(1));
   await page.waitFor(`!!maskImage`, { what: 'image à retoucher chargée' });

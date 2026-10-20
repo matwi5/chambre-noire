@@ -45,11 +45,11 @@ test('rechargement : un lot repris montre le prompt complet et « Reprendre » r
   assert.deepEqual(await page.eval(`pageJobs.map(p => p.prompt)`), [LONG, LONG]);
   bench.release('lot');
   await page.click('#tabbar [data-pane="run"]');   // la page rechargée s'ouvre sur Créer
-  await page.waitFor(`!$('lotGrid').hidden && $('lotGrid').querySelectorAll('button[data-k]').length === 2`,
+  await page.waitFor(`$('doneList').querySelectorAll('.dlot [data-open]').length === 2`,
     { what: 'grille du lot terminé', timeout: 30000 });
-  assert.equal(await page.eval(`$('resultMeta').querySelector('.m-prompt').textContent`), LONG, 'prompt sous l\'image');
+  assert.equal(await page.eval(`$('doneList').querySelector('.dlot .dprompt').textContent`), LONG, 'prompt du lot');
 
-  await page.click('#lotGrid button[data-k]');     // visionneuse depuis la zone de résultat, puis « Reprendre »
+  await page.click('#doneList .dlot [data-open]'); // visionneuse depuis les terminées, puis « Reprendre »
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
   await page.eval(`$('t2i_prompt').value = ''`);
   await page.click(`#viewer button[onclick="viewerAction('prompt')"]`);
