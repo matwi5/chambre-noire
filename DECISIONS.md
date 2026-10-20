@@ -4,6 +4,17 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-20 · Suites du groupe B : lot en tête, « Rien en cours », terminées incognito
+
+- **Contexte** : la session du groupe B (page En cours) remonte trois écarts entre la lettre des textes et ce qu'elle a
+  fait.
+- **Décision** (porteur, 20/10/2026 : « oui pour les points 1 à 4 ») : « Passer en tête » d'un lot n'est offert que si
+  rien du lot ne tourne (spécification, section 8 ; la ligne de la décision du 19/10 est précisée) ; « Rien en cours »
+  ne s'affiche que si rien ne tourne, rien n'attend et aucune terminée n'est là ; les images incognito ne comptent pas
+  dans le plafond de 12 terminées et ne sortent jamais d'elles-mêmes (la liste peut dépasser 12 en incognito, dans la
+  seule mémoire de la page). Piège « Verrous » de `CLAUDE.md` complété (`start_job`, `cancel_job` sous `S.turn`).
+- **Écarté** : oublier d'elle-même la plus ancienne image incognito au-delà de 12 (avec un message).
+
 ## 2026-10-20 · Suites du groupe A : marqueur de campagne caché des lignes incognito, annulation au démarrage
 
 - **Contexte** : la revue de sécurité du groupe A (file réordonnable, variantes en édition) relève que le marqueur de
@@ -36,9 +47,9 @@ les messages de commit.
     une par demande (un lot ou une campagne sur une carte, une case par image, annulation de la carte ou d'une image
     dépliée), « prête vers HH h MM » et l'heure de fin de la file, vignette (image d'entrée, cadre aux proportions
     demandées, icône incognito), ligne des réglages, seul « autre appareil » signalé ; « Passer en tête » (génération
-    ou lot), offert à qui peut l'annuler. Puis les terminées de la page (au plus 12, lots en grille, « × » et « Tout
-    retirer », échecs avec leur message et « Relancer », vidées au rechargement). Message « Image prête » ou « Lot
-    prêt » quand on est ailleurs dans l'application.
+    ou lot), offert à qui peut l'annuler, sur une carte dont rien ne tourne. Puis les terminées de la page (au plus
+    12, lots en grille, « × » et « Tout retirer », échecs avec leur message et « Relancer », vidées au rechargement).
+    Message « Image prête » ou « Lot prêt » quand on est ailleurs dans l'application.
   - **Navigation** : pastille sur l'onglet En cours (nombre en cours et en attente, anneau de progression) ; la
     pastille du haut mène à En cours quand une génération tourne, sinon au panneau Moteur ; la feuille « File
     d'attente » et la rangée « #1 #2… » disparaissent.
