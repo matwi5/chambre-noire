@@ -1,8 +1,9 @@
 """Une demande invalide est refusée, une génération qui ne peut pas se préparer échoue seule : la file continue."""
-import os, threading, time, unittest
+import contextlib, io, os, sys, threading, time, unittest
 from unittest import mock
 
 import bench
+import calibrate
 from bench import call, gen_body, generate, wait_job
 
 
@@ -77,7 +78,7 @@ class PreparationFailureTest(bench.BenchCase):
 
 
 class CancelDuringPreparationTest(bench.BenchCase):
-    def test_cancel_while_inputs_are_prepared_stops_the_engine_at_once(self):
+    def test_cancel_while_inputs_are_prepared_does_not_start_the_engine(self):
         preparing, cancelled, real = threading.Event(), threading.Event(), bench.launch.build_cmd
 
         def slow_build(job):                    # préparation longue (grosses images d'entrée), jusqu'à l'annulation
@@ -89,12 +90,117 @@ class CancelDuringPreparationTest(bench.BenchCase):
             self.assertTrue(preparing.wait(5))
             self.assertEqual(call("POST", f"/api/job/{jid}/cancel")[1]["status"], "cancelled")
             cancelled.set()
-            t0 = time.time()
             bench.wait_idle()
-        self.assertLess(time.time() - t0, 5)       # le moteur n'a pas tourné ses 20 s
-        self.assertEqual(bench.job(jid)["status"], "cancelled")
+        done = bench.job(jid)
+        self.assertEqual((done["status"], done["seconds"]), ("cancelled", None))   # seconds : posé après le moteur
+        self.assertIsNotNone(done["finished"])
         self.assertEqual(bench.files("outputs", "*.png"), [])
         self.assertEqual(bench.files("jobs", jid), [])
+
+    def test_cancel_as_the_engine_starts_stops_it_at_once(self):
+        real = bench.launch.subprocess.Popen
+
+        def start_then_cancel(*a, **kw):        # annulation arrivée pendant le lancement du moteur
+            proc = real(*a, **kw)
+            if a and str(a[0][0]).endswith(bench.launch.EXE):
+                self.assertEqual(call("POST", f"/api/job/{jid}/cancel")[1]["status"], "cancelled")
+            return proc
+        jid = None
+        with mock.patch.object(bench.launch.subprocess, "Popen", start_then_cancel):
+            code, reply = call("POST", "/api/generate", gen_body("HOLD=jamais long one", steps=20))
+            jid = reply["id"]
+            bench.wait_idle()                      # HOLD : sans l'arrêt du moteur, il ne finirait jamais
+        self.assertEqual(bench.job(jid)["status"], "cancelled")
+        self.assertEqual((bench.files("outputs", "*.png"), bench.files("jobs", jid)), ([], []))
+
+
+class CancelAtStartTest(bench.BenchCase):
+    """Annulation posée au moment où worker() vient de prendre la génération en tête de file, avant son lancement."""
+
+    def cancel_at_start(self, body):
+        """Lance la demande ; à la prise en tête de sa première génération, lit sa ligne de la file et l'annule (par
+        son identifiant, que la page qui l'a lancée connaît). Renvoie la réponse de /api/generate et cette ligne."""
+        real, done = bench.launch.run_job, threading.Event()
+        entry = cancelled = None
+
+        def cancel_then_run(job):               # fenêtre entre le passage en cours (sous S.turn) et run_job
+            nonlocal entry, cancelled
+            if not done.is_set():
+                queue = call("GET", "/api/status")[1]["queue"]
+                mine = job.get("tag") or job["id"]   # une ligne incognito ne porte que son étiquette
+                entry = next((e for e in queue if (e.get("tag") or e.get("id")) == mine), None)
+                cancelled = call("POST", f"/api/job/{job['id']}/cancel")[1]
+                done.set()
+            return real(job)
+        with mock.patch.object(bench.launch, "run_job", cancel_then_run):
+            code, reply = call("POST", "/api/generate", body)
+            self.assertEqual(code, 202, reply)
+            self.assertTrue(done.wait(10), "génération jamais prise en tête")
+            bench.wait_idle()
+        self.assertEqual(cancelled["status"], "cancelled")
+        self.assertIsNotNone(entry, "ligne de la génération absente de la file")
+        return reply, entry
+
+    def assert_never_computed(self, jid):
+        j = bench.job(jid)
+        self.assertEqual((j["status"], j["seconds"]), ("cancelled", None))   # seconds : posé après le moteur
+        self.assertIsNotNone(j["finished"])
+
+    def test_cancel_as_a_lot_image_starts_stops_it_and_notifies_the_lot_once(self):
+        with bench.capture_push() as sent:
+            reply, entry = self.cancel_at_start(gen_body("lot", count=2))
+            first, second = reply["jobs"]
+            self.assertEqual((entry["status"], entry["position"]), ("running", 0))   # plus de « 0e en attente »
+            self.assert_never_computed(first["id"])
+            self.assertEqual(bench.job(second["id"])["status"], "done")
+            self.assertEqual(len(sent.decided), 1, sent.decided)
+        self.assertEqual(len(bench.files("outputs", "*.png")), 1)
+        self.assertEqual(bench.files("jobs", first["id"]), [])
+        self.assertEqual([e.get("seed") for e in bench.journal()], [bench.job(second["id"])["seed"]])
+
+    def test_cancel_as_an_incognito_generation_starts_leaves_nothing(self):
+        bench.LOG.clear()
+        reply, entry = self.cancel_at_start(gen_body("zq9secret", incognito=True))
+        self.assertEqual(entry["status"], "running")
+        self.assert_never_computed(reply["id"])
+        self.assertEqual((bench.files("outputs", "*"), bench.files("jobs", "*"), bench.journal()), ([], [], []))
+        self.assertTrue(bench.LOG)                 # la demande est bien passée par le journal du serveur
+        self.assertFalse([line for line in bench.LOG if "zq9secret" in line or reply["id"] in line])
+
+
+class RankWhileFinishingTest(bench.BenchCase):
+    def test_next_generation_stays_first_in_line_while_the_previous_one_is_put_away(self):
+        real, seen = bench.launch.notify_job, []
+
+        def look_then_notify(job):              # fin de génération : statut done, S.current encore posé
+            seen.extend(e for e in call("GET", "/api/status")[1]["queue"] if e.get("id") == second)
+            return real(job)
+        with mock.patch.object(bench.launch, "notify_job", look_then_notify):
+            first = generate("HOLD=rang first")["id"]
+            wait_job(first, ("running",))
+            second = generate("second")["id"]
+            bench.release("rang")
+            wait_job(second)
+            bench.wait_idle()
+        self.assertTrue(seen, "seconde génération absente de la file pendant le rangement de la première")
+        self.assertEqual((seen[0]["status"], seen[0]["position"]), ("queued", 1))   # jamais « 0e en attente »
+
+
+class CalibrationTest(bench.BenchCase):
+    """tools/calibrate.py lance ses trois générations par run_job, hors de la file (sur le faux moteur)."""
+
+    def test_calibration_runs_its_three_generations(self):
+        S, launch = bench.S, bench.launch
+        saved = (S.cfg, S.backend, S.model, S.engine, S.store, dict(launch.MODELS))
+        argv = ["calibrate.py", "--backend", S.backend, "--model", "q4", "--steps", "2"]
+        out = io.StringIO()
+        try:
+            with mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(out):
+                calibrate.main()                   # échec : sys.exit, qui fait échouer le test avec son message
+        finally:
+            S.cfg, S.backend, S.model, S.engine, S.store, models = saved
+            launch.MODELS.update(models)
+        self.assertIn("[calibration] terminée", out.getvalue())
 
 
 class CancelFinishedTest(bench.BenchCase):

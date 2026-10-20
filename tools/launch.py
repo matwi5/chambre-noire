@@ -1029,7 +1029,9 @@ class State:
     pending = []             # générations en attente, dans l'ordre de calcul : seule source de l'ordre de la file ; une
                              # génération annulée y reste jusqu'à ce que worker() la saute
     turn = threading.Condition()   # protège pending : un lot y entre d'un bloc, « Passer en tête » y réordonne,
-                                   # worker() y prend la tête et la pose dans current en une seule opération
+                                   # worker() y prend la tête, la pose dans current et la passe « en cours » en
+                                   # une seule opération ; cancel_job y annule (la fin d'une génération, done ou
+                                   # failed, s'écrit sans lui)
     current = None
     started = None           # version du code au lancement du serveur (code_version) : launch.py n'est relu qu'au
                              # redémarrage, l'interface à chaque requête
@@ -1107,22 +1109,36 @@ def latest_preview(job):
         job["preview_version"] = job.get("preview_version", 0) + 1
 
 
+def start_job(job):
+    """Passe une génération « en cours » : worker() l'appelle sous S.turn, en même temps que la prise en tête ;
+    tools/calibrate.py, qui lance run_job hors de la file, l'appelle aussi."""
+    job["status"], job["started"], job["phase"] = "running", time.time(), "chargement du modèle"
+
+
 def run_job(job):
-    job["status"] = "running"
-    job["started"] = time.time()
-    job["phase"] = "chargement du modèle"
+    """Prépare et calcule une génération passée « en cours » par start_job ; une génération annulée depuis ne lance
+    pas le moteur et ne laisse rien."""
+    if job.get("status") == "cancelled":         # annulée depuis la prise en tête : pas même ses images d'entrée
+        discard_cancelled(job)
+        return
     cmd = build_cmd(job)
     job["cmd"] = " ".join(cmd)
+    if job.get("status") == "cancelled":         # annulée pendant la préparation (images d'entrée)
+        discard_cancelled(job)
+        return
     logf = open(os.devnull if secret(job) else os.path.join(job["dir"], "sd-cli.log"), "wb")
     try:
         proc = subprocess.Popen(cmd, cwd=P("sdcpp", S.backend), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     except Exception as e:
+        logf.close()
+        if job.get("status") == "cancelled":     # annulée entre-temps : elle le reste, sans message d'échec
+            discard_cancelled(job)
+            return
         job["status"] = "failed"
         job["error"] = f"impossible de lancer sd-cli : {e}"
-        logf.close()
         return
     job["proc"] = proc
-    if job.get("status") == "cancelled":         # annulée pendant la préparation (images d'entrée) : moteur arrêté aussitôt
+    if job.get("status") == "cancelled":         # annulée pendant le lancement du moteur : arrêté aussitôt
         proc.kill()
     buf = b""
     tail = []
@@ -1261,7 +1277,9 @@ def keep_private(job):
 
 def discard_cancelled(job):
     """Génération annulée : rien n'en reste sur le disque, ni le dossier de travail (images d'entrée, aperçus, journal du
-    moteur), ni une image finale que sd-cli aurait commencé à écrire avant d'être arrêté."""
+    moteur), ni une image finale que sd-cli aurait commencé à écrire avant d'être arrêté. Sa fin est notée si rien ne
+    l'a encore fait (annulée au démarrage) : le suivi et sweep() la comptent depuis là."""
+    job.setdefault("finished", time.time())
     shutil.rmtree(job["dir"], ignore_errors=True)
     try:
         os.remove(job["out"])
@@ -1303,15 +1321,18 @@ ACTIVE = ("queued", "running")             # statuts d'une génération de la fi
 
 def cancel_job(job):
     """Annule une génération en file ou en cours (le moteur est arrêté) ; une génération terminée garde son statut et son
-    image. worker() supprime ensuite ses fichiers."""
-    if job.get("status") in ACTIVE:
+    image. worker() supprime ensuite ses fichiers. Sous S.turn, comme la prise en tête par worker() : une génération
+    prise en tête est déjà « en cours »."""
+    with S.turn:
+        if job.get("status") not in ACTIVE:
+            return
         if job["status"] == "queued":
             job["finished"] = time.time()       # fin d'une génération qui n'a jamais tourné (run_job pose celle des autres)
         job["status"] = "cancelled"
         job["phase"] = "annulé"
-        proc = job.get("proc")
-        if proc and proc.poll() is None:
-            proc.kill()
+    proc = job.get("proc")                      # lu après le statut : run_job pose proc, puis relit le statut
+    if proc and proc.poll() is None:
+        proc.kill()
 
 
 def forget_job(job):
@@ -1344,7 +1365,10 @@ def worker():
                 S.turn.wait()
             job = S.pending.pop(0)
             if job.get("status") != "cancelled":
+                # « en cours » posé dans la même section : une annulation (cancel_job, sous S.turn) passe avant ou
+                # après, jamais entre la prise en tête et le passage en cours, et run_job ne l'écrase plus
                 S.current = job["id"]
+                start_job(job)
         try:
             if job.get("status") == "cancelled":       # annulée avant de démarrer
                 discard_cancelled(job)
@@ -1499,8 +1523,12 @@ def in_space(job, private):
 def queue_ranks(active, private):
     """Rang de chaque génération d'un espace dans la file (active : active_jobs()), par identifiant : 0 pour celle qui
     tourne, sinon le nombre de générations de l'espace en attente devant elle, plus une si une génération tourne,
-    de quelque espace qu'elle soit (« 1re en attente » derrière une génération cachée, sans compter celles-ci)."""
-    running = any(j["status"] == "running" for j in active)
+    de quelque espace qu'elle soit (« 1re en attente » derrière une génération cachée, sans compter celles-ci).
+    Une génération finie que worker() range encore (S.current posé) occupe toujours le moteur : la suivante reste
+    « 1re »."""
+    with S.turn:
+        busy = S.current is not None
+    running = busy or any(j["status"] == "running" for j in active)
     ranks, waiting = {}, 0
     for j in active:
         if in_space(j, private):

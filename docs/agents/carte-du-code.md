@@ -53,16 +53,18 @@ Dans l'ordre du fichier :
   `S.turn`, lots `S.lots`, génération en cours `S.current`, sessions privées `S.private_sessions`, noms `S.lan_hosts`
   et `S.https_hosts`).
 - **Préparer et lancer une génération** : `data_url_bytes`, `write_data_url`, `image_size`, `build_cmd` (ligne de
-  commande de sd-cli ; aperçu tous les `preview_interval` pas), `latest_preview`, `run_job` (lit la sortie ligne à
-  ligne : étape, phase, durées pour la calibration ; écrit l'image, le journal, les entrées), `secret(job)` (incognito
-  ou privée : rien en clair), `kind_of`, `keep_private` (chiffre une génération privée), `discard_cancelled`,
-  `forget_files`, `fail_job`.
-- **File** : `ACTIVE`, `cancel_job`, `forget_job`, `sweep()` (appelé en tête de chaque requête : oublie les générations
-  incognito ou privées terminées depuis `INCOGNITO_TTL`, ferme les sessions privées inactives depuis `PRIVATE_IDLE`),
-  `worker()` (thread de calcul : un job à la fois, pris en tête de `S.pending` et posé dans `S.current` sous
-  `S.turn` en une seule opération ; une génération annulée en attente est sautée ; une exception fait échouer ce job
-  seul ; dans son `finally`, fichiers d'une génération secrète supprimés, fin de lot, puis `S.current` rendu en
-  dernier), `end_of_lot`.
+  commande de sd-cli ; aperçu tous les `preview_interval` pas), `latest_preview`, `start_job` (passage « en cours » :
+  par `worker()` sous `S.turn`, et par `tools/calibrate.py`, qui appelle `run_job` hors de la file), `run_job` (lit
+  la sortie ligne à ligne : étape, phase, durées pour la calibration ; écrit l'image, le journal, les entrées),
+  `secret(job)` (incognito ou privée : rien en clair), `kind_of`, `keep_private` (chiffre une génération privée),
+  `discard_cancelled`, `forget_files`, `fail_job`.
+- **File** : `ACTIVE`, `cancel_job` (statut changé sous `S.turn`), `forget_job`, `sweep()` (appelé en tête de chaque
+  requête : oublie les générations incognito ou privées terminées depuis `INCOGNITO_TTL`, ferme les sessions privées
+  inactives depuis `PRIVATE_IDLE`), `worker()` (thread de calcul : un job à la fois, pris en tête de `S.pending`,
+  posé dans `S.current` et passé « en cours » sous `S.turn` en une seule opération ; une génération annulée en
+  attente est sautée, une annulée après sa prise en tête ne lance pas le moteur (`run_job`) ; une exception fait
+  échouer ce job seul ; dans son `finally`, fichiers d'une génération secrète supprimés, fin de lot, puis
+  `S.current` rendu en dernier), `end_of_lot`.
 - **Demandes** : `request_error` (400 pour tout champ que `build_cmd` utilise tel quel), `expand_request` (une
   demande par image d'un lot : variantes `count`, campagne `campaign`), `draw_seeds` (graines -1 tirées par le serveur
   pour être écrites au journal), `active_jobs` (génération en cours puis `S.pending`, lus sous `S.turn`), `move_first`
