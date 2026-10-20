@@ -44,6 +44,7 @@ test('rechargement : un lot repris montre le prompt complet et « Reprendre » r
   assert.ok(excerpts.length > 0 && excerpts.every(p => p.length < LONG.length), 'la file n\'a qu\'un extrait');
   assert.deepEqual(await page.eval(`pageJobs.map(p => p.prompt)`), [LONG, LONG]);
   bench.release('lot');
+  await page.click('#tabbar [data-pane="run"]');   // la page rechargée s'ouvre sur Créer
   await page.waitFor(`!$('lotGrid').hidden && $('lotGrid').querySelectorAll('button[data-k]').length === 2`,
     { what: 'grille du lot terminé', timeout: 30000 });
   assert.equal(await page.eval(`$('resultMeta').querySelector('.m-prompt').textContent`), LONG, 'prompt sous l\'image');

@@ -1,5 +1,5 @@
-// Test de fumée de l'interface, dans la vue du téléphone : chaque écran principal s'ouvre sans erreur de console, et le
-// panneau Moteur dit quelle version du code est servie.
+// Test de fumée de l'interface, dans la vue du téléphone : chaque écran principal s'ouvre sans erreur de console
+// (page En cours comprise, avec la file), et le panneau Moteur dit quelle version du code est servie.
 //   node --test "tests/ui/*.test.mjs"   (ou : venv/bin/python tests/check.py --ui)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,12 +24,14 @@ test('vue du téléphone : mode allégé', async () => {
   assert.equal(await page.eval(`document.documentElement.classList.contains('lite')`), true);
 });
 
-test('onglets Créer, Éditer, Dessiner et Galerie', async () => {
-  for (const pane of ['edit', 'mask', 'hist', 't2i']) {
+test('onglets En cours, Créer, Éditer, Dessiner et Galerie', async () => {
+  for (const pane of ['run', 'edit', 'mask', 'hist', 't2i']) {
     await page.click(`#tabbar [data-pane="${pane}"]`);
     await page.waitFor(`$('pane-${pane}').classList.contains('active') && document.body.className === 'm-${pane}'`);
     if (pane === 'hist') await page.waitFor(`$('histGrid').children.length > 0`, { what: 'galerie affichée' });
   }
+  // feuille de la file, rangée « #1 #2… » et annulation du compositeur : remplacées par la page En cours
+  assert.deepEqual(await page.eval(`['queueSheet', 'strip', 'cancel'].filter(id => $(id))`), []);
   page.assertNoErrors();
 });
 
@@ -41,19 +43,17 @@ test('feuille des prompts', async () => {
   page.assertNoErrors();
 });
 
-test('feuille de la file, puis annulation depuis la file', async () => {
+test('« Générer » mène à la page En cours, puis annulation depuis sa file', async () => {
   // une génération lente lancée depuis l'interface (le faux moteur ralentit sur SLOW=…)
   await page.eval(`(() => { const t = $('t2i_prompt'); t.value = 'SLOW=0.3 essai de la file'; t.dispatchEvent(new Event('input')); })()`);
   await page.click('#go');
-  await page.waitFor(`pageJobs.some(isActive)`, { what: 'génération suivie par la page' });
-  await page.click('#island');
-  await page.waitFor(`$('queueSheet').classList.contains('on') && !!$('queueList').querySelector('.qrow.own [data-cancel]')`,
-    { what: 'feuille de la file avec la génération de cet appareil' });
+  await page.waitFor(`pageJobs.some(isActive) && mode === 'run'`, { what: 'génération suivie, page En cours' });
+  await page.waitFor(`!!$('queueList').querySelector('.qrow.own [data-cancel]')`,
+    { what: 'file de la page avec la génération de cet appareil' });
   await page.click('#queueList .qrow.own [data-cancel]');
   await page.waitFor(`!pageJobs.some(isActive)`, { what: 'génération annulée' });
   const status = await (await fetch(bench.url + '/api/status')).json();
   assert.equal(status.queue.length, 0);
-  await page.eval(`closeSheet()`);
   page.assertNoErrors();
 });
 

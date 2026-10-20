@@ -96,12 +96,15 @@ dernier bloc, après le HTML.
 
 - **CSS** : sections « jetons », « fond », « verre liquide », « barre du haut », « barre d'onglets », « panneaux du
   bas », « compositeur », « panneau Réglages », « Éditer et Dessiner », « visionneuse plein écran », « résultat »,
-  « île », « pellicule … liste de la file », « prompts enregistrés », « espace privé », « messages et
+  « île », « liste de la file (page En cours) », « prompts enregistrés », « espace privé », « messages et
   confirmations », « téléphone (html.lite) ».
-- **HTML** : onglets `#pane-t2i`, `#pane-edit`, `#pane-mask`, `#pane-hist` (galerie `#histGrid`) ; compositeur
-  `#composer` (prompts `#t2i_prompt`, `#edit_prompt`, `#mask_prompt`, bouton `#go`) ; zone de résultat `#result` ;
-  barre d'onglets `#tabbar` ; visionneuse `#viewer` (`#vKeep` : « Garder celle-ci ») ; images d'entrée `#iv` ;
-  feuilles `.sheet` : `#askSheet`, `#setSheet`, `#engineSheet`, `#lotSheet`, `#queueSheet`, `#promptSheet`,
+- **HTML** : onglets `#pane-run` (page En cours : zone de la page `#ownZone` avec `#stage`, `#lotGrid`,
+  `#resultMeta`, `#resultActions` et « Rien en cours » `#resultEmpty` ; génération d'un autre appareil ou attente
+  `#runNow` ; file `#runQueue`), `#pane-t2i`, `#pane-edit`, `#pane-mask`, `#pane-hist` (galerie `#histGrid`) ;
+  compositeur `#composer` (prompts `#t2i_prompt`, `#edit_prompt`, `#mask_prompt`, bouton `#go`) ; barre d'onglets
+  `#tabbar` (onglet En cours : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vKeep` : « Garder
+  celle-ci ») ; images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`, `#engineSheet`, `#lotSheet`,
+  `#promptSheet`,
   `#promptEditSheet` et celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`, `#privCodeSheet`…).
 - **JavaScript**, sections dans l'ordre :
   - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
@@ -110,8 +113,8 @@ dernier bloc, après le HTML.
     `refreshChoices`, `setIncog`.
   - « onglets & statut » : `TABS`, changement d'onglet (`mode`) ; « panneaux du bas » : `openSheet`, `closeSheet`
     (un seul ouvert, `openedSheet`) ; `refreshStatus()` (interroge `/api/status` toutes les 5 s, 2 s tant que la file
-    n'est pas vide ; met à jour `queueState`, l'île, la file et l'espace privé par `applyPrivate`, et le panneau
-    Moteur, version servie comprise : `fmtVersion`, `staleServer`).
+    n'est pas vide ; met à jour `queueState`, l'île, la page En cours et l'espace privé par `applyPrivate`, et le
+    panneau Moteur, version servie comprise : `fmtVersion`, `staleServer`).
   - « images », « dessin » : `toEntry`, `renderEditThumbs`, `setMaskImage`, `showMaskImage`, `dropMaskImage`,
     `exportMask`.
   - « requête & loader » : `buildRequest` ; « messages et confirmations » : `toast`, `ask` et `answer` (feuille
@@ -126,10 +129,15 @@ dernier bloc, après le HTML.
     chargés en avance, chargements en cours abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne
     jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
     de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
-  - « générations de la page, zone de résultat, île et file » : `pageJobs` (générations lancées par cette page),
+  - « générations de la page, page En cours, île et file » : `pageJobs` (générations lancées par cette page),
     `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `isCampaignLot`, `lotOf`, `gridOf`,
-    `show`, `showGrid`, `renderStrip`, `renderIsland`, `onIsland` (file non vide : `#queueSheet`, sinon `#engineSheet`),
-    `renderQueue` (annulation et « Passer en tête » par ligne), `ownOf` (ligne de `queue` → génération de la page :
+    `show` (`showOwn`, puis `renderRun`) et `showGrid` (zone de la page), `spaceNow` (état de l'espace pour l'île et
+    l'onglet ; `entryFrac`, `firstWait`, `ringOffset`), `renderIsland` (île) et `renderRunTab` (nombre et anneau de
+    l'onglet En cours), `onIsland` (file non vide : page En cours, sinon `#engineSheet`), `renderRun` (haut de la
+    page : génération de la page qui tourne, sinon d'un autre appareil, ou attente d'une génération cachée, classe
+    `other` ; image incognito marquée vue par `markSeen`),
+    `renderQueue` (file de la page ; annulation et « Passer en tête » par ligne), `ownOf` (ligne de `queue` →
+    génération de la page :
     par identifiant, ou par l'étiquette `tag` d'une incognito), `ofSpace`, `spaceActive`, `firstActive` (celle qui
     tourne, sinon la prochaine dans l'ordre de calcul) et `nextActive` (la même, parmi les générations de l'espace
     affiché), `latestResult` (générations de l'espace affiché), `track` (suit une génération, `pollJobs` chaque seconde
@@ -156,8 +164,8 @@ dernier bloc, après le HTML.
 
 Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
 « Dessiner », « Reprendre » (reprend le texte du prompt) et « Supprimer » → `viewerAction('edit' | 'mask' | 'prompt'
-| 'delete')`, avec l'image décrite par `pageItem` pour une image de la page ; texte sous l'image de la zone de
-résultat → `setMeta` ; « Garder celle-ci » → `keepThis` ; cadenas de la Galerie → `#privEntry`, « Sortir » →
+| 'delete')`, avec l'image décrite par `pageItem` pour une image de la page ; texte sous l'image de la page En
+cours → `setMeta` ; « Garder celle-ci » → `keepThis` ; cadenas de la Galerie → `#privEntry`, « Sortir » →
 `privLock` ; pastille du haut → `#island`, `renderIsland`.
 
 Deux boucles suivent les générations sans se synchroniser : `pollJobs` (`/api/job/<id>`, chaque seconde) et

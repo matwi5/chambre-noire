@@ -93,17 +93,23 @@ async function paint() {
 }
 
 // « Générer » ; refuse : 'error' (le Mac répond par une erreur) ou 'unreachable' (Mac injoignable), simulés au niveau
-// du réseau de Chrome
+// du réseau de Chrome. Demande acceptée : la page passe à En cours, puis le test revient à l'onglet de saisie ;
+// refusée : elle reste sur l'onglet
 async function generate({ refuse = null } = {}) {
   refusal = refuse;
   if (refuse) await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/generate', requestStage: 'Request' }] });
-  const jobsBefore = await page.eval(`pageJobs.length`);
+  const jobsBefore = await page.eval(`pageJobs.length`), tab = await page.eval(`mode`);
   await page.click('#go');
   if (refuse) {
     const shown = refuse === 'unreachable' ? 'Serveur injoignable' : 'Erreur : moteur non prêt';
     await page.waitFor(`$('toast').textContent.startsWith(${JSON.stringify(shown)})`, { what: 'refus affiché' });
     await page.send('Fetch.disable');
-  } else await page.waitFor(`pageJobs.length > ${jobsBefore}`, { what: 'génération suivie par la page' });
+    assert.equal(await page.eval(`mode`), tab, 'demande refusée : la page reste sur l\'onglet');
+  } else {
+    await page.waitFor(`pageJobs.length > ${jobsBefore} && mode === 'run'`,
+      { what: 'génération suivie, page En cours' });
+    await page.click(`#tabbar [data-pane="${tab}"]`);
+  }
 }
 
 test('Créer : texte et brouillon vidés quand la demande est acceptée, Réglages inchangés', async () => {

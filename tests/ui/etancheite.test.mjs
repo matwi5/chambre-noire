@@ -1,5 +1,5 @@
 // Étanchéité de l'espace privé, dans la vue du téléphone : après un parcours privé complet (galerie, visionneuse,
-// images d'entrée, lot, zone de résultat, file, prompts enregistrés, saisie, suppression), puis la sortie par
+// images d'entrée, lot, page En cours et sa file, prompts enregistrés, saisie, suppression), puis la sortie par
 // « Sortir » ou par la fermeture que décide le Mac, rien de privé ne reste dans la page : ni dans le HTML (attributs et
 // textes cachés compris), ni dans les champs, ni dans la mémoire de la page (listes d'images, générations suivies,
 // images prêtes, prompts, file), ni dans localStorage. La recherche porte sur des marqueurs : identifiants des images
@@ -64,6 +64,8 @@ async function privateTour() {
   assert.equal(await generate(`{ mode: 't2i', prompt: 'HOLD=etanche zqE4file' }`), 202);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`pageJobs.some(p => p.private && p.adopted)`, { what: 'génération privée suivie en file' });
+  await page.click('#tabbar [data-pane="run"]');   // page En cours : génération privée en haut, file privée
+  await page.waitFor(`$('queueList').textContent.includes('zqE4file')`, { what: 'file privée sur la page' });
   await type('zqE6saisie');
   // prompts enregistrés de l'espace
   assert.equal(await post('/api/private/prompts', { title: 'zqE5titre', text: 'zqE5texte', usage: 't2i' }), 200);

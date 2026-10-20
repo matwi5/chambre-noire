@@ -212,9 +212,11 @@ venv/bin/python tools/make_service.py
 
 ## Utilisation
 
-L'interface a quatre onglets, dans la barre du bas : **Créer** (texte → image), **Éditer**, **Dessiner** (dessin guidé)
-et **Galerie**. Sur un écran tactile, glisser le doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le
-dessin et sur les rangées qui défilent). Elle s'adapte au téléphone comme à l'ordinateur, en thème sombre ou clair selon le système.
+L'interface a cinq onglets, dans la barre du bas : **En cours** (la génération en cours et la file d'attente),
+**Créer** (texte → image), **Éditer**, **Dessiner** (dessin guidé) et **Galerie** ; elle s'ouvre sur Créer. Sur un
+grand écran, chaque page est une colonne centrée (la galerie prend toute la largeur). Sur un écran tactile, glisser
+le doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le dessin et sur les rangées qui défilent).
+Elle s'adapte au téléphone comme à l'ordinateur, en thème sombre ou clair selon le système.
 Sur un écran tactile, elle allège ses effets de verre et d'animation pour rester fluide ; ajouter `?lite=1` ou
 `?lite=0` à l'adresse force l'un ou l'autre rendu.
 
@@ -240,40 +242,46 @@ Conseil : **540p + 12 étapes** pour chercher la bonne formulation, puis montez 
 Les descriptions en **anglais, longues et précises** donnent les meilleurs résultats.
 
 **Générer** reste actif pendant une génération : chaque appui ajoute une demande à la **file d'attente**, avec les
-réglages du moment. Dès que le Mac accepte la demande, l'onglet est vidé pour la suivante : texte et son brouillon,
-images (Éditer, campagne comprise : l'interrupteur **Campagne** reste tel quel), image à retoucher et masque
-(Dessiner) ; ce qui a été tapé ou ajouté pendant l'envoi reste ; les Réglages ne bougent pas (seul le format
-« Image », qui suit l'image, part avec elle). Si la demande est refusée (erreur du Mac, Mac injoignable, génération
-longue non confirmée), rien n'est vidé. Le Mac calcule les générations une à une, dans l'ordre d'arrivée (sauf celles
-passées en tête depuis la file d'attente), qu'elles viennent de l'ordinateur ou du téléphone. Pendant le calcul, l'image
-en cours affiche l'étape, le temps restant et un bouton d'annulation (une génération annulée ne laisse aucun fichier :
-ni image, ni images d'entrée, ni aperçus, ni journal du moteur) ; une génération qui attend affiche sa place dans la
-file et le temps avant son image. La zone de résultat suit la génération de la page en cours de calcul, sinon la
-prochaine dans la file, puis montre son image ; quand la page en a lancé plusieurs, une rangée de vignettes sous l'image
-passe de l'une à l'autre.
+réglages du moment, et mène à la page **En cours**. Dès que le Mac accepte la demande, l'onglet est vidé pour la
+suivante : texte et son brouillon, images (Éditer, campagne comprise : l'interrupteur **Campagne** reste tel quel),
+image à retoucher et masque (Dessiner) ; ce qui a été tapé ou ajouté pendant l'envoi reste ; les Réglages ne bougent
+pas (seul le format « Image », qui suit l'image, part avec elle). Si la demande est refusée (erreur du Mac, Mac
+injoignable, génération longue non confirmée), rien n'est vidé et l'on reste sur l'onglet. Le Mac calcule les
+générations une à une, dans l'ordre d'arrivée (sauf celles passées en tête depuis la file d'attente), qu'elles
+viennent de l'ordinateur ou du téléphone.
 
-La pastille d'état en haut suit la génération en cours depuis n'importe quel onglet et affiche « +N en attente »
-(« +N » seul quand l'écran est trop étroit pour tout contenir). Un appui ouvre la **file d'attente** : pour chaque
-génération, sa place, le début de son prompt et le temps avant son image, avec un bouton pour l'annuler et, pour une
-génération en attente, un bouton **Passer en tête** qui la fait passer juste après celle en cours (pour un essai rapide
-bloqué derrière une campagne). Une génération normale s'annule ou passe en tête depuis n'importe quel appareil ; une
-génération incognito n'apparaît ailleurs que comme « Génération incognito », sans prompt ni aperçu, et seule la page
-qui l'a lancée peut l'annuler ou la faire passer en tête. La file et la pastille ne montrent que les générations de
-l'espace où l'on est (public, ou espace privé) : rang et « +N en attente » ne comptent qu'elles. Une génération qui
-attend derrière une génération de l'autre espace affiche « en attente » et un temps qui compte ce travail caché, sans
-ligne pour lui ; si rien de l'espace ne tourne, la pastille dit « En attente » et le temps avant le début de la
-première, et si l'espace n'a rien en file, elle reste éteinte même quand le Mac calcule pour l'autre espace. On peut
-recharger la page sans rien perdre : elle se rattache aux générations normales qu'elle avait lancées (retenues par le
-navigateur), pas à celles des autres appareils, qui restent visibles dans la file, ni aux générations incognito ; dans
-l'espace privé, à toutes les générations privées en cours (voir « Espace privé »). Une génération ainsi reprise garde
-son prompt complet (sous l'image, et pour **Reprendre** depuis la visionneuse), pas seulement le début qu'en montre la
-file. Les lignes lancées par l'appareil y sont marquées « cet appareil ». Le bouton Incognito se change à tout moment :
-chaque génération garde le mode choisi à son lancement. Chaque image est enregistrée en PNG dans **`outputs\`**, avec
-ses images d'entrée (références, image d'origine, zone peinte) dans `outputs\.inputs\`. Sous le résultat :
-**Télécharger**, **Partager** et **Copier** (dans le presse-papiers), puis **Éditer** et **Dessiner**, qui le
-réutilisent comme point de départ, et **Supprimer**. Partager et Copier ne sont proposés que là où le navigateur les
-permet : sur l'ordinateur lui-même, ou sur le téléphone par l'adresse HTTPS de Tailscale (pas par l'adresse `http://`
-du Wi-Fi).
+La page **En cours** montre en haut, en grand, la génération en cours. Lancée par la page : l'étape, le temps restant,
+les aperçus et un bouton d'annulation (une génération annulée ne laisse aucun fichier : ni image, ni images d'entrée, ni
+aperçus, ni journal du moteur), puis son image une fois prête ; une génération de la page qui attend affiche sa place
+dans la file et le temps avant son image. Lancée par un autre appareil : son texte (« Génération incognito » pour une
+génération incognito), un cadre aux proportions demandées, ses réglages et une progression estimée, sans aperçu, avec
+l'annulation là où l'appareil y a droit. Quand le Mac calcule une génération que l'espace où l'on est ne voit pas, le
+haut de la page dit « En attente » et le temps avant le début de la première génération de l'espace. Quand rien ne
+tourne et que la page n'a rien montré, elle dit « Rien en cours », avec un bouton vers Créer ; après un rechargement,
+elle repart ainsi (les images sont dans la galerie). Sous la génération en cours, la **file d'attente** de l'espace :
+pour chaque génération, sa place, le début de son prompt et le temps avant son image, avec un bouton pour l'annuler et,
+pour une génération en attente, un bouton **Passer en tête** qui la fait passer juste après celle en cours (pour un
+essai rapide bloqué derrière une campagne). Une génération normale s'annule ou passe en tête depuis n'importe quel
+appareil ; une génération incognito n'apparaît ailleurs que comme « Génération incognito », sans prompt ni aperçu, et
+seule la page qui l'a lancée peut l'annuler ou la faire passer en tête. La file et la pastille ne montrent que les
+générations de l'espace où l'on est (public, ou espace privé) : rang et « +N en attente » ne comptent qu'elles. La
+pastille d'état en haut suit la génération en cours depuis n'importe quel onglet et affiche « +N en attente » (« +N »
+seul quand l'écran est trop étroit pour tout contenir) ; un appui mène à la page En cours (au panneau Moteur quand rien
+de l'espace n'est en file). L'onglet **En cours** porte le nombre de générations de l'espace en cours et en attente
+(rien à zéro), et son icône un anneau qui suit la génération en cours. Une génération qui attend derrière une génération
+de l'autre espace affiche « en attente » et un temps qui compte ce travail caché, sans ligne pour lui ; si rien de
+l'espace ne tourne, la pastille dit « En attente » et le temps avant le début de la première, et si l'espace n'a rien en
+file, elle reste éteinte même quand le Mac calcule pour l'autre espace. On peut recharger la page sans rien perdre :
+elle se rattache aux générations normales qu'elle avait lancées (retenues par le navigateur), pas à celles des autres
+appareils, qui restent visibles dans la file, ni aux générations incognito ; dans l'espace privé, à toutes les
+générations privées en cours (voir « Espace privé »). Une génération ainsi reprise garde son prompt complet (sous
+l'image, et pour **Reprendre** depuis la visionneuse), pas seulement le début qu'en montre la file. Les lignes lancées
+par l'appareil y sont marquées « cet appareil ». Le bouton Incognito se change à tout moment : chaque génération garde
+le mode choisi à son lancement. Chaque image est enregistrée en PNG dans **`outputs\`**, avec ses images d'entrée
+(références, image d'origine, zone peinte) dans `outputs\.inputs\`. Sous le résultat : **Télécharger**, **Partager** et
+**Copier** (dans le presse-papiers), puis **Éditer** et **Dessiner**, qui le réutilisent comme point de départ, et
+**Supprimer**. Partager et Copier ne sont proposés que là où le navigateur les permet : sur l'ordinateur lui-même, ou
+sur le téléphone par l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du Wi-Fi).
 
 ### Créer (texte → image)
 
@@ -282,8 +290,8 @@ du Wi-Fi).
 Pour obtenir plusieurs propositions du même prompt, choisir 2, 3 ou 4 **Images** dans les Réglages (une pastille
 « 3 images » le rappelle sous le texte ; le choix est retenu). Une seule demande lance alors un **lot de variantes** :
 une génération par image, à la suite dans la file (jamais en même temps), chacune avec sa propre graine. Le bouton
-**Générer** affiche le temps de tout le lot. Pendant le calcul, l'image en cours porte « Image 2 sur 3 » et la rangée
-de vignettes montre les suivantes ; dans la file d'attente, le lot a son en-tête avec **Annuler le lot** (le bouton
+**Générer** affiche le temps de tout le lot. Pendant le calcul, l'image en cours porte « Image 2 sur 3 » et la file
+d'attente montre les suivantes, sous l'en-tête du lot avec **Annuler le lot** (le bouton
 de l'image en cours n'annule que celle-ci, et une image en échec n'arrête pas les autres). À la fin, une **grille**
 remplace l'image unique : un appui ouvre une image en grand, avec sa graine, et **Garder celle-ci** supprime les autres
 images du lot après confirmation. Sans choix, toutes les images restent dans la galerie. En incognito, la grille n'a
@@ -388,8 +396,8 @@ privés, chiffrés avec l'espace (voir [Espace privé](#espace-privé)) ; les pr
 Avec le bouton **Incognito**, à droite de **Générer**, l'image produite peut être téléchargée mais n'est gardée nulle part sur
 le Mac : ni dans `outputs\`, ni dans la galerie, ni dans le journal des générations, ni dans `logs\`. La page la garde
 tant qu'on ne l'a pas vue puis quittée : lancer d'autres générations, ou en voir une autre se terminer, ne la fait pas
-disparaître, et plusieurs images incognito peuvent attendre dans la rangée de vignettes. Elle est perdue pour de bon une
-fois affichée puis quittée (autre vignette, autre génération de la file, onglet **Galerie**), quand on l'efface, ou
+disparaître. Elle est perdue pour de bon une fois affichée sur la page **En cours** puis quittée (onglet **Galerie**),
+quand on l'efface, ou
 quand la page est rechargée ou fermée : toutes les générations incognito de la page sont alors arrêtées et oubliées, y
 compris celles qui attendaient dans la file. Pensez à la **télécharger** avant. Les autres appareils ne voient d'elle,
 dans la file, que « Génération incognito » ; ils ne peuvent ni la suivre ni l'annuler. Le texte tapé n'est pas retenu par le
@@ -445,7 +453,7 @@ du Mac, ne suffit pas pour voir les images privées.
   la première fois) ; en sortant, la saisie publique revient intacte. La saisie privée n'est jamais retenue par le
   navigateur, brouillons compris : elle ne survit pas à la fermeture de l'application. L'interrupteur **Campagne** et
   les Réglages sont communs aux deux espaces.
-- **Sortir vide l'écran** : la saisie privée est effacée, comme les images privées de la zone de résultat, de la grille,
+- **Sortir vide l'écran** : la saisie privée est effacée, comme les images privées de la page En cours, de la grille,
   de la galerie, de la visionneuse, des images d'entrée et de la feuille « Voir le lot » (fermée), même cachées, et les
   lignes du journal du panneau Moteur écrites dans l'espace : la page ne les garde plus prêtes à l'affichage, et celles
   qui chargeaient encore sont abandonnées (si le Mac est injoignable, un message le dit et l'on reste dans l'espace).
@@ -456,7 +464,7 @@ du Mac, ne suffit pas pour voir les images privées.
   entre-temps.
 - **Retour dans l'espace privé** : la page suit toutes les générations privées encore en file ou en cours, avec leur
   prompt et leur progression, qu'elle les ait lancées ou non, aussi après un rechargement ou depuis un autre appareil
-  (aucun identifiant privé n'est gardé par le navigateur) ; la dernière image de l'espace public n'y est pas montrée.
+  (aucun identifiant privé n'est gardé par le navigateur).
 - **Fermeture automatique** : si l'espace se ferme seul (15 minutes sans activité privée), la saisie privée quitte
   l'écran comme à la sortie, mais la page la garde en mémoire : elle revient si l'on rentre sans avoir fermé
   l'application (un long texte en cours n'est pas perdu). Si l'espace privé est supprimé, elle est effacée. Quand
@@ -861,7 +869,8 @@ GitHub, la même commande, complète, tourne sur chaque pull request vers `main`
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps
 que le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier. Ils ouvrent
 l'interface servie par le banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur
-de la console du navigateur. Ils couvrent les écrans principaux, « Garder celle-ci » après un rechargement de la
+de la console du navigateur. Ils couvrent les écrans principaux, la page En cours (onglets, pastilles, génération d'un
+autre appareil ou cachée, rien qui dépasse à la largeur du téléphone), « Garder celle-ci » après un rechargement de la
 galerie, la saisie (plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque espace), l'en-tête
 (cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés, la reprise d'une génération, le
 suivi d'une génération privée devenue inconnue (sans faux « Échec ») et l'absence de brouillon incognito ou privé
