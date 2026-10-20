@@ -1569,18 +1569,18 @@ def job_estimate(job, r, coefs):
 def queue_entry(job, position, ahead, coefs):
     """Entrée de la liste de la file (/api/status), vue depuis l'espace de la génération. Une génération incognito
     (espace public) n'y montre que son genre, le jeton de sa page et son étiquette (tag) : ni identifiant (seule la page
-    qui l'a lancée peut la suivre, l'annuler ou la faire passer en tête), ni prompt, ni mode (son lot dit seulement
-    s'il est une campagne). Une génération privée
-    n'est vue que depuis l'espace privé, où elle a une entrée complète comme une génération normale, genre « private ».
-    ahead : durée restante estimée des générations de l'autre espace placées devant elle. None si la génération vient
-    de finir."""
+    qui l'a lancée peut la suivre, l'annuler ou la faire passer en tête), ni prompt, ni mode, ni réglages, ni marqueur
+    de campagne (son lot ne dit que son rang et sa taille). Une génération privée n'est vue que depuis l'espace privé,
+    où elle a une entrée complète comme une génération normale, genre « private ». ahead : durée restante estimée des
+    générations de l'autre espace placées devant elle. None si la génération vient de finir."""
     r = job.get("req")
     if r is None:
         return None
     est, lot = job_estimate(job, r, coefs), job.get("lot")
     e = {"status": job["status"], "position": position, "ahead": round(ahead, 1),
-         # identifiant d'un lot incognito : connu de sa seule page, comme celui de ses générations
-         "lot": lot and ({k: lot[k] for k in ("rank", "size", "campaign")} if job.get("incognito") else dict(lot)),
+         # lot incognito : ni son identifiant (connu de sa seule page, comme ceux de ses générations) ni son marqueur
+         # de campagne (sa page l'a dans sa réponse de /api/generate) : son rang et sa taille
+         "lot": lot and ({k: lot[k] for k in ("rank", "size")} if job.get("incognito") else dict(lot)),
          "estimate": round(est, 1),
          "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None}
     if job.get("incognito"):

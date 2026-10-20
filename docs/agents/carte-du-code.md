@@ -95,9 +95,9 @@ Le fichier se lit par ses commentaires d'en-tête `/* ---…` (CSS) et `// ---�
 `<script>` dans `<head>` pose `html.lite` (téléphone : effets allégés) ; tout le reste du JavaScript est dans le
 dernier bloc, après le HTML.
 
-- **CSS** : sections « jetons », « fond », « verre liquide », « barre du haut », « barre d'onglets », « panneaux du
-  bas », « compositeur », « panneau Réglages », « Éditer et Dessiner », « visionneuse plein écran », « résultat »,
-  « île », « liste de la file (page En cours) », « prompts enregistrés », « espace privé », « messages et
+- **CSS** : sections « jetons », « fond », « verre liquide », « barre du haut », « barre d'onglets », « panneaux du bas
+  », « compositeur », « panneau Réglages », « Éditer et Dessiner », « visionneuse plein écran », « résultat », « île »,
+  « liste de la file (page En cours) » (cartes de la file), « prompts enregistrés », « espace privé », « messages et
   confirmations », « téléphone (html.lite) ».
 - **HTML** : onglets `#pane-run` (page En cours : zone de la page `#ownZone` avec `#stage` et « Rien en cours »
   `#resultEmpty` ; génération d'un autre appareil ou attente `#runNow` ; file `#runQueue` ; terminées `#runDone`, liste
@@ -133,23 +133,24 @@ dernier bloc, après le HTML.
   - « générations de la page, page En cours, île et file » : `pageJobs` (générations lancées par cette page),
     `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `isDone` (image prête ou échec),
     `isCampaignLot`, `lotOf`, `show` (`showOwn` : une génération active de la page, ou rien ; puis `renderRun`),
-    `pageItem` (image de la page pour la visionneuse : vrai mode et images d'entrée, `mode` et `inputs` de son
-    suivi), `spaceNow` (état de l'espace pour l'île et
-    l'onglet ; `entryFrac`, `firstWait`, `ringOffset`), `renderIsland` (île) et `renderRunTab` (nombre et anneau de
-    l'onglet En cours), `onIsland` (file non vide : page En cours, sinon `#engineSheet`), `renderRun` (haut de la
-    page : génération de la page qui tourne, sinon d'un autre appareil, ou attente d'une génération cachée, classe
-    `other` ; « Rien en cours » sans terminée), terminées : `renderDone` (`doneEntries`, cartes `doneCard`,
-    `failCard`, `lotCard` en grille ; `doneView` : leurs images pour la visionneuse), `evictDone` (`MAX_DONE`),
-    `notifyDone` (message « Image prête », « Lot prêt » hors de la page En cours, `toast(…, go)`),
-    `renderQueue` (file de la page ; annulation et « Passer en tête » par ligne), `ownOf` (ligne de `queue` →
-    génération de la page :
-    par identifiant, ou par l'étiquette `tag` d'une incognito), `ofSpace`, `spaceActive`, `firstActive` (celle qui
-    tourne, sinon la prochaine dans l'ordre de calcul) et `nextActive` (la même, parmi les générations de l'espace
-    affiché), `track` (suit une génération, `pollJobs` chaque seconde ; une privée « inconnue » quitte la page sans
-    message), `finish` (fin d'une génération : terminée gardée, échec compris, ou annulée retirée), `drop` (retire
-    une génération de la page ; image incognito révoquée) ; bouton
-    `#go` ; reprise : `followQueue` (suit des entrées de la file), `resumeOwn` (générations normales de ce navigateur,
-    après un rechargement et au retour dans l'espace public), `resume`, `adoptPrivate` (dans l'espace privé, toutes les
+    `pageItem` (image de la page pour la visionneuse : vrai mode et images d'entrée, `mode` et `inputs` de son suivi),
+    `spaceNow` (état de l'espace pour l'île et l'onglet ; `entryFrac`, `firstWait`, `ringOffset`), `renderIsland` (île)
+    et `renderRunTab` (nombre et anneau de l'onglet En cours), `onIsland` (file non vide : page En cours, sinon
+    `#engineSheet`), `renderRun` (haut de la page : génération de la page qui tourne, sinon d'un autre appareil, ou
+    attente d'une génération cachée, classe `other` ; « Rien en cours » sans terminée), terminées : `renderDone`
+    (`doneEntries`, cartes `doneCard`, `failCard`, `lotCard` en grille ; `doneView` : leurs images pour la visionneuse),
+    `evictDone` (`MAX_DONE`), `notifyDone` (message « Image prête », « Lot prêt » hors de la page En cours, `toast(…,
+    go)`), `renderQueue` (file de la page en cartes : `queueCards` regroupe les entrées d'un lot, `queueCard` dessine
+    une carte, `lotCases` ses cases (`lotCancels` : rangs annulés pendant la vie de la page), `lotSubs` ses lignes une
+    fois dépliée (`openLots`) ; `lotLabel` : « N variantes » ou « Campagne · N photos » ; `qbtn` : bouton d'annulation
+    ou de « Passer en tête », chemin fixé à l'affichage ; `hhmm` : heure de fin, `resLabel` : résolution), `ownOf`
+    (ligne de `queue` → génération de la page : par identifiant, ou par l'étiquette `tag` d'une incognito), `ofSpace`,
+    `spaceActive`, `firstActive` (celle qui tourne, sinon la prochaine dans l'ordre de calcul) et `nextActive` (la même,
+    parmi les générations de l'espace affiché), `track` (suit une génération, `pollJobs` chaque seconde ; une privée «
+    inconnue » quitte la page sans message), `finish` (fin d'une génération : terminée gardée, échec compris, ou annulée
+    retirée), `drop` (retire une génération de la page ; image incognito révoquée) ; bouton `#go` ; reprise :
+    `followQueue` (suit des entrées de la file), `resumeOwn` (générations normales de ce navigateur, après un
+    rechargement et au retour dans l'espace public), `resume`, `adoptPrivate` (dans l'espace privé, toutes les
     générations privées actives de la file, `adopted` : pas lancées par la page, qui ne les fait pas oublier).
   - « notifications » : `pushSubscribe`, `askNotifications`.
   - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts`, `renderPrompts`,

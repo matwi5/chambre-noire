@@ -493,8 +493,7 @@
   /* ------------------------------------------------------------ liste de la file (page En cours) */
   .qlist { display:grid; grid-template-columns:minmax(0, 1fr); gap:8px; margin-top:12px; }
   .qrow { display:flex; align-items:center; gap:12px; padding:8px; border-radius:18px; background:var(--field); border:1px solid var(--rim); }
-  .qrow.own { border-color:color-mix(in srgb, var(--iris) 50%, var(--rim)); }
-  .qrow > img, .qicon { flex:none; width:44px; height:44px; border-radius:12px; object-fit:cover; }
+  .qicon { flex:none; width:44px; height:44px; border-radius:12px; object-fit:cover; }
   .qicon { display:grid; place-items:center; background:var(--glass-hi); color:var(--ink2); }
   .qicon svg { width:22px; height:22px; }
   .qtxt { flex:1; min-width:0; display:flex; flex-direction:column; line-height:1.3; }
@@ -503,6 +502,25 @@
   .qx { flex:none; width:36px; height:36px; border-radius:50%; border:0; display:grid; place-items:center; cursor:pointer; color:var(--ink); background:var(--glass-hi); }
   .qx svg { width:16px; height:16px; }
   .qx:disabled { opacity:.4; }
+  /* cartes de la file : une par demande ; lot : une case par image, carte dépliable (une ligne par image) */
+  .qcard { display:flex; flex-direction:column; gap:8px; padding:8px; border-radius:18px; background:var(--field); border:1px solid var(--rim); min-width:0; }
+  .qcard.own { border-color:color-mix(in srgb, var(--iris) 50%, var(--rim)); }
+  .qmain { display:flex; align-items:center; gap:12px; min-width:0; }
+  .qmain > img { flex:none; width:44px; height:44px; border-radius:12px; object-fit:cover; }
+  .qacts { flex:none; display:flex; gap:6px; }
+  .qx.on svg { transform:rotate(180deg); }
+  .qshape { display:grid; place-items:center; min-width:12px; min-height:12px; border:1.6px solid currentColor; border-radius:6px; }
+  .qshape svg { width:16px; height:16px; }
+  .qcases { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-left:56px; }
+  .qcases .qx { margin-left:auto; }
+  .qcase { width:30px; height:30px; border-radius:9px; display:grid; place-items:center; overflow:hidden; font-size:12px; font-weight:700;
+    font-variant-numeric:tabular-nums; color:var(--ink2); background:var(--glass-hi); border:1px solid var(--rim); }
+  .qcase img { width:100%; height:100%; object-fit:cover; }
+  .qcase.run { color:var(--ink); border-color:var(--iris2); box-shadow:0 0 0 1px var(--iris2) inset; }
+  .qcase.fail { color:var(--err); } .qcase.gone, .qcase.out { opacity:.45; text-decoration:line-through; }
+  .qsubs { display:flex; flex-direction:column; gap:6px; padding-left:56px; }
+  .qsub { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink2); }
+  .qsub span { flex:1; min-width:0; }
   /* ------------------------------------------------------------ prompts enregistrés */
   .pnew { width:100%; margin-top:14px; }
   .prow { padding:4px 8px 4px 4px; gap:6px; }
@@ -519,7 +537,6 @@
   .privsheet .links .danger { color:var(--err); }
   .privsheet .err { color:var(--err); font-size:14px; min-height:20px; margin:8px 2px 0; }
   .privsheet [hidden] { display:none !important; }
-  .qlot { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 4px -2px; font-size:13px; font-weight:650; color:var(--ink2); }
 
   /* ------------------------------------------------------------ messages et confirmations */
   .toast { position:fixed; z-index:60; left:50%; top:calc(62px + env(safe-area-inset-top)); transform:translate(-50%, -16px) scale(.96); opacity:0; pointer-events:none;
@@ -1311,7 +1328,7 @@ function failCard(p){
     + `<p class="dmeta err">${esc(failText(p))}</p></div>${removeBtn}</article>`; }
 function lotCard(items, addToView){                // lot fini : ses images en grille, chaque case à la forme de son image
   const first=items[0], size=first.lot.size, ok=items.filter(q=>q.result), incog=first.incognito;
-  const meta=[isCampaignLot(first.lot, first.j.mode) ? `Campagne · ${size} photos` : `${size} variantes`, fmt(ok.reduce((t, q)=>t+(q.j.seconds||0), 0)),
+  const meta=[lotLabel(first.lot, first.j.mode), fmt(ok.reduce((t, q)=>t+(q.j.seconds||0), 0)),
     (first.j.total||'?')+' étapes'].join(' · ');
   const cells=items.map(q=>{ if(!q.result) return `<div class="cell fail"><span>${q.lot.rank}</span><p>${esc(failText(q))}</p></div>`;
     const r=q.result, [w, h]=r.dims||[1, 1], k=addToView(q);
@@ -1422,51 +1439,105 @@ function renderRun(){
 $('nowCancel').onclick=async ()=>{ const id=$('nowCancel').dataset.id; if(!id) return; $('nowCancel').disabled=true;
   log('annulation demandée'); await postJson('/api/job/'+id+'/cancel', {}).catch(()=>{});
   $('nowCancel').disabled=false; refreshStatus(); };
-// file de l'espace sur la page En cours : une ligne par génération, de la génération en cours à la dernière, dans l'ordre
-// de calcul, avec le temps restant avant son image ; annulation, et « Passer en tête » d'une génération en attente, là
-// où l'appareil y a droit (génération normale ou privée : partout dans son espace ; incognito : sa page seulement)
+// icônes de la nature d'une demande (file, haut de la page) ; annulation et « Passer en tête » là où l'appareil y a
+// droit : génération normale ou privée, partout dans son espace ; incognito, sa page seulement
 const QICON = {
   t2i:'<path d="M11 3.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7Z"/>',
   edit:'<rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/>',
   mask:'<path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/>',
   incognito:'<path d="M3 12h18"/><path d="M6 12l1.6-6.2a1.5 1.5 0 0 1 2-1l2.4 1 2.4-1a1.5 1.5 0 0 1 2 1L18 12"/><circle cx="7.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/>',
   wait:'<circle cx="12" cy="12" r="8.5"/><path d="M12 8v4.2l2.6 1.6"/>' };
-// file de l'espace (/api/status) : une génération privée, dans l'espace privé, a sa ligne complète comme une normale ;
-// le temps restant avant une image compte les lignes devant elle et le travail caché de l'autre espace (ahead, cumulé)
+// File de l'espace (/api/status) en cartes : une carte par demande, génération seule ou toutes les entrées d'un même lot
+// (lot.id ; lot incognito de la page : celui de sa réponse de /api/generate ; lot incognito d'une autre page : ses
+// entrées qui se suivent), dans l'ordre de calcul. La génération en cours n'a pas de carte (elle est en haut de la page),
+// sauf dans la carte de son lot. Une génération privée, dans l'espace privé, a sa carte complète comme une normale. Le
+// temps restant avant une image compte les entrées devant elle et le travail caché de l'autre espace (ahead).
+// openLots : cartes de lot dépliées ; lotCancels : rangs annulés pendant la vie de la page, par lot (une image qui n'est
+// plus ni dans la page ni dans la file sans y avoir été annulée est « sortie ») ; les deux, vidés à la sortie de l'espace
+// privé et purgés des lots qui n'ont plus de carte, ne gardent rien d'un lot fini
+const openLots=new Set(), lotCancels=new Map();
+const hhmm = s => { const d=new Date(Date.now()+s*1000); return d.getHours()+' h '+String(d.getMinutes()).padStart(2, '0'); };
+// résolution la plus proche du nombre de pixels (libellés de RES)
+const resLabel = (w, h) => RES.reduce((b, r)=>Math.abs(MAX_PIXELS*r.scale*r.scale-w*h)<Math.abs(MAX_PIXELS*b.scale*b.scale-w*h) ? r : b).label;
+// nature d'un lot : campagne ou variantes (marqueur ; mode d'un lot d'avant lui) ; inconnue pour un lot incognito d'une
+// autre page, dont la ligne ne dit pas le marqueur
+const lotLabel = (lot, mode) => lot.campaign===undefined && !mode ? `Lot · ${lot.size} images`
+  : isCampaignLot(lot, mode) ? `Campagne · ${lot.size} photos` : `${lot.size} variantes`;
+const QBTN = {
+  first:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12"/><path d="M12 20V9"/><path d="m7 13 5-5 5 5"/></svg>',
+  cancel:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  more:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>' };
+// bouton d'action d'une carte : le chemin est fixé à l'affichage (la file peut avancer avant l'appui)
+const qbtn = (kind, path, label) => `<button class="qx" data-post="${esc(path)}" data-kind="${kind}" aria-label="${esc(label)}" title="${esc(label)}">${QBTN[kind]}</button>`;
+// cartes : items (une par entrée : e, sa génération de la page p, l'identifiant id avec lequel l'appareil peut agir),
+// lotId (lot sur lequel agir), readyIn (secondes avant sa dernière image)
+function queueCards(){
+  const cards=[], byKey=new Map(); let wait=0;
+  queueState.forEach((e, i)=>{ const p=ownOf(e), lotId=e.lot && (e.lot.id || p && p.lot && p.lot.id); wait+=entryLeft(e);
+    let key=lotId;
+    if(e.lot && !key){ const prev=cards.at(-1), last=prev && prev.items.at(-1).e;   // lot incognito d'une autre page
+      key=prev && prev.foreignIncogLot && last.page===e.page && last.lot.size===e.lot.size && last.lot.rank<e.lot.rank ? prev.key : 'anon'+i; }
+    let c=key && byKey.get(key);
+    if(!c){ c={key:key || 'job'+i, lot:!!e.lot, lotId, foreignIncogLot:!!e.lot && !lotId, items:[], readyIn:0}; cards.push(c); if(key) byKey.set(key, c); }
+    c.items.push({e, p, id:e.id || p && p.id}); c.readyIn=Math.max(c.readyIn, wait+(e.ahead||0)); });
+  return cards.filter(c=>c.lot || c.items[0].e.status!=='running'); }
+// cases d'un lot : une par image ; lot de la page : état de chacune ; sinon en file, ou sortie (issue inconnue)
+function lotCases(c, lot, p, toggle){
+  const mine=p ? lotOf(p) : [], cancelled=lotCancels.get(c.lotId);
+  return '<div class="qcases">'+Array.from({length:lot.size}, (_, k)=>{ const r=k+1, q=mine.find(x=>x.lot.rank===r), it=c.items.find(y=>y.e.lot.rank===r);
+    // une génération finie dont l'image se charge encore (incognito) reste « en cours »
+    const st=q ? (q.j.status==='failed' ? 'fail' : q.result ? 'done' : q.j.status==='queued' ? 'wait' : 'run')
+      : it ? (it.e.status==='running' ? 'run' : 'wait') : cancelled && cancelled.has(r) ? 'gone' : 'out';
+    const label={run:'en cours', wait:'en attente', done:'faite', fail:'en échec', gone:'annulée', out:'sortie'}[st];
+    return `<span class="qcase ${st}" title="Image ${r} : ${label}" aria-label="Image ${r} : ${label}">${st==='done' ? `<img src="${esc(thumbOf(pageItem(q)))}" alt="">` : r}</span>`; }).join('')+toggle+'</div>'; }
+// carte dépliée : une ligne par image sur laquelle l'appareil peut agir
+const lotSubs = c => '<div class="qsubs">'+c.items.filter(x=>x.id).map(({e, id})=>`<div class="qsub"><span>Image ${e.lot.rank} · ${e.status==='running' ? 'en cours' : 'en attente'}</span>`
+  + (e.status==='queued' ? qbtn('first', `/api/job/${id}/first`, `Passer l'image ${e.lot.rank} en tête`) : '')
+  + qbtn('cancel', `/api/job/${id}/cancel`, `Annuler l'image ${e.lot.rank}`)+'</div>').join('')+'</div>';
+function queueCard(c, own){
+  const {e, p}=c.items[0], mine=c.items.find(x=>x.p), page=mine && mine.p, isIncog=e.kind==='incognito';
+  const lot=c.lot ? page && page.lot || e.lot : null, mode=e.mode || page && page.j.mode;
+  const w=e.width || page && page.w, h=e.height || page && page.h, steps=e.steps || page && page.steps;
+  const icon=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${QICON[isIncog ? 'incognito' : tabOf(mode)]}</svg>`;
+  const pic=page && page.thumb ? `<img src="${esc(page.thumb)}" alt="">`   // image d'entrée de la page ; sinon cadre aux proportions demandées
+    : `<span class="qicon">${!isIncog && w && h ? `<span class="qshape" style="width:${Math.round(32*w/Math.max(w, h))}px;height:${Math.round(32*h/Math.max(w, h))}px">${icon}</span>` : icon}</span>`;
+  const settings=[w && h ? closestRatio(w, h) : '', w && h ? resLabel(w, h) : '', steps ? steps+' étapes' : ''].filter(Boolean).join(' · ');
+  const other=e.kind==='normal' && !p && !own.has(e.id);   // lancée par un autre appareil (rien dans l'espace privé)
+  const when=[`prête vers ${hhmm(c.readyIn)}`, '≈ '+fmt(c.readyIn), other ? 'autre appareil' : ''].filter(Boolean).join(' · ');
+  // actions là où l'appareil peut annuler (entrée avec id, ou génération de la page) ; « Passer en tête » si rien ne tourne
+  const running=c.items.some(x=>x.e.status==='running'), acts=[];
+  if(c.lot && c.lotId){ if(!running) acts.push(qbtn('first', `/api/lot/${c.lotId}/first`, 'Passer le lot en tête'));
+    acts.push(qbtn('cancel', `/api/lot/${c.lotId}/cancel`, 'Annuler le lot')); }
+  else if(!c.lot && c.items[0].id){ acts.push(qbtn('first', `/api/job/${c.items[0].id}/first`, 'Passer en tête'));
+    acts.push(qbtn('cancel', `/api/job/${c.items[0].id}/cancel`, 'Annuler cette génération')); }
+  const open=c.lot && openLots.has(c.key), toggle=c.lot && c.items.some(x=>x.id)   // dépliable : au bout de ses cases
+    ? `<button class="qx${open ? ' on' : ''}" data-toggle="${esc(c.key)}" aria-expanded="${open}" aria-label="Images du lot" title="Images du lot">${QBTN.more}</button>` : '';
+  return `<div class="qcard${page ? ' own' : ''}"><div class="qmain">${pic}<div class="qtxt"><b>${esc(isIncog ? 'Génération incognito' : e.prompt||'')}</b>`
+    + `<span>${esc([lot ? lotLabel(lot, mode) : '', settings].filter(Boolean).join(' · '))}</span><span>${esc(when)}</span></div><div class="qacts">${acts.join('')}</div></div>`
+    + (c.lot ? lotCases(c, lot, page, toggle) : '')+(open ? lotSubs(c) : '')+'</div>'; }
 function renderQueue(){
-  const q=queueState; let wait=0, prevLot=null;
-  $('runQueue').hidden=!q.length;
-  $('queueNote').textContent = q.length ? `${q.length} génération${q.length>1?'s':''}, une à la fois · file vide dans ≈ ${fmt(q.reduce((t, e)=>t+entryLeft(e), 0)+(q.at(-1).ahead||0))}` : '';
-  $('queueList').innerHTML=q.map(e=>{ const p=ownOf(e), incog=e.kind==='incognito'; wait+=entryLeft(e);
-    const pic = p && p.thumb ? `<img src="${p.thumb}" alt="">`
-      : `<span class="qicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${QICON[incog ? 'incognito' : tabOf(e.mode)]}</svg></span>`;
-    const camp=isCampaignLot(e.lot, e.mode || (p && p.tab));
-    const sub=[e.status==='running' ? 'En cours' : ordinal(e.position)+' en attente', incog ? '' : MODE_LABELS[e.mode]||e.mode, e.lot ? `${camp ? 'photo' : 'image'} ${e.lot.rank}/${e.lot.size}` : '', 'prête dans ≈ '+fmt(wait+(e.ahead||0)), p && !p.adopted ? 'cet appareil' : ''];
-    // lot : un en-tête avant chaque suite de ses images dans la file (une image passée en tête l'en sépare), avec
-    // l'annulation de tout le lot là où l'appareil y a droit (lot normal ou privé : partout dans son espace ; lot
-    // incognito : sa page seulement, seule à connaître son identifiant)
-    const lot=e.lot && (e.lot.id || (p && p.lot && p.lot.id)), head=lot && lot!==prevLot ? (`<div class="qlot"><span>${camp ? 'Campagne de '+e.lot.size+' photos' : 'Lot de '+e.lot.size+' images'}</span><button class="btn secondary small" data-cancel-lot="${esc(lot)}">Annuler le lot</button></div>`) : ''; prevLot=lot;
-    // l'identifiant de la ligne est fixé à l'affichage : la file peut avancer avant l'appui
-    return head + `<div class="qrow${p?' own':''}" data-id="${esc(e.id || (p && p.id) || '')}">${pic}<div class="qtxt"><b>${esc(incog ? 'Génération incognito' : e.prompt)}</b><span>${sub.filter(Boolean).map(esc).join(' · ')}</span></div>`
-      + ((e.id || p) && e.status==='queued' ? '<button class="qx" data-first aria-label="Passer en tête" title="Passer en tête"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12"/><path d="M12 20V9"/><path d="m7 13 5-5 5 5"/></svg></button>' : '')
-      + (e.id || p ? '<button class="qx" data-cancel aria-label="Annuler cette génération"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>' : '') + '</div>'; }).join(''); }
+  const q=queueState, cards=queueCards(), n=q.filter(e=>e.status==='queued').length, own=new Set(ownIds());
+  const total=q.reduce((t, e)=>t+entryLeft(e), 0)+(q.length ? q.at(-1).ahead||0 : 0);
+  const keys=new Set(cards.map(c=>c.key));         // lots sans carte : plus rien d'eux en mémoire
+  [...openLots].forEach(k=>{ if(!keys.has(k)) openLots.delete(k); });
+  [...lotCancels.keys()].forEach(k=>{ if(!keys.has(k) && !pageJobs.some(p=>p.lot && p.lot.id===k && isActive(p))) lotCancels.delete(k); });
+  $('runQueue').hidden=!cards.length;
+  $('queueNote').textContent = n ? `${n} en attente · file vide vers ${hhmm(total)} (≈ ${fmt(total)})` : '';
+  $('queueList').innerHTML=cards.map(c=>queueCard(c, own)).join(''); }
 $('queueList').addEventListener('click', async ev=>{
-  const lot=ev.target.closest('[data-cancel-lot]');
-  if(lot){ lot.disabled=true; log('annulation du lot demandée'); await postJson('/api/lot/'+lot.dataset.cancelLot+'/cancel', {}).catch(()=>{}); return refreshStatus(); }
-  const row=ev.target.closest('.qrow'), id=row && row.dataset.id; if(!id) return;
-  const x=ev.target.closest('[data-cancel]'), first=ev.target.closest('[data-first]');
-  if(x){ x.disabled=true; log('annulation demandée');
-    await postJson('/api/job/'+id+'/cancel', {}).catch(()=>{}); return refreshStatus(); }
+  const t=ev.target.closest('[data-toggle]');
+  if(t){ const k=t.dataset.toggle; if(openLots.has(k)) openLots.delete(k); else openLots.add(k); return renderQueue(); }
+  const b=ev.target.closest('[data-post]'); if(!b) return;
+  b.disabled=true; log(b.dataset.kind==='first' ? 'passage en tête demandé' : 'annulation demandée');
   // 404 ou 409 (la file a pu avancer) : la file rafraîchie suffit, sans message
-  if(first){ first.disabled=true; log('passage en tête demandé');
-    await postJson('/api/job/'+id+'/first', {}).catch(()=>{}); return refreshStatus(); } });
+  await postJson(b.dataset.post, {}).catch(()=>{}); refreshStatus(); });
 // suivi des générations de la page : une interrogation par seconde de chacune tant qu'elle n'est pas terminée
 function track(j, info){
   // déjà suivie (génération privée reprise de la file pendant l'envoi de sa demande) : complétée par info, et lancée
   // ici si info le dit (elle passe alors en haut de la page En cours comme une génération qui vient d'être lancée)
   let p=pageJobs.find(q=>q.id===j.id);
-  if(p){ ['prompt','tab','w','h','thumb','est'].forEach(k=>{ if(info[k]) p[k]=info[k]; }); p.adopted=p.adopted && !!info.adopted; }
-  else { pageJobs.push(p={ id:j.id, j, incognito:!!j.incognito, private:!!j.private, lot:j.lot||null, tag:j.tag||null, prompt:info.prompt||'', tab:info.tab||'t2i', w:info.w, h:info.h, thumb:info.thumb||null,
+  if(p){ ['prompt','tab','w','h','steps','thumb','est'].forEach(k=>{ if(info[k]) p[k]=info[k]; }); p.adopted=p.adopted && !!info.adopted; }
+  else { pageJobs.push(p={ id:j.id, j, incognito:!!j.incognito, private:!!j.private, lot:j.lot||null, tag:j.tag||null, prompt:info.prompt||'', tab:info.tab||'t2i', w:info.w, h:info.h, steps:info.steps, thumb:info.thumb||null,
       est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0,
       adopted:!!info.adopted });                    // adopted : reprise de la file (espace privé), pas lancée ici
     if(!j.incognito && !j.private) saveOwn(); }
@@ -1500,7 +1571,8 @@ async function finish(p){                          // génération terminée : e
     if(!p.adopted) forgetJob(j.id);                // (seule la page qui l'a lancée : les autres la suivent encore)
     if(!inPrivate()) return drop(p);         // sorti entre-temps : rien à l'écran ni rien qui signale l'espace (l'image y est rangée)
     if(j.status==='done') p.result={item:j.item, url:privImage(j.item)}; }
-  if(j.status==='cancelled'){ log('génération annulée', !!j.private); drop(p, true); }   // annulée : elle sort, sans message
+  if(j.status==='cancelled'){ log('génération annulée', !!j.private); drop(p, true);   // annulée : elle sort, sans message
+    if(p.lot) lotCancels.set(p.lot.id, (lotCancels.get(p.lot.id) || new Set()).add(p.lot.rank)); }   // sa case le dira
   else { p.doneAt=Date.now();
     if(j.status==='done'){ const secs=j.seconds||0;
       p.result={...(p.result||{}), name:j.private ? privName(j.item) : j.name, dims:j.dims};
@@ -1534,7 +1606,7 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   const camp=body.campaign;                         // campagne : chaque génération a sa photo, ses dimensions et son estimation
   // espace privé quitté pendant l'envoi (fermeture par le Mac) : la génération privée continue sur le Mac, hors de la
   // page ; une demande publique acceptée après l'entrée dans l'espace privé est suivie, hors de l'écran
-  if(!(priv && !inPrivate())) jobs.forEach((x, k)=>track(x, {prompt:body.prompt, tab, w:camp ? camp[k].width : body.width, h:camp ? camp[k].height : body.height,
+  if(!(priv && !inPrivate())) jobs.forEach((x, k)=>track(x, {prompt:body.prompt, tab, w:camp ? camp[k].width : body.width, h:camp ? camp[k].height : body.height, steps:body.steps,
     thumb:camp ? camp[k].image : thumb, est:camp ? campaignEst[k]||estOne : estOne, stepSec:stepSeconds, vaeSec:vaeSeconds}));
   emptyTab(tab, priv, sent);                        // demande acceptée : l'onglet est prêt pour la suivante (refus : rien n'est vidé)
   if(priv===inPrivate() && jobs[0].queue_position) toast((!j.lot ? 'Ajoutée' : camp ? `Campagne de ${jobs.length} photos ajoutée` : `Lot de ${jobs.length} images ajouté`)+' à la file · '+ordinal(jobs[0].queue_position)+' en attente');
@@ -1927,6 +1999,7 @@ function changedSpace(inside){
     logLines=logLines.filter(x=>!x.priv); renderLog();
     if(ivIndex<0) emptyInputs(); if(vIndex<0) emptyViewer(); }   // vues fermées : vidées sans attendre le fondu
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
+    openLots.clear(); lotCancels.clear();          // identifiants de lots (privés compris) des cartes de la file
     resumeOwn(queueState); }
   show(nextActive()); renderDone();
   histItems=[]; $('histGrid').innerHTML=''; $('histCount').textContent=''; if(mode==='hist') loadHistory();

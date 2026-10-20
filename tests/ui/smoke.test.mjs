@@ -43,14 +43,13 @@ test('feuille des prompts', async () => {
   page.assertNoErrors();
 });
 
-test('« Générer » mène à la page En cours, puis annulation depuis sa file', async () => {
+test('« Générer » mène à la page En cours, puis annulation depuis le haut de la page', async () => {
   // une génération lente lancée depuis l'interface (le faux moteur ralentit sur SLOW=…)
   await page.eval(`(() => { const t = $('t2i_prompt'); t.value = 'SLOW=0.3 essai de la file'; t.dispatchEvent(new Event('input')); })()`);
   await page.click('#go');
   await page.waitFor(`pageJobs.some(isActive) && mode === 'run'`, { what: 'génération suivie, page En cours' });
-  await page.waitFor(`!!$('queueList').querySelector('.qrow.own [data-cancel]')`,
-    { what: 'file de la page avec la génération de cet appareil' });
-  await page.click('#queueList .qrow.own [data-cancel]');
+  await page.waitFor(`shown && shown.j.status === 'running'`, { what: 'génération en cours en haut de la page' });
+  await page.click('#cancelLoader');
   await page.waitFor(`!pageJobs.some(isActive)`, { what: 'génération annulée' });
   const status = await (await fetch(bench.url + '/api/status')).json();
   assert.equal(status.queue.length, 0);

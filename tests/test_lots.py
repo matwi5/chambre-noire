@@ -60,12 +60,13 @@ class VariantsTest(bench.BenchCase):
         for j in jobs:
             wait_job(j["id"])
 
-    def test_incognito_lot_hides_its_id_from_the_queue(self):
+    def test_incognito_lot_hides_its_id_and_campaign_marker_from_the_queue(self):
+        # la ligne d'une génération incognito ne dit que son genre ; sa page lit le marqueur dans sa propre réponse
         jobs = generate_lot("SLOW=0.05 secret", count=2, steps=8, incognito=True)["jobs"]
         lot = jobs[0]["lot"]["id"]
+        self.assertEqual(jobs[0]["lot"]["campaign"], False)
         s = call("GET", "/api/status", remote=True)[1]
-        self.assertEqual([e["lot"] for e in s["queue"]],
-                         [{"rank": 1, "size": 2, "campaign": False}, {"rank": 2, "size": 2, "campaign": False}])
+        self.assertEqual([e["lot"] for e in s["queue"]], [{"rank": 1, "size": 2}, {"rank": 2, "size": 2}])
         self.assertNotIn(lot, str(s))
         for j in jobs:
             wait_job(j["id"])
