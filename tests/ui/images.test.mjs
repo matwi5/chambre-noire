@@ -118,7 +118,7 @@ test('galerie : sortir de l\'espace privé depuis Créer puis revenir à la gale
   await page.waitFor(`histItems.length === 1 && histItems[0].private
     && [...$('histGrid').querySelectorAll('img')].every(i => i.complete && i.naturalWidth > 0)`,
   { what: 'galerie privée affichée' });
-  await page.click('#tabbar [data-pane="t2i"]');
+  await page.click('#tabbar [data-pane="create"]');
   await page.click('#privExit');                   // « Sortir », depuis Créer
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   // retour à la galerie : à chaque image peinte jusqu'à la galerie publique chargée, aucune image privée
@@ -190,7 +190,7 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
     height: 512, steps: 2, cfg: 1, seed: -1, preview: false, ref_images: [], private: true, count: 2 })
     .then(r => r.status)`), 202);
   await idle();
-  await page.eval(`goTab('t2i'); goTab('hist')`);   // galerie rechargée, lot compris
+  await page.eval(`goTab('create'); goTab('hist')`);   // galerie rechargée, lot compris
   await page.waitFor(`histItems.filter(it => it.lot).length === 2`, { what: 'lot privé dans la galerie' });
   await page.eval(`openViewer(histItems.findIndex(it => it.lot), histItems); openLot()`);
   await page.waitFor(`openedSheet === $('lotSheet') && $('lotSheetGrid').querySelectorAll('img').length === 2`,
@@ -208,7 +208,7 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
 
 test('terminées : une image retirée de la liste, son lien de téléchargement part avec elle', async () => {
   await page.waitFor(`!inPrivate()`, { what: 'espace public' });
-  await page.eval(`goTab('t2i'); (() => { const t = $('t2i_prompt'); t.value = 'zq3 retirée';
+  await page.eval(`goTab('create'); (() => { const t = $('prompt'); t.value = 'zq3 retirée';
     t.dispatchEvent(new Event('input')); })()`);
   await page.click('#go');
   await page.waitFor(`!!$('doneList').querySelector('.dcard a[download]')`,
@@ -232,7 +232,7 @@ async function inputSizes(prompt, w, h, during) {
     .then(r => r.status)`),
   202);
   await idle();
-  await page.eval(`goTab('t2i'); goTab('hist')`);
+  await page.eval(`goTab('create'); goTab('hist')`);
   const index = `histItems.findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
   await page.waitFor(`${index} >= 0`, { what: 'image dans la galerie' });
   const held = [], hold = p => held.push(p.requestId);

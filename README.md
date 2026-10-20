@@ -188,7 +188,7 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   (Google pour Chrome) et ne contient ni le prompt ni le nom du fichier : « Image prête — Générée en 12 min 14 s ·
   1024×1024 » (« Image incognito prête » en incognito ; dans l'espace privé, le même message qu'une image normale,
   pour que rien ne le trahisse). Un lot
-  (plusieurs images d'une seule demande, voir [Créer](#créer-texte--image)) n'envoie qu'une notification, à la fin de
+  (plusieurs images d'une seule demande, voir [Créer](#créer)) n'envoie qu'une notification, à la fin de
   sa dernière image : « 3 images prêtes », « 2 images prêtes, 1 en échec », « Échec du lot » si aucune n'a réussi
   (« 2 images incognito prêtes » en incognito, le même message qu'un lot normal dans l'espace privé), et rien si tout le
   lot a été annulé. Il faut la bibliothèque `pywebpush` (installée par `requirements.txt` ; sur une installation
@@ -212,11 +212,11 @@ venv/bin/python tools/make_service.py
 
 ## Utilisation
 
-L'interface a cinq onglets, dans la barre du bas : **En cours** (la génération en cours et la file d'attente),
-**Créer** (texte → image), **Éditer**, **Dessiner** (dessin guidé) et **Galerie** ; elle s'ouvre sur Créer. Sur un
-grand écran, chaque page est une colonne centrée (la galerie prend toute la largeur). Sur un écran tactile, glisser
-le doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le dessin et sur les rangées qui défilent).
-Elle s'adapte au téléphone comme à l'ordinateur, en thème sombre ou clair selon le système.
+L'interface a quatre onglets, dans la barre du bas : **En cours** (la génération en cours et la file d'attente),
+**Créer** (texte → image, ou édition avec des images d'entrée), **Dessiner** (dessin guidé) et **Galerie** ; elle
+s'ouvre sur Créer. Sur un grand écran, chaque page est une colonne centrée (la galerie prend toute la largeur). Sur un
+écran tactile, glisser le doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le dessin et sur les
+rangées qui défilent). Elle s'adapte au téléphone comme à l'ordinateur, en thème sombre ou clair selon le système.
 Sur un écran tactile, elle allège ses effets de verre et d'animation pour rester fluide ; ajouter `?lite=1` ou
 `?lite=0` à l'adresse force l'un ou l'autre rendu.
 
@@ -230,23 +230,25 @@ Sous le texte, trois pastilles résument le format, la résolution et les étape
 | **Format** | 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16, et « Image » (les proportions de l'image) quand une seule image est chargée | Proportions de l'image produite |
 | **Résolution** | 360p (512×512) · 540p (768×768) · **720p** (1024×1024, par défaut) · 1080p (1536×1536) · 1440p (2048×2048, 2K natif du modèle) | Nombre de pixels, nommé d'après le format vidéo qui en compte autant (720p : ≈ 0,9 à 1 million de pixels) ; les dimensions exactes, qui dépendent du format, s'affichent en bas du panneau |
 | **Étapes** | Low 8 · Medium 12 · High 20 · XHigh 30 · **Max 40** (par défaut, réglage officiel du modèle) | Finesse des détails ; chaque option affiche le **temps estimé** |
-| **Images** (hors campagne) | **1**, 2, 3 ou 4 | Nombre de variantes du même prompt, chacune avec sa graine, en Créer, Éditer ou Dessiner (voir [Créer](#créer-texte--image)) ; le temps affiché est celui de toutes les images |
+| **Images** (hors campagne) | **1**, 2, 3 ou 4 | Nombre de variantes du même prompt, chacune avec sa graine, avec ou sans images d'entrée et en Dessiner (voir [Créer](#créer)) ; le temps affiché est celui de toutes les images |
 | **Aperçu toutes les 5 étapes** | interrupteur, activé par défaut | Montre l'image en cours de formation ; coût affiché à côté |
 
 Le bouton **Générer** affiche le temps estimé ; à sa droite, le bouton **Incognito** (icône de chapeau et lunettes)
 active le [mode incognito](#mode-incognito) : l'interface passe alors en thème graphite sombre, sans couleurs ni image
 en fond, comme la navigation privée des navigateurs. Le navigateur retient les réglages choisis,
-le mode incognito et le texte en cours de chaque onglet de l'espace public (sauf en incognito).
+le mode incognito et le texte en cours de l'espace public (un seul brouillon, jamais en incognito : activer
+l'incognito l'efface aussitôt).
 
 Conseil : **540p + 12 étapes** pour chercher la bonne formulation, puis montez la résolution et les étapes pour la version finale.
 Les descriptions en **anglais, longues et précises** donnent les meilleurs résultats.
 
 **Générer** reste actif pendant une génération : chaque appui ajoute une demande à la **file d'attente**, avec les
-réglages du moment, et mène à la page **En cours**. Dès que le Mac accepte la demande, l'onglet est vidé pour la
-suivante : texte et son brouillon, images (Éditer, campagne comprise : l'interrupteur **Campagne** reste tel quel),
-image à retoucher et masque (Dessiner) ; ce qui a été tapé ou ajouté pendant l'envoi reste ; les Réglages ne bougent
+réglages du moment, et mène à la page **En cours**. Dès que le Mac accepte la demande, la saisie est vidée pour la
+suivante de ce qui est parti : texte et son brouillon, images d'entrée d'une édition (campagne comprise :
+l'interrupteur **Campagne** reste tel quel), image à retoucher et masque d'un dessin ; ce qui a été tapé ou ajouté
+pendant l'envoi reste ; les Réglages ne bougent
 pas (seul le format « Image », qui suit l'image, part avec elle). Si la demande est refusée (erreur du Mac, Mac
-injoignable, génération longue non confirmée), rien n'est vidé et l'on reste sur l'onglet. Le Mac calcule les
+injoignable, génération longue non confirmée), rien n'est vidé et l'on reste sur la page. Le Mac calcule les
 générations une à une, dans l'ordre d'arrivée (sauf celles passées en tête depuis la file d'attente), qu'elles
 viennent de l'ordinateur ou du téléphone.
 
@@ -302,9 +304,12 @@ sur un autre onglet, un message le dit (« Image prête », « Lot prêt · 3 im
 Partager et Copier ne sont proposés que là où le navigateur les permet : sur l'ordinateur lui-même, ou sur le téléphone
 par l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du Wi-Fi).
 
-### Créer (texte → image)
+### Créer
 
-Écrire la description, ajuster les réglages si besoin, appuyer sur **Générer**.
+Un seul champ de texte et une seule liste d'**images d'entrée**. Sans image d'entrée, la génération part du texte :
+écrire la description, ajuster les réglages si besoin, appuyer sur **Générer**. Avec des images, c'est une
+**édition** (voir plus bas). L'exemple affiché dans le champ vide suit la saisie : décrire l'image sans image
+d'entrée, dire quoi changer avec des images.
 
 Pour obtenir plusieurs propositions du même prompt, choisir 2, 3 ou 4 **Images** dans les Réglages (une pastille « 3
 images » le rappelle sous le texte ; le choix est retenu). Une seule demande lance alors un **lot de variantes** : une
@@ -315,13 +320,13 @@ l'image en cours n'annule que celle-ci, et une image en échec n'arrête pas les
 terminées en **grille** : un appui ouvre une image en grand, avec sa graine, et **Garder celle-ci** supprime les autres
 images du lot après confirmation. Sans choix, toutes les images restent dans la galerie. En incognito, la grille n'a pas
 **Garder celle-ci** : chaque image a son bouton de téléchargement, et elles sont perdues une fois retirées de la liste.
-Les variantes marchent de la même façon en Éditer (hors campagne) et en Dessiner : plusieurs essais de la même édition,
-chacun avec sa graine, à départager par **Garder celle-ci**.
+Les variantes marchent de la même façon avec des images d'entrée (hors campagne) et en Dessiner : plusieurs essais
+de la même édition, chacun avec sa graine, à départager par **Garder celle-ci**.
 
-### Éditer
-
-Ajouter 1 à 10 images (elles sont numérotées 1, 2, 3…), une à une ou plusieurs d'un coup dans le sélecteur (elles
-sont ajoutées dans l'ordre de sélection), puis écrire une **instruction** :
+**Édition** : ajouter 1 à 10 images d'entrée par **Ajouter des images**, au-dessus du texte (elles sont numérotées 1,
+2, 3…, et un « × » retire une image), une à une ou plusieurs d'un coup dans le sélecteur (elles sont ajoutées dans
+l'ordre de sélection), ou par **Éditer** sur une image de la galerie, des terminées ou des images d'entrée, puis écrire
+une **instruction** :
 
 - « Replace the sky with a dramatic orange sunset, keep everything else unchanged »
 - « The woman in image 1 wears the jacket from image 2 »
@@ -331,7 +336,8 @@ Les images trop grandes sont réduites automatiquement à 2048 px de côté. Au-
 ajoutées et un message le signale.
 
 **Campagne** : pour appliquer la même instruction à toute une série de photos (« 6 voitures rouges → 6 voitures
-bleues »), activer l'interrupteur **Campagne** sous les images (le choix est retenu ; il n'existe que dans Éditer).
+bleues »), activer l'interrupteur **Campagne** sous les images (le choix est retenu ; il n'est proposé qu'à partir
+de 2 images, et ignoré tant qu'il ne l'est pas : une seule photo est une édition simple).
 Chaque photo est alors éditée seule, avec cette seule photo en référence : une image par photo, jusqu'à 10 photos, au
 lieu d'une image qui les combine. Le compteur passe à « n photos », la pastille « Campagne · n photos » remplace celle
 du format, et le choix du format disparaît des Réglages : chaque image prend la forme de sa photo (le format pris en
@@ -360,12 +366,12 @@ le modèle à redessiner l'original.
 L'onglet **Galerie** montre toutes les images de `outputs\`, la plus récente d'abord. Un appui sur une miniature
 l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèle, durée, et la graine quand elle est connue). Glisser sur le côté passe
 à l'image voisine (flèches du clavier sur ordinateur), glisser vers le bas ferme, un appui sur l'image masque les
-commandes. Pour zoomer (jusqu'à ×6), pincer l'image : elle passe au-dessus de tout, peut couvrir tout l'écran, suit
-les doigts, et revient à sa taille dès qu'on les relâche. Sur ordinateur, la molette zoome, glisser déplace l'image
-et un clic la remet à sa taille. En haut à droite : **Partager**, **Copier** et
-**Télécharger** ; en bas : **Éditer**, **Dessiner**, **Reprendre** (remet le texte de l'image dans l'onglet
-correspondant) et **Supprimer** (définitif, après confirmation, images d'entrée comprises). La zone de génération est
-masquée dans la galerie.
+commandes. Pour zoomer (jusqu'à ×6), pincer l'image : elle passe au-dessus de tout, peut couvrir tout l'écran, suit les
+doigts, et revient à sa taille dès qu'on les relâche. Sur ordinateur, la molette zoome, glisser déplace l'image et un
+clic la remet à sa taille. En haut à droite : **Partager**, **Copier** et **Télécharger** ; en bas : **Éditer** (ajoute
+l'image aux images d'entrée de Créer), **Dessiner**, **Reprendre** (remet le texte de l'image dans le champ, sur Créer,
+ou sur Dessiner pour un dessin) et **Supprimer** (définitif, après confirmation, images d'entrée comprises). La zone de
+génération est masquée dans la galerie.
 
 Une image ne s'affiche qu'une fois chargée : sa miniature d'abord, puis l'image complète, sans jamais laisser voir un
 instant l'image vue avant (ni celle d'une autre image, ni celle de l'autre espace). Les images voisines de la
@@ -380,16 +386,16 @@ ouvre une en grand, et l'on passe de l'une à l'autre en glissant. **Tout télé
 chaque image du lot (une par fichier, pas d'archive ; le navigateur peut demander d'autoriser plusieurs
 téléchargements), et **Garder celle-ci** (variantes seulement) supprime les autres images du lot après confirmation.
 
-Pour une édition ou un dessin guidé, le bouton **Image d'entrée** (ou **N images d'entrée**) ouvre les images de
-départ en grand, une par une, avec les mêmes gestes que la visionneuse : pincer pour zoomer (molette sur ordinateur),
-glisser à gauche ou à droite pour passer de l'une à l'autre, vers le bas pour fermer. Chacune peut
-être téléchargée, ou reprise dans **Éditer** ou **Dessiner** pour repartir d'elle. Les images d'entrée sont conservées
+Pour une édition ou un dessin guidé, le bouton **Image d'entrée** (ou **N images d'entrée**) ouvre les images de départ
+en grand, une par une, avec les mêmes gestes que la visionneuse : pincer pour zoomer (molette sur ordinateur), glisser à
+gauche ou à droite pour passer de l'une à l'autre, vers le bas pour fermer. Chacune peut être téléchargée, ou reprise
+par **Éditer** (images d'entrée de Créer) ou **Dessiner** pour repartir d'elle. Les images d'entrée sont conservées
 depuis le 13/10/2026 ; pour les images plus anciennes, elles ont été récupérées tant que leur dossier de travail
 existait encore (les 20 derniers).
 
 ### Prompts enregistrés
 
-Le bouton **Prompts**, sous le champ de texte de **Créer**, **Éditer** et **Dessiner**, ouvre la liste des prompts
+Le bouton **Prompts**, sous le champ de texte de **Créer** et **Dessiner**, ouvre la liste des prompts
 enregistrés, le dernier utilisé en tête. Elle est gardée sur le Mac (`tools/saved_prompts.json`) : on retrouve sur le
 téléphone ce qui a été enregistré depuis le Mac, et inversement. Dans l'espace privé, la liste est celle des prompts
 privés, chiffrés avec l'espace (voir [Espace privé](#espace-privé)) ; les prompts types restent les mêmes.
@@ -398,10 +404,12 @@ privés, chiffrés avec l'espace (voir [Espace privé](#espace-privé)) ; les pr
   caractères au plus), modifiable avant d'enregistrer. Seuls le titre et le texte sont gardés, pas les réglages
   (format, résolution, étapes) : un prompt sert à tous les formats. C'est un geste explicite, permis aussi en
   incognito. 500 prompts au plus.
-- Un appui sur un prompt remplace le texte du champ de l'onglet ouvert, quel que soit l'onglet où il a été enregistré.
+- Un appui sur un prompt remplace le texte du champ, quelle que soit sa catégorie.
   Le premier passage entre crochets (`[couleur]`, par exemple) est sélectionné : il suffit de taper pour le remplacer.
   Le prompt passe en tête de la liste (sauf en incognito, où rien n'est écrit sur le Mac).
-- Le filtre **Tous**, **Créer**, **Éditer**, **Dessiner** ne montre que les prompts enregistrés depuis cet onglet.
+- Le filtre **Tous**, **Créer**, **Éditer**, **Dessiner** ne montre que les prompts de cette catégorie : un prompt
+  prend celle de la saisie au moment où il est enregistré (Créer sans image d'entrée, Éditer avec, Dessiner depuis
+  Dessiner).
 - Le crayon modifie le titre et le texte ; la corbeille supprime le prompt, après confirmation.
 - Sous la liste, **Prompts types** : onze prompts prêts à l'emploi livrés avec l'application (`tools/prompt_types.json`),
   en lecture seule : repeindre, changer l'arrière-plan, retirer un élément, fond blanc produit, style aquarelle, heure
@@ -455,19 +463,19 @@ du Mac, ne suffit pas pour voir les images privées.
 - Le cadenas **Sortir**, en haut à droite, ramène à l'application normale en verrouillant l'espace. Il se verrouille
   aussi seul après 15 minutes sans activité privée sur cet appareil, et à la fermeture ou au rechargement de
   l'application.
-- Dans l'espace privé, **toute génération est privée** (Créer, Éditer, Dessiner) : son image, ses images d'entrée, sa
-  miniature, son prompt et ses réglages sont chiffrés sur le Mac. Le texte tapé n'est pas retenu par le navigateur.
-  Une génération privée lancée va jusqu'au bout et est rangée chiffrée même si l'espace se verrouille avant la fin, ou
-  si l'application est fermée ; sa notification est celle d'une image normale (« Image prête »), sans rien qui
-  trahisse l'espace privé. Hors de l'espace privé, la file n'en montre rien ; dedans, chaque génération privée y a
+- Dans l'espace privé, **toute génération est privée** (Créer, édition comprise, et Dessiner) : son image, ses images
+  d'entrée, sa miniature, son prompt et ses réglages sont chiffrés sur le Mac. Le texte tapé n'est pas retenu par le
+  navigateur. Une génération privée lancée va jusqu'au bout et est rangée chiffrée même si l'espace se verrouille avant
+  la fin, ou si l'application est fermée ; sa notification est celle d'une image normale (« Image prête »), sans rien
+  qui trahisse l'espace privé. Hors de l'espace privé, la file n'en montre rien ; dedans, chaque génération privée y a
   sa ligne complète (début du prompt, mode, rang dans son lot, temps restant), annulable, ainsi que son lot, quel que
   soit l'appareil qui l'a lancée.
 - Les **variantes** et les **campagnes** marchent aussi dans l'espace privé : chaque image du lot est chiffrée, la
   grille et « Garder celle-ci » restent, et la notification est celle d'un lot normal (« N images prêtes »).
 - La **Galerie** de l'espace privé ne montre que les images privées, avec la même visionneuse : télécharger,
   partager, copier, images d'entrée, Éditer, Dessiner, Reprendre, Supprimer. En sortant, elles quittent l'écran.
-- **Chaque espace a sa propre saisie**, onglet par onglet : texte, images d'Éditer, image à retoucher et son masque
-  de Dessiner. En entrant dans l'espace privé, la saisie publique est mise de côté et la saisie privée revient (vide
+- **Chaque espace a sa propre saisie** : texte, images d'entrée, image à retoucher et son masque de Dessiner. En
+  entrant dans l'espace privé, la saisie publique est mise de côté et la saisie privée revient (vide
   la première fois) ; en sortant, la saisie publique revient intacte. La saisie privée n'est jamais retenue par le
   navigateur, brouillons compris : elle ne survit pas à la fermeture de l'application. L'interrupteur **Campagne** et
   les Réglages sont communs aux deux espaces.
@@ -881,16 +889,16 @@ dépôt est public. Un avis, sans échec, signale un changement de code qui touc
 GitHub, la même commande, complète, tourne sur chaque pull request vers `main` et chaque envoi sur `dev`
 (`.github/workflows/checks.yml`, sur macOS).
 
-Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps
-que le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier. Ils ouvrent
-l'interface servie par le banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur
-de la console du navigateur. Ils couvrent les écrans principaux, la page En cours (onglets, pastilles, génération d'un
-autre appareil ou cachée, rien qui dépasse à la largeur du téléphone), les terminées (cartes, grille d'un lot,
-échecs, « × » et « Tout retirer », plafond, message « Image prête »), « Garder celle-ci » après un rechargement de la
-galerie, la saisie (plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque espace), l'en-tête
+Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps que
+le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier. Ils ouvrent l'interface servie par le banc dans un
+Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du navigateur. Ils couvrent
+les écrans principaux, la page En cours (onglets, pastilles, génération d'un autre appareil ou cachée, rien qui dépasse
+à la largeur du téléphone), les terminées (cartes, grille d'un lot, échecs, « × » et « Tout retirer », plafond, message
+« Image prête »), « Garder celle-ci » après un rechargement de la galerie, la saisie (page Créer unique, campagne à
+partir de 2 images, plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque espace), l'en-tête
 (cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés, la reprise d'une génération, le
-suivi d'une génération privée devenue inconnue (sans faux « Échec ») et l'absence de brouillon incognito ou privé
-dans le navigateur.
+suivi d'une génération privée devenue inconnue (sans faux « Échec ») et le brouillon unique (reprise des anciens, aucun
+brouillon incognito ou privé dans le navigateur).
 
 Tests de bout en bout, interface lancée :
 

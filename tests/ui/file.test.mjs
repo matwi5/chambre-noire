@@ -37,7 +37,8 @@ async function launch(prompt, extra = {}) {
   assert.equal(r.status, 202);
   return r.body;
 }
-const type = text => page.eval(`(() => { const t = $('t2i_prompt'); t.value = ${JSON.stringify(text)}; t.dispatchEvent(new Event('input')); })()`);
+const type = text => page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
+  t.dispatchEvent(new Event('input')); })()`);
 // génération de la page annulée depuis la file de la page En cours
 async function cancelOwnFromQueue() {
   await page.click('#tabbar [data-pane="run"]');
@@ -47,7 +48,7 @@ async function cancelOwnFromQueue() {
 }
 // texte tapé dans Créer puis « Générer », qui mène à la page En cours
 async function go(text) {
-  if (await page.eval(`mode`) !== 't2i') await page.click('#tabbar [data-pane="t2i"]');
+  if (await page.eval(`mode`) !== 'create') await page.click('#tabbar [data-pane="create"]');
   await type(text);
   await page.click('#go');
   await page.waitFor(`mode === 'run'`, { what: 'page En cours après « Générer »' });
@@ -68,7 +69,7 @@ test('espace privé : la file ne montre que les générations privées, avec leu
   await page.waitFor(`$('island').classList.contains('run') && $('islStep').textContent === 'En attente' && $('islEta').textContent.startsWith('≈')`,
     { what: 'pastille en attente avec sa durée' });
   assert.match(await page.eval(`$('islMore').textContent`), /^\+2/);
-  await page.click('#tabbar [data-pane="t2i"]');
+  await page.click('#tabbar [data-pane="create"]');
   await page.click('#island');
   await page.waitFor(`mode === 'run' && ${count(2)}`,
     { what: 'page En cours, file avec les deux générations privées' });
@@ -194,7 +195,7 @@ test('espace public : une génération privée en cours n\'allume pas la pastill
   await page.eval(`refreshStatus()`);
   await page.waitFor(`$('islStep').textContent === 'En attente' && $('islEta').textContent.startsWith('≈')`,
     { what: 'pastille en attente' });
-  await page.click('#tabbar [data-pane="t2i"]');
+  await page.click('#tabbar [data-pane="create"]');
   await page.click('#island');
   await page.waitFor(`mode === 'run' && ${count(1)}`, { what: 'une seule carte' });
   const [card] = await cards();
@@ -305,7 +306,7 @@ test('« Passer en tête » d\'une image du lot d\'un autre appareil, carte dép
     const other = await launch('zq9 avant le lot');
     const lot = await launch('zq9 lot', { count: 3 });
     await page.eval(`refreshStatus()`);
-    await page.click('#tabbar [data-pane="t2i"]');
+    await page.click('#tabbar [data-pane="create"]');
     await page.click('#island');
     await page.waitFor(`mode === 'run' && ${count(2)}`, { what: 'deux cartes : l\'autre génération et le lot' });
     const lotCard = `[...$('queueList').querySelectorAll('.qcard')].find(c => /zq9 lot/.test(c.textContent))`;

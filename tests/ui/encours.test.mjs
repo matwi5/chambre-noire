@@ -1,4 +1,4 @@
-// Page En cours, dans la vue du téléphone : onglets dans l'ordre En cours, Créer, Éditer, Dessiner, Galerie (ouverture
+// Page En cours, dans la vue du téléphone : onglets dans l'ordre En cours, Créer, Dessiner, Galerie (ouverture
 // sur Créer), « Générer » et la pastille du haut qui y mènent, pastille de l'onglet (nombre de la file de l'espace),
 // génération en cours en grand (de la page, d'un autre appareil, ou cachée dans l'autre espace : « En attente »),
 // « Rien en cours », et rien qui dépasse à 367 px.
@@ -33,7 +33,7 @@ async function launch(prompt, extra = {}) {
   assert.equal(r.status, 202);
   return r.body;
 }
-const type = text => page.eval(`(() => { const t = $('t2i_prompt'); t.value = ${JSON.stringify(text)};
+const type = text => page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
   t.dispatchEvent(new Event('input')); })()`);
 const idle = () => page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)`,
   { what: 'Mac au repos', timeout: 30000 });
@@ -53,11 +53,11 @@ const overflowing = () => page.eval(`(() => {
     .filter(el => { const r = el.getBoundingClientRect(); return r.width && out(r) && !clipped(el); })
     .map(el => el.id || el.className || el.tagName); })()`);
 
-test('onglets En cours, Créer, Éditer, Dessiner, Galerie ; ouverture sur Créer', async () => {
+test('onglets En cours, Créer, Dessiner, Galerie ; ouverture sur Créer', async () => {
   assert.deepEqual(await page.eval(`[...$('tabbar').querySelectorAll('button')].map(b => b.dataset.pane)`),
-    ['run', 't2i', 'edit', 'mask', 'hist']);
-  assert.equal(await page.eval(`mode`), 't2i');
-  assert.equal(await page.eval(`document.querySelector('#tabbar button.active').dataset.pane`), 't2i');
+    ['run', 'create', 'mask', 'hist']);
+  assert.equal(await page.eval(`mode`), 'create');
+  assert.equal(await page.eval(`document.querySelector('#tabbar button.active').dataset.pane`), 'create');
   assert.equal(await page.eval(`$('lens').style.transform`), 'translateX(100%)', 'lentille sous Créer');
   page.assertNoErrors();
 });
@@ -69,7 +69,7 @@ test('rien en cours : « Rien en cours » et un bouton vers Créer ; la pastille
   assert.match(await page.eval(`$('resultEmpty').textContent`), /Rien en cours/);
   assert.equal(await page.eval(`$('runCount').hidden`), true, 'pastille de l\'onglet cachée à zéro');
   await page.click('#resultEmpty button');
-  await page.waitFor(`mode === 't2i'`, { what: 'retour sur Créer' });
+  await page.waitFor(`mode === 'create'`, { what: 'retour sur Créer' });
   await page.click('#island');
   await page.waitFor(`$('engineSheet').classList.contains('on')`, { what: 'panneau Moteur' });
   await page.eval(`closeSheet()`);
@@ -84,7 +84,7 @@ test('file qui attend, rien qui tourne (rangement de la précédente) : pas « R
       id: 'zq5-rangement', prompt: 'zq5 en attente', mode: 't2i', lot: null }];
     renderRun(); const hidden = $('resultEmpty').hidden; queueState = was; renderRun(); return hidden; })()`), true);
   assert.equal(await visible('#resultEmpty'), true, 'file vide : « Rien en cours » de nouveau');
-  await page.click('#tabbar [data-pane="t2i"]');
+  await page.click('#tabbar [data-pane="create"]');
   page.assertNoErrors();
 });
 
@@ -106,7 +106,7 @@ test('« Générer » mène à En cours ; pastille de l\'onglet et pastille du h
   assert.equal(await visible('#nowCancel'), true);
   assert.notEqual(await page.eval(`$('runRing').style.strokeDashoffset`), '100');
   assert.equal(await visible('#stage'), false, 'zone de la page cachée');
-  await page.click('#tabbar [data-pane="t2i"]');
+  await page.click('#tabbar [data-pane="create"]');
   await page.click('#island');
   await page.waitFor(`mode === 'run'`, { what: 'pastille du haut : page En cours' });
   assert.deepEqual(await overflowing(), [], 'rien ne dépasse à 367 px');
@@ -159,7 +159,7 @@ test('génération incognito d\'un autre appareil : « Génération incognito »
 
 test('une seconde génération de la page prend le haut d\'En cours quand elle démarre', async () => {
   for (const text of ['HOLD=premiere zq5 première', 'HOLD=seconde zq5 seconde']) {
-    await page.click('#tabbar [data-pane="t2i"]');
+    await page.click('#tabbar [data-pane="create"]');
     await type(text);
     await page.click('#go');
     await page.waitFor(`mode === 'run' && pageJobs.some(p => p.prompt === ${JSON.stringify(text)})`,
@@ -178,7 +178,7 @@ test('une seconde génération de la page prend le haut d\'En cours quand elle d
 
 test('grand écran : Créer et En cours sont une colonne centrée', async () => {
   await page.send('Emulation.setDeviceMetricsOverride', { ...PHONE, width: 1280, mobile: false });
-  for (const pane of ['t2i', 'run']) {
+  for (const pane of ['create', 'run']) {
     await page.click(`#tabbar [data-pane="${pane}"]`);
     // largeur de la vue sans la barre de défilement : clientWidth
     const [left, width, right] = await page.eval(`(() => {

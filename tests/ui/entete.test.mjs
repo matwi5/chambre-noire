@@ -32,7 +32,7 @@ test('Galerie : le cadenas de l\'espace privé est aussi visible que Rafraîchir
   const lock = await look('#privEntry'), refresh = await look('.hist-head button[onclick="loadHistory()"]');
   assert.deepEqual(lock, refresh);
   assert.deepEqual(lock.opacity, ['1', '1'], 'pleine opacité');
-  await page.click('#tabbar [data-pane="t2i"]');
+  await page.click('#tabbar [data-pane="create"]');
   page.assertNoErrors();
 });
 

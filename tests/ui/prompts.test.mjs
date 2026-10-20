@@ -29,7 +29,8 @@ async function openPrompts(expected) {             // feuille des prompts, une f
 }
 // « Enregistrer le texte actuel » avec ce titre, depuis la feuille ouverte
 async function saveCurrent(title, text) {
-  await page.eval(`(() => { const t = $(mode + '_prompt'); t.value = ${JSON.stringify(text)}; t.dispatchEvent(new Event('input')); })()`);
+  await page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
+    t.dispatchEvent(new Event('input')); })()`);
   await page.click('#promptSheet .pnew');
   await page.waitFor(`openedSheet === $('promptEditSheet')`, { what: 'feuille d\'enregistrement' });
   await page.eval(`$('peTitle').value = ${JSON.stringify(title)}`);
@@ -60,7 +61,7 @@ test('espaces : les prompts privés ne se voient que dans l\'espace privé, les 
   await page.waitFor(`[...$('promptList').querySelectorAll('.prow b')].some(b => b.textContent === ${JSON.stringify(dup)})`,
     { what: 'prompt type dupliqué' });
   await page.eval(`[...$('promptList').querySelectorAll('.prow')].find(r => r.querySelector('b').textContent === 'Privé').querySelector('[data-pick]').click()`);
-  assert.equal(await page.eval(`$(mode + '_prompt').value`), 'un prompt privé');
+  assert.equal(await page.eval(`$('prompt').value`), 'un prompt privé');
   // utiliser un prompt privé le fait passer en tête
   await page.waitFor(`fetch('/api/private/prompts').then(r => r.json()).then(j => j.saved[0].title === 'Privé')`,
     { what: 'dernière utilisation du prompt privé notée' });

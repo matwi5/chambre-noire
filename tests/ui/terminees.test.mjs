@@ -25,12 +25,12 @@ after(async () => {
   await bench?.stop();
 });
 
-const type = (tab, text) => page.eval(`(() => { const t = $('${tab}_prompt'); t.value = ${JSON.stringify(text)};
+const type = text => page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
   t.dispatchEvent(new Event('input')); })()`);
-// texte tapé dans un onglet de saisie puis « Générer » : la page passe à En cours
-async function go(text, tab = 't2i') {
-  if (await page.eval(`mode`) !== tab) await page.click(`#tabbar [data-pane="${tab}"]`);
-  await type(tab, text);
+// texte tapé dans Créer puis « Générer » : la page passe à En cours
+async function go(text) {
+  if (await page.eval(`mode`) !== 'create') await page.click('#tabbar [data-pane="create"]');
+  await type(text);
   const before = await page.eval(`pageJobs.length`);
   await page.click('#go');
   await page.waitFor(`mode === 'run' && pageJobs.length > ${before}`, { what: 'demande acceptée, page En cours' });
@@ -103,7 +103,7 @@ test('échec : carte avec le message du Mac ; annulée : absente', async () => {
 test('ailleurs : « Image prête » mène à En cours ; lot en grille, « Lot prêt » avec ses échecs', async () => {
   await watchToasts();
   await go('HOLD=pret zq4 depuis Créer');
-  await page.click('#tabbar [data-pane="t2i"]');
+  await page.click('#tabbar [data-pane="create"]');
   bench.release('pret');                           // elle finit pendant qu'on est sur Créer
   await page.waitFor(`seenToasts.includes('Image prête')`, { what: 'message « Image prête »' });
   await page.click('#toast');
@@ -113,7 +113,7 @@ test('ailleurs : « Image prête » mène à En cours ; lot en grille, « Lot pr
     window.realBuild = window.realBuild || buildRequest; window.buildRequest = () => ({ ...realBuild(), seed: 20 })`);
   await go('HOLD=lotpret FAILSEED=21 zq4 lot');
   await page.eval(`opt.count = 1; saveOpt(); refreshChoices(); window.buildRequest = realBuild`);
-  await page.click('#tabbar [data-pane="t2i"]');
+  await page.click('#tabbar [data-pane="create"]');
   bench.release('lotpret');
   await page.waitFor(`seenToasts.some(t => t.startsWith('Lot prêt'))`, { what: 'message du lot', timeout: 30000 });
   assert.deepEqual(await page.eval(`seenToasts.filter(t => /prêt|Échec/.test(t))`),
@@ -172,13 +172,13 @@ test('plafond : 12 terminées hors incognito, la plus ancienne sort d\'elle-mêm
 });
 
 test('vrai mode et images d\'entrée : une édition à deux références les montre toutes', async () => {
-  await page.click('#tabbar [data-pane="edit"]');
+  await page.click('#tabbar [data-pane="create"]');
   await page.eval(`(async () => { for (const c of ['#a03070', '#30a070']) {
     const cv = document.createElement('canvas'); cv.width = cv.height = 256; const x = cv.getContext('2d');
     x.fillStyle = c; x.fillRect(0, 0, 256, 256);
-    editImages.push(await toEntry(c + '.png', cv.toDataURL('image/png'))); }
-    renderEditThumbs(); })()`);
-  await go('zq4 édition', 'edit');
+    inputImages.push(await toEntry(c + '.png', cv.toDataURL('image/png'))); }
+    renderInputs(); })()`);
+  await go('zq4 édition');
   await page.waitFor(`$('doneList').children.length === 1 && !pageJobs.some(isActive)`, { what: 'édition finie' });
   await page.click('#doneList [data-open]');
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse' });

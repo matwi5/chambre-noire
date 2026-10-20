@@ -95,14 +95,15 @@ Le fichier se lit par ses commentaires d'en-tête `/* ---…` (CSS) et `// ---�
 `<script>` dans `<head>` pose `html.lite` (téléphone : effets allégés) ; tout le reste du JavaScript est dans le
 dernier bloc, après le HTML.
 
-- **CSS** : sections « jetons », « fond », « verre liquide », « barre du haut », « barre d'onglets », « panneaux du bas
-  », « compositeur », « panneau Réglages », « Éditer et Dessiner », « visionneuse plein écran », « résultat », « île »,
-  « liste de la file (page En cours) » (cartes de la file), « prompts enregistrés », « espace privé », « messages et
-  confirmations », « téléphone (html.lite) ».
+- **CSS** : sections « jetons », « fond », « verre liquide », « barre du haut », « barre d'onglets », « panneaux du
+  bas », « compositeur », « panneau Réglages », « images d'entrée (Créer) et Dessiner », « visionneuse plein écran »,
+  « résultat », « île », « liste de la file (page En cours) » (cartes de la file), « prompts enregistrés », « espace
+  privé », « messages et confirmations », « téléphone (html.lite) ».
 - **HTML** : onglets `#pane-run` (page En cours : zone de la page `#ownZone` avec `#stage` et « Rien en cours »
   `#resultEmpty` ; génération d'un autre appareil ou attente `#runNow` ; file `#runQueue` ; terminées `#runDone`, liste
-  `#doneList`, « Tout retirer » `#doneClear`), `#pane-t2i`, `#pane-edit`, `#pane-mask`, `#pane-hist` (galerie
-  `#histGrid`) ; compositeur `#composer` (prompts `#t2i_prompt`, `#edit_prompt`, `#mask_prompt`, bouton `#go`) ; barre
+  `#doneList`, « Tout retirer » `#doneClear`), `#pane-create` (page Créer : images d'entrée `#refs`, vignettes
+  `#inThumbs`, ajout `#inDrop` et son champ `#inFiles`, interrupteur Campagne `#campSwitch`), `#pane-mask`, `#pane-hist`
+  (galerie `#histGrid`) ; compositeur `#composer` (champ unique `#prompt`, bouton `#go`) ; barre
   d'onglets `#tabbar` (onglet En cours : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vKeep` :
   « Garder celle-ci ») ; images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`, `#engineSheet`,
   `#lotSheet`, `#promptSheet`, `#promptEditSheet` et celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`,
@@ -111,13 +112,16 @@ dernier bloc, après le HTML.
   - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
     privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
     (`refPx`, `inputsFor`, `parts` : copies de `estimate.py`) ; réglages `opt` (`localStorage` `qwen-opt`),
-    `refreshChoices`, `setIncog`.
+    `refreshChoices` (exemple du champ, `PLACEHOLDERS`), `setIncog` (activer l'incognito efface le brouillon) ; nature
+    de la demande lue dans la saisie : `inputKind` (`t2i` sans image d'entrée, `edit` avec, `mask` sur l'onglet
+    Dessiner), `singleImage`, `campaignShown` (interrupteur proposé à partir de 2 images), `inCampaign`, `variants` ;
+    brouillon unique `qwen-prompt` (dans `init` : reprise une fois des anciens `qwen-<onglet>_prompt`).
   - « onglets & statut » : `TABS`, changement d'onglet (`mode`) ; « panneaux du bas » : `openSheet`, `closeSheet`
     (un seul ouvert, `openedSheet`) ; `refreshStatus()` (interroge `/api/status` toutes les 5 s, 2 s tant que la file
     n'est pas vide ; met à jour `queueState`, l'île, la page En cours et l'espace privé par `applyPrivate`, et le
     panneau Moteur, version servie comprise : `fmtVersion`, `staleServer`).
-  - « images », « dessin » : `toEntry`, `renderEditThumbs`, `setMaskImage`, `showMaskImage`, `dropMaskImage`,
-    `exportMask`.
+  - « images », « dessin » : `toEntry`, `renderInputs` (images d'entrée de Créer, `inputImages`), `setMaskImage`,
+    `showMaskImage`, `dropMaskImage`, `exportMask`.
   - « requête & loader » : `buildRequest` ; « messages et confirmations » : `toast`, `ask` et `answer` (feuille
     `#askSheet`, jamais `confirm()`).
   - « affichage des images » : `showImage` (toute image qui change d'adresse : vidée, puis remplie une fois l'image
@@ -165,8 +169,8 @@ dernier bloc, après le HTML.
     et terminées), `forgetResult`.
   - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
     `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,
-    `putInput`, `swapInput`, `emptyTab` (vidage après « Générer », dans l'espace d'où la demande est partie) ; un ajout
-    d'image asynchrone (Éditer, Dessiner) va dans la saisie de l'espace où il a commencé. `openPrivSheet`,
+    `putInput`, `swapInput`, `emptyInput` (vidage après « Générer », dans l'espace d'où la demande est partie) ; un
+    ajout d'image asynchrone (Éditer, Dessiner) va dans la saisie de l'espace où il a commencé. `openPrivSheet`,
     `privCreate`, `privUnlock`, `privLock`, `privChangeCode`, `privReset`.
 
 Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
@@ -232,7 +236,7 @@ invariants ».
   après un passage en tête (à défaut, serveur plus ancien : au jeton de la page, `PAGE_TOKEN`, et au rang). Les
   générations finies vont dans les terminées (`renderDone`, un lot fini en grille) ; la visionneuse parcourt `vList` (la
   galerie, ou les terminées de la page, incognito comprises par leur adresse `blob:`). Réglages, brouillons de la saisie
-  publique et générations à reprendre dans `localStorage` (`qwen-opt`, `qwen-<onglet>_prompt`, `qwen-own`).
+  publique et générations à reprendre dans `localStorage` (`qwen-opt`, `qwen-prompt`, `qwen-own`).
 - **Contrôle d'accès** : `_host_ok` (liste blanche de `Host` contre le rebinding DNS, noms du Wi-Fi et de Tailscale
   figés au démarrage), `_post_refused` (tout POST : `Sec-Fetch-Site`, `Origin` égal à l'origine du `Host`,
   `Content-Type: application/json` exigé, sinon 403/415), puis `_allowed` (le Mac lui-même passe ; les autres

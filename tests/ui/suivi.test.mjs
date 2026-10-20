@@ -44,7 +44,7 @@ async function enterPrivate(page) {
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
 }
 async function launch(page, prompt) {
-  await page.eval(`(() => { const t = $('t2i_prompt'); t.value = ${JSON.stringify(prompt)};
+  await page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(prompt)};
     t.dispatchEvent(new Event('input')); })()`);
   await page.click('#go');
   await page.waitFor(`pageJobs.some(p => p.private && !p.adopted)`, { what: 'génération privée suivie par la page' });

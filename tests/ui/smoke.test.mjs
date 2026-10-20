@@ -24,8 +24,8 @@ test('vue du téléphone : mode allégé', async () => {
   assert.equal(await page.eval(`document.documentElement.classList.contains('lite')`), true);
 });
 
-test('onglets En cours, Créer, Éditer, Dessiner et Galerie', async () => {
-  for (const pane of ['run', 'edit', 'mask', 'hist', 't2i']) {
+test('onglets En cours, Créer, Dessiner et Galerie', async () => {
+  for (const pane of ['run', 'mask', 'hist', 'create']) {
     await page.click(`#tabbar [data-pane="${pane}"]`);
     await page.waitFor(`$('pane-${pane}').classList.contains('active') && document.body.className === 'm-${pane}'`);
     if (pane === 'hist') await page.waitFor(`$('histGrid').children.length > 0`, { what: 'galerie affichée' });
@@ -45,7 +45,8 @@ test('feuille des prompts', async () => {
 
 test('« Générer » mène à la page En cours, puis annulation depuis le haut de la page', async () => {
   // une génération lente lancée depuis l'interface (le faux moteur ralentit sur SLOW=…)
-  await page.eval(`(() => { const t = $('t2i_prompt'); t.value = 'SLOW=0.3 essai de la file'; t.dispatchEvent(new Event('input')); })()`);
+  await page.eval(`(() => { const t = $('prompt'); t.value = 'SLOW=0.3 essai de la file';
+    t.dispatchEvent(new Event('input')); })()`);
   await page.click('#go');
   await page.waitFor(`pageJobs.some(isActive) && mode === 'run'`, { what: 'génération suivie, page En cours' });
   await page.waitFor(`shown && shown.j.status === 'running'`, { what: 'génération en cours en haut de la page' });

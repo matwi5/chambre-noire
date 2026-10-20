@@ -66,7 +66,7 @@ async function launchLot(extra) {
 // « Garder celle-ci » offert sur la première image du lot, ouverte depuis la galerie
 async function keepOffered(lot) {
   const [name] = await lotNames(lot);
-  await page.eval(`goTab('t2i'); goTab('hist')`);
+  await page.eval(`goTab('create'); goTab('hist')`);
   await page.waitFor(`!!$('histGrid').querySelector('button[data-name="${name}"]')`, { what: 'image dans la galerie' });
   await page.click(`#histGrid button[data-name="${name}"]`);
   await page.waitFor(`$('viewer').classList.contains('on') && vList[vIndex].name === '${name}'`,

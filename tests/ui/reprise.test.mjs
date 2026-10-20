@@ -34,7 +34,7 @@ test('rechargement : un lot repris montre le prompt complet et « Reprendre » r
   await page.goto(bench.url + '/');
   await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
   await page.eval(`opt.count = 2; saveOpt(); refreshChoices();
-    (() => { const t = $('t2i_prompt'); t.value = ${JSON.stringify(LONG)}; t.dispatchEvent(new Event('input')); })()`);
+    (() => { const t = $('prompt'); t.value = ${JSON.stringify(LONG)}; t.dispatchEvent(new Event('input')); })()`);
   await page.click('#go');
   await page.waitFor(`pageJobs.length === 2`, { what: 'lot de deux images suivi par la page' });
 
@@ -51,10 +51,10 @@ test('rechargement : un lot repris montre le prompt complet et « Reprendre » r
 
   await page.click('#doneList .dlot [data-open]'); // visionneuse depuis les terminées, puis « Reprendre »
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
-  await page.eval(`$('t2i_prompt').value = ''`);
+  await page.eval(`$('prompt').value = ''`);
   await page.click(`#viewer button[onclick="viewerAction('prompt')"]`);
   await page.waitFor(`!$('viewer').classList.contains('on')`, { what: 'texte repris, visionneuse fermée' });
-  assert.equal(await page.eval(`$('t2i_prompt').value`), LONG);
+  assert.equal(await page.eval(`$('prompt').value`), LONG);
   await page.eval(`opt.count = 1; saveOpt();`);
   page.assertNoErrors();
 });
