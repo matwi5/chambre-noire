@@ -76,6 +76,18 @@ test('rien en cours : « Rien en cours » et un bouton vers Créer ; la pastille
   page.assertNoErrors();
 });
 
+test('file qui attend, rien qui tourne (rangement de la précédente) : pas « Rien en cours »', async () => {
+  await page.click('#tabbar [data-pane="run"]');
+  // file reçue entre deux générations : une entrée en attente d'un autre appareil, rien en cours, rien de caché
+  assert.equal(await page.eval(`(() => { const was = queueState;
+    queueState = [{ status: 'queued', position: 1, ahead: 0, estimate: 30, elapsed: null, kind: 'normal',
+      id: 'zq5-rangement', prompt: 'zq5 en attente', mode: 't2i', lot: null }];
+    renderRun(); const hidden = $('resultEmpty').hidden; queueState = was; renderRun(); return hidden; })()`), true);
+  assert.equal(await visible('#resultEmpty'), true, 'file vide : « Rien en cours » de nouveau');
+  await page.click('#tabbar [data-pane="t2i"]');
+  page.assertNoErrors();
+});
+
 test('« Générer » mène à En cours ; pastille de l\'onglet et pastille du haut', async () => {
   await launch('HOLD=encours zq5 d\'un autre appareil', { width: 768, height: 512 });
   await type('zq5 de cette page');

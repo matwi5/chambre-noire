@@ -100,16 +100,21 @@ class CancelDuringPreparationTest(bench.BenchCase):
     def test_cancel_as_the_engine_starts_stops_it_at_once(self):
         real = bench.launch.subprocess.Popen
 
+        started = []
+
         def start_then_cancel(*a, **kw):        # annulation arrivée pendant le lancement du moteur
             proc = real(*a, **kw)
             if a and str(a[0][0]).endswith(bench.launch.EXE):
-                self.assertEqual(call("POST", f"/api/job/{jid}/cancel")[1]["status"], "cancelled")
+                # génération lancée lue dans S.current : le thread de calcul peut arriver ici avant que la réponse
+                # de /api/generate ait rendu son identifiant au test
+                started.append(bench.launch.S.current)
+                self.assertEqual(call("POST", f"/api/job/{started[-1]}/cancel")[1]["status"], "cancelled")
             return proc
-        jid = None
         with mock.patch.object(bench.launch.subprocess, "Popen", start_then_cancel):
             code, reply = call("POST", "/api/generate", gen_body("HOLD=jamais long one", steps=20))
             jid = reply["id"]
             bench.wait_idle()                      # HOLD : sans l'arrêt du moteur, il ne finirait jamais
+        self.assertEqual(started, [jid])
         self.assertEqual(bench.job(jid)["status"], "cancelled")
         self.assertEqual((bench.files("outputs", "*.png"), bench.files("jobs", jid)), ([], []))
 

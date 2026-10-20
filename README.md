@@ -256,7 +256,7 @@ aperçus, ni journal du moteur) ; une génération de la page qui attend affiche
 son image. Lancée par un autre appareil : son texte (« Génération incognito » pour une génération incognito), un cadre
 aux proportions demandées, ses réglages et une progression estimée, sans aperçu, avec l'annulation là où l'appareil y a
 droit. Quand le Mac calcule une génération que l'espace où l'on est ne voit pas, le haut de la page dit « En attente »
-et le temps avant le début de la première génération de l'espace. Quand rien ne tourne et qu'il n'y a aucune terminée,
+et le temps avant le début de la première génération de l'espace. Quand la file est vide et qu'il n'y a aucune terminée,
 elle dit « Rien en cours », avec un bouton vers Créer. Sous la génération en cours, la **file d'attente** de l'espace,
 en cartes, dans l'ordre de calcul, sous un en-tête qui dit combien de générations attendent et à quelle heure la file
 sera vide (« 4 en attente · file vide vers 15 h 10 (≈ 60 min) »). Une carte par demande : une génération seule, ou tout

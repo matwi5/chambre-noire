@@ -993,7 +993,7 @@ TABS.forEach(b=>b.addEventListener('click',()=>{
   TABS.forEach(x=>x.classList.toggle('active', x===b));
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active')); mode=b.dataset.pane; $('pane-'+mode).classList.add('active');
   document.body.className='m-'+mode; placeLens(); if(mode==='hist') loadHistory(); suggestRatio();
-  renderRun(); }));
+  renderQueue(); renderRun(); }));
 document.body.className='m-'+mode; placeLens();     // ouverture sur Créer, deuxième onglet
 (function tabSwipe(){          // glisser horizontalement sur la page : onglet voisin (sauf sur le dessin, les rangées qui défilent, un texte en cours de saisie)
   const main=document.querySelector('main'), SKIP='#paintWrap, .opts, .ratios, .chips5, .thumbs, input, select, button.pill';
@@ -1193,7 +1193,7 @@ function forgetPrivateImages(){
 
 // ------------------------------------------------------------ générations de la page, page En cours, île et file
 // La page suit les générations qu'elle a lancées (ou reprises après un rechargement), dans l'ordre : pageJobs. La page
-// En cours en montre une en haut (shown) : celle qui tourne, sinon la prochaine, puis son image quand elle est prête ;
+// En cours en montre une en haut (shown) : celle qui tourne, sinon la prochaine ; finie, elle passe dans les terminées ;
 // une génération d'un autre appareil de l'espace qui tourne y prend sa place (renderRun), et la file de l'espace suit.
 // L'île et l'onglet En cours résument la file de l'espace où l'on est, tous appareils confondus (queue de /api/status) ;
 // un appui sur l'île mène à la page. Chaque génération garde les réglages de son lancement.
@@ -1327,15 +1327,15 @@ function failCard(p){
   return `<article class="dcard fail" data-id="${esc(p.id)}"><span class="qicon">${dicon('fail')}</span><div class="dbody"><p class="dprompt">${esc(p.incognito ? 'Génération incognito' : p.prompt)}</p>`
     + `<p class="dmeta err">${esc(failText(p))}</p></div>${removeBtn}</article>`; }
 function lotCard(items, addToView){                // lot fini : ses images en grille, chaque case à la forme de son image
-  const first=items[0], size=first.lot.size, ok=items.filter(q=>q.result), incog=first.incognito;
+  const first=items[0], ok=items.filter(q=>q.result), isIncog=first.incognito;
   const meta=[lotLabel(first.lot, first.j.mode), fmt(ok.reduce((t, q)=>t+(q.j.seconds||0), 0)),
     (first.j.total||'?')+' étapes'].join(' · ');
   const cells=items.map(q=>{ if(!q.result) return `<div class="cell fail"><span>${q.lot.rank}</span><p>${esc(failText(q))}</p></div>`;
     const r=q.result, [w, h]=r.dims||[1, 1], k=addToView(q);
     return `<div class="cell" style="--ar:${w/h}"><button data-open="${k}" aria-label="Ouvrir l'image ${q.lot.rank}"><img src="${esc(thumbOf(doneView[k]))}" alt=""></button><span>${q.lot.rank}</span>`
-      + (incog ? `<a href="${esc(r.url)}" download="${esc(r.name)}" aria-label="Télécharger l'image ${q.lot.rank}">${dicon('dl')}</a>` : '') + '</div>'; }).join('');
+      + (isIncog ? `<a href="${esc(r.url)}" download="${esc(r.name)}" aria-label="Télécharger l'image ${q.lot.rank}">${dicon('dl')}</a>` : '') + '</div>'; }).join('');
   return `<article class="dcard dlot" data-lot="${esc(first.lot.id)}"><div class="dhead"><div class="dbody"><p class="dprompt">${esc(first.prompt)}</p><p class="dmeta">${esc(meta)}</p>`
-    + `${incog ? '<p class="dmeta">Incognito · non enregistrées : téléchargez celles à garder</p>' : ''}</div>${removeBtn}</div><div class="lotgrid">${cells}</div></article>`; }
+    + `${isIncog ? '<p class="dmeta">Incognito · non enregistrées : téléchargez celles à garder</p>' : ''}</div>${removeBtn}</div><div class="lotgrid">${cells}</div></article>`; }
 function renderDone(){
   const entries=doneEntries(); doneView=[];
   const addToView = p => doneView.push(pageItem(p))-1;   // rang de l'image dans doneView
@@ -1407,8 +1407,8 @@ function onIsland(){                               // file non vide : la page En
   if(!queueState.length && !spaceActive()) return openSheet('engineSheet');
   goTab('run'); refreshStatus(); }
 // haut de la page En cours. La génération de la page qui tourne (elle remplace dans la zone de la page #ownZone une
-// image finie ou une génération qui attend, sauf une image incognito affichée, qui le reste), ou à défaut ce que montre
-// cette zone (show). Sinon, une génération d'un autre appareil de l'espace qui tourne : son texte (« Génération
+// génération qui attend ; une génération finie n'y reste pas, elle passe dans les terminées), ou à défaut ce que
+// montre cette zone (show). Sinon, une génération d'un autre appareil de l'espace qui tourne : son texte (« Génération
 // incognito » pour une incognito), un cadre aux proportions demandées avec l'icône de sa nature, une progression
 // estimée, sans aperçu, et l'annulation si l'appareil y a droit (entrée avec id). Sinon, des générations de l'espace
 // attendent derrière une génération cachée de l'autre espace (ahead) : « En attente » et la durée jusqu'au début de la
@@ -1420,7 +1420,9 @@ function renderRun(){
   const run=queueState.find(e=>e.status==='running'), next=queueState.find(e=>e.status==='queued');
   const other=!ownRun && (run ? !ownOf(run) : !!(next && next.ahead));
   $('pane-run').classList.toggle('other', other);
-  $('resultEmpty').hidden=!!shown || other || doneEntries().length>0;   // « Rien en cours » : ni génération ni terminée
+  // « Rien en cours » : ni génération, ni carte de file (entre deux générations, pendant le rangement de la
+  // précédente, la file attend sans rien qui tourne), ni terminée
+  $('resultEmpty').hidden=!!shown || other || queueState.length>0 || doneEntries().length>0;
   if(!other){ if(nowKey){ nowKey=''; $('nowFrame').style.removeProperty('--ar'); $('nowIco').innerHTML='';
       ['nowTitle', 'nowSub', 'nowEta', 'nowPrompt'].forEach(id=>$(id).textContent=''); $('nowCancel').dataset.id=''; }
     return; }
@@ -1523,7 +1525,9 @@ function renderQueue(){
   [...lotCancels.keys()].forEach(k=>{ if(!keys.has(k) && !pageJobs.some(p=>p.lot && p.lot.id===k && isActive(p))) lotCancels.delete(k); });
   $('runQueue').hidden=!cards.length;
   $('queueNote').textContent = n ? `${n} en attente · file vide vers ${hhmm(total)} (≈ ${fmt(total)})` : '';
-  $('queueList').innerHTML=cards.map(c=>queueCard(c, own)).join(''); }
+  // cartes dessinées sur la page En cours seulement (rendue à son ouverture) : ailleurs, rien à refaire toutes les 2 s
+  // (vignettes d'entrée en data URL), et rien de l'espace quitté ne reste dans la liste cachée
+  $('queueList').innerHTML = mode==='run' ? cards.map(c=>queueCard(c, own)).join('') : ''; }
 $('queueList').addEventListener('click', async ev=>{
   const t=ev.target.closest('[data-toggle]');
   if(t){ const k=t.dataset.toggle; if(openLots.has(k)) openLots.delete(k); else openLots.add(k); return renderQueue(); }
