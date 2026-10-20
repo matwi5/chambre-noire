@@ -4,6 +4,17 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-20 · Suites du groupe A : marqueur de campagne caché des lignes incognito, annulation au démarrage
+
+- **Contexte** : la revue de sécurité du groupe A (file réordonnable, variantes en édition) relève que le marqueur de
+  campagne, posé aussi sur la ligne d'un lot incognito comme le demandait la spécification, dit aux autres appareils
+  qu'il s'agit d'une campagne ; la session du groupe retrouve aussi une piste ouverte le 14/10/2026 : une annulation
+  posée au démarrage d'une génération est écrasée et la génération va au bout.
+- **Décision** (porteur, 20/10/2026 : « oui poue les points 1 à 4, mets dans le groupe B ») : la ligne de la file
+  d'une génération incognito ne porte pas le marqueur de campagne (elle ne montre que son genre, comme avant) ; sa
+  page le lit dans sa propre réponse de `/api/generate` (ticket « Présenter la file en cartes »). L'annulation écrasée
+  devient un ticket du groupe B. Pièges de `CLAUDE.md` complétés (`S.turn`, étiquette `tag` qui n'ouvre aucune route).
+
 ## 2026-10-19 · Une seule page Créer, une page En cours pour la file et les résultats
 
 - **Contexte** : trois onglets (Créer, Éditer, Dessiner) font la même chose à une image d'entrée près ; l'image en
