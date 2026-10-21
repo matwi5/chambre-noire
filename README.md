@@ -291,8 +291,10 @@ images d'entrée (références, image d'origine, zone peinte) dans `outputs\.inp
 Sous la file, les **terminées** : les générations finies de la page, la plus récente en premier. Une image a sa vignette
 (un appui l'ouvre en grand, avec ses images d'entrée), son texte, ses réglages et ses actions : **Télécharger**,
 **Partager** et **Copier** (dans le presse-papiers), **Éditer** et **Dessiner**, qui la réutilisent comme point de
-départ, et **Supprimer** (**Effacer** pour une image incognito). Un lot fini s'y montre en grille, une case par image en
-échec avec son message ; une génération en échec garde son message ; une génération annulée n'y laisse rien. Le « × »
+départ, **Relancer** et **Supprimer** (**Effacer** pour une image incognito). Un lot fini s'y montre en grille, une case
+par image en échec avec son message, et **Relancer** sur sa carte refait tout le lot ; une génération en échec garde son
+message et **Relancer** ; une génération annulée n'y laisse rien. Une carte de lot ou d'échec reprise après un
+rechargement n'a pas **Relancer** (la page n'a plus la demande). Le « × »
 d'une carte la retire de la liste sans la supprimer de la galerie, **Tout retirer** vide la liste (après confirmation
 quand une image incognito, qu'on perdrait, en fait partie). La liste garde au plus 12 générations qui ne sont pas
 incognito (les deux espaces comptent ensemble) : au-delà, la plus ancienne en sort d'elle-même, échecs compris ; les
@@ -379,8 +381,8 @@ l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèl
 commandes. Pour zoomer (jusqu'à ×6), pincer l'image : elle passe au-dessus de tout, peut couvrir tout l'écran, suit les
 doigts, et revient à sa taille dès qu'on les relâche. Sur ordinateur, la molette zoome, glisser déplace l'image et un
 clic la remet à sa taille. En haut à droite : **Partager**, **Copier** et **Télécharger** ; en bas : **Éditer** (ajoute
-l'image aux images d'entrée de Créer), **Dessiner**, **Reprendre** et **Supprimer** (définitif, après confirmation,
-images d'entrée comprises). La zone de génération est masquée dans la galerie.
+l'image aux images d'entrée de Créer), **Dessiner**, **Reprendre**, **Relancer** et **Supprimer** (définitif, après
+confirmation, images d'entrée comprises). La zone de génération est masquée dans la galerie.
 
 **Reprendre** remet dans Créer la saisie d'où vient l'image, à la place de la saisie en cours (après confirmation si
 elle n'est pas vide) : son texte, ses réglages (format, résolution, étapes) et ses images d'entrée selon son usage.
@@ -391,6 +393,14 @@ en édition, avec sa référence où le trait rouge est déjà dessiné. Les ima
 comprise : la reprise n'écrit pas son texte comme brouillon). Si l'on tape ou ajoute une image pendant la lecture des
 images, la confirmation est redemandée. Le geste est absent pour une édition ou un dessin dont la galerie n'a pas
 gardé les images d'entrée (images anciennes).
+
+**Relancer** refait la même demande avec une nouvelle graine, sans toucher la saisie de Créer, puis mène à **En
+cours**, comme **Générer** : dans l'espace où l'on est et avec l'interrupteur Incognito du moment. Pour une image des
+terminées, c'est la demande que la page a gardée (une image d'un lot : cette image seule ; la carte du lot : tout le
+lot, mêmes variantes ou mêmes photos de campagne). Pour une image de la galerie, ou une image reprise après un
+rechargement, la demande est refaite à partir de l'image : son texte, ses images d'entrée, ses dimensions, ses étapes
+et son usage (une annotation repart en annotation), pour une seule image ; le geste est absent pour un dessin en masque
+(le masque n'est pas gardé avec l'image) et pour une édition dont les images d'entrée ne sont pas connues.
 
 Une image ne s'affiche qu'une fois chargée : sa miniature d'abord, puis l'image complète, sans jamais laisser voir un
 instant l'image vue avant (ni celle d'une autre image, ni celle de l'autre espace). Les images voisines de la

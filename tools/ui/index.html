@@ -363,6 +363,8 @@
   .viewer.immersive .v-top, .viewer.immersive .v-panel { opacity:0; pointer-events:none; }
   .viewer.immersive .v-panel { transform:translateY(24px); }
   .acts.v-acts { grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:16px; }
+  /* visionneuse : ses actions sur une ligne, un bouton masqué n'y prend pas de place */
+  #viewer .acts.v-acts { grid-template-columns:none; grid-auto-flow:column; grid-auto-columns:minmax(0, 1fr); gap:5px; }
   .v-panel .keep { width:100%; margin-top:14px; }
   .v-lot { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px; }
   .v-lot[hidden] { display:none; }
@@ -373,6 +375,7 @@
   #lotSheet > .btn { width:100%; margin-top:14px; }
   .keep[hidden] { display:none; }
   .v-acts .act { background:var(--field); font-size:12.5px; padding:13px 4px 11px; border-radius:20px; gap:7px; }
+  #viewer .v-acts .act { font-size:11px; letter-spacing:-.1px; padding-inline:0; min-width:0; }   /* cinq dans la largeur du téléphone */
   .v-panel .m-chips { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; margin:0; padding:0 18px 0 2px;
     -webkit-mask:linear-gradient(90deg, #000 85%, transparent); mask:linear-gradient(90deg, #000 85%, transparent); }
   .v-panel .m-chips::-webkit-scrollbar { display:none; }
@@ -427,7 +430,8 @@
   .qx.danger { color:var(--err); }
   .dx { position:absolute; top:8px; right:8px; }
   .dhead .dx { position:static; }
-  .dcard.fail > .qicon { color:var(--err); }
+  .dcard.fail .qicon { color:var(--err); }
+  .dcard.fail .dhead { flex:1; }                  /* icône, message, Relancer et « × » sur une ligne */
   .cell.fail { display:grid; place-items:center; aspect-ratio:1; padding:28px 10px 10px; }
   .cell.fail p { margin:0; font-size:12px; color:var(--err); text-align:center; overflow-wrap:anywhere; }
   .stage { position:relative; display:none; width:min(100%, calc(72svh * var(--ar, 1))); margin-inline:auto; aspect-ratio:1/1; border-radius:26px; overflow:hidden;
@@ -703,6 +707,7 @@
       <button class="act" onclick="viewerAction('edit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/></svg><span>Éditer</span></button>
       <button class="act" onclick="viewerAction('mask')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg><span>Dessiner</span></button>
       <button class="act" id="vResume" onclick="viewerAction('resume')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15M4.5 11.5h15M4.5 16.5h8"/><path d="m16 15.5 2.5 2.5 3-4"/></svg><span>Reprendre</span></button>
+      <button class="act" id="vAgain" onclick="viewerAction('again')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 9.5A8 8 0 0 0 5.2 7.2L4 8.5"/><path d="M4 4.5v4h4"/><path d="M4.5 14.5a8 8 0 0 0 14.3 2.3l1.2-1.3"/><path d="M20 19.5v-4h-4"/></svg><span>Relancer</span></button>
       <button class="act danger" id="vDelete" onclick="viewerAction('delete')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="m6.5 7 1 12.5h9l1-12.5"/></svg><span>Supprimer</span></button>
     </div>
   </div>
@@ -1185,11 +1190,12 @@ function paintedReference(w,h,opaque){ const a=document.createElement('canvas');
   ac.putImageData(im,0,0); const f=document.createElement('canvas'); f.width=w; f.height=h; f.getContext('2d').drawImage(a,0,0,w,h); return f.toDataURL('image/png'); }
 
 // ------------------------------------------------------------ requête & loader
+// champs d'une demande que la saisie ne règle pas (Générer, et Relancer d'une image de la galerie)
+const requestBase = () => ({ cfg:CFG, seed:-1, preview:$('previewChk').checked, preview_interval:PREVIEW_EVERY, ref_images:[],
+  init_image:null, mask_image:null, strength:1.0, incognito:incogOn, page:PAGE_TOKEN });
 function buildRequest(){
   const [w,h]=currentDims(); const steps=stepsSel().steps;
-  const kind=inputKind(), body={ mode:kind, prompt:$('prompt').value.trim(), width:w, height:h, steps, cfg:CFG, seed:-1,
-    preview:$("previewChk").checked, preview_interval:PREVIEW_EVERY, ref_images:[], init_image:null, mask_image:null, strength:1.0,
-    incognito:incogOn, page:PAGE_TOKEN };
+  const kind=inputKind(), body={ ...requestBase(), mode:kind, prompt:$('prompt').value.trim(), width:w, height:h, steps };
   if(kind==='edit'){
     if(inCampaign()){ body.campaign=campaignPlan().map(x=>({image:x.im.dataUrl, width:x.w, height:x.h}));
       body.width=body.campaign[0].width; body.height=body.campaign[0].height; }
@@ -1379,10 +1385,12 @@ const DICON = {
   edit:'<rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/>',
   mask:'<path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/>',
   del:'<path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="m6.5 7 1 12.5h9l1-12.5"/>',
+  again:'<path d="M19.5 9.5A8 8 0 0 0 5.2 7.2L4 8.5"/><path d="M4 4.5v4h4"/><path d="M4.5 14.5a8 8 0 0 0 14.3 2.3l1.2-1.3"/><path d="M20 19.5v-4h-4"/>',
   fail:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5.5"/><path d="M12 16.3v.2"/>',
   x:'<path d="M6 6l12 12M18 6 6 18"/>' };
 const dicon = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DICON[k]}</svg>`;
 const removeBtn = '<button class="qx dx" data-remove aria-label="Retirer de la liste">'+dicon('x')+'</button>';
+const againBtn = '<button class="qx" data-again aria-label="Relancer">'+dicon('again')+'</button>';
 const failText = p => 'Échec : '+(p.j.error||'génération impossible');
 function doneEntries(){
   const lots=new Set(), out=[];
@@ -1402,10 +1410,10 @@ function doneCard(p, k){
     + (canShare ? `<button class="qx" data-act="share" aria-label="Partager">${dicon('share')}</button>` : '')
     + (canCopy ? `<button class="qx" data-act="copy" aria-label="Copier">${dicon('copy')}</button>` : '')
     + `<button class="qx" data-act="edit" aria-label="Éditer">${dicon('edit')}</button><button class="qx" data-act="mask" aria-label="Dessiner">${dicon('mask')}</button>`
-    + `<button class="qx danger" data-act="del" aria-label="${p.incognito ? 'Effacer' : 'Supprimer'}">${dicon('del')}</button></div>${removeBtn}</article>`; }
+    + (canAgain(it) ? againBtn : '') + `<button class="qx danger" data-act="del" aria-label="${p.incognito ? 'Effacer' : 'Supprimer'}">${dicon('del')}</button></div>${removeBtn}</article>`; }
 function failCard(p){
-  return `<article class="dcard fail" data-id="${esc(p.id)}"><span class="qicon">${dicon('fail')}</span><div class="dbody"><p class="dprompt">${esc(p.incognito ? 'Génération incognito' : p.prompt)}</p>`
-    + `<p class="dmeta err">${esc(failText(p))}</p></div>${removeBtn}</article>`; }
+  return `<article class="dcard fail" data-id="${esc(p.id)}"><div class="dhead"><span class="qicon">${dicon('fail')}</span><div class="dbody"><p class="dprompt">${esc(p.incognito ? 'Génération incognito' : p.prompt)}</p>`
+    + `<p class="dmeta err">${esc(failText(p))}</p></div>${p.req ? againBtn : ''}${removeBtn}</div></article>`; }
 function lotCard(items, addToView){                // lot fini : ses images en grille, chaque case à la forme de son image
   const first=items[0], ok=items.filter(q=>q.result), isIncog=first.incognito;
   const meta=[lotLabel(first.lot, first.j.mode), fmt(ok.reduce((t, q)=>t+(q.j.seconds||0), 0)),
@@ -1415,7 +1423,7 @@ function lotCard(items, addToView){                // lot fini : ses images en g
     return `<div class="cell" style="--ar:${w/h}"><button data-open="${k}" aria-label="Ouvrir l'image ${q.lot.rank}"><img src="${esc(thumbOf(doneView[k]))}" alt=""></button><span>${q.lot.rank}</span>`
       + (isIncog ? `<a href="${esc(r.url)}" download="${esc(r.name)}" aria-label="Télécharger l'image ${q.lot.rank}">${dicon('dl')}</a>` : '') + '</div>'; }).join('');
   return `<article class="dcard dlot" data-lot="${esc(first.lot.id)}"><div class="dhead"><div class="dbody"><p class="dprompt">${esc(first.prompt)}</p><p class="dmeta">${esc(meta)}</p>`
-    + `${isIncog ? '<p class="dmeta">Incognito · non enregistrées : téléchargez celles à garder</p>' : ''}</div>${removeBtn}</div><div class="lotgrid">${cells}</div></article>`; }
+    + `${isIncog ? '<p class="dmeta">Incognito · non enregistrées : téléchargez celles à garder</p>' : ''}</div>${first.req ? againBtn : ''}${removeBtn}</div><div class="lotgrid">${cells}</div></article>`; }
 function renderDone(){
   const entries=doneEntries(); doneView=[];
   const addToView = p => doneView.push(pageItem(p))-1;   // rang de l'image dans doneView
@@ -1428,6 +1436,8 @@ $('doneList').addEventListener('click', e=>{
   const open=e.target.closest('[data-open]'); if(open) return openViewer(+open.dataset.open, doneView);
   const card=e.target.closest('.dcard'); if(!card) return;
   if(e.target.closest('[data-remove]')){ cardJobs(card).forEach(p=>drop(p, true)); return renderDone(); }
+  if(e.target.closest('[data-again]')){ const p=cardJobs(card)[0]; if(!p) return;   // carte d'un lot : tout le lot
+    return again(()=>p.req ? relaunch(keptRequest(p, !!card.dataset.lot)) : againFrom(pageItem(p))); }
   const act=e.target.closest('[data-act]'), p=cardJobs(card)[0]; if(!act || !p || !p.result) return;
   const it=pageItem(p), k=act.dataset.act;
   if(k==='share') shareImage(srcOf(it), it.name); else if(k==='copy') copyImage(srcOf(it));
@@ -1624,7 +1634,7 @@ function track(j, info){
   let p=pageJobs.find(q=>q.id===j.id);
   if(p){ ['prompt','w','h','steps','thumb','est','req'].forEach(k=>{ if(info[k]) p[k]=info[k]; }); p.adopted=p.adopted && !!info.adopted; }
   // req : la demande envoyée par cette page (images en data URL), un seul objet pour tout un lot, gardé en mémoire de la
-  // page seulement, pour « Reprendre » ; aucune pour une génération reprise de la file
+  // page seulement, pour « Reprendre » et « Relancer » ; aucune pour une génération reprise de la file
   else { pageJobs.push(p={ id:j.id, j, incognito:!!j.incognito, private:!!j.private, lot:j.lot||null, tag:j.tag||null, prompt:info.prompt||'', w:info.w, h:info.h, steps:info.steps, thumb:info.thumb||null, req:info.req||null,
       est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0,
       adopted:!!info.adopted });                    // adopted : reprise de la file (espace privé), pas lancée ici
@@ -1686,6 +1696,15 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   if(estSeconds>3600 && !await ask('Génération longue', 'Temps estimé : '+fmt(estSeconds)+'. La lancer quand même ?', 'Lancer')) return;
   if(body.incognito) try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}   // texte incognito : jamais retenu, même refusé
   log(`${body.mode} ${body.width}x${body.height} ${body.steps} étapes refs=${body.ref_images.length}${body.campaign ? ' campagne='+body.campaign.length : ''} mask=${body.mask_image?'oui':'non'} aperçus=${body.preview?'oui':'non'} estimation=${fmt(estSeconds)}`, priv);
+  const camp=body.campaign;                         // campagne : chaque génération a sa photo, ses dimensions et son estimation
+  // demande acceptée : la saisie est prête pour la suivante (refus : rien n'est vidé), avant le passage sur En cours
+  await launch(body, priv, k=>({w:camp ? camp[k].width : body.width, h:camp ? camp[k].height : body.height,
+    thumb:camp ? camp[k].image : thumb, est:camp ? campaignEst[k]||estOne : estOne, stepSec:stepSeconds, vaeSec:vaeSeconds}),
+    ()=>emptyInput(priv, sent));
+};
+// envoie une demande (Générer, Relancer) partie de l'espace priv ; acceptée, ses générations sont suivies avec la
+// demande (req) et ce que infoOf(k) dit de la k-ième, accepted() est appelée, puis la page En cours
+async function launch(body, priv, infoOf, accepted){
   let r, j; try{ r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=await r.json(); }
   catch(e){ toast('Serveur injoignable', 'err'); return; }
   if(!r.ok){ toast('Erreur : '+(j.error||('HTTP '+r.status)), 'err'); return; }
@@ -1694,13 +1713,49 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   const camp=body.campaign;                         // campagne : chaque génération a sa photo, ses dimensions et son estimation
   // espace privé quitté pendant l'envoi (fermeture par le Mac) : la génération privée continue sur le Mac, hors de la
   // page ; une demande publique acceptée après l'entrée dans l'espace privé est suivie, hors de l'écran
-  if(!(priv && !inPrivate())) jobs.forEach((x, k)=>track(x, {prompt:body.prompt, w:camp ? camp[k].width : body.width,
-    h:camp ? camp[k].height : body.height, steps:body.steps, thumb:camp ? camp[k].image : thumb, est:camp ? campaignEst[k]||estOne : estOne, stepSec:stepSeconds, vaeSec:vaeSeconds, req:body}));
-  emptyInput(priv, sent);                           // demande acceptée : la saisie est prête pour la suivante (refus : rien n'est vidé)
+  if(!(priv && !inPrivate())) jobs.forEach((x, k)=>track(x, {prompt:body.prompt, steps:body.steps, req:body, ...infoOf(k)}));
+  if(accepted) accepted();
   if(priv===inPrivate() && jobs[0].queue_position) toast((!j.lot ? 'Ajoutée' : camp ? `Campagne de ${jobs.length} photos ajoutée` : `Lot de ${jobs.length} images ajouté`)+' à la file · '+ordinal(jobs[0].queue_position)+' en attente');
   document.activeElement.blur(); if(priv===inPrivate()) goTab('run');   // la demande part : on la voit sur En cours
-  refreshStatus();
-};
+  refreshStatus(); }
+// « Relancer » : la même demande avec une graine tirée au hasard, sans toucher la saisie, dans l'espace affiché et avec
+// l'interrupteur incognito du moment, comme « Générer » ; mène à En cours. Une génération de la page qui a gardé sa
+// demande la refait (keptRequest) ; sinon (galerie, génération reprise de la file) la demande est reconstruite de
+// l'image (againFrom), une seule image, absente pour un masque (le masque n'est pas gardé avec l'image)
+function keptRequest(p, whole){                    // whole : tout le lot ; sinon l'image seule (sa photo d'une campagne)
+  if(whole || !p.lot) return {...p.req};
+  const {count, campaign, ...one}=p.req; if(!campaign) return one;
+  const c=campaign[p.lot.rank-1]; return {...one, ref_images:[c.image], width:c.width, height:c.height}; }
+const canAgain = it => !!(it.page && it.page.req)
+  || it.mode!=='mask' && canResume(it) && !!(it.prompt && it.width && it.height && it.steps);
+async function againFrom(it){
+  if(it.page && it.page.req) return relaunch(keptRequest(it.page, false));
+  if(!canAgain(it)) return;
+  const priv=inPrivate(), base=requestBase(); let images;
+  try{ images=await Promise.all(resumeImages(it).map(f=>dataUrlOf(f.name, f.url))); }
+  catch(e){ if(priv===inPrivate()) toast('Images d\'entrée illisibles', 'err'); return; }
+  if(priv!==inPrivate()) return;                   // espace changé pendant la lecture : rien ne part
+  return relaunch({ ...base, mode:it.mode||'t2i', prompt:it.prompt, width:it.width, height:it.height, steps:it.steps,
+    ref_images:images }); }
+// un seul « Relancer » à la fois : un double appui sur une carte, qui reste à l'écran, ne relance pas deux fois
+let relaunching=false;
+async function again(go){ if(relaunching) return; relaunching=true; try{ await go(); } finally{ relaunching=false; } }
+async function relaunch(req){
+  const priv=inPrivate(), body={...req, seed:-1, incognito:incogOn && !priv, page:PAGE_TOKEN}, camp=body.campaign;
+  if(priv) body.private=true; else delete body.private;
+  const dims = k => camp ? [camp[k].width, camp[k].height] : [body.width, body.height];
+  const refs=camp ? 1 : body.ref_images.length, n=camp ? camp.length : body.count || 1;
+  // estimation de la k-ième par parts(), approchée : sans les proportions des références (refPx), chacune comptée à la
+  // taille de la sortie (au plus un arrondi près)
+  const cost = k => { const [w, h]=dims(k); return parts(w, h, body.steps, {refs:Array(refs).fill(w*h), init:body.init_image ? w*h : 0}, body.preview); };
+  const est = k => E ? cost(k).total : 0;
+  const total=Array.from({length:n}, (_, k)=>est(k)).reduce((t, x)=>t+x, 0);
+  askNotifications();
+  if(total>3600 && !await ask('Génération longue', 'Temps estimé : '+fmt(total)+'. La lancer quand même ?', 'Lancer')) return;
+  if(priv!==inPrivate()) return;
+  log(`relance ${body.mode} ${body.width}x${body.height} ${body.steps} étapes${camp ? ' campagne='+camp.length : n>1 ? ' lot='+n : ''}`, priv);
+  await launch(body, priv, k=>{ const [w, h]=dims(k), c=E ? cost(k) : {};
+    return {w, h, est:est(k), stepSec:c.step, vaeSec:c.vae, thumb:camp ? camp[k].image : body.init_image || body.ref_images[0] || null}; }); }
 // suit les entrées de la file pas encore suivies dont la génération est active et de l'espace affiché ; info : ce
 // qui s'ajoute aux réglages tirés de l'entrée (adopted)
 const following=new Set();
@@ -1878,6 +1933,7 @@ function openViewer(i, list=vList){
     it.lot ? `image ${it.lot.rank}/${it.lot.size}` : '', it.seed!=null && it.seed>=0 ? 'graine '+it.seed : '']
     .filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('');
   $('vDl').href=dlOf(it); $('vDl').download=it.name; renderInputsButton(it); $('vResume').hidden=!canResume(it);
+  $('vAgain').hidden=!canAgain(it);
   // garder la meilleure de variantes, de tout mode : seulement s'il en reste d'autres sur le Mac (ni campagne, ni
   // image incognito)
   const members=lotMembers(it);
@@ -1946,7 +2002,8 @@ function zoomable(st, img, v, step, close){
 const resetZoom=zoomable($('vStage'), $('vImg'), $('viewer'), stepViewer, closeViewer);
 async function dataUrlOf(name, url){
   const own=pageJobs.find(p=>p.result && p.result.blob && p.result.name===name); if(own) return await readFile(own.result.blob);   // image incognito d'un lot
-  const b=await (await fetch(url || resultUrl(name))).blob(); return await readFile(b); }
+  const r=await fetch(url || resultUrl(name)); if(!r.ok) throw new Error('HTTP '+r.status);   // (pas le corps de l'erreur)
+  return await readFile(await r.blob()); }
 async function useAsEditInput(name, url){
   if(!name || refuseWhileDrawing()) return; if(inputImages.length>=MAX_REFS){ toast(MAX_REFS+' images d\'entrée au maximum', 'err'); return; }
   const list=inputImages, priv=inPrivate(); let entry;
@@ -2069,6 +2126,7 @@ async function viewerAction(kind){
   if(kind==='edit' && refuseWhileDrawing()) return;   // refusé avant de fermer : l'image reste à l'écran
   if(kind==='edit' || kind==='mask'){ closeViewer(); return kind==='edit' ? useAsEditInput(it.name, srcOf(it)) : useAsMaskInput(it.name, srcOf(it)); }
   if(kind==='resume') return resumeFrom(it);
+  if(kind==='again'){ closeViewer(); return again(()=>againFrom(it)); }
   if(kind==='delete' && await deleteItem(it)) removeFromViewer([it]);
 }
 // « Supprimer » (visionneuse, terminées) : une image incognito de la page est effacée de la page (« Effacer ») ; une autre

@@ -129,8 +129,8 @@ dernier bloc, après le HTML.
     `drawCanvasFor` (le tracé appartient à `drawFor`, l'image pour laquelle il a été commencé : gardé quand on éteint
     Dessiner, effacé avec son image), `drawWith` (une image seule dans la saisie, dessin actif, tracé vierge),
     `exportMask`, `paintedReference`.
-  - « requête & loader » : `buildRequest` ; « messages et confirmations » : `toast`, `ask` et `answer` (feuille
-    `#askSheet`, jamais `confirm()`).
+  - « requête & loader » : `requestBase` (champs qu'aucun réglage ne fixe, communs avec « Relancer »), `buildRequest` ;
+    « messages et confirmations » : `toast`, `ask` et `answer` (feuille `#askSheet`, jamais `confirm()`).
   - « affichage des images » : `showImage` (toute image qui change d'adresse : vidée, puis remplie une fois l'image
     chargée et décodée à part, miniature d'abord ; `img.want` : adresse attendue, une image arrivée trop tard est
     ignorée ; `keep` : l'aperçu d'avant reste jusqu'au suivant ; `once` : aperçu servi une fois ; `decoded` : image déjà
@@ -177,7 +177,11 @@ dernier bloc, après le HTML.
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;
     « Reprendre » : `resumeFrom` (saisie remplacée, confirmation si elle n'est pas vide), `resumeImages` (images
     d'entrée selon le mode, `RESUME_FILES` : demande gardée `req`, sinon galerie), `canResume` (bouton `#vResume`),
-    `settingsFor` (format, résolution et étapes qui redonnent l'image) ;
+    `settingsFor` (format, résolution et étapes qui redonnent l'image) ; « Relancer » (visionneuse `#vAgain`, terminées
+    `data-again`) : `keptRequest` (demande gardée : l'image seule ou tout le lot), `againFrom` (reconstruite de l'image
+    sinon), `canAgain`, `relaunch` (graine, espace et incognito du moment, estimation), puis `launch` (envoi commun
+    avec « Générer » : suivi, `accepted` (vidage de la saisie de « Générer »), message, page En cours), `again` (un
+    geste à la fois) ;
     actions de la visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`, `keepThis` (« Garder celle-ci »),
     `deleteItem` (« Supprimer », ou « Effacer » une image incognito : visionneuse et terminées), `forgetResult`.
   - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
@@ -187,9 +191,10 @@ dernier bloc, après le HTML.
     `privCreate`, `privUnlock`, `privLock`, `privChangeCode`, `privReset`.
 
 Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
-« Dessiner », « Reprendre » (texte, images d'entrée, dessin et réglages : `resumeFrom`) et « Supprimer » →
-`viewerAction('edit' | 'mask' | 'resume' | 'delete')`, avec l'image décrite par `pageItem` pour une image de la page ;
-carte d'une terminée → `doneCard`, ses boutons → `data-act` dans l'écouteur de `#doneList` ; « Garder celle-ci » →
+« Dessiner », « Reprendre » (texte, images d'entrée, dessin et réglages : `resumeFrom`), « Relancer » (`againFrom`) et
+« Supprimer » → `viewerAction('edit' | 'mask' | 'resume' | 'again' | 'delete')`, avec l'image décrite par `pageItem`
+pour une image de la page ; carte d'une terminée → `doneCard`, ses boutons → `data-act` (« Relancer » : `data-again`,
+aussi sur la carte d'un lot et d'un échec) dans l'écouteur de `#doneList` ; « Garder celle-ci » →
 `keepThis` ; cadenas de la Galerie → `#privEntry`, « Sortir » → `privLock` ; pastille du haut → `#island`,
 `renderIsland`.
 
