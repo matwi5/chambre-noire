@@ -175,6 +175,7 @@ dernier bloc, après le HTML.
     molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les images d'entrée).
   - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;
+    `keepIncognito` (« Reprendre », « Éditer » ou « Dessiner » une image incognito l'allume ; message `INCOG_NOTE`) ;
     « Reprendre » : `resumeFrom` (saisie remplacée, confirmation si elle n'est pas vide ; une image incognito
     allume l'incognito), `resumeImages` (images
     d'entrée selon le mode, `RESUME_FILES` : demande gardée `req`, sinon galerie), `canResume` (bouton `#vResume`),

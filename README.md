@@ -460,7 +460,10 @@ pas disparaître. Elle est perdue pour de bon une fois retirée ou effacée, ou 
 toutes les générations incognito de la page sont alors arrêtées et oubliées, y compris celles qui attendaient dans la
 file. Pensez à la **télécharger** avant. Les autres appareils ne voient d'elle, dans la file, que « Génération incognito
 » ; ils ne peuvent ni la suivre ni l'annuler. Le texte tapé n'est pas retenu par le navigateur, et la génération n'entre
-pas dans les mesures de calibration. Les boutons **Éditer** et **Dessiner** la réutilisent comme d'habitude.
+pas dans les mesures de calibration. **Éditer**, **Dessiner** et **Reprendre** la réutilisent comme d'habitude,
+et une image incognito reste incognito : ces gestes allument l'interrupteur **Incognito** (le message le dit, sauf si
+l'on a changé d'espace entre-temps), ce qui retire le brouillon ; la demande suivante part en incognito tant qu'il
+reste allumé, sans rien laisser de l'image sur le disque. **Relancer** la relance toujours en incognito.
 
 Ce que cela garantit, et ses limites :
 
