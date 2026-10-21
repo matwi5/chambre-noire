@@ -226,7 +226,7 @@ test('« Reprendre » un texte → image : le texte seul, sans images ; absent s
   page.assertNoErrors();
 });
 
-test('« Reprendre » une image incognito des terminées : ses images gardées par la page, aucun brouillon', async () => {
+test('« Reprendre » une image incognito : images gardées par la page, incognito rallumé, sans brouillon', async () => {
   await fresh();
   await page.click('#incog');
   await page.eval(`(async () => { inputImages.push(await toEntry('b.png', ${ref('#d08020')})); renderInputs(); })()`);
@@ -235,7 +235,7 @@ test('« Reprendre » une image incognito des terminées : ses images gardées p
   await page.click('#go');
   await page.waitFor(`mode === 'run' && !!$('doneList').querySelector('[data-open]')`,
     { what: 'image incognito dans les terminées', timeout: 30000 });
-  await page.eval(`$('incog').click()`);           // incognito désactivé : le texte repris n'est pas retenu pour autant
+  await page.eval(`$('incog').click()`);           // incognito éteint : la reprise le rallume (DECISIONS, 21/10/2026)
   await page.click('#doneList [data-open]');
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
   assert.equal(await resumable(), true);
@@ -246,7 +246,12 @@ test('« Reprendre » une image incognito des terminées : ses images gardées p
     .filter(u => u.includes('/api/input'))`), [], 'lue dans la mémoire de la page (le Mac ne la garde pas)');
   assert.equal(await page.eval(`$('prompt').value`), 'zr5 incognito');
   assert.deepEqual(await colors(), ['#d08020']);
+  assert.deepEqual(await page.eval(`[incogOn, $('incog').classList.contains('on'),
+    document.documentElement.classList.contains('incog')]`), [true, true, true], 'incognito rallumé, visible');
+  await typed('zr5 incognito, retouché');          // une frappe après la reprise
   assert.equal(await draft(), null, 'rien de l\'incognito dans le navigateur');
+  assert.deepEqual(await page.eval(`Object.values({ ...localStorage }).filter(v => v.includes('zr5'))`), [],
+    'localStorage fouillé');
   page.assertNoErrors();
 });
 

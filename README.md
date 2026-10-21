@@ -389,13 +389,15 @@ elle n'est pas vide) : son texte, ses réglages (format, résolution, étapes) e
 Une édition revient avec ses références (Campagne éteinte : c'était une seule édition) ; un dessin en masque avec son
 image de départ, Dessiner actif en masque et le tracé vide (la zone peinte n'est pas gardée) ; une annotation revient
 en édition, avec sa référence où le trait rouge est déjà dessiné. Les images d'entrée se lisent dans la galerie
-(publique ou privée), ou, pour une image des terminées, dans la demande que la page a gardée (une image incognito
-comprise : la reprise n'écrit pas son texte comme brouillon). Si l'on tape ou ajoute une image pendant la lecture des
+(publique ou privée), ou, pour une image des terminées, dans la demande que la page a gardée. Une image incognito
+reste incognito : la reprendre allume l'interrupteur **Incognito** (le message le dit), et son texte n'est pas
+retenu comme brouillon tant qu'on ne l'éteint pas. Si l'on tape ou ajoute une image pendant la lecture des
 images, la confirmation est redemandée. Le geste est absent pour une édition ou un dessin dont la galerie n'a pas
 gardé les images d'entrée (images anciennes).
 
 **Relancer** refait la même demande avec une nouvelle graine, sans toucher la saisie de Créer, puis mène à **En
-cours**, comme **Générer** : dans l'espace où l'on est et avec l'interrupteur Incognito du moment. Pour une image des
+cours**, comme **Générer** : dans l'espace où l'on est et avec l'interrupteur Incognito du moment, sauf une image
+incognito, toujours relancée en incognito (dans l'espace privé, tout part en privé). Pour une image des
 terminées, c'est la demande que la page a gardée (une image d'un lot : cette image seule ; la carte du lot : tout le
 lot, mêmes variantes ou mêmes photos de campagne). Pour une image de la galerie, ou une image reprise après un
 rechargement, la demande est refaite à partir de l'image : son texte, ses images d'entrée, ses dimensions, ses étapes

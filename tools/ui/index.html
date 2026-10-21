@@ -1719,7 +1719,8 @@ async function launch(body, priv, infoOf, accepted){
   document.activeElement.blur(); if(priv===inPrivate()) goTab('run');   // la demande part : on la voit sur En cours
   refreshStatus(); }
 // « Relancer » : la même demande avec une graine tirée au hasard, sans toucher la saisie, dans l'espace affiché et avec
-// l'interrupteur incognito du moment, comme « Générer » ; mène à En cours. Une génération de la page qui a gardé sa
+// l'interrupteur incognito du moment, comme « Générer », sauf une image incognito, qui reste incognito (porteur,
+// 21/10/2026) ; mène à En cours. Une génération de la page qui a gardé sa
 // demande la refait (keptRequest) ; sinon (galerie, génération reprise de la file) la demande est reconstruite de
 // l'image (againFrom), une seule image, absente pour un masque (le masque n'est pas gardé avec l'image)
 function keptRequest(p, whole){                    // whole : tout le lot ; sinon l'image seule (sa photo d'une campagne)
@@ -1740,8 +1741,8 @@ async function againFrom(it){
 // un seul « Relancer » à la fois : un double appui sur une carte, qui reste à l'écran, ne relance pas deux fois
 let relaunching=false;
 async function again(go){ if(relaunching) return; relaunching=true; try{ await go(); } finally{ relaunching=false; } }
-async function relaunch(req){
-  const priv=inPrivate(), body={...req, seed:-1, incognito:incogOn && !priv, page:PAGE_TOKEN}, camp=body.campaign;
+async function relaunch(req){                      // req.incognito : demande d'une image incognito, qui le reste
+  const priv=inPrivate(), body={...req, seed:-1, incognito:(req.incognito || incogOn) && !priv, page:PAGE_TOKEN}, camp=body.campaign;
   if(priv) body.private=true; else delete body.private;
   const dims = k => camp ? [camp[k].width, camp[k].height] : [body.width, body.height];
   const refs=camp ? 1 : body.ref_images.length, n=camp ? camp.length : body.count || 1;
@@ -2059,8 +2060,13 @@ async function resumeFrom(it){
   catch(e){ if(priv===inPrivate()) toast('Images d\'entrée illisibles', 'err'); return; }
   const changed = () => $('prompt').value!==text || list.length!==was.length || list.some((e, k)=>e!==was[k]);
   if(list===inputImages && changed() && filled() && !await replace()) return;
-  const keep=!it.url && !priv && !incogOn;          // brouillon public ; jamais le texte d'une image incognito
-  if(list===inputImages){
+  const here=list===inputImages, aside=!here && !!asideInput && asideInput.images===list; if(!here && !aside) return;
+  // une image incognito (it.url : adresse blob:) reste incognito (porteur, 21/10/2026) : l'interrupteur s'allume, et
+  // son texte n'est pas écrit comme brouillon (setIncog retire le brouillon) ; saisie publique mise de côté : allumé
+  // aussi, on le voit au retour dans l'espace public ; dans l'espace privé, tout part déjà en privé
+  const lit=!!it.url && !priv && !incogOn; if(lit){ setIncog(true); saveOpt(); }
+  const keep=!priv && !incogOn;                    // brouillon public
+  if(here){
     $('prompt').value=it.prompt;
     if(keep) $('prompt').dispatchEvent(new Event('input')); else if(!priv) try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
     list.splice(0, list.length, ...entries); drawOn=mask; if(mask) setMaskMode('mask');
@@ -2068,8 +2074,8 @@ async function resumeFrom(it){
     // la même demande : ses réglages, et une édition à plusieurs références n'est pas une campagne
     if(it.width && it.height) Object.assign(opt, settingsFor(it.width, it.height, it.steps));
     if(campaignShown()) $('campChk').checked=campaignOn=false;
-    saveOpt(); renderInputs(); refreshChoices(); toast('Image reprise'); }
-  else if(asideInput && asideInput.images===list){   // espace changé pendant la lecture : dans sa saisie mise de côté
+    saveOpt(); renderInputs(); refreshChoices(); toast(lit ? 'Image reprise · incognito activé' : 'Image reprise'); }
+  else {                                           // espace changé pendant la lecture : dans sa saisie mise de côté
     asideInput.text=it.prompt; list.splice(0, list.length, ...entries); asideInput.imageRatio=false;
     asideInput.drawing={...asideInput.drawing, on:mask, mask:mask ? 'mask' : asideInput.drawing.mask,
       image:mask ? entries[0] : null, pixels:null};

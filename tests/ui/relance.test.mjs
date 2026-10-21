@@ -1,7 +1,8 @@
 // « Relancer », dans la vue du téléphone : la même demande avec une nouvelle graine, sans toucher la saisie, depuis une
 // terminée (demande gardée par la page : une image, ou tout le lot depuis sa carte, variantes ou campagne), un échec ou
 // la visionneuse (galerie : demande reconstruite de l'image, absente pour un masque), dans l'espace affiché et avec
-// l'interrupteur incognito du moment, puis la page En cours. La demande envoyée est lue au passage (fetch enveloppé).
+// l'interrupteur incognito du moment, sauf une image incognito, toujours relancée en incognito, puis la page En cours.
+// La demande envoyée est lue au passage (fetch enveloppé).
 //   node --test tests/ui/relance.test.mjs   (ou : venv/bin/python tests/check.py --ui tests/ui/relance.test.mjs)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -221,5 +222,56 @@ test('double appui sur « Relancer » d\'une terminée : une seule relance', asy
   await page.waitFor(`pageJobs.length === 2`, { what: 'relance suivie' });
   await settled();
   assert.equal(await page.eval(`sentBodies.length`), 2, 'une seule demande en plus');
+  page.assertNoErrors();
+});
+
+test('image incognito : relancée en incognito, interrupteur éteint (terminée, carte de lot, visionneuse)', async () => {
+  await fresh();
+  await page.click('#tabbar [data-pane="create"]');
+  await page.click('#incog');
+  await go('zl12 incognito');
+  await settled();
+  await page.eval(`opt.count = 2; saveOpt(); refreshChoices()`);
+  await go('zl13 lot incognito');
+  await settled();
+  await page.eval(`opt.count = 1; saveOpt(); $('incog').click()`);   // interrupteur éteint
+  assert.equal(await page.eval(`incogOn`), false);
+  const one = await again('#doneList .dcard:not(.dlot):not(.fail) [data-again]');
+  assert.deepEqual([one.prompt, one.incognito], ['zl12 incognito', true], 'terminée');
+  await settled();
+  const lot = await again('#doneList .dlot [data-again]');
+  assert.deepEqual([lot.prompt, lot.count, lot.incognito], ['zl13 lot incognito', 2, true], 'carte du lot');
+  await settled();
+  await page.click('#doneList .dlot [data-open]');
+  await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
+  const viewed = await again('#vAgain');
+  assert.deepEqual([viewed.count, viewed.incognito], [undefined, true], 'visionneuse');
+  await settled();
+  assert.deepEqual(await page.eval(`Object.values({ ...localStorage }).filter(v => v.includes('zl1'))`), [],
+    'localStorage fouillé');
+  page.assertNoErrors();
+});
+
+test('échec incognito : relancé en incognito, interrupteur éteint', async () => {
+  await fresh();
+  await page.click('#tabbar [data-pane="create"]');
+  await page.click('#incog');
+  await go('zl14 FAIL incognito');
+  await settled();
+  await page.eval(`$('incog').click()`);
+  const b = await again('#doneList .dcard.fail [data-again]');
+  assert.equal(b.incognito, true);
+  await settled();
+  page.assertNoErrors();
+});
+
+test('terminée normale : relancée en incognito quand l\'interrupteur est allumé', async () => {
+  await fresh();
+  await go('zl15 normale');
+  await settled();
+  await page.eval(`$('incog').click()`);           // allumé après la génération
+  const b = await again('#doneList .dcard [data-again]');
+  assert.deepEqual([b.prompt, b.incognito], ['zl15 normale', true]);
+  await settled();
   page.assertNoErrors();
 });

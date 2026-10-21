@@ -175,13 +175,14 @@ dernier bloc, après le HTML.
     molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les images d'entrée).
   - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;
-    « Reprendre » : `resumeFrom` (saisie remplacée, confirmation si elle n'est pas vide), `resumeImages` (images
+    « Reprendre » : `resumeFrom` (saisie remplacée, confirmation si elle n'est pas vide ; une image incognito
+    allume l'incognito), `resumeImages` (images
     d'entrée selon le mode, `RESUME_FILES` : demande gardée `req`, sinon galerie), `canResume` (bouton `#vResume`),
     `settingsFor` (format, résolution et étapes qui redonnent l'image) ; « Relancer » (visionneuse `#vAgain`, terminées
     `data-again`) : `keptRequest` (demande gardée : l'image seule ou tout le lot), `againFrom` (reconstruite de l'image
-    sinon), `canAgain`, `relaunch` (graine, espace et incognito du moment, estimation), puis `launch` (envoi commun
-    avec « Générer » : suivi, `accepted` (vidage de la saisie de « Générer »), message, page En cours), `again` (un
-    geste à la fois) ;
+    sinon), `canAgain`, `relaunch` (graine, espace et incognito du moment, sauf une image incognito, relancée en
+    incognito ; estimation), puis `launch` (envoi commun avec « Générer » : suivi, `accepted` (vidage de la saisie de
+    « Générer »), message, page En cours), `again` (un geste à la fois) ;
     actions de la visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`, `keepThis` (« Garder celle-ci »),
     `deleteItem` (« Supprimer », ou « Effacer » une image incognito : visionneuse et terminées), `forgetResult`.
   - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
