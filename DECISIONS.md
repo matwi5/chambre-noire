@@ -4,6 +4,20 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-21 · Une image incognito reste incognito quand on la reprend ou la relance
+
+- **Contexte** : à la fin du groupe D, « Relancer » suivait l'interrupteur incognito du moment (choix de la
+  rédaction de la spécification, pas du porteur) : relancer une image incognito interrupteur éteint enregistrait la
+  nouvelle image sur le disque ; reprendre une image incognito mettait son texte dans la saisie publique, écrit comme
+  brouillon à la première frappe.
+- **Décision** (porteur, 21/10/2026 : « a, oui pour le ticket et oui pour les pièges ») : une image incognito reste
+  incognito : « Relancer » la relance toujours en incognito ; « Reprendre » allume l'interrupteur incognito, de façon
+  visible, donc son texte n'est jamais écrit comme brouillon. Les autres images suivent l'interrupteur comme
+  « Générer ». Ticket du groupe D ; pièges de `CLAUDE.md` complétés (« Reprendre » et « Relancer », demande gardée en
+  mémoire, estimation de « Relancer », image du dessin).
+- **Écarté** : garder « Relancer » sur l'interrupteur du moment et seulement marquer le texte repris pour qu'il ne
+  soit jamais écrit comme brouillon.
+
 ## 2026-10-21 · Suites du groupe C : adresse d'image échappée, image du dessin par `showImage`
 
 - **Contexte** : la revue de sécurité du groupe C (page Créer) relève deux faiblesses non exploitables : l'adresse
