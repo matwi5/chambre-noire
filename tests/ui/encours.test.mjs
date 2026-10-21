@@ -1,4 +1,4 @@
-// Page En cours, dans la vue du téléphone : onglets dans l'ordre En cours, Créer, Dessiner, Galerie (ouverture
+// Page En cours, dans la vue du téléphone : onglets dans l'ordre En cours, Créer, Galerie (ouverture
 // sur Créer), « Générer » et la pastille du haut qui y mènent, pastille de l'onglet (nombre de la file de l'espace),
 // génération en cours en grand (de la page, d'un autre appareil, ou cachée dans l'autre espace : « En attente »),
 // « Rien en cours », et rien qui dépasse à 367 px.
@@ -53,9 +53,9 @@ const overflowing = () => page.eval(`(() => {
     .filter(el => { const r = el.getBoundingClientRect(); return r.width && out(r) && !clipped(el); })
     .map(el => el.id || el.className || el.tagName); })()`);
 
-test('onglets En cours, Créer, Dessiner, Galerie ; ouverture sur Créer', async () => {
+test('onglets En cours, Créer, Galerie ; ouverture sur Créer', async () => {
   assert.deepEqual(await page.eval(`[...$('tabbar').querySelectorAll('button')].map(b => b.dataset.pane)`),
-    ['run', 'create', 'mask', 'hist']);
+    ['run', 'create', 'hist']);
   assert.equal(await page.eval(`mode`), 'create');
   assert.equal(await page.eval(`document.querySelector('#tabbar button.active').dataset.pane`), 'create');
   assert.equal(await page.eval(`$('lens').style.transform`), 'translateX(100%)', 'lentille sous Créer');

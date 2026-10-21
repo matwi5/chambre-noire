@@ -115,7 +115,7 @@
 
   /* ------------------------------------------------------------ barre d'onglets flottante, lentille qui glisse */
   .tabbar { position:fixed; z-index:30; left:50%; bottom:calc(12px + env(safe-area-inset-bottom)); transform:translateX(-50%);
-    width:min(480px, calc(100% - 24px)); height:66px; padding:5px; border-radius:999px; display:grid; grid-template-columns:repeat(4, 1fr); }
+    width:min(480px, calc(100% - 24px)); height:66px; padding:5px; border-radius:999px; display:grid; grid-template-columns:repeat(3, 1fr); }
   .tabbar button { position:relative; z-index:1; border:0; background:none; cursor:pointer; color:var(--ink2); border-radius:999px;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:11.5px; font-weight:650; letter-spacing:.01em;
     transition:color .3s; }
@@ -123,7 +123,7 @@
   .tabbar button.active { color:var(--ink); }
   .tabbar button.active svg { transform:translateY(-1px) scale(1.08); color:var(--iris2); }
   .tabbar button:focus-visible { outline:2px solid var(--iris); outline-offset:-4px; }
-  .lens { position:absolute; z-index:0; top:5px; bottom:5px; left:5px; width:calc((100% - 10px) / 4); border-radius:999px;
+  .lens { position:absolute; z-index:0; top:5px; bottom:5px; left:5px; width:calc((100% - 10px) / 3); border-radius:999px;
     background:linear-gradient(180deg, rgba(255,255,255,.20), rgba(255,255,255,.06));
     box-shadow:inset 0 1px 0 rgba(255,255,255,.4), inset 0 -1px 0 rgba(255,255,255,.08), 0 6px 18px -6px rgba(0,0,0,.45);
     transition:transform .55s var(--spring); }
@@ -279,9 +279,14 @@
   .paint-area { display:grid; justify-items:center; }
   #paintWrap img { display:block; max-width:100%; max-height:58svh; }
   #paintCanvas { position:absolute; left:0; top:0; width:100%; height:100%; cursor:crosshair; }
-  .swap { position:absolute; right:8px; top:8px; z-index:2; height:32px; padding:0 12px; font-size:13px; }
-  #pane-mask.has-img #mask_drop { display:none; }
-  #pane-mask:not(.has-img) .tools, #pane-mask:not(.has-img) .paint-area { display:none; }
+  /* bouton Dessiner sous les images d'entrée ; dessin actif : la zone de dessin et ses outils sous lui */
+  .drawrow { display:flex; align-items:center; gap:10px; margin-top:10px; min-width:0; }
+  #drawBtn svg { width:15px; height:15px; }
+  #drawBtn.on { border-color:color-mix(in srgb, var(--iris) 75%, transparent); background:color-mix(in srgb, var(--iris) 30%, var(--field)); }
+  #drawBtn:disabled { opacity:.45; cursor:default; }
+  #drawHint { font-size:13px; color:var(--ink2); }
+  #pane-create:not(.drawing) :is(.paint-area, .tools, .mm) { display:none; }
+  #pane-create.drawing .paint-area { margin-top:12px; }
   .tools { display:flex; gap:10px; align-items:center; margin-top:12px; font-size:13px; color:var(--ink2); font-variant-numeric:tabular-nums; }
   .tools .btn-icon { width:40px; height:40px; } .tools .btn-icon svg { width:19px; height:19px; }
   #brushVal { min-width:42px; text-align:right; }
@@ -561,7 +566,7 @@
   .lite .ambient .mesh { animation:none; }
   .lite :is(.glass, .card) { -webkit-backdrop-filter:none; backdrop-filter:none; }
   .lite .glass::before { display:none; }
-  .lite :is(.tabbar, .island, #phoneBtn, .toast, .sheet, .swap) { -webkit-backdrop-filter:var(--blur); backdrop-filter:var(--blur); }
+  .lite :is(.tabbar, .island, #phoneBtn, .toast, .sheet) { -webkit-backdrop-filter:var(--blur); backdrop-filter:var(--blur); }
   .lite .topbar::before { -webkit-backdrop-filter:none; backdrop-filter:none; -webkit-mask:none; mask:none;
     background:linear-gradient(180deg, color-mix(in srgb, var(--void) 92%, transparent), color-mix(in srgb, var(--void) 55%, transparent) 65%, transparent); }
   .lite :is(.thumb span, .thumb button, .hgrid span, .hgrid b.lotb) { -webkit-backdrop-filter:none; backdrop-filter:none; background:rgba(10,8,22,.62); }
@@ -626,15 +631,9 @@
       <div class="thumbs" id="inThumbs"></div>
       <div class="drop" id="inDrop" role="button" tabindex="0" aria-label="Ajouter des images d'entrée"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M12 8.5v7M8.5 12h7"/></svg><b>Ajouter des images</b><small id="dropHint"></small><input type="file" id="inFiles" accept="image/*" multiple></div>
     </div>
-    <p class="hint" id="refHint" hidden>Désignez-les par leur numéro : « the woman in image 1 wears the jacket from image 2 ».</p>
-    <label class="switch" id="campSwitch" hidden><input type="checkbox" id="campChk"><span class="track"></span><span>Campagne <small>le même texte appliqué à chaque photo séparément, une image par photo</small></span></label>
-  </div>
-
-  <div class="pane" id="pane-mask">
-    <div class="pane-head">Image à retoucher</div>
-    <div class="drop" id="mask_drop" role="button" tabindex="0" aria-label="Choisir l'image à retoucher"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="m4 16 4.5-4.5 4 4 2.5-2.5 5 5"/><circle cx="15.5" cy="8.5" r="1.6"/></svg><b>Choisir une image</b><small>puis peindre la zone à changer</small><input type="file" id="mask_file" accept="image/*"></div>
+    <div class="drawrow"><button class="pill" id="drawBtn" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg>Dessiner</button><span id="drawHint"></span><input type="file" id="drawFile" accept="image/*" hidden></div>
     <div class="paint-area">
-      <div id="paintWrap" style="display:none"><img id="paintImg" alt=""><canvas id="paintCanvas"></canvas><button class="chipbtn glass swap" onclick="$('mask_file').click()">Changer</button></div>
+      <div id="paintWrap"><img id="paintImg" alt=""><canvas id="paintCanvas"></canvas></div>
     </div>
     <div class="tools">
       <div class="seg"><button id="modePaint" class="on" aria-label="Peindre"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/></svg><span>Peindre</span></button><button id="modeErase" aria-label="Gommer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m8.5 19.5-4-4a2 2 0 0 1 0-2.8l8.2-8.2a2 2 0 0 1 2.8 0l4 4a2 2 0 0 1 0 2.8L13 19.5Z"/><path d="M8.5 19.5h11M9.5 8.5l6 6"/></svg><span>Gommer</span></button></div>
@@ -649,6 +648,8 @@
       <p class="mm-mask">Seule la zone peinte change ; le reste est gardé au pixel près.</p>
       <p class="mm-annot">Le trait rouge sert de repère au modèle ; pratique pour plusieurs zones.</p>
     </div>
+    <p class="hint" id="refHint" hidden>Désignez-les par leur numéro : « the woman in image 1 wears the jacket from image 2 ».</p>
+    <label class="switch" id="campSwitch" hidden><input type="checkbox" id="campChk"><span class="track"></span><span>Campagne <small>le même texte appliqué à chaque photo séparément, une image par photo</small></span></label>
   </div>
 
   <div class="pane" id="pane-hist">
@@ -660,7 +661,7 @@
 <section class="card composer gen" id="composer">
   <textarea id="prompt" class="prompt" rows="4" aria-label="Texte du prompt"></textarea>
   <div class="optrow">
-    <button class="pill" id="promptsBtn" onclick="openPrompts()" aria-label="Prompts enregistrés"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h10A1.5 1.5 0 0 1 18.5 5v15.5L12 16.5l-6.5 4V5A1.5 1.5 0 0 1 7 3.5Z"/></svg>Prompts</button>
+    <button class="pill" id="promptsBtn" onclick="openPrompts(true)" aria-label="Prompts enregistrés"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h10A1.5 1.5 0 0 1 18.5 5v15.5L12 16.5l-6.5 4V5A1.5 1.5 0 0 1 7 3.5Z"/></svg>Prompts</button>
     <div class="opts" id="pills"></div>
   </div>
   <div class="go-row">
@@ -676,7 +677,6 @@
   <i class="lens" id="lens" aria-hidden="true"></i>
   <button data-pane="run"><span class="runico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle class="rarc" id="runRing" cx="12" cy="12" r="8.5" pathLength="100"/><path d="M12 8v4.2l2.6 1.6"/></svg><b class="tabcount" id="runCount" hidden></b></span><span>En cours</span></button>
   <button data-pane="create" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M11 3.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7Z"/><path d="M18.5 15c.35 1.8 1.2 2.65 3 3-1.8.35-2.65 1.2-3 3-.35-1.8-1.2-2.65-3-3 1.8-.35 2.65-1.2 3-3Z"/></svg><span>Créer</span></button>
-  <button data-pane="mask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg><span>Dessiner</span></button>
   <button data-pane="hist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7.5" height="7.5" rx="2.2"/><rect x="13" y="3.5" width="7.5" height="7.5" rx="2.2"/><rect x="3.5" y="13" width="7.5" height="7.5" rx="2.2"/><rect x="13" y="13" width="7.5" height="7.5" rx="2.2"/></svg><span>Galerie</span></button>
 </nav>
 
@@ -840,8 +840,9 @@ function applyEstimates(est){
 }
 
 const $ = id => document.getElementById(id);
-// mode : page affichée ; inputImages : images d'entrée de la saisie (Créer) ; maskImage : image à retoucher (Dessiner)
-let mode='create', inputImages=[], maskImage=null, paintMode='paint', estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
+// mode : page affichée ; inputImages : images d'entrée de la saisie (Créer) ; drawOn : dessin actif (sur la seule
+// image d'entrée) ; drawFor : image à laquelle appartient le tracé du canevas (gardé quand on éteint Dessiner)
+let mode='create', inputImages=[], drawOn=false, drawFor=null, paintMode='paint', estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
 let privState={available:false, exists:false, unlocked:false};   // espace privé vu par cet appareil (/api/status)
 
 // journal du panneau Moteur ; une ligne de l'espace privé (nom prive_…, taille d'une photo) en sort avec lui. priv :
@@ -852,10 +853,9 @@ function log(m, priv=inPrivate()){ if(priv && !inPrivate()) return;   // action 
 function renderLog(){ const l=$('log'); l.textContent=logLines.map(x=>x.text+'\n').join(''); l.scrollTop=l.scrollHeight; }
 const round32 = v => Math.max(256, Math.round(v/32)*32);
 // nature de la demande que prépare la saisie (valeurs des catégories de prompts) : texte → image sans image d'entrée,
-// édition avec, dessin sur l'onglet Dessiner
-const inputKind = () => mode==='mask' ? 'mask' : inputImages.length ? 'edit' : 't2i';
-function singleImage(){ const k=inputKind();
-  if(k==='edit' && inputImages.length===1) return inputImages[0]; if(k==='mask' && maskImage) return maskImage; return null; }
+// édition avec, dessin quand le dessin est actif
+const inputKind = () => drawOn ? 'mask' : inputImages.length ? 'edit' : 't2i';
+const singleImage = () => inputImages.length===1 ? inputImages[0] : null;   // format « Image » proposé
 // exemple affiché dans le champ vide, selon la nature de la demande
 const PLACEHOLDERS = { t2i:'Décrivez l\'image, de préférence en anglais : sujet, lieu, lumière, style…',
   edit:'Que faut-il changer ? Ex. : Replace the sky with a dramatic orange sunset, keep everything else unchanged',
@@ -879,8 +879,8 @@ function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt
 const resSel = () => RES.find(p=>p.k===opt.res) || RES[1];
 const stepsSel = () => STEPS.find(p=>p.k===opt.steps) || STEPS[1];
 function currentDims(){ return dimsFor(opt.ratio, resSel().scale); }
-// campagne : l'interrupteur n'est proposé qu'à partir de 2 images d'entrée ; son réglage (campaignOn) est gardé, mais
-// ignoré tant qu'il n'est pas proposé
+// campagne : l'interrupteur n'est proposé qu'à partir de 2 images d'entrée (donc hors dessin) ; son réglage
+// (campaignOn) est gardé, mais ignoré tant qu'il n'est pas proposé
 const campaignShown = () => inputImages.length>=2;
 const inCampaign = () => inputKind()==='edit' && campaignShown() && campaignOn;
 const variants = () => inCampaign() ? 1 : opt.count;   // images de la prochaine demande (une campagne : une par photo)
@@ -1074,26 +1074,47 @@ async function toEntry(name, dataUrl, priv=inPrivate()){ let im=await loadImg(da
     dataUrl=resizeDataUrl(im, nw, nh); im=await loadImg(dataUrl); log(`${name} : ${w}×${h} réduite à ${nw}×${nh}`, priv); w=nw; h=nh; }
   return {name, dataUrl, w, h, img:im}; }
 // la liste des fichiers est copiée avant la remise à zéro du champ : celle-ci vide la liste du champ elle-même, que le
-// traitement (asynchrone) lit encore après sa première image
-function wireDrop(dropId, inputId, handler){ const d=$(dropId), inp=$(inputId); d.addEventListener('click',()=>inp.click());
+// traitement (asynchrone) lit encore après sa première image. La saisie visée est notée à l'ouverture du choix des
+// fichiers (picked) : l'espace peut changer pendant que le sélecteur est ouvert
+const noteInput = () => ({ list:inputImages, priv:inPrivate() });   // saisie visée par un ajout, et son espace
+function wireDrop(dropId, inputId, handler){ const d=$(dropId), inp=$(inputId); let picked=null;
+  d.addEventListener('click',()=>{ if(refuseWhileDrawing()) return; picked=noteInput(); inp.click(); });
   d.addEventListener('dragover',e=>{e.preventDefault(); d.classList.add('over');}); d.addEventListener('dragleave',()=>d.classList.remove('over'));
-  d.addEventListener('drop',e=>{e.preventDefault(); d.classList.remove('over'); handler([...e.dataTransfer.files]);}); inp.addEventListener('change',e=>{ handler([...e.target.files]); e.target.value=''; }); }
+  d.addEventListener('drop',e=>{e.preventDefault(); d.classList.remove('over'); handler([...e.dataTransfer.files]);});
+  inp.addEventListener('change',e=>{ handler([...e.target.files], picked || noteInput()); picked=null; e.target.value=''; }); }
 // les images lues vont dans la saisie de l'espace où l'ajout a commencé (list, pris avant toute attente), même s'il
 // change pendant la lecture : une image privée ne tombe jamais dans la saisie publique
 // chaque image apparaît dès qu'elle est lue (une image invisible changerait la nature de la demande) ; une image
-// illisible n'arrête pas les suivantes
-wireDrop('inDrop','inFiles', async files=>{ let skipped=0, bad=0; const list=inputImages, priv=inPrivate();
+// illisible n'arrête pas les suivantes. Choix, dépôt et collage ; refusé pendant le dessin, même allumé pendant la lecture
+async function addInputFiles(files, {list, priv}=noteInput()){ if(refuseWhileDrawing(list)) return;
+  let skipped=0, bad=0;
   for(const f of files){ if(list.length>=MAX_REFS){ skipped++; continue; }
     let entry; try{ entry=await toEntry(f.name, await readFile(f), priv); }catch(e){ bad++; continue; }
+    if(refuseWhileDrawing(list)) return;
     if(list.length>=MAX_REFS){ skipped++; continue; }
     list.push(entry); if(list===inputImages){ renderInputs(); suggestRatio(); } }
+  if(priv!==inPrivate()) return;                   // espace changé pendant la lecture : pas de message dans l'autre
   if(bad) toast(`${bad} fichier${bad>1?'s':''} illisible${bad>1?'s':''} : non ajouté${bad>1?'s':''}`, 'err');
-  else if(skipped) toast(`${MAX_REFS} ${inCampaign() ? 'photos' : 'images'} au maximum : ${skipped} non ajoutée${skipped>1?'s':''}`, 'err'); });
-wireDrop('mask_drop','mask_file', async files=>{ const f=files[0], priv=inPrivate(); if(f) await setMaskImage(f.name, await readFile(f), priv); });
+  else if(skipped) toast(`${MAX_REFS} ${inCampaign() ? 'photos' : 'images'} au maximum : ${skipped} non ajoutée${skipped>1?'s':''}`, 'err'); }
+wireDrop('inDrop','inFiles', addInputFiles);
+$('inDrop').addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); $('inDrop').click(); } });
+// coller une image (Cmd+V, « Coller ») sur la page Créer : elle rejoint les images d'entrée comme un dépôt ; un collage
+// de texte reste un collage de texte, aussi quand une image l'accompagne (Word, Keynote) dans un champ de texte, et rien
+// dans une feuille ouverte
+addEventListener('paste', e=>{ const cd=e.clipboardData; if(mode!=='create' || openedSheet || !cd) return;
+  if(e.target.closest && e.target.closest('textarea, input') && [...cd.types].includes('text/plain')) return;
+  const files=[...cd.files].filter(f=>f.type.startsWith('image/'));
+  if(files.length){ e.preventDefault(); addInputFiles(files); } });
+// pendant le dessin, aucune image ne s'ajoute à sa saisie (le tracé appartient à l'image seule) : vrai si l'ajout à list
+// est refusé, avec un message pour la saisie affichée ; list : saisie mise de côté par un changement d'espace
+function refuseWhileDrawing(list=inputImages){
+  if(list!==inputImages) return !!(asideInput && asideInput.images===list && asideInput.drawing.on);
+  if(drawOn) toast('Désactivez Dessiner pour ajouter d\'autres images', 'err'); return drawOn; }
 const maskMode = () => document.querySelector('input[name=mask_mode]:checked').value;
-['inDrop','mask_drop'].forEach(id=>$(id).addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); $(id).querySelector('input').click(); } }));
-// images d'entrée de Créer : vignettes numérotées, interrupteur Campagne à partir de 2 images
+const setMaskMode = k => { document.querySelector(`input[name=mask_mode][value=${k}]`).checked=true; };
+// images d'entrée de Créer : vignettes numérotées, interrupteur Campagne à partir de 2 images, bouton et zone de dessin
 function renderInputs(){ const t=$('inThumbs'); t.innerHTML='';
+  if(inputImages.length!==1) drawOn=false;         // dessin : sur une image seule (en-tête et campagne en dépendent)
   const k=inputImages.length, camp=inCampaign();   // campagne : des photos éditées une à une
   $('refTitle').textContent = camp ? 'Photos de la campagne' : 'Images d\'entrée';
   $('dropHint').textContent = `facultatif : 1 à ${MAX_REFS} images à modifier ou à citer dans le texte`;
@@ -1101,35 +1122,57 @@ function renderInputs(){ const t=$('inThumbs'); t.innerHTML='';
   $('refs').classList.toggle('full', k>=MAX_REFS); $('refHint').hidden = k<2 || camp; $('campSwitch').hidden=!campaignShown();
   inputImages.forEach((im,i)=>{ const d=document.createElement('div'); d.className='thumb';
     d.innerHTML=`<img src="${im.dataUrl}" alt=""><span>${i+1}</span><button aria-label="Retirer l'image ${i+1}">×</button>`;
-    d.querySelector('button').onclick=()=>{ inputImages.splice(i,1); renderInputs(); suggestRatio(); }; t.appendChild(d); }); }
+    d.querySelector('button').onclick=()=>{ inputImages.splice(i,1); renderInputs(); suggestRatio(); }; t.appendChild(d); });
+  renderDrawing(); }
 
 // ------------------------------------------------------------ dessin
 const canvas=$('paintCanvas'); const ctx=canvas.getContext('2d');
 $('brush').addEventListener('input',e=>$('brushVal').textContent=e.target.value+' px');
 $('modePaint').onclick=()=>{paintMode='paint'; $('modePaint').classList.add('on'); $('modeErase').classList.remove('on');};
 $('modeErase').onclick=()=>{paintMode='erase'; $('modeErase').classList.add('on'); $('modePaint').classList.remove('on');};
-// priv : espace où le choix de l'image a commencé ; s'il a changé entre-temps, l'image va dans sa saisie mise de côté
-async function setMaskImage(name, dataUrl, priv=inPrivate()){ const entry=await toEntry(name, dataUrl, priv);
-  if(priv!==inPrivate()){ if(asideInput) asideInput.mask={image:entry, pixels:null}; return false; }
-  maskImage=entry; showMaskImage(); suggestRatio(); return true; }
-// image à retoucher (maskImage) sur la zone de dessin, avec un masque déjà peint (pixels) ou vierge
-function showMaskImage(pixels){ $('paintImg').src=maskImage.dataUrl; $('paintWrap').style.display='inline-block'; $('pane-mask').classList.add('has-img');
-  canvas.width=maskImage.w; canvas.height=maskImage.h; ctx.clearRect(0,0,canvas.width,canvas.height); if(pixels) ctx.putImageData(pixels, 0, 0); }
-function dropMaskImage(){ maskImage=null; clearMask(); $('paintWrap').style.display='none'; $('pane-mask').classList.remove('has-img'); }
+// tracé du canevas pour l'image im (ou aucune), repris de pixels ou vierge
+function drawCanvasFor(im, pixels){ drawFor=im;   // sans image : canevas réduit, rien de la taille de l'image d'avant
+  if(im){ canvas.width=im.w; canvas.height=im.h; } else canvas.width=canvas.height=1; clearMask();
+  if(im && pixels) ctx.putImageData(pixels, 0, 0); }
+// bouton Dessiner (selon le nombre d'images) et zone de dessin : le tracé part avec son image, Dessiner s'éteint
+// sans image seule ; éteint, l'image n'est plus dans la zone de dessin (rien d'un autre espace n'y reste)
+function renderDrawing(){
+  const n=inputImages.length, im=n===1 ? inputImages[0] : null;
+  if(drawFor && !inputImages.includes(drawFor)) drawCanvasFor(null);
+  if(!im) drawOn=false;
+  if(drawOn && drawFor!==im) drawCanvasFor(im);
+  if(drawOn){ if($('paintImg').getAttribute('src')!==im.dataUrl) $('paintImg').src=im.dataUrl; }
+  else $('paintImg').removeAttribute('src');
+  $('pane-create').classList.toggle('drawing', drawOn);
+  $('drawBtn').classList.toggle('on', drawOn); $('drawBtn').setAttribute('aria-pressed', drawOn); $('drawBtn').disabled=n>1;
+  $('drawHint').textContent = n>1 ? 'Dessiner se fait sur une seule image' : ''; }
+// Dessiner (grisé à plusieurs images) : sans image, choix d'une image puis dessin, la saisie visée notée à l'ouverture du
+// sélecteur ; avec une image, l'allume ou l'éteint (le tracé reste)
+let drawPick=null;
+$('drawBtn').onclick=()=>{ if(inputImages.length){ drawOn=!drawOn; renderDrawing(); refreshChoices(); return; }
+  drawPick=noteInput(); $('drawFile').click(); };
+$('drawFile').addEventListener('change', e=>{ const f=e.target.files[0], from=drawPick || noteInput(); drawPick=null; e.target.value='';
+  if(f) drawFrom(f.name, ()=>readFile(f), from); });
+// l'image seule dans la saisie de list (prise avant toute attente), dessin actif, tracé vierge ; mène à Créer. Espace
+// changé entre-temps : dans sa saisie mise de côté
+function drawWith(list, entry){ list.splice(0, list.length, entry);
+  if(list===inputImages){ drawOn=true; drawCanvasFor(entry); renderInputs(); suggestRatio(); if(mode!=='create') goTab('create'); return; }
+  if(asideInput && asideInput.images===list) asideInput.drawing={...asideInput.drawing, on:true, image:entry, pixels:null}; }
 function clearMask(){ ctx.clearRect(0,0,canvas.width,canvas.height); }
-let drawing=false, last=null, rect=null;      // rect : position du canevas, mesurée une fois par trait
+let stroking=false, last=null, rect=null;     // rect : position du canevas, mesurée une fois par trait
 function pos(ev){ const r=rect; return [(ev.clientX-r.left)*canvas.width/r.width, (ev.clientY-r.top)*canvas.height/r.height]; }
 function dab(p){ const size=Number($('brush').value)*canvas.width/rect.width;
   ctx.globalCompositeOperation = paintMode==='erase' ? 'destination-out' : 'source-over'; ctx.strokeStyle='rgba(255,0,0,0.5)'; ctx.fillStyle='rgba(255,0,0,0.5)'; ctx.lineWidth=size; ctx.lineCap='round'; ctx.lineJoin='round';
   if(last){ ctx.beginPath(); ctx.moveTo(last[0],last[1]); ctx.lineTo(p[0],p[1]); ctx.stroke(); } else { ctx.beginPath(); ctx.arc(p[0],p[1],size/2,0,Math.PI*2); ctx.fill(); } last=p; }
-canvas.addEventListener('pointerdown',ev=>{ if(!maskImage) return; drawing=true; last=null; rect=canvas.getBoundingClientRect(); canvas.setPointerCapture(ev.pointerId); dab(pos(ev)); });
-canvas.addEventListener('pointermove',ev=>{ if(drawing) dab(pos(ev)); });
-['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,()=>{ drawing=false; last=null; }));
+canvas.addEventListener('pointerdown',ev=>{ if(!drawOn) return; stroking=true; last=null; rect=canvas.getBoundingClientRect(); canvas.setPointerCapture(ev.pointerId); dab(pos(ev)); });
+canvas.addEventListener('pointermove',ev=>{ if(stroking) dab(pos(ev)); });
+['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,()=>{ stroking=false; last=null; }));
 function paintedPixels(){ const d=ctx.getImageData(0,0,canvas.width,canvas.height); let n=0; for(let i=3;i<d.data.length;i+=4) if(d.data[i]>0) n++; return n; }
 function exportMask(w,h){ const d=ctx.getImageData(0,0,canvas.width,canvas.height); const m=document.createElement('canvas'); m.width=canvas.width; m.height=canvas.height; const mc=m.getContext('2d'); const out=mc.createImageData(m.width,m.height);
   for(let i=0;i<d.data.length;i+=4){ const v=d.data[i+3]>0?255:0; out.data[i]=v; out.data[i+1]=v; out.data[i+2]=v; out.data[i+3]=255; }
   mc.putImageData(out,0,0); const f=document.createElement('canvas'); f.width=w; f.height=h; const fc=f.getContext('2d'); fc.imageSmoothingEnabled=false; fc.drawImage(m,0,0,w,h); return f.toDataURL('image/png'); }
-function paintedReference(w,h,opaque){ const a=document.createElement('canvas'); a.width=canvas.width; a.height=canvas.height; const ac=a.getContext('2d'); ac.drawImage(maskImage.img,0,0,a.width,a.height);
+function paintedReference(w,h,opaque){ const a=document.createElement('canvas'); a.width=canvas.width; a.height=canvas.height;
+  const ac=a.getContext('2d'); ac.drawImage(drawFor.img,0,0,a.width,a.height);
   const d=ctx.getImageData(0,0,canvas.width,canvas.height); const im=ac.getImageData(0,0,a.width,a.height);
   for(let i=0;i<d.data.length;i+=4){ if(d.data[i+3]>0){ if(opaque){ im.data[i]=255; im.data[i+1]=0; im.data[i+2]=0; } else { im.data[i]=Math.round(im.data[i]*0.5+127); im.data[i+1]=Math.round(im.data[i+1]*0.5); im.data[i+2]=Math.round(im.data[i+2]*0.5); } } }
   ac.putImageData(im,0,0); const f=document.createElement('canvas'); f.width=w; f.height=h; f.getContext('2d').drawImage(a,0,0,w,h); return f.toDataURL('image/png'); }
@@ -1144,10 +1187,10 @@ function buildRequest(){
     if(inCampaign()){ body.campaign=campaignPlan().map(x=>({image:x.im.dataUrl, width:x.w, height:x.h}));
       body.width=body.campaign[0].width; body.height=body.campaign[0].height; }
     else body.ref_images=inputImages.map(x=>x.dataUrl); }
-  else if(kind==='mask'){ if(!maskImage) throw new Error('Chargez une image.');
-    if(!paintedPixels()) throw new Error('Peignez une zone.');
+  else if(kind==='mask'){ if(!paintedPixels()) throw new Error('Peignez une zone.');
     if(maskMode()==='annotation'){ body.mode='annot'; body.ref_images=[paintedReference(w,h,true)]; }
-    else { body.init_image=resizeDataUrl(maskImage.img,w,h); body.mask_image=exportMask(w,h); body.ref_images=[paintedReference(w,h,false)]; } }
+    else { body.init_image=resizeDataUrl(drawFor.img,w,h); body.mask_image=exportMask(w,h);
+      body.ref_images=[paintedReference(w,h,false)]; } }
   if(!body.prompt) throw new Error('Le texte est vide.');
   if(variants()>1) body.count=variants();          // variantes : un lot, dans tous les modes sauf la campagne
   if(inPrivate()){ body.private=true; body.incognito=false; }   // dans l'espace privé, tout part en privé
@@ -1624,12 +1667,11 @@ function drop(p, quiet){
   if(p.result && p.result.blob){ ready.delete(p.result.url); URL.revokeObjectURL(p.result.url); }   // image incognito : plus rien d'elle
   if(shown===p) showOwn(nextActive());
   if(!quiet) renderDone(); }
-function inputThumb(kind){ return kind==='edit' ? inputImages[0].dataUrl : kind==='mask' ? maskImage.dataUrl : null; }
+function inputThumb(kind){ return kind==='t2i' ? null : inputImages[0].dataUrl; }
 $('go').onclick=async()=>{                         // toujours actif : la demande rejoint la file avec les réglages du moment
   let body; try{ body=buildRequest(); }catch(e){ toast(e.message, 'err'); return; }
   const kind=inputKind(), thumb=inputThumb(kind), priv=inPrivate();   // pris avant l'envoi : l'espace peut changer pendant l'attente
-  // saisie qui part (voir emptyInput) : texte, images d'entrée d'une édition, image à retoucher d'un dessin
-  const sent={ text:$('prompt').value, images:kind==='edit' ? inputImages.slice() : [], mask:kind==='mask' ? maskImage : null };
+  const sent={ text:$('prompt').value, images:inputImages.slice() };   // saisie qui part (voir emptyInput)
   askNotifications();                              // première génération : autorisation demandée une fois (appui en cours)
   if(estSeconds>3600 && !await ask('Génération longue', 'Temps estimé : '+fmt(estSeconds)+'. La lancer quand même ?', 'Lancer')) return;
   if(body.incognito) try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}   // texte incognito : jamais retenu, même refusé
@@ -1717,7 +1759,10 @@ const USAGE_LABELS = { t2i:'Créer', edit:'Éditer', mask:'Dessiner' };
 const PEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg>';
 const BIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="m6.5 7 1 12.5h9l1-12.5"/></svg>';
 let prompts={saved:[], types:[]}, promptUsage='all', editingPrompt=null;
-async function openPrompts(){ openSheet('promptSheet'); renderPrompts(); const priv=inPrivate();
+// fromButton : ouverte par le bouton Prompts, la feuille se filtre sur la catégorie de la saisie ; rouverte après un
+// enregistrement, une copie ou une suppression, elle garde le filtre choisi
+async function openPrompts(fromButton){ if(fromButton) promptUsage=inputKind();
+  openSheet('promptSheet'); renderPrompts(); const priv=inPrivate();
   try{ const r=await fetch(promptsApi()), j=await r.json(); if(!r.ok) throw new Error(j.error);
     if(priv===inPrivate()){ prompts=j; renderPrompts(); } }   // espace changé pendant l'attente : la liste de l'autre n'est pas montrée
   catch(e){ if(priv===inPrivate()) toast('Prompts indisponibles : '+e.message, 'err'); } }
@@ -1731,7 +1776,7 @@ function renderPrompts(){
   // prompts types : livrés avec l'application, en lecture seule ; « Dupliquer » en fait un prompt enregistré modifiable
   $('typeHead').hidden=!types.length;
   $('typeList').innerHTML=types.map(p=>row(p, `<button class="btn secondary small" data-dup aria-label="Dupliquer « ${esc(p.title)} »">Dupliquer</button>`)).join(''); }
-// le texte remplace celui du champ ; le premier passage entre crochets (« [couleur] ») est sélectionné pour
+// le texte remplace celui du champ, sans toucher aux images ni au dessin ; le premier passage entre crochets (« [couleur] ») est sélectionné pour
 // être remplacé en tapant
 function usePrompt(p, saved){ const t=$('prompt'); closeSheet();
   t.value=p.text; t.dispatchEvent(new Event('input')); t.focus();
@@ -1893,13 +1938,24 @@ async function dataUrlOf(name, url){
   const own=pageJobs.find(p=>p.result && p.result.blob && p.result.name===name); if(own) return await readFile(own.result.blob);   // image incognito d'un lot
   const b=await (await fetch(url || resultUrl(name))).blob(); return await readFile(b); }
 async function useAsEditInput(name, url){
-  if(!name) return; if(inputImages.length>=MAX_REFS){ toast(MAX_REFS+' images d\'entrée au maximum', 'err'); return; }
+  if(!name || refuseWhileDrawing()) return; if(inputImages.length>=MAX_REFS){ toast(MAX_REFS+' images d\'entrée au maximum', 'err'); return; }
   const list=inputImages, priv=inPrivate(); addEditImage(list, await toEntry(name, await dataUrlOf(name, url), priv)); }
-async function useAsMaskInput(name, url){ if(!name) return; const priv=inPrivate();
-  if(await setMaskImage(name, await dataUrlOf(name, url), priv)) goTab('mask'); }
+async function useAsMaskInput(name, url){ if(name) await drawFrom(name, ()=>dataUrlOf(name, url)); }
+// « Dessiner » sur une image (visionneuse, terminées, images d'entrée) : elle remplace les images de la saisie, après
+// confirmation s'il y en avait, dessin actif, tracé vierge ; la saisie visée est notée avant toute attente
+async function drawFrom(name, read, {list, priv}=noteInput()){
+  const replace = async n => !n || await ask('Dessiner sur cette image ?',
+    `Remplacer ${n>1 ? 'les '+n+' images' : 'l\'image'} de la saisie par celle-ci ?`, 'Remplacer');
+  const n=list.length; if(!await replace(n)) return;
+  let entry; try{ entry=await toEntry(name, await read(), priv); }
+  catch(e){ if(priv===inPrivate()) toast('Image illisible', 'err'); return; }
+  // images ajoutées pendant la lecture : la confirmation porte sur elles (pas de question pour une saisie mise de côté)
+  if(list.length>n && (list!==inputImages || !await replace(list.length))) return;
+  drawWith(list, entry); }
 // image ajoutée par « Éditer » aux images d'entrée de Créer : list est la saisie de l'espace où le geste a commencé
-// (prise avant toute attente)
+// (prise avant toute attente) ; plafond et dessin actif revus à l'arrivée de l'image
 function addEditImage(list, entry){
+  if(refuseWhileDrawing(list)) return;
   if(list.length>=MAX_REFS){ if(list===inputImages) toast(MAX_REFS+' images d\'entrée au maximum', 'err'); return; }
   list.push(entry); if(list!==inputImages) return;
   renderInputs(); goTab('create'); suggestRatio(); toast('Ajoutée aux images d\'entrée'); }
@@ -1940,20 +1996,22 @@ function emptyInputs(){ clearTimeout(ivEmpty); clearImage($('ivImg'));
   $('ivImg').alt=$('ivLabel').textContent=$('ivCount').textContent=''; dropLink($('ivDl')); }
 async function inputAction(kind){             // repartir de cette image d'entrée : Éditer (référence) ou Dessiner
   if(!ivOwner || ivIndex<0) return;               // second appui pendant le fondu de fermeture
+  if(kind==='edit' && refuseWhileDrawing()) return;   // refusé avant de fermer : l'image reste à l'écran
   const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f, list=inputImages, priv=inPrivate();
   closeInputs(); closeViewer();
+  if(kind==='mask') return drawFrom(name, ()=>dataUrlOf(name, url));
   const dataUrl=await readFile(await (await fetch(url)).blob());
-  if(kind==='mask'){ if(await setMaskImage(name, dataUrl, priv)) goTab('mask'); return; }
   if(list.length>=MAX_REFS){ toast(MAX_REFS+' images d\'entrée au maximum', 'err'); return; }
   addEditImage(list, await toEntry(name, dataUrl, priv)); }
 const resetInputZoom=zoomable($('ivStage'), $('ivImg'), $('iv'), d=>showInput(ivIndex+d), closeInputs);   // comme la visionneuse
 async function viewerAction(kind){
   const it=vList[vIndex]; if(!it) return;
+  if(kind==='edit' && refuseWhileDrawing()) return;   // refusé avant de fermer : l'image reste à l'écran
   if(kind==='edit' || kind==='mask'){ closeViewer(); return kind==='edit' ? useAsEditInput(it.name, srcOf(it)) : useAsMaskInput(it.name, srcOf(it)); }
   if(kind==='prompt'){
     if(!it.prompt){ toast('Pas de texte enregistré pour cette image', 'err'); return; }
     const t=$('prompt'); t.value=it.prompt; t.dispatchEvent(new Event('input')); closeViewer();
-    goTab(kindOf(it.mode)==='mask' ? 'mask' : 'create'); toast('Texte repris'); return; }
+    goTab('create'); toast('Texte repris'); return; }
   if(kind==='delete' && await deleteItem(it)) removeFromViewer([it]);
 }
 // « Supprimer » (visionneuse, terminées) : une image incognito de la page est effacée de la page (« Effacer ») ; une autre
@@ -2044,23 +2102,23 @@ function changedSpace(inside){
   show(nextActive()); renderDone();
   histItems=[]; $('histGrid').innerHTML=''; $('histCount').textContent=''; if(mode==='hist') loadHistory();
   syncThemeColor(); }
-// Saisie propre à chaque espace (texte, images d'entrée, image à retoucher et masque de Dessiner) :
+// Saisie propre à chaque espace (texte, images d'entrée, dessin : actif ou non, masque ou annotation, tracé) :
 // celle de l'espace affiché est dans les champs, celle de l'autre espace est mise de côté en mémoire de la page
 // (asideInput : la saisie publique dans l'espace privé, la saisie privée hors de lui), jamais dans le navigateur.
 // Entrer ou sortir les échange ; « Sortir » et la suppression de l'espace effacent la saisie privée, la fermeture par
 // le Mac (15 minutes) la garde pour le retour dans la même page.
 let asideInput=null, erasePrivate=false;            // erasePrivate : « Sortir » demandé, saisie privée à effacer
 function readInput(){ return { text:$('prompt').value, images:inputImages,
-  mask:maskImage && { image:maskImage, pixels:ctx.getImageData(0, 0, canvas.width, canvas.height) },
+  drawing:{ on:drawOn, mask:maskMode(), image:drawFor, pixels:drawFor && ctx.getImageData(0, 0, canvas.width, canvas.height) },
   imageRatio:opt.ratio==='image' }; }              // format « Image » : il revient avec son image
 function putInput(s){                              // s : saisie mise de côté, ou rien (saisie vide)
-  $('prompt').value = s ? s.text : '';
-  inputImages = s ? s.images : []; renderInputs();
-  if(s && s.mask){ maskImage=s.mask.image; showMaskImage(s.mask.pixels); } else dropMaskImage();
+  const d=s && s.drawing;
+  $('prompt').value = s ? s.text : ''; inputImages = s ? s.images : [];
+  drawCanvasFor(d ? d.image : null, d && d.pixels); drawOn=!!(d && d.on); setMaskMode(d ? d.mask : 'mask'); renderInputs();
   forceImageRatio=!!(s && s.imageRatio); refreshChoices(); }
 function swapInput(){ const here=readInput(); putInput(asideInput); asideInput=here; }
 // vide la saisie d'un espace (priv : celui d'où la demande est partie) de ce qui est parti avec la demande (sent :
-// texte, images d'entrée, image à retoucher et son masque), et le brouillon s'il est public ; ce qui a été tapé ou
+// texte, images d'entrée ; le tracé part avec son image), et le brouillon s'il est public ; ce qui a été tapé ou
 // ajouté pendant l'envoi reste. Les images sont retirées de la liste elle-même, qu'un ajout en cours remplit encore.
 // Si l'espace a changé entre-temps, c'est sa saisie mise de côté qui est vidée. L'estimation suit.
 function emptyInput(priv, sent){
@@ -2070,8 +2128,7 @@ function emptyInput(priv, sent){
     if(!priv) try{ localStorage.removeItem(DRAFT_KEY); }catch(e){} }
   const list=here ? inputImages : s.images;
   sent.images.forEach(e=>{ const i=list.indexOf(e); if(i>=0) list.splice(i, 1); });
-  const m=here ? maskImage : s.mask && s.mask.image;
-  if(m && m===sent.mask){ if(here) dropMaskImage(); else s.mask=null; }
+  if(!here && s.drawing.image && !list.includes(s.drawing.image)) s.drawing={...s.drawing, on:false, image:null, pixels:null};
   if(here){ renderInputs(); refreshChoices(); } }
 function openPrivSheet(id){
   // en http:// sur le Wi-Fi, l'espace ne s'ouvre pas (le code passerait en clair) : la feuille le dit, sans champ de code.

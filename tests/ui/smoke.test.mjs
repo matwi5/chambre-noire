@@ -24,8 +24,8 @@ test('vue du téléphone : mode allégé', async () => {
   assert.equal(await page.eval(`document.documentElement.classList.contains('lite')`), true);
 });
 
-test('onglets En cours, Créer, Dessiner et Galerie', async () => {
-  for (const pane of ['run', 'mask', 'hist', 'create']) {
+test('onglets En cours, Créer et Galerie', async () => {
+  for (const pane of ['run', 'hist', 'create']) {
     await page.click(`#tabbar [data-pane="${pane}"]`);
     await page.waitFor(`$('pane-${pane}').classList.contains('active') && document.body.className === 'm-${pane}'`);
     if (pane === 'hist') await page.waitFor(`$('histGrid').children.length > 0`, { what: 'galerie affichée' });

@@ -102,7 +102,9 @@ dernier bloc, après le HTML.
 - **HTML** : onglets `#pane-run` (page En cours : zone de la page `#ownZone` avec `#stage` et « Rien en cours »
   `#resultEmpty` ; génération d'un autre appareil ou attente `#runNow` ; file `#runQueue` ; terminées `#runDone`, liste
   `#doneList`, « Tout retirer » `#doneClear`), `#pane-create` (page Créer : images d'entrée `#refs`, vignettes
-  `#inThumbs`, ajout `#inDrop` et son champ `#inFiles`, interrupteur Campagne `#campSwitch`), `#pane-mask`, `#pane-hist`
+  `#inThumbs`, ajout `#inDrop` et son champ `#inFiles`, bouton Dessiner `#drawBtn` (choix d'une image `#drawFile`,
+  explication `#drawHint`), zone de dessin `#paintWrap` et `#paintCanvas`, masque ou annotation `#mask_mode`,
+  interrupteur Campagne `#campSwitch` ; classe `drawing` quand le dessin est actif), `#pane-hist`
   (galerie `#histGrid`) ; compositeur `#composer` (champ unique `#prompt`, bouton `#go`) ; barre
   d'onglets `#tabbar` (onglet En cours : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vKeep` :
   « Garder celle-ci ») ; images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`, `#engineSheet`,
@@ -113,15 +115,19 @@ dernier bloc, après le HTML.
     privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
     (`refPx`, `inputsFor`, `parts` : copies de `estimate.py`) ; réglages `opt` (`localStorage` `qwen-opt`),
     `refreshChoices` (exemple du champ, `PLACEHOLDERS`), `setIncog` (activer l'incognito efface le brouillon) ; nature
-    de la demande lue dans la saisie : `inputKind` (`t2i` sans image d'entrée, `edit` avec, `mask` sur l'onglet
-    Dessiner), `singleImage`, `campaignShown` (interrupteur proposé à partir de 2 images), `inCampaign`, `variants` ;
+    de la demande lue dans la saisie : `inputKind` (`t2i` sans image d'entrée, `edit` avec, `mask` dessin actif :
+    `drawOn`), `singleImage`, `campaignShown` (interrupteur proposé à partir de 2 images), `inCampaign`, `variants` ;
     brouillon unique `qwen-prompt` (dans `init` : reprise une fois des anciens `qwen-<onglet>_prompt`).
   - « onglets & statut » : `TABS`, changement d'onglet (`mode`) ; « panneaux du bas » : `openSheet`, `closeSheet`
     (un seul ouvert, `openedSheet`) ; `refreshStatus()` (interroge `/api/status` toutes les 5 s, 2 s tant que la file
     n'est pas vide ; met à jour `queueState`, l'île, la page En cours et l'espace privé par `applyPrivate`, et le
     panneau Moteur, version servie comprise : `fmtVersion`, `staleServer`).
-  - « images », « dessin » : `toEntry`, `renderInputs` (images d'entrée de Créer, `inputImages`), `setMaskImage`,
-    `showMaskImage`, `dropMaskImage`, `exportMask`.
+  - « images », « dessin » : `toEntry`, `addInputFiles` (choix, dépôt et collage, écouteur `paste` de la page Créer),
+    `refuseWhileDrawing` (ajout refusé pendant le dessin, saisie affichée ou mise de côté), `noteInput` (saisie visée
+    par un ajout, notée avant toute attente), `renderInputs` (images d'entrée de Créer, `inputImages`, puis
+    `renderDrawing` : bouton Dessiner et zone de dessin), `drawCanvasFor` (le tracé appartient à `drawFor`, l'image pour
+    laquelle il a été commencé : gardé quand on éteint Dessiner, effacé avec son image), `drawWith` (une image seule
+    dans la saisie, dessin actif, tracé vierge), `exportMask`, `paintedReference`.
   - « requête & loader » : `buildRequest` ; « messages et confirmations » : `toast`, `ask` et `answer` (feuille
     `#askSheet`, jamais `confirm()`).
   - « affichage des images » : `showImage` (toute image qui change d'adresse : vidée, puis remplie une fois l'image
@@ -157,16 +163,17 @@ dernier bloc, après le HTML.
     rechargement et au retour dans l'espace public), `resume`, `adoptPrivate` (dans l'espace privé, toutes les
     générations privées actives de la file, `adopted` : pas lancées par la page, qui ne les fait pas oublier).
   - « notifications » : `pushSubscribe`, `askNotifications`.
-  - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts`, `renderPrompts`,
-    `usePrompt`, `savePrompt`.
+  - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts` (ouverte par le
+    bouton, filtre `promptUsage` sur la catégorie de la saisie, `inputKind`), `renderPrompts`, `usePrompt`,
+    `savePrompt`.
   - « galerie et visionneuse » : `histItems`, `vList` (ce que parcourt la visionneuse : la galerie ou les terminées
     de la page), `loadHistory`, `renderGallery`, `openViewer`, `stepViewer`, `closeViewer` et `emptyViewer` (contenu
     vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace privé), gestes : `zoomable` (pincer,
     molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les images d'entrée).
   - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
-    `inputAction`, `addEditImage` ; actions de la visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`,
-    `keepThis` (« Garder celle-ci »), `deleteItem` (« Supprimer », ou « Effacer » une image incognito : visionneuse
-    et terminées), `forgetResult`.
+    `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;
+    actions de la visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`, `keepThis` (« Garder celle-ci »),
+    `deleteItem` (« Supprimer », ou « Effacer » une image incognito : visionneuse et terminées), `forgetResult`.
   - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
     `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,
     `putInput`, `swapInput`, `emptyInput` (vidage après « Générer », dans l'espace d'où la demande est partie) ; un

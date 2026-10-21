@@ -1,7 +1,9 @@
 // Saisie, dans la vue du téléphone : page Créer unique (un champ de texte, une liste d'images d'entrée : sans image la
-// demande part en texte → image, avec des images en édition ; exemple du champ selon la saisie ; Campagne proposée à
-// partir de 2 images), images choisies d'un coup, champs vidés après « Générer », saisie propre à chaque espace
-// (public, privé), variantes avec ou sans images et en Dessiner, hors campagne.
+// demande part en texte → image, avec des images en édition, dessin actif en masque ou annotation ; exemple du champ
+// selon la saisie ; Campagne proposée à partir de 2 images), bouton Dessiner (selon le nombre d'images, ajout refusé
+// pendant le dessin, tracé gardé en désactivant et effacé avec son image), geste « Dessiner », collage d'une image,
+// images choisies d'un coup, champs vidés après « Générer », saisie propre à chaque espace (public, privé), variantes
+// avec ou sans images et en dessin, hors campagne.
 //   node --test tests/ui/saisie.test.mjs   (ou : venv/bin/python tests/check.py --ui)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +13,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { startBench, launchChrome } from './driver.mjs';
 
-// PNG gris de w×h pixels (assez grand pour qu'on puisse peindre dessus en Dessiner)
+// PNG gris de w×h pixels (assez grand pour qu'on puisse peindre dessus)
 function png(w, h) {
   const chunk = (type, data) => { const len = Buffer.alloc(4), crc = Buffer.alloc(4), td = Buffer.concat([Buffer.from(type), data]);
     len.writeUInt32BE(data.length); crc.writeUInt32BE(zlib.crc32(td)); return Buffer.concat([len, td, crc]); };
@@ -117,8 +119,7 @@ const type = text => page.eval(`(() => { const t = $('prompt'); t.value = ${JSON
 const draft = () => page.eval(`localStorage.getItem('qwen-prompt')`);
 const settings = () => page.eval(`JSON.stringify({ opt, incogOn, campaignOn, preview: $('previewChk').checked })`);
 
-// un trait de pinceau dans le quart haut gauche de l'image à retoucher (le bouton « Changer » en couvre le milieu) ;
-// souris : événements pointeur réels
+// un trait de pinceau dans le quart haut gauche de l'image du dessin ; souris : événements pointeur réels
 async function paint() {
   const box = await page.eval(`(() => { const c = $('paintCanvas'); c.scrollIntoView({ block: 'center' });
     const r = c.getBoundingClientRect(); return { x: r.left + r.width / 4, y: r.top + r.height / 4 }; })()`);
@@ -151,10 +152,137 @@ async function generate({ refuse = null } = {}) {
 const lastJob = () => page.eval(`(p => ({ mode: p.j.mode,
   lot: p.lot && { size: p.lot.size, campaign: p.lot.campaign } }))(pageJobs.at(-1))`);
 const tabs = () => page.eval(`[...document.querySelectorAll('#tabbar button')].map(b => b.dataset.pane)`);
+const SHOWN = `!!$('paintCanvas').getClientRects().length`;   // zone de dessin affichée
+// une image d'entrée, puis Dessiner activé dessus
+async function drawOne() {
+  await page.setFiles('#inFiles', photos(1));
+  await page.waitFor(`inputImages.length === 1`, { what: 'une image d\'entrée' });
+  await page.click('#drawBtn');
+  await page.waitFor(`drawOn && ${SHOWN}`, { what: 'dessin actif' });
+}
+const toastSays = text => page.waitFor(`$('toast').classList.contains('on')
+  && $('toast').textContent === ${JSON.stringify(text)}`, { what: `message « ${text} »` });
+const REFUSED = 'Désactivez Dessiner pour ajouter d\'autres images';
+
+test('Dessiner : sans image, choix d\'une image puis dessin ; à plusieurs images, grisé et expliqué', async () => {
+  await fresh();
+  await page.eval(`$('drawFile').addEventListener('click', e => { window.chooser = true; e.preventDefault(); },
+    { once: true })`);
+  await page.click('#drawBtn');
+  assert.equal(await page.eval(`!!window.chooser && !drawOn`), true, 'choix d\'une image ouvert');
+  await page.setFiles('#drawFile', photos(1));
+  await page.waitFor(`inputImages.length === 1 && drawOn && ${SHOWN}`, { what: 'image choisie, dessin actif' });
+  assert.match(await page.eval(`$('prompt').placeholder`), /^Que mettre dans la zone peinte/);
+  await page.click('#drawBtn');                    // une image : le bouton éteint le dessin
+  await page.waitFor(`!drawOn && !${SHOWN}`, { what: 'dessin éteint' });
+  await page.setFiles('#inFiles', photos(1));
+  await page.waitFor(`inputImages.length === 2`, { what: 'deux images' });
+  assert.equal(await page.eval(`$('drawBtn').disabled`), true, 'grisé à deux images');
+  assert.equal(await page.eval(`$('drawHint').textContent`), 'Dessiner se fait sur une seule image');
+  assert.equal(await page.eval(`!!$('drawHint').getClientRects().length`), true, 'explication visible');
+  page.assertNoErrors();
+});
+
+test('Dessiner : ajout refusé pendant le dessin ; tracé gardé en désactivant, effacé avec son image', async () => {
+  await fresh();
+  await drawOne();
+  await paint();
+  await page.setFiles('#inFiles', photos(1));      // choix de fichiers, puis appui sur la tuile d'ajout
+  await toastSays(REFUSED);
+  await page.eval(`$('toast').classList.remove('on')`);
+  await page.click('#inDrop');
+  await toastSays(REFUSED);
+  assert.equal(await page.eval(`inputImages.length`), 1);
+  assert.equal(await page.eval(`campaignShown()`), false);
+  await page.click('#drawBtn');                    // éteint : tracé gardé, la demande serait une édition
+  await page.waitFor(`!drawOn && inputKind() === 'edit'`, { what: 'dessin éteint' });
+  await page.click('#drawBtn');
+  await page.waitFor(`drawOn && paintedPixels() > 0`, { what: 'tracé retrouvé' });
+  await page.click('#drawBtn');
+  await page.click('#inThumbs .thumb button');     // l'image retirée emporte son tracé
+  await page.waitFor(`!inputImages.length && !drawOn`, { what: 'image retirée' });
+  assert.equal(await page.eval(`paintedPixels()`), 0);
+  await drawOne();
+  assert.equal(await page.eval(`paintedPixels()`), 0, 'nouvelle image : tracé vierge');
+  page.assertNoErrors();
+});
+
+test('Dessiner : la demande part en masque, ou en annotation ; sans zone peinte, refusée', async () => {
+  await fresh();
+  await drawOne();
+  await type('une fenêtre ouverte');
+  await page.click('#go');
+  await toastSays('Peignez une zone.');
+  await paint();
+  await generate();
+  assert.deepEqual(await lastJob(), { mode: 'mask', lot: null });
+  await drawOne();
+  await page.eval(`$('mask_mode').querySelector('[value=annotation]').click()`);
+  await paint();
+  await type('une fenêtre ouverte');
+  await generate();
+  assert.deepEqual(await lastJob(), { mode: 'annot', lot: null });
+  page.assertNoErrors();
+});
+
+// image collée (Cmd+V, « Coller ») dans le champ : événement paste avec un fichier image, ou du texte seul
+const paste = kind => page.eval(`(async () => { const dt = new DataTransfer();
+  if (${JSON.stringify(kind)} !== 'text') { const c = document.createElement('canvas'); c.width = c.height = 64;
+    const b = await new Promise(r => c.toBlob(r, 'image/png'));
+    dt.items.add(new File([b], 'image.png', { type: 'image/png' })); }
+  if (${JSON.stringify(kind)} !== 'image') dt.setData('text/plain', 'texte collé');
+  const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+  $('prompt').dispatchEvent(ev); return ev.defaultPrevented; })()`);
+
+test('Collage : une image collée s\'ajoute ; un texte reste un texte ; refusé pendant le dessin', async () => {
+  await fresh();
+  assert.equal(await paste('text'), false, 'collage de texte laissé au champ');
+  assert.equal(await paste('both'), false, 'texte accompagné d\'une image (Word, Keynote) : laissé au champ');
+  assert.equal(await page.eval(`inputImages.length`), 0);
+  assert.equal(await paste('image'), true);
+  await page.waitFor(`inputImages.length === 1 && $('inThumbs').children.length === 1`,
+    { what: 'image collée ajoutée' });
+  await page.click('#drawBtn');
+  await page.waitFor(`drawOn`, { what: 'dessin actif' });
+  await paste('image');
+  await toastSays(REFUSED);
+  assert.equal(await page.eval(`inputImages.length`), 1);
+  page.assertNoErrors();
+});
+
+test('geste « Dessiner » : l\'image seule, dessin actif ; confirmation s\'il y avait des images', async () => {
+  await fresh();
+  await type('un phare à dessiner');
+  await generate();
+  await page.waitFor(`pageJobs.at(-1).result`, { what: 'image finie', timeout: 30000 });
+  await page.click('#tabbar [data-pane="hist"]');
+  await page.waitFor(`histItems.length > 0`, { what: 'galerie' });
+  const name = await page.eval(`histItems[0].name`);
+  await page.eval(`openViewer(0, histItems); void viewerAction('mask')`);   // saisie sans image : pas de confirmation
+  await page.waitFor(`mode === 'create' && drawOn && inputImages.length === 1`, { what: 'dessin sur l\'image' });
+  assert.equal(await page.eval(`inputImages[0].name`), name);
+  await page.click('#drawBtn');
+  await page.setFiles('#inFiles', photos(1));
+  await page.waitFor(`inputImages.length === 2`, { what: 'deux images' });
+  await page.click('#tabbar [data-pane="hist"]');
+  await page.eval(`openViewer(0, histItems); void viewerAction('mask')`);
+  await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation' });
+  assert.equal(await page.eval(`$('askText').textContent`), 'Remplacer les 2 images de la saisie par celle-ci ?');
+  await page.eval(`answer(false)`);                 // refusée : rien ne change
+  assert.equal(await page.eval(`inputImages.length`), 2);
+  await page.eval(`openViewer(0, histItems); void viewerAction('mask')`);
+  await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation' });
+  await page.eval(`answer(true)`);
+  await page.waitFor(`mode === 'create' && drawOn && inputImages.length === 1
+    && inputImages[0].name === ${JSON.stringify(name)}`,
+    { what: 'images remplacées, dessin actif' });
+  assert.equal(await page.eval(`paintedPixels()`), 0, 'tracé vierge');
+  page.assertNoErrors();
+});
 
 test('Créer : sans image d\'entrée la demande part du texte, avec des images c\'est une édition', async () => {
   await fresh();
-  assert.deepEqual(await tabs(), ['run', 'create', 'mask', 'hist'], 'plus d\'onglet Éditer');
+  assert.deepEqual(await tabs(), ['run', 'create', 'hist'], 'plus d\'onglet Éditer ni Dessiner');
   assert.equal(await page.eval(`$('pane-create').classList.contains('active')
     && !!$('inDrop').getClientRects().length`), true, 'ajout d\'images offert sur Créer');
   assert.match(await page.eval(`$('prompt').placeholder`), /^Décrivez l'image/);
@@ -200,10 +328,9 @@ test('Créer avec des images : texte et images vidés quand la demande est accep
   page.assertNoErrors();
 });
 
-test('Dessiner : texte, image à retoucher et masque vidés quand la demande est acceptée', async () => {
-  await fresh('mask');
-  await page.setFiles('#mask_file', photos(1));
-  await page.waitFor(`!!maskImage && $('pane-mask').classList.contains('has-img')`, { what: 'image à retoucher chargée' });
+test('Dessiner : texte, image et tracé vidés quand la demande est acceptée', async () => {
+  await fresh();
+  await drawOne();
   await paint();
   assert.match(await page.eval(`$('prompt').placeholder`), /^Que mettre dans la zone peinte/);
   await type('une fenêtre ouverte');
@@ -214,7 +341,7 @@ test('Dessiner : texte, image à retoucher et masque vidés quand la demande est
   assert.equal(opts.opt.ratio, 'image');
   assert.deepEqual(JSON.parse(await settings()), { ...opts, opt: { ...opts.opt, ratio: '1:1' } });
   assert.equal(await page.eval(`$('prompt').value`), '');
-  assert.equal(await page.eval(`maskImage === null && !$('pane-mask').classList.contains('has-img') && $('paintWrap').style.display === 'none'`), true);
+  assert.equal(await page.eval(`!drawOn && !inputImages.length && !${SHOWN}`), true, 'image partie, dessin éteint');
   assert.equal(await page.eval(`paintedPixels()`), 0, 'masque effacé');
   page.assertNoErrors();
 });
@@ -287,21 +414,15 @@ test('Variantes : proposées avec des images et en Dessiner hors campagne, la de
     { what: 'deux lots terminés', timeout: 60000 });
   const ends = await page.eval(`seenToasts.filter(t => t.startsWith('Lot prêt'))`);
   assert.deepEqual(ends, ['Lot prêt · 2 images', 'Lot prêt · 3 images']);
-  // Dessiner l'emporte sur les images d'entrée de Créer restées dans la saisie
   await fresh();
-  await page.setFiles('#inFiles', photos(1));
-  await page.waitFor(`inputImages.length === 1`, { what: 'une image d\'entrée' });
-  await goTab('mask');
-  await page.setFiles('#mask_file', photos(1));
-  await page.waitFor(`!!maskImage`, { what: 'image à retoucher chargée' });
-  assert.equal(await countShown(), true, 'rangée des images en Dessiner');
+  await drawOne();
+  assert.equal(await countShown(), true, 'rangée des images en dessin');
   await pick(3);
   await paint();
   await type('une fenêtre ouverte');
   await generate();
   assert.deepEqual(await lastJob(), { mode: 'mask', lot: { size: 3, campaign: false } });
   assert.equal(await page.eval(`pageJobs.slice(-3).every(p => p.j.mode === 'mask' && p.lot.size === 3)`), true);
-  assert.equal(await page.eval(`inputImages.length`), 1, 'les images d\'entrée de Créer restent');
   page.assertNoErrors();
 });
 
@@ -345,18 +466,14 @@ const marked = () => page.eval(`[...document.querySelectorAll('#tabbar button')]
 
 test('espaces : la saisie privée disparaît à « Sortir », la saisie publique revient intacte', async () => {
   await fresh();
-  await page.setFiles('#inFiles', photos(1));
-  await page.waitFor(`inputImages.length === 1`, { what: 'une image publique' });
-  await goTab('mask');
-  await page.setFiles('#mask_file', photos(1));
-  await page.waitFor(`!!maskImage`, { what: 'image à retoucher publique' });
+  await drawOne();
   await paint();
+  await page.eval(`$('mask_mode').querySelector('[value=annotation]').click()`);
   await type('chapeau public');
 
   await enterPrivate();                            // première entrée : saisie privée vide
-  assert.deepEqual(await page.eval(`[$('prompt').value, inputImages.length, !!maskImage]`), ['', 0, false]);
-  assert.equal(await page.eval(`$('paintWrap').style.display === 'none' && !$('pane-mask').classList.contains('has-img')`), true);
-  await goTab('create');
+  assert.deepEqual(await page.eval(`[$('prompt').value, inputImages.length, drawOn, ${SHOWN}]`), ['', 0, false, false]);
+  assert.equal(await page.eval(`paintedPixels()`), 0, 'aucun tracé public sur le canevas');
   await page.setFiles('#inFiles', photos(2));
   await page.waitFor(`inputImages.length === 2`, { what: 'deux images privées' });
   await type('chapeau secret');
@@ -372,15 +489,27 @@ test('espaces : la saisie privée disparaît à « Sortir », la saisie publique
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.equal(await value(), 'chapeau public');
-  assert.equal(await page.eval(`inputImages.length`), 1);
-  assert.equal(await page.eval(`!!maskImage && $('pane-mask').classList.contains('has-img') && paintedPixels() > 0`),
-    true, 'image à retoucher et masque publics');
+  assert.equal(await page.eval(`inputImages.length === 1 && drawOn && ${SHOWN} && paintedPixels() > 0`), true,
+    'image, dessin et tracé publics');
+  assert.equal(await page.eval(`maskMode()`), 'annotation', 'mode du dessin public');
   assert.equal(await marked(), 0, 'aucun onglet marqué');
 
   await enterPrivate();                            // « Sortir » a effacé la saisie privée
-  assert.deepEqual(await page.eval(`[$('prompt').value, inputImages.length, !!maskImage]`), ['', 0, false]);
+  assert.deepEqual(await page.eval(`[$('prompt').value, inputImages.length, drawOn]`), ['', 0, false]);
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  page.assertNoErrors();
+});
+
+test('espaces : un dessin privé ne laisse ni image, ni tracé, ni taille d\'image après « Sortir »', async () => {
+  await fresh();
+  await enterPrivate();
+  await drawOne();
+  await paint();
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  assert.deepEqual(await page.eval(`[inputImages.length, drawOn, $('paintImg').hasAttribute('src'), paintedPixels(),
+    $('paintCanvas').width, $('paintCanvas').height]`), [0, false, false, 0, 1, 1]);
   page.assertNoErrors();
 });
 
