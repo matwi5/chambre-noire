@@ -226,7 +226,7 @@ invariants ».
   génération annulée (en cours ou en file) ne laisse rien : `discard_cancelled` supprime son dossier de travail et une
   image finale déjà écrite. Le statut `cancelled` est posé avant que le moteur soit arrêté.
 - **Lots** (variantes : `count` de 2 à 4, tous les modes, jamais avec une campagne ; campagne : `campaign`, 2 à 10
-  photos avec leurs dimensions, mode Éditer) : `expand_request` en tire une demande par image, `/api/generate` une
+  photos avec leurs dimensions, en `edit`) : `expand_request` en tire une demande par image, `/api/generate` une
   génération par demande (`new_job`), reliées par `job["lot"]` (`id`, `rank`, `size`, et `campaign`, le marqueur qui
   distingue une campagne de variantes, posé par `/api/generate` : le mode ne le dit plus) et gardées dans `S.lots`
   même quand une génération incognito quitte `S.jobs`. Côté interface, `isCampaignLot` lit le marqueur (un lot d'avant

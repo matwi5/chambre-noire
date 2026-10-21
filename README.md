@@ -801,7 +801,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   les 30 s ; `server_version` : la même chose au lancement du serveur, `null` sans `main()`) ; lots : `"count"` de 2 à 4
   dans `/api/generate` (tous les modes ; 1 : génération seule ; 400 « count : pas de variantes dans une campagne »
   au-delà de 1 avec `campaign`) crée autant de générations ; `"campaign": [{"image": <data URL>, "width", "height"}, …]`
-  (1 à 10 photos, mode Éditer, `"mode": "edit"`, sans `ref_images`) crée une édition par photo, avec cette seule photo
+  (1 à 10 photos, en édition, `"mode": "edit"`, sans `ref_images`) crée une édition par photo, avec cette seule photo
   en référence et à ses dimensions (une seule photo : génération seule) ; les générations d'un lot passent à la suite
   dans la file, et la réponse devient `{"lot": {"id", "size", "campaign"}, "jobs": [...]}` ; chaque génération porte
   `lot` (`id`, `rank`, `size` et `campaign` : vrai pour une campagne, faux pour des variantes, quel que soit le mode ;
@@ -859,7 +859,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 - `POST /api/generate` refuse (code 400, avec un message) une demande dont le prompt n'est pas un texte non vide, dont
   la largeur ou la hauteur n'est pas un entier de 64 à 4096, les étapes un entier de 1 à 200, ou la graine un entier
   (-1 : au hasard), ou `count` qui n'est pas un entier de 1 à 4 ou qui dépasse 1 avec une `campaign`, ou une
-  `campaign` hors du mode Éditer, de plus de 10 photos, ou dont une photo n'a pas d'image ou de dimensions valides ;
+  `campaign` hors du mode `edit`, de plus de 10 photos, ou dont une photo n'a pas d'image ou de dimensions valides ;
   les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Une génération qui ne
   peut pas se préparer (image d'entrée illisible, par exemple) échoue seule, avec un message, et la file passe à la
   suivante.
