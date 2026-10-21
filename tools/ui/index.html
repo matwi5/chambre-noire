@@ -1436,7 +1436,7 @@ $('doneList').addEventListener('click', e=>{
   const open=e.target.closest('[data-open]'); if(open) return openViewer(+open.dataset.open, doneView);
   const card=e.target.closest('.dcard'); if(!card) return;
   if(e.target.closest('[data-remove]')){ cardJobs(card).forEach(p=>drop(p, true)); return renderDone(); }
-  if(e.target.closest('[data-again]')){ const p=cardJobs(card)[0]; if(!p) return;   // carte d'un lot : tout le lot
+  if(e.target.closest('[data-again]')){ const p=cardJobs(card)[0]; if(!p || !p.req && !p.result) return;   // carte d'un lot : tout le lot
     return again(()=>p.req ? relaunch(keptRequest(p, !!card.dataset.lot)) : againFrom(pageItem(p))); }
   const act=e.target.closest('[data-act]'), p=cardJobs(card)[0]; if(!act || !p || !p.result) return;
   const it=pageItem(p), k=act.dataset.act;
@@ -2052,11 +2052,13 @@ async function resumeFrom(it){
   const filled = () => !!($('prompt').value.trim() || list.length), replace = () => ask('Reprendre cette image ?',
     'Le texte et les images de la saisie seront remplacés par les siens.', 'Remplacer');
   if(filled() && !await replace()) return;
-  const text=$('prompt').value, n=list.length;     // saisie acceptée : redemandé si elle change pendant la lecture
+  // saisie acceptée : redemandé si elle change pendant la lecture (une image retirée puis une autre ajoutée comprises)
+  const text=$('prompt').value, was=list.slice();
   let entries; try{ entries=await Promise.all(files.map(async f=>toEntry(f.name,
     f.url.startsWith('data:') ? f.url : await dataUrlOf(f.name, f.url), priv))); }
   catch(e){ if(priv===inPrivate()) toast('Images d\'entrée illisibles', 'err'); return; }
-  if(list===inputImages && ($('prompt').value!==text || list.length!==n) && filled() && !await replace()) return;
+  const changed = () => $('prompt').value!==text || list.length!==was.length || list.some((e, k)=>e!==was[k]);
+  if(list===inputImages && changed() && filled() && !await replace()) return;
   const keep=!it.url && !priv && !incogOn;          // brouillon public ; jamais le texte d'une image incognito
   if(list===inputImages){
     $('prompt').value=it.prompt;
@@ -2126,7 +2128,7 @@ async function viewerAction(kind){
   if(kind==='edit' && refuseWhileDrawing()) return;   // refusé avant de fermer : l'image reste à l'écran
   if(kind==='edit' || kind==='mask'){ closeViewer(); return kind==='edit' ? useAsEditInput(it.name, srcOf(it)) : useAsMaskInput(it.name, srcOf(it)); }
   if(kind==='resume') return resumeFrom(it);
-  if(kind==='again'){ closeViewer(); return again(()=>againFrom(it)); }
+  if(kind==='again'){ if(relaunching) return; closeViewer(); return again(()=>againFrom(it)); }   // (une relance part : l'image reste)
   if(kind==='delete' && await deleteItem(it)) removeFromViewer([it]);
 }
 // « Supprimer » (visionneuse, terminées) : une image incognito de la page est effacée de la page (« Effacer ») ; une autre
