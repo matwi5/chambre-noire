@@ -4,6 +4,17 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-21 · « Éditer » et « Dessiner » sur une image incognito allument aussi l'incognito
+
+- **Contexte** : la passe « bogues » du ticket incognito du groupe D trouve un comportement antérieur au parcours :
+  « Éditer » ou « Dessiner » sur une image incognito, interrupteur éteint, met l'image dans la saisie publique ; un
+  « Générer » ensuite part en normal et le serveur copie l'image incognito dans `outputs/.inputs/` (image d'entrée de
+  la nouvelle image, visible dans la galerie).
+- **Décision** (porteur, 21/10/2026 : « oui et oui ») : « Éditer » et « Dessiner » sur une image incognito allument
+  l'interrupteur incognito, comme « Reprendre » (ticket du groupe D). Le texte repris d'une image incognito n'est pas
+  écrit comme brouillon tant que l'interrupteur reste allumé ; l'éteindre est un geste explicite du porteur, après
+  lequel la frappe suivante l'écrit (formulation du README gardée).
+
 ## 2026-10-21 · Une image incognito reste incognito quand on la reprend ou la relance
 
 - **Contexte** : à la fin du groupe D, « Relancer » suivait l'interrupteur incognito du moment (choix de la
