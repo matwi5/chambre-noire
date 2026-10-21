@@ -14,12 +14,13 @@ sur Internet en dehors du téléchargement initial du moteur et du modèle.
 
 ## Périmètre
 
-- Trois usages, une sortie PNG : texte → image ; édition à partir de 1 à 10 images de référence et d'une instruction ;
-  dessin guidé (masque ou annotation peints sur l'image).
+- Trois usages, une sortie PNG, depuis une seule page Créer : texte → image (sans image d'entrée) ; édition à partir
+  de 1 à 10 images de référence et d'une instruction ; dessin guidé (masque ou annotation peints sur l'image).
 - Installation en une commande (`setup.py`) : moteur stable-diffusion.cpp et modèles épinglés, vérifiés par SHA256.
 - Estimations de durée calibrées sur la machine, progression et aperçus pendant la génération, annulation.
-- File d'attente commune aux appareils (générations calculées l'une après l'autre, jamais simultanément) ; lots :
-  variantes d'un même prompt (mode Créer) et campagne d'édition, une image par photo (mode Éditer).
+- File d'attente commune aux appareils (générations calculées l'une après l'autre, jamais simultanément), suivie
+  sur une page En cours ; lots : variantes d'un même prompt (avec ou sans image d'entrée) et campagne d'édition, une
+  image par photo.
 - Prompts enregistrés, partagés entre appareils, et prompts types livrés avec l'application.
 - Galerie des images produites ; mode incognito qui ne garde rien sur l'ordinateur ; espace privé chiffré, ouvert par
   un code distinct, que l'on ouvre par un cadenas discret.
