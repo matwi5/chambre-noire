@@ -1143,8 +1143,12 @@ function renderDrawing(){
   if(drawFor && !inputImages.includes(drawFor)) drawCanvasFor(null);
   if(!im) drawOn=false;
   if(drawOn && drawFor!==im) drawCanvasFor(im);
-  const show=drawOn ? im : null;                   // image de la zone de dessin, comparée sans relire son adresse
-  if(show!==paintShown){ paintShown=show; if(show) $('paintImg').src=show.dataUrl; else $('paintImg').removeAttribute('src'); }
+  // image de la zone de dessin, comparée sans relire son adresse ; par showImage, comme toute image affichée (jamais
+  // celle d'avant, d'un autre espace, le temps du chargement), avec l'image que toEntry a déjà décodée : posée tout de
+  // suite (pas de zone vide le temps d'un décodage), et rien d'elle parmi les images prêtes (une adresse data: privée
+  // n'en sortirait pas avec l'espace)
+  const show=drawOn ? im : null;
+  if(show!==paintShown){ paintShown=show; if(show) showImage($('paintImg'), show.dataUrl, {decoded:show.img}); else clearImage($('paintImg')); }
   $('pane-create').classList.toggle('drawing', drawOn);
   $('drawBtn').classList.toggle('on', drawOn); $('drawBtn').setAttribute('aria-pressed', drawOn); $('drawBtn').disabled=n>1;
   $('drawHint').textContent = n>1 ? 'Dessiner se fait sur une seule image' : ''; }
@@ -1233,14 +1237,15 @@ function preload(url){ let e=ready.get(url);
 // (aperçu), qui ne reste pas dans ready. fit : la miniature prend la taille où s'affichera l'image complète (visionneuses :
 // sinon elle s'affiche à ses 320 px, puis l'image saute) ; dims : dimensions de l'image complète, si connues (sinon
 // devinées : une miniature plus petite que THUMB_SIDE est l'image elle-même, une autre vient d'une image plus grande que
-// l'écran).
-function showImage(img, url, {thumb, keep, then, once, fit, dims}={}){
+// l'écran). decoded : l'image de url, déjà décodée à part (image d'entrée lue par toEntry) : posée tout de suite, sans
+// passer par ready ni la décoder une seconde fois.
+function showImage(img, url, {thumb, keep, then, once, fit, dims, decoded}={}){
   if(img.want===url && img.getAttribute('src')===url && img.complete && img.naturalWidth){ if(then) then(true); return; }   // déjà là
   img.want=url;                                    // adresse attendue : une image chargée trop tard pour un autre choix est ignorée
   const put=e=>{ if(once && ready.get(url)===e) ready.delete(url);
     if(img.want!==url) return; if((e.im || !keep) && img.getAttribute('src')!==url){ img.src=url; unfit(img); }
     if(then) then(!!e.im); };
-  const e=preload(url); if(e.im!==undefined) return put(e);   // déjà prête : tout de suite, sans image vide entre les deux
+  const e=decoded ? {im:decoded} : preload(url); if(e.im!==undefined) return put(e);   // déjà prête : tout de suite, sans image vide entre les deux
   if(!keep) img.removeAttribute('src');
   if(thumb){ const t=preload(thumb), side=()=>{ if(img.want!==url || !t.im || img.getAttribute('src')) return;
       if(fit){ const tw=t.im.naturalWidth, th=t.im.naturalHeight;   // dimensions inconnues : celles que dit la miniature
@@ -2117,6 +2122,7 @@ function readInput(){ return { text:$('prompt').value, images:inputImages,
   imageRatio:opt.ratio==='image' }; }              // format « Image » : il revient avec son image
 function putInput(s){                              // s : saisie mise de côté, ou rien (saisie vide)
   const d=s && s.drawing;
+  stroking=false; last=null;                       // un trait commencé dans l'autre espace ne continue pas sur ce tracé
   $('prompt').value = s ? s.text : ''; inputImages = s ? s.images : [];
   drawCanvasFor(d ? d.image : null, d && d.pixels); drawOn=!!(d && d.on); setMaskMode(d ? d.mask : 'mask'); renderInputs();
   forceImageRatio=!!(s && s.imageRatio); refreshChoices(); }

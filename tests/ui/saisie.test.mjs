@@ -13,15 +13,14 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { startBench, launchChrome } from './driver.mjs';
 
-// PNG gris de w×h pixels (assez grand pour qu'on puisse peindre dessus)
-function png(w, h) {
+// PNG gris de w×h pixels (assez grand pour qu'on puisse peindre dessus), du niveau de gris donné
+function png(w, h, gray = 128) {
   const chunk = (type, data) => { const len = Buffer.alloc(4), crc = Buffer.alloc(4), td = Buffer.concat([Buffer.from(type), data]);
     len.writeUInt32BE(data.length); crc.writeUInt32BE(zlib.crc32(td)); return Buffer.concat([len, td, crc]); };
   const head = Buffer.alloc(13); head.writeUInt32BE(w, 0); head.writeUInt32BE(h, 4); head[8] = 8; head[9] = 0;   // 8 bits, gris
-  const rows = Buffer.alloc((w + 1) * h, 128); for (let y = 0; y < h; y++) rows[y * (w + 1)] = 0;                // filtre 0 par ligne
+  const rows = Buffer.alloc((w + 1) * h, gray); for (let y = 0; y < h; y++) rows[y * (w + 1)] = 0;   // filtre 0
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', head), chunk('IDAT', zlib.deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
 }
-const PNG = png(320, 320);
 let bench, chrome, page, dir, refusal = null, held = null;
 
 before(async () => {
@@ -53,12 +52,15 @@ async function fresh(pane = 'create') {
   await page.waitFor(`$('pane-${pane}').classList.contains('active')`);
 }
 
+// une photo de ce gris (gris moyen par défaut) ; un autre gris : une adresse data: que la page n'a jamais affichée
+function photo(name, gray = 128) {
+  const file = path.join(dir, name);
+  fs.writeFileSync(file, png(320, 320, gray));
+  return file;
+}
+
 function photos(n) {
-  return Array.from({ length: n }, (_, i) => {
-    const file = path.join(dir, `photo-${String(i + 1).padStart(2, '0')}.png`);
-    fs.writeFileSync(file, PNG);
-    return file;
-  });
+  return Array.from({ length: n }, (_, i) => photo(`photo-${String(i + 1).padStart(2, '0')}.png`));
 }
 
 test('Créer : trois photos choisies d\'un coup sont toutes ajoutées, dans l\'ordre', async () => {
@@ -121,6 +123,7 @@ const settings = () => page.eval(`JSON.stringify({ opt, incogOn, campaignOn, pre
 
 // un trait de pinceau dans le quart haut gauche de l'image du dessin ; souris : événements pointeur réels
 async function paint() {
+  await page.waitFor(`$('paintCanvas').getBoundingClientRect().width > 0`, { what: 'zone de dessin à sa taille' });
   const box = await page.eval(`(() => { const c = $('paintCanvas'); c.scrollIntoView({ block: 'center' });
     const r = c.getBoundingClientRect(); return { x: r.left + r.width / 4, y: r.top + r.height / 4 }; })()`);
   for (const [kind, dx] of [['mousePressed', 0], ['mouseMoved', 4], ['mouseReleased', 4]])
@@ -176,7 +179,7 @@ test('Dessiner : sans image, choix d\'une image puis dessin ; à plusieurs image
   // Masque et Annotation : chaque texte au milieu de son bouton, à la hauteur de la lentille qui le surligne
   assert.deepEqual(await page.eval(`[...$('mask_mode').children].map(l => {
     const a = l.getBoundingClientRect(), s = l.parentElement.getBoundingClientRect();
-    return Math.round(Math.abs((a.top + a.bottom) - (s.top + s.bottom)) / 2); })`), [0, 0], 'texte centré verticalement');
+    return Math.round(Math.abs((a.top + a.bottom) - (s.top + s.bottom)) / 2); })`), [0, 0], 'texte décentré');
   await page.click('#drawBtn');                    // une image : le bouton éteint le dessin
   await page.waitFor(`!drawOn && !${SHOWN}`, { what: 'dessin éteint' });
   await page.setFiles('#inFiles', photos(1));
@@ -524,6 +527,76 @@ test('espaces : un dessin privé ne laisse ni image, ni tracé, ni taille d\'ima
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.deepEqual(await page.eval(`[inputImages.length, drawOn, $('paintImg').hasAttribute('src'), paintedPixels(),
     $('paintCanvas').width, $('paintCanvas').height]`), [0, false, false, 0, 1, 1]);
+  page.assertNoErrors();
+});
+
+// image réellement peinte sous le canevas du dessin (currentSrc : l'image d'avant tant que la nouvelle charge), notée
+// à chaque changement de l'image et à chaque image de l'écran, avec l'espace où l'on est. Garde de régression : Chrome
+// sans écran montre aussitôt une adresse data: déjà décodée (toEntry le fait pour chaque image d'entrée), même après
+// une alerte mémoire, donc l'image d'avant n'y reste pas même sans showImage ; c'est tests/check.py (IMAGE_IDS) qui
+// refuse l'adresse donnée à la main
+const watchPaint = () => page.eval(`(() => { window.paintSeen = []; const i = $('paintImg');
+  const note = () => paintSeen.push({ priv: inPrivate(), cur: i.currentSrc });
+  window.paintWatch?.disconnect(); window.paintWatch = new MutationObserver(note);
+  paintWatch.observe(i, { attributes: true });
+  (function frame(){ if (window.paintSeen) { note(); requestAnimationFrame(frame); } })(); })()`);
+const paintLoaded = `$('paintImg').complete && $('paintImg').naturalWidth > 0
+  && $('paintImg').currentSrc === inputImages[0]?.dataUrl`;
+
+test('espaces : dessin actif des deux côtés, l\'image du dessin n\'est jamais celle de l\'autre espace', async () => {
+  await fresh();
+  await page.setFiles('#inFiles', [photo('publique.png', 60)]);
+  await page.waitFor(`inputImages.length === 1`, { what: 'une image publique' });
+  await page.click('#drawBtn');
+  await page.waitFor(`drawOn && ${paintLoaded}`, { what: 'dessin public affiché' });
+  const pub = await page.eval(`inputImages[0].dataUrl`);
+  // dans l'espace privé, Dessiner ouvre le choix d'une image ; le Mac ferme l'espace pendant que le sélecteur est
+  // ouvert, puis l'image choisie arrive : elle va dans la saisie privée mise de côté, jamais encore affichée
+  await enterPrivate();
+  await page.eval(`$('drawFile').addEventListener('click', e => e.preventDefault(), { once: true })`);
+  await page.click('#drawBtn');
+  await closedByMac();
+  await page.setFiles('#drawFile', [photo('privee.png', 200)]);
+  await page.waitFor(`asideInput && asideInput.drawing.on && asideInput.images.length === 1`,
+    { what: 'image privée mise de côté, dessin actif' });
+  await page.waitFor(paintLoaded, { what: 'dessin public de nouveau affiché' });
+
+  await watchPaint();
+  await enterPrivate();                            // public → privé : l'image privée remplace la publique
+  await page.waitFor(`drawOn && ${paintLoaded}`, { what: 'dessin privé affiché' });
+  const priv = await page.eval(`inputImages[0].dataUrl`);
+  assert.notEqual(priv, pub);
+  await page.click('#privExit');                   // privé → public
+  await page.waitFor(`!inPrivate() && drawOn && ${paintLoaded}`, { what: 'dessin public de retour' });
+  const seen = await page.eval(`(() => { const s = paintSeen; window.paintSeen = null; paintWatch.disconnect();
+    return s; })()`);
+  assert.ok(seen.some(x => x.priv) && seen.some(x => !x.priv), 'image du dessin notée dans les deux espaces');
+  const other = seen.filter(x => x.cur === (x.priv ? pub : priv)).map(x => (x.priv ? 'privé' : 'public'));
+  assert.deepEqual(other, [], 'image de l\'autre espace à l\'écran');
+  // après « Sortir », l'image privée n'est plus nulle part dans la page, ni dans les images prêtes
+  const p = JSON.stringify(priv);
+  assert.deepEqual(await page.eval(`[document.documentElement.outerHTML.includes(${p}),
+    [...ready.keys()].includes(${p}), $('paintImg').currentSrc === ${p}]`), [false, false, false]);
+  page.assertNoErrors();
+});
+
+test('espaces : un trait commencé dans l\'espace privé ne continue pas sur le tracé public', async () => {
+  await fresh();
+  await drawOne();                                 // dessin public, tracé vide
+  await enterPrivate();
+  await drawOne();
+  const box = await page.eval(`(() => { const c = $('paintCanvas'); c.scrollIntoView({ block: 'center' });
+    const r = c.getBoundingClientRect();
+    return { x: r.left + r.width / 4, y: r.top + r.height / 4, w: r.width }; })()`);
+  const mouse = (type, dx, buttons = 1) => page.send('Input.dispatchMouseEvent',
+    { type, x: box.x + dx, y: box.y, button: 'left', buttons, clickCount: 1 });
+  await mouse('mousePressed', 0);
+  await mouse('mouseMoved', 4);
+  await page.waitFor(`paintedPixels() > 0`, { what: 'trait privé commencé' });
+  await closedByMac();                             // le doigt encore posé
+  await mouse('mouseMoved', box.w / 2);
+  await mouse('mouseReleased', box.w / 2, 0);
+  assert.equal(await page.eval(`drawOn && paintedPixels()`), 0, 'rien du trait privé sur le tracé public');
   page.assertNoErrors();
 });
 
