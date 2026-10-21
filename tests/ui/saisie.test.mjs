@@ -173,6 +173,10 @@ test('Dessiner : sans image, choix d\'une image puis dessin ; à plusieurs image
   await page.setFiles('#drawFile', photos(1));
   await page.waitFor(`inputImages.length === 1 && drawOn && ${SHOWN}`, { what: 'image choisie, dessin actif' });
   assert.match(await page.eval(`$('prompt').placeholder`), /^Que mettre dans la zone peinte/);
+  // Masque et Annotation : chaque texte au milieu de son bouton, à la hauteur de la lentille qui le surligne
+  assert.deepEqual(await page.eval(`[...$('mask_mode').children].map(l => {
+    const a = l.getBoundingClientRect(), s = l.parentElement.getBoundingClientRect();
+    return Math.round(Math.abs((a.top + a.bottom) - (s.top + s.bottom)) / 2); })`), [0, 0], 'texte centré verticalement');
   await page.click('#drawBtn');                    // une image : le bouton éteint le dessin
   await page.waitFor(`!drawOn && !${SHOWN}`, { what: 'dessin éteint' });
   await page.setFiles('#inFiles', photos(1));
