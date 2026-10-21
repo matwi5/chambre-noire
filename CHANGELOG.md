@@ -3,6 +3,44 @@
 Les versions suivent [SemVer](https://semver.org/lang/fr/) ; tant que l'application est en 0.x, une version mineure
 peut changer un comportement existant.
 
+## 0.5.0 · 2026-10-22
+
+### Ajouté
+
+- **Page En cours**, premier onglet : la génération en cours en grand, la file d'attente en cartes (une carte par
+  demande, un lot ou une campagne sur une seule carte, heure « prête vers HH h MM », réglages, « autre appareil »),
+  puis les terminées de la page avec leurs actions, « × » et « Tout retirer ». « Générer » et la pastille du haut y
+  mènent ; l'onglet porte une pastille et un anneau de progression.
+- **Passer en tête** : une génération en attente, ou tout un lot, passe juste après celle en cours (routes
+  `POST /api/job/<id>/first` et `POST /api/lot/<id>/first`).
+- **Relancer** : refait une demande avec une nouvelle graine, sans toucher la saisie, depuis une terminée, la carte
+  d'un lot, un échec ou la visionneuse.
+- **Message « Image prête »** (ou « Lot prêt ») quand une génération finit pendant qu'on est sur une autre page.
+- **Coller une image** dans la page Créer (Cmd+V, « Coller » sur le téléphone).
+- **Variantes en édition et en dessin** (2 à 4 images d'une même demande), refusées dans une campagne.
+
+### Modifié
+
+- **Une seule page Créer** remplace Créer, Éditer et Dessiner : un seul champ de texte, des images d'entrée
+  facultatives (sans image : texte → image ; avec : édition), campagne proposée à partir de 2 images, bouton
+  « Dessiner » sur une image unique, un seul brouillon. Les onglets sont désormais En cours, Créer et Galerie ;
+  l'application s'ouvre sur Créer.
+- **Reprendre** remet le texte, les réglages, les images d'entrée et le dessin d'une image, après confirmation si la
+  saisie n'est pas vide.
+- **La feuille Prompts** s'ouvre sur la catégorie de la saisie (Créer, Éditer ou Dessiner).
+- **Une image incognito reste incognito** quand on la reprend, la relance, l'édite ou la dessine : l'interrupteur
+  incognito s'allume, et rien n'en est écrit sur le disque ni dans le navigateur.
+- La feuille de la file d'attente, la rangée de vignettes sous l'image et le bouton d'annulation à côté de
+  « Générer » sont retirés : la file et l'annulation sont sur la page En cours.
+- Après la mise à jour, **relancer le service** : l'interface envoie des variantes en édition, que l'ancien serveur
+  refuse.
+
+### Corrigé
+
+- Une annulation demandée au moment où une génération démarrait était ignorée : la génération allait au bout.
+- L'image sur laquelle on dessine ne montre plus un instant l'image de l'autre espace.
+- Une image de dessin terminée n'est plus étiquetée « Texte → image ».
+
 ## 0.4.0 · 2026-10-17
 
 ### Ajouté
