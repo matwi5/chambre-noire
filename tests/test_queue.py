@@ -201,7 +201,8 @@ class SpacesQueueTest(bench.BenchCase):
         q = s["queue"]
         self.assertEqual([(e["id"], e["kind"], e["status"], e["position"]) for e in q],
                          [(p1["id"], "private", "queued", 1), (p2["id"], "private", "queued", 2)])
-        self.assertEqual([(e["mode"], e["prompt"]) for e in q], [("edit", "HOLD=p1 zq9secret first"), ("t2i", "zq9secret second")])
+        self.assertEqual([(e["mode"], e["prompt"]) for e in q],
+                         [("edit", "HOLD=p1 zq9secret first"), ("t2i", "zq9secret second")])
         self.assertNotIn(a, str(q))
         self.assertNotIn(n, str(q))
         self.assertNotIn("zq9public", str(q))
