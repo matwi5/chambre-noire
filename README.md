@@ -379,9 +379,18 @@ l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèl
 commandes. Pour zoomer (jusqu'à ×6), pincer l'image : elle passe au-dessus de tout, peut couvrir tout l'écran, suit les
 doigts, et revient à sa taille dès qu'on les relâche. Sur ordinateur, la molette zoome, glisser déplace l'image et un
 clic la remet à sa taille. En haut à droite : **Partager**, **Copier** et **Télécharger** ; en bas : **Éditer** (ajoute
-l'image aux images d'entrée de Créer), **Dessiner**, **Reprendre** (remet le texte de l'image dans le champ de Créer) et
-**Supprimer** (définitif, après confirmation, images d'entrée comprises). La zone de génération est masquée dans la
-galerie.
+l'image aux images d'entrée de Créer), **Dessiner**, **Reprendre** et **Supprimer** (définitif, après confirmation,
+images d'entrée comprises). La zone de génération est masquée dans la galerie.
+
+**Reprendre** remet dans Créer la saisie d'où vient l'image, à la place de la saisie en cours (après confirmation si
+elle n'est pas vide) : son texte, ses réglages (format, résolution, étapes) et ses images d'entrée selon son usage.
+Une édition revient avec ses références (Campagne éteinte : c'était une seule édition) ; un dessin en masque avec son
+image de départ, Dessiner actif en masque et le tracé vide (la zone peinte n'est pas gardée) ; une annotation revient
+en édition, avec sa référence où le trait rouge est déjà dessiné. Les images d'entrée se lisent dans la galerie
+(publique ou privée), ou, pour une image des terminées, dans la demande que la page a gardée (une image incognito
+comprise : la reprise n'écrit pas son texte comme brouillon). Si l'on tape ou ajoute une image pendant la lecture des
+images, la confirmation est redemandée. Le geste est absent pour une édition ou un dessin dont la galerie n'a pas
+gardé les images d'entrée (images anciennes).
 
 Une image ne s'affiche qu'une fois chargée : sa miniature d'abord, puis l'image complète, sans jamais laisser voir un
 instant l'image vue avant (ni celle d'une autre image, ni celle de l'autre espace). Les images voisines de la

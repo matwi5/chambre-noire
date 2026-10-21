@@ -158,7 +158,8 @@ dernier bloc, après le HTML.
     ou de « Passer en tête », chemin fixé à l'affichage ; `hhmm` : heure de fin, `resLabel` : résolution), `ownOf`
     (ligne de `queue` → génération de la page : par identifiant, ou par l'étiquette `tag` d'une incognito), `ofSpace`,
     `spaceActive`, `firstActive` (celle qui tourne, sinon la prochaine dans l'ordre de calcul) et `nextActive` (la même,
-    parmi les générations de l'espace affiché), `track` (suit une génération, `pollJobs` chaque seconde ; une privée «
+    parmi les générations de l'espace affiché), `track` (suit une génération, avec sa demande `req` si la page l'a
+    envoyée, un objet par lot, en mémoire de la page seulement ; `pollJobs` chaque seconde ; une privée «
     inconnue » quitte la page sans message), `finish` (fin d'une génération : terminée gardée, échec compris, ou annulée
     retirée), `drop` (retire une génération de la page ; image incognito révoquée) ; bouton `#go` ; reprise :
     `followQueue` (suit des entrées de la file), `resumeOwn` (générations normales de ce navigateur, après un
@@ -174,6 +175,9 @@ dernier bloc, après le HTML.
     molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les images d'entrée).
   - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;
+    « Reprendre » : `resumeFrom` (saisie remplacée, confirmation si elle n'est pas vide), `resumeImages` (images
+    d'entrée selon le mode, `RESUME_FILES` : demande gardée `req`, sinon galerie), `canResume` (bouton `#vResume`),
+    `settingsFor` (format, résolution et étapes qui redonnent l'image) ;
     actions de la visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`, `keepThis` (« Garder celle-ci »),
     `deleteItem` (« Supprimer », ou « Effacer » une image incognito : visionneuse et terminées), `forgetResult`.
   - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
@@ -183,10 +187,11 @@ dernier bloc, après le HTML.
     `privCreate`, `privUnlock`, `privLock`, `privChangeCode`, `privReset`.
 
 Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
-« Dessiner », « Reprendre » (reprend le texte du prompt) et « Supprimer » → `viewerAction('edit' | 'mask' | 'prompt' |
-'delete')`, avec l'image décrite par `pageItem` pour une image de la page ; carte d'une terminée → `doneCard`, ses
-boutons → `data-act` dans l'écouteur de `#doneList` ; « Garder celle-ci » → `keepThis` ; cadenas de la Galerie →
-`#privEntry`, « Sortir » → `privLock` ; pastille du haut → `#island`, `renderIsland`.
+« Dessiner », « Reprendre » (texte, images d'entrée, dessin et réglages : `resumeFrom`) et « Supprimer » →
+`viewerAction('edit' | 'mask' | 'resume' | 'delete')`, avec l'image décrite par `pageItem` pour une image de la page ;
+carte d'une terminée → `doneCard`, ses boutons → `data-act` dans l'écouteur de `#doneList` ; « Garder celle-ci » →
+`keepThis` ; cadenas de la Galerie → `#privEntry`, « Sortir » → `privLock` ; pastille du haut → `#island`,
+`renderIsland`.
 
 Deux boucles suivent les générations sans se synchroniser : `pollJobs` (`/api/job/<id>`, chaque seconde) et
 `refreshStatus` (`/api/status`, toutes les 2 à 5 s). Une réponse de l'une peut arriver avant celle de l'autre :

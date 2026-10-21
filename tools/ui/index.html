@@ -702,7 +702,7 @@
     <div class="acts v-acts">
       <button class="act" onclick="viewerAction('edit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/></svg><span>Éditer</span></button>
       <button class="act" onclick="viewerAction('mask')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg><span>Dessiner</span></button>
-      <button class="act" onclick="viewerAction('prompt')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15M4.5 11.5h15M4.5 16.5h8"/><path d="m16 15.5 2.5 2.5 3-4"/></svg><span>Reprendre</span></button>
+      <button class="act" id="vResume" onclick="viewerAction('resume')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15M4.5 11.5h15M4.5 16.5h8"/><path d="m16 15.5 2.5 2.5 3-4"/></svg><span>Reprendre</span></button>
       <button class="act danger" id="vDelete" onclick="viewerAction('delete')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="m6.5 7 1 12.5h9l1-12.5"/></svg><span>Supprimer</span></button>
     </div>
   </div>
@@ -1622,8 +1622,10 @@ function track(j, info){
   // déjà suivie (génération privée reprise de la file pendant l'envoi de sa demande) : complétée par info, et lancée
   // ici si info le dit (elle passe alors en haut de la page En cours comme une génération qui vient d'être lancée)
   let p=pageJobs.find(q=>q.id===j.id);
-  if(p){ ['prompt','w','h','steps','thumb','est'].forEach(k=>{ if(info[k]) p[k]=info[k]; }); p.adopted=p.adopted && !!info.adopted; }
-  else { pageJobs.push(p={ id:j.id, j, incognito:!!j.incognito, private:!!j.private, lot:j.lot||null, tag:j.tag||null, prompt:info.prompt||'', w:info.w, h:info.h, steps:info.steps, thumb:info.thumb||null,
+  if(p){ ['prompt','w','h','steps','thumb','est','req'].forEach(k=>{ if(info[k]) p[k]=info[k]; }); p.adopted=p.adopted && !!info.adopted; }
+  // req : la demande envoyée par cette page (images en data URL), un seul objet pour tout un lot, gardé en mémoire de la
+  // page seulement, pour « Reprendre » ; aucune pour une génération reprise de la file
+  else { pageJobs.push(p={ id:j.id, j, incognito:!!j.incognito, private:!!j.private, lot:j.lot||null, tag:j.tag||null, prompt:info.prompt||'', w:info.w, h:info.h, steps:info.steps, thumb:info.thumb||null, req:info.req||null,
       est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0,
       adopted:!!info.adopted });                    // adopted : reprise de la file (espace privé), pas lancée ici
     if(!j.incognito && !j.private) saveOwn(); }
@@ -1693,7 +1695,7 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   // espace privé quitté pendant l'envoi (fermeture par le Mac) : la génération privée continue sur le Mac, hors de la
   // page ; une demande publique acceptée après l'entrée dans l'espace privé est suivie, hors de l'écran
   if(!(priv && !inPrivate())) jobs.forEach((x, k)=>track(x, {prompt:body.prompt, w:camp ? camp[k].width : body.width,
-    h:camp ? camp[k].height : body.height, steps:body.steps, thumb:camp ? camp[k].image : thumb, est:camp ? campaignEst[k]||estOne : estOne, stepSec:stepSeconds, vaeSec:vaeSeconds}));
+    h:camp ? camp[k].height : body.height, steps:body.steps, thumb:camp ? camp[k].image : thumb, est:camp ? campaignEst[k]||estOne : estOne, stepSec:stepSeconds, vaeSec:vaeSeconds, req:body}));
   emptyInput(priv, sent);                           // demande acceptée : la saisie est prête pour la suivante (refus : rien n'est vidé)
   if(priv===inPrivate() && jobs[0].queue_position) toast((!j.lot ? 'Ajoutée' : camp ? `Campagne de ${jobs.length} photos ajoutée` : `Lot de ${jobs.length} images ajouté`)+' à la file · '+ordinal(jobs[0].queue_position)+' en attente');
   document.activeElement.blur(); if(priv===inPrivate()) goTab('run');   // la demande part : on la voit sur En cours
@@ -1875,7 +1877,7 @@ function openViewer(i, list=vList){
   $('vChips').innerHTML=[date, MODE_LABELS[it.mode]||it.mode, it.width?it.width+'×'+it.height:'', it.steps?it.steps+' étapes':'', it.model?it.model.toUpperCase():'', it.seconds?fmt(it.seconds):'',
     it.lot ? `image ${it.lot.rank}/${it.lot.size}` : '', it.seed!=null && it.seed>=0 ? 'graine '+it.seed : '']
     .filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('');
-  $('vDl').href=dlOf(it); $('vDl').download=it.name; renderInputsButton(it);
+  $('vDl').href=dlOf(it); $('vDl').download=it.name; renderInputsButton(it); $('vResume').hidden=!canResume(it);
   // garder la meilleure de variantes, de tout mode : seulement s'il en reste d'autres sur le Mac (ni campagne, ni
   // image incognito)
   const members=lotMembers(it);
@@ -1964,6 +1966,55 @@ async function drawFrom(name, read, {list, priv}=noteInput()){
   catch(e){ if(priv===inPrivate()) toast('Image illisible', 'err'); return; }
   if(list.length>n && !await replace(list.length)) return;   // images ajoutées pendant la lecture : redemandé
   drawWith(list, entry); }
+// « Reprendre » (visionneuse) : la saisie d'où vient l'image (texte, images d'entrée, dessin) et ses réglages, à la place
+// de la saisie, après confirmation si elle n'est pas vide. Images d'entrée selon le mode : édition, ses références ;
+// masque, son image de départ (dessin actif en masque, tracé vierge : le masque n'est pas gardé) ; annotation, sa
+// référence, où le trait rouge est déjà incrusté (elle repart en édition). Lues dans la demande que la page a gardée
+// (une terminée, incognito comprise), sinon dans la galerie, publique ou privée ; la saisie visée est notée avant toute
+// attente
+const RESUME_FILES = { edit:f=>f.startsWith('ref_'), mask:f=>f==='init.png', annot:f=>f==='ref_1.png' };
+function resumeImages(it){                         // [{name, url}] : adresse data: (demande gardée) ou route de la galerie
+  const m=it.mode, base=it.name.slice(0, -4), req=it.page && it.page.req; if(!(m in RESUME_FILES)) return [];
+  if(!req) return (it.inputs||[]).filter(RESUME_FILES[m]).map(f=>({name:base+'_'+f, url:inputUrl(it, f)}));
+  const urls = m==='mask' ? [req.init_image] : m==='annot' ? [req.ref_images[0]]
+    : req.campaign ? [req.campaign[it.lot.rank-1].image] : req.ref_images;
+  return urls.map((url, k)=>({name:base+(m==='mask' ? '_init.png' : '_ref_'+(k+1)+'.png'), url})); }
+// absent pour une édition ou un dessin dont les images d'entrée ne sont pas connues (images anciennes)
+const canResume = it => !(it.mode in RESUME_FILES) || resumeImages(it).length>0;
+// réglages (format, résolution, étapes) qui redonnent une image de w×h en steps étapes avec la saisie affichée, sinon
+// les plus proches ; à égalité, un format nommé plutôt que « Image » ; étapes inconnues : celles du moment
+function settingsFor(w, h, steps){ let best=null;
+  for(const r of Object.keys(RATIOS).concat(singleImage() ? ['image'] : [])) for(const p of RES){
+    const [dw, dh]=dimsFor(r, p.scale), d=Math.abs(Math.log(dw/w))+Math.abs(Math.log(dh/h));
+    if(!best || d<best.d-1e-9) best={d, ratio:r, res:p.k}; }
+  const st=Number.isFinite(steps) ? STEPS.reduce((a, b)=>Math.abs(b.steps-steps)<Math.abs(a.steps-steps) ? b : a) : stepsSel();
+  return {ratio:best.ratio, res:best.res, steps:st.k}; }
+async function resumeFrom(it){
+  if(!it.prompt){ toast('Pas de texte enregistré pour cette image', 'err'); return; }
+  const files=resumeImages(it), {list, priv}=noteInput(), mask=it.mode==='mask'; closeViewer();
+  const filled = () => !!($('prompt').value.trim() || list.length), replace = () => ask('Reprendre cette image ?',
+    'Le texte et les images de la saisie seront remplacés par les siens.', 'Remplacer');
+  if(filled() && !await replace()) return;
+  const text=$('prompt').value, n=list.length;     // saisie acceptée : redemandé si elle change pendant la lecture
+  let entries; try{ entries=await Promise.all(files.map(async f=>toEntry(f.name,
+    f.url.startsWith('data:') ? f.url : await dataUrlOf(f.name, f.url), priv))); }
+  catch(e){ if(priv===inPrivate()) toast('Images d\'entrée illisibles', 'err'); return; }
+  if(list===inputImages && ($('prompt').value!==text || list.length!==n) && filled() && !await replace()) return;
+  const keep=!it.url && !priv && !incogOn;          // brouillon public ; jamais le texte d'une image incognito
+  if(list===inputImages){
+    $('prompt').value=it.prompt;
+    if(keep) $('prompt').dispatchEvent(new Event('input')); else if(!priv) try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
+    list.splice(0, list.length, ...entries); drawOn=mask; if(mask) setMaskMode('mask');
+    if(mode!=='create') goTab('create');           // (qui propose le format « Image » : remplacé ci-dessous)
+    // la même demande : ses réglages, et une édition à plusieurs références n'est pas une campagne
+    if(it.width && it.height) Object.assign(opt, settingsFor(it.width, it.height, it.steps));
+    if(campaignShown()) $('campChk').checked=campaignOn=false;
+    saveOpt(); renderInputs(); refreshChoices(); toast('Image reprise'); }
+  else if(asideInput && asideInput.images===list){   // espace changé pendant la lecture : dans sa saisie mise de côté
+    asideInput.text=it.prompt; list.splice(0, list.length, ...entries); asideInput.imageRatio=false;
+    asideInput.drawing={...asideInput.drawing, on:mask, mask:mask ? 'mask' : asideInput.drawing.mask,
+      image:mask ? entries[0] : null, pixels:null};
+    try{ if(keep) localStorage.setItem(DRAFT_KEY, it.prompt); else if(!priv) localStorage.removeItem(DRAFT_KEY); }catch(e){} } }
 // image ajoutée par « Éditer » aux images d'entrée de Créer : list est la saisie de l'espace où le geste a commencé
 // (prise avant toute attente) ; plafond et dessin actif revus à l'arrivée de l'image
 function addEditImage(list, entry){
@@ -2017,10 +2068,7 @@ async function viewerAction(kind){
   const it=vList[vIndex]; if(!it) return;
   if(kind==='edit' && refuseWhileDrawing()) return;   // refusé avant de fermer : l'image reste à l'écran
   if(kind==='edit' || kind==='mask'){ closeViewer(); return kind==='edit' ? useAsEditInput(it.name, srcOf(it)) : useAsMaskInput(it.name, srcOf(it)); }
-  if(kind==='prompt'){
-    if(!it.prompt){ toast('Pas de texte enregistré pour cette image', 'err'); return; }
-    const t=$('prompt'); t.value=it.prompt; t.dispatchEvent(new Event('input')); closeViewer();
-    goTab('create'); toast('Texte repris'); return; }
+  if(kind==='resume') return resumeFrom(it);
   if(kind==='delete' && await deleteItem(it)) removeFromViewer([it]);
 }
 // « Supprimer » (visionneuse, terminées) : une image incognito de la page est effacée de la page (« Effacer ») ; une autre
