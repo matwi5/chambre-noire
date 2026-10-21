@@ -163,11 +163,11 @@ class SpacesQueueTest(bench.BenchCase):
         self.assertEqual(code, 202, job)
         return job
 
-    def mixed_queue(self):
+    def mixed_queue(self, first="zq9secret first"):
         """Une génération normale qui tourne, puis, en attente : privée, incognito, privée, normale."""
         a = generate("SLOW=1 zq9public running", steps=20)["id"]
         wait_job(a, ("running",))
-        p1 = self.private("zq9secret first", mode="edit", ref_images=[bench.data_url(bench.png_bytes())])
+        p1 = self.private(first, mode="edit", ref_images=[bench.data_url(bench.png_bytes())])
         i = generate("zq9incognito", incognito=True, page="pageInc1")["id"]
         p2 = self.private("zq9secret second")
         n = generate("zq9public waiting")["id"]
@@ -193,13 +193,15 @@ class SpacesQueueTest(bench.BenchCase):
         call("POST", f"/api/job/{a}/cancel")
 
     def test_private_space_sees_only_private_generations_with_their_prompt(self):
-        a, p1, i, p2, n = self.mixed_queue()
+        # la première privée attend sa libération une fois lancée : sinon, rapide, elle peut finir avant d'être vue
+        # « running » (vu en CI)
+        a, p1, i, p2, n = self.mixed_queue(first="HOLD=p1 zq9secret first")
         pub = self.status()["queue"]
         s = self.status(private=True)
         q = s["queue"]
         self.assertEqual([(e["id"], e["kind"], e["status"], e["position"]) for e in q],
                          [(p1["id"], "private", "queued", 1), (p2["id"], "private", "queued", 2)])
-        self.assertEqual([(e["mode"], e["prompt"]) for e in q], [("edit", "zq9secret first"), ("t2i", "zq9secret second")])
+        self.assertEqual([(e["mode"], e["prompt"]) for e in q], [("edit", "HOLD=p1 zq9secret first"), ("t2i", "zq9secret second")])
         self.assertNotIn(a, str(q))
         self.assertNotIn(n, str(q))
         self.assertNotIn("zq9public", str(q))
@@ -223,6 +225,7 @@ class SpacesQueueTest(bench.BenchCase):
         self.assertEqual([(e["kind"], e["position"]) for e in pub["queue"]], [("incognito", 1), ("normal", 2)])
         for j in (p1["id"], p2["id"]):
             call("POST", f"/api/job/{j}/cancel", private=self.session)
+        bench.release("p1")
 
     def test_moving_a_private_generation_needs_the_private_space_and_public_ones_pass_hidden_work(self):
         a = generate("HOLD zq9public running")["id"]
