@@ -277,6 +277,16 @@ test('geste « Dessiner » : l\'image seule, dessin actif ; confirmation s\'il y
     && inputImages[0].name === ${JSON.stringify(name)}`,
     { what: 'images remplacées, dessin actif' });
   assert.equal(await page.eval(`paintedPixels()`), 0, 'tracé vierge');
+  // saisie mise de côté (espace changé pendant que le sélecteur était ouvert) qui a une image : ni question posée dans
+  // l'espace affiché, ni image remplacée
+  const aside = await page.eval(`(async () => { const keep = inputImages[0], n = ${JSON.stringify(name)};
+    asideInput = { text: '', images: [keep], imageRatio: false,
+      drawing: { on: false, mask: 'mask', image: null, pixels: null } };
+    await drawFrom(n, () => dataUrlOf(n), { list: asideInput.images, priv: false });
+    const r = { asked: !!openedSheet, kept: asideInput.images.length === 1 && asideInput.images[0] === keep,
+      drawing: asideInput.drawing.on };
+    asideInput = null; return r; })()`);
+  assert.deepEqual(aside, { asked: false, kept: true, drawing: false });
   page.assertNoErrors();
 });
 

@@ -841,8 +841,9 @@ function applyEstimates(est){
 
 const $ = id => document.getElementById(id);
 // mode : page affichée ; inputImages : images d'entrée de la saisie (Créer) ; drawOn : dessin actif (sur la seule
-// image d'entrée) ; drawFor : image à laquelle appartient le tracé du canevas (gardé quand on éteint Dessiner)
-let mode='create', inputImages=[], drawOn=false, drawFor=null, paintMode='paint', estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
+// image d'entrée) ; drawFor : image à laquelle appartient le tracé du canevas (gardé quand on éteint Dessiner) ;
+// paintShown : image affichée sous le canevas (renderDrawing)
+let mode='create', inputImages=[], drawOn=false, drawFor=null, paintShown=null, paintMode='paint', estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
 let privState={available:false, exists:false, unlocked:false};   // espace privé vu par cet appareil (/api/status)
 
 // journal du panneau Moteur ; une ligne de l'espace privé (nom prive_…, taille d'une photo) en sort avec lui. priv :
@@ -1081,7 +1082,8 @@ function wireDrop(dropId, inputId, handler){ const d=$(dropId), inp=$(inputId); 
   d.addEventListener('click',()=>{ if(refuseWhileDrawing()) return; picked=noteInput(); inp.click(); });
   d.addEventListener('dragover',e=>{e.preventDefault(); d.classList.add('over');}); d.addEventListener('dragleave',()=>d.classList.remove('over'));
   d.addEventListener('drop',e=>{e.preventDefault(); d.classList.remove('over'); handler([...e.dataTransfer.files]);});
-  inp.addEventListener('change',e=>{ handler([...e.target.files], picked || noteInput()); picked=null; e.target.value=''; }); }
+  inp.addEventListener('change',e=>{ handler([...e.target.files], picked || noteInput()); picked=null; e.target.value=''; });
+  inp.addEventListener('cancel',()=>{ picked=null; }); }   // sélecteur fermé sans choix : la saisie notée n'est plus gardée
 // les images lues vont dans la saisie de l'espace où l'ajout a commencé (list, pris avant toute attente), même s'il
 // change pendant la lecture : une image privée ne tombe jamais dans la saisie publique
 // chaque image apparaît dès qu'elle est lue (une image invisible changerait la nature de la demande) ; une image
@@ -1141,8 +1143,8 @@ function renderDrawing(){
   if(drawFor && !inputImages.includes(drawFor)) drawCanvasFor(null);
   if(!im) drawOn=false;
   if(drawOn && drawFor!==im) drawCanvasFor(im);
-  if(drawOn){ if($('paintImg').getAttribute('src')!==im.dataUrl) $('paintImg').src=im.dataUrl; }
-  else $('paintImg').removeAttribute('src');
+  const show=drawOn ? im : null;                   // image de la zone de dessin, comparée sans relire son adresse
+  if(show!==paintShown){ paintShown=show; if(show) $('paintImg').src=show.dataUrl; else $('paintImg').removeAttribute('src'); }
   $('pane-create').classList.toggle('drawing', drawOn);
   $('drawBtn').classList.toggle('on', drawOn); $('drawBtn').setAttribute('aria-pressed', drawOn); $('drawBtn').disabled=n>1;
   $('drawHint').textContent = n>1 ? 'Dessiner se fait sur une seule image' : ''; }
@@ -1153,6 +1155,7 @@ $('drawBtn').onclick=()=>{ if(inputImages.length){ drawOn=!drawOn; renderDrawing
   drawPick=noteInput(); $('drawFile').click(); };
 $('drawFile').addEventListener('change', e=>{ const f=e.target.files[0], from=drawPick || noteInput(); drawPick=null; e.target.value='';
   if(f) drawFrom(f.name, ()=>readFile(f), from); });
+$('drawFile').addEventListener('cancel', ()=>{ drawPick=null; });
 // l'image seule dans la saisie de list (prise avant toute attente), dessin actif, tracé vierge ; mène à Créer. Espace
 // changé entre-temps : dans sa saisie mise de côté
 function drawWith(list, entry){ list.splice(0, list.length, entry);
@@ -1939,18 +1942,22 @@ async function dataUrlOf(name, url){
   const b=await (await fetch(url || resultUrl(name))).blob(); return await readFile(b); }
 async function useAsEditInput(name, url){
   if(!name || refuseWhileDrawing()) return; if(inputImages.length>=MAX_REFS){ toast(MAX_REFS+' images d\'entrée au maximum', 'err'); return; }
-  const list=inputImages, priv=inPrivate(); addEditImage(list, await toEntry(name, await dataUrlOf(name, url), priv)); }
+  const list=inputImages, priv=inPrivate(); let entry;
+  try{ entry=await toEntry(name, await dataUrlOf(name, url), priv); }
+  catch(e){ if(priv===inPrivate()) toast('Image illisible', 'err'); return; }
+  addEditImage(list, entry); }
 async function useAsMaskInput(name, url){ if(name) await drawFrom(name, ()=>dataUrlOf(name, url)); }
 // « Dessiner » sur une image (visionneuse, terminées, images d'entrée) : elle remplace les images de la saisie, après
 // confirmation s'il y en avait, dessin actif, tracé vierge ; la saisie visée est notée avant toute attente
 async function drawFrom(name, read, {list, priv}=noteInput()){
-  const replace = async n => !n || await ask('Dessiner sur cette image ?',
+  // la question n'est posée que pour la saisie affichée : une saisie mise de côté (espace changé pendant que le
+  // sélecteur était ouvert) qui a des images n'est pas remplacée
+  const replace = async n => !n || list===inputImages && await ask('Dessiner sur cette image ?',
     `Remplacer ${n>1 ? 'les '+n+' images' : 'l\'image'} de la saisie par celle-ci ?`, 'Remplacer');
   const n=list.length; if(!await replace(n)) return;
   let entry; try{ entry=await toEntry(name, await read(), priv); }
   catch(e){ if(priv===inPrivate()) toast('Image illisible', 'err'); return; }
-  // images ajoutées pendant la lecture : la confirmation porte sur elles (pas de question pour une saisie mise de côté)
-  if(list.length>n && (list!==inputImages || !await replace(list.length))) return;
+  if(list.length>n && !await replace(list.length)) return;   // images ajoutées pendant la lecture : redemandé
   drawWith(list, entry); }
 // image ajoutée par « Éditer » aux images d'entrée de Créer : list est la saisie de l'espace où le geste a commencé
 // (prise avant toute attente) ; plafond et dessin actif revus à l'arrivée de l'image
@@ -1997,12 +2004,9 @@ function emptyInputs(){ clearTimeout(ivEmpty); clearImage($('ivImg'));
 async function inputAction(kind){             // repartir de cette image d'entrée : Éditer (référence) ou Dessiner
   if(!ivOwner || ivIndex<0) return;               // second appui pendant le fondu de fermeture
   if(kind==='edit' && refuseWhileDrawing()) return;   // refusé avant de fermer : l'image reste à l'écran
-  const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f, list=inputImages, priv=inPrivate();
+  const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f;
   closeInputs(); closeViewer();
-  if(kind==='mask') return drawFrom(name, ()=>dataUrlOf(name, url));
-  const dataUrl=await readFile(await (await fetch(url)).blob());
-  if(list.length>=MAX_REFS){ toast(MAX_REFS+' images d\'entrée au maximum', 'err'); return; }
-  addEditImage(list, await toEntry(name, dataUrl, priv)); }
+  return kind==='mask' ? drawFrom(name, ()=>dataUrlOf(name, url)) : useAsEditInput(name, url); }
 const resetInputZoom=zoomable($('ivStage'), $('ivImg'), $('iv'), d=>showInput(ivIndex+d), closeInputs);   // comme la visionneuse
 async function viewerAction(kind){
   const it=vList[vIndex]; if(!it) return;
