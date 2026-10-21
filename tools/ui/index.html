@@ -1123,7 +1123,7 @@ function renderInputs(){ const t=$('inThumbs'); t.innerHTML='';
   $('refCount').textContent = !k ? '' : camp ? k+' photos' : k+' / '+MAX_REFS;
   $('refs').classList.toggle('full', k>=MAX_REFS); $('refHint').hidden = k<2 || camp; $('campSwitch').hidden=!campaignShown();
   inputImages.forEach((im,i)=>{ const d=document.createElement('div'); d.className='thumb';
-    d.innerHTML=`<img src="${im.dataUrl}" alt=""><span>${i+1}</span><button aria-label="Retirer l'image ${i+1}">×</button>`;
+    d.innerHTML=`<img src="${esc(im.dataUrl)}" alt=""><span>${i+1}</span><button aria-label="Retirer l'image ${i+1}">×</button>`;
     d.querySelector('button').onclick=()=>{ inputImages.splice(i,1); renderInputs(); suggestRatio(); }; t.appendChild(d); });
   renderDrawing(); }
 

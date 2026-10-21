@@ -4,6 +4,15 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-21 · Suites du groupe C : adresse d'image échappée, image du dessin par `showImage`
+
+- **Contexte** : la revue de sécurité du groupe C (page Créer) relève deux faiblesses non exploitables : l'adresse
+  `data:` d'une image d'entrée insérée sans `esc()` dans la page, et l'image du dessin (`#paintImg`) affichée sans
+  passer par `showImage`, qui peut laisser voir un instant l'image de l'espace quitté.
+- **Décision** (porteur, 21/10/2026 : « oui et oui ») : l'adresse est échappée tout de suite ; l'image du dessin
+  passe par `showImage` et rejoint les images que `tests/check.py` surveille, dans un ticket du groupe D. Pièges
+  « Incognito et espace privé » (brouillon unique) et « Saisie par espace » de `CLAUDE.md` mis à jour.
+
 ## 2026-10-20 · Suites du groupe B : lot en tête, « Rien en cours », terminées incognito
 
 - **Contexte** : la session du groupe B (page En cours) remonte trois écarts entre la lettre des textes et ce qu'elle a
