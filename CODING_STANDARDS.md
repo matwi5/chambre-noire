@@ -32,8 +32,8 @@ les tests viennent de bugs passés à travers les revues par ticket.
 
 - **Un champ nouveau de `/api/status` a une valeur par défaut tolérante dans l'interface** (`s.x || …`) :
   `index.html` est relu à chaque requête, donc servi avant que le serveur qui envoie le champ soit relancé.
-- **Une constante ou une formule recopiée entre Python et JavaScript est notée dans les pièges de `CLAUDE.md`**,
-  avec les deux emplacements : sinon l'un change sans l'autre et rien ne casse visiblement.
+- **Une constante ou une formule recopiée entre Python et JavaScript est notée dans la carte du code** (« Copies entre
+  Python et JavaScript »), avec les deux emplacements : sinon l'un change sans l'autre et rien ne casse visiblement.
 - **Une action asynchrone de l'interface liée à un espace note ce qu'elle vise avant sa première attente** (`await`,
   `fetch`, lecture d'un fichier) : l'espace (`inPrivate()`), la liste, l'onglet ou la route ; après l'attente, elle
   écrit dans ce qu'elle a noté, ou abandonne si l'espace a changé, sans relire l'état global. Sinon une image privée

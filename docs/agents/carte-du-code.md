@@ -295,6 +295,39 @@ invariants ».
   dans `tools/calibration.json`, filtrées sur la release de sd.cpp installée lue dans `sdcpp/<moteur>/.installed`). Les
   coefficients partent vers l'interface par `/api/status`.
 
+## Pièges de l'interface
+
+- **Brouillon et mémoire de la page** : rien de l'incognito ni de l'espace privé dans `localStorage`, brouillon
+  compris : une seule clé, `qwen-prompt` (`DRAFT_KEY`), où un texte incognito ou privé n'est jamais écrit, même quand
+  la demande est refusée, et qu'activer l'incognito efface aussitôt (`tests/ui/brouillons.test.mjs`). La demande
+  gardée par la page (`req` de `pageJobs`, images en data URL, incognito et privée comprises, pour « Reprendre » et
+  « Relancer ») vit en mémoire de la page seulement, jamais dans `localStorage` (`saveOwn` n'écrit que des
+  identifiants).
+- **Visionneuse et images affichées** : la visionneuse parcourt `vList`, jamais `histItems` directement (la galerie
+  peut être rechargée pendant qu'elle est ouverte). `#paintImg` (image du dessin) passe aussi par `showImage`, avec
+  l'image décodée par `toEntry` (`decoded`) ; `tests/check.py` la surveille (`IMAGE_IDS`).
+- **Saisie par espace** : la saisie de Créer (texte, images d'entrée, dessin et son tracé) est propre à chaque
+  espace, et non plus à chaque onglet. Tout ajout à la saisie qui attend (lecture d'image, sélecteur de fichiers,
+  collage, « Éditer », « Dessiner », « Reprendre », envoi d'une demande) note sa liste et son espace avant la
+  première attente (`noteInput()`) ; « Relancer », qui ne touche pas la saisie, note l'espace avant de lire les images
+  et ne part pas s'il a changé ; sinon un changement d'espace pendant l'attente le fait tomber dans la saisie de
+  l'autre espace (une image privée dans la saisie publique) ; à l'arrivée de l'image, il revérifie le dessin
+  (`refuseWhileDrawing(list)`).
+
+## Copies entre Python et JavaScript
+
+Registre des constantes et formules recopiées d'un côté à l'autre : une modification se fait des deux côtés
+(`CODING_STANDARDS.md`).
+
+- `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()` et `ref_px()` de `estimate.py` (jetons de
+  16×16 px, arrondi à 32) : formule et coefficients.
+- `PREVIEW_EVERY = 5` côté interface égale le défaut `preview_interval` de `build_cmd`.
+- La longueur minimale du code privé (`MIN_PRIVATE_CODE`, 8) est aussi vérifiée dans `index.html` (feuilles
+  privées).
+- Pas une copie : l'estimation de chaque génération de la file (`job_estimate`, pour `queue_entry` et le travail caché
+  `ahead`) appelle `estimate.predict` ; l'estimation de « Relancer » (`relaunch`) est approchée (chaque référence
+  comptée à la taille de la sortie, pas de `refPx`).
+
 ## Tests
 
 `tests/bench.py` (banc : `start`, `call`, `generate`, `wait_job`, `wait_idle`, `wait_until`, `capture_push`),
