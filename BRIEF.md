@@ -22,8 +22,8 @@ sur Internet en dehors du téléchargement initial du moteur et du modèle.
   sur une page En cours ; lots : variantes d'un même prompt (avec ou sans image d'entrée) et campagne d'édition, une
   image par photo.
 - Prompts enregistrés, partagés entre appareils, et prompts types livrés avec l'application.
-- Galerie des images produites ; mode incognito qui ne garde rien sur l'ordinateur ; espace privé chiffré, ouvert par
-  un code distinct, que l'on ouvre par un cadenas discret.
+- Galerie des images produites ; espace privé chiffré, ouvert par un code distinct, que l'on ouvre par un cadenas
+  discret.
 - Accès depuis un téléphone protégé par un code ; démarrage automatique en service sur Mac.
 
 ## Hors périmètre

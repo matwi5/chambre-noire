@@ -117,7 +117,7 @@ test('« Éditer » depuis la galerie : l\'image rejoint les images d\'entrée, 
 });
 
 const draft = () => page.eval(`localStorage.getItem('qwen-prompt')`);
-const settings = () => page.eval(`JSON.stringify({ opt, incogOn, campaignOn, preview: $('previewChk').checked })`);
+const settings = () => page.eval(`JSON.stringify({ opt, campaignOn, preview: $('previewChk').checked })`);
 
 // un trait de pinceau dans le quart haut gauche de l'image du dessin ; souris : événements pointeur réels
 async function paint() {

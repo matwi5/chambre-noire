@@ -128,24 +128,6 @@ test('génération cachée de l\'autre espace : « En attente » et la durée av
   page.assertNoErrors();
 });
 
-test('génération incognito d\'un autre appareil : « Génération incognito », sans annulation', async () => {
-  await page.launch('HOLD=autreincog zq5 incognito ailleurs', { incognito: true });
-  await page.eval(`refreshStatus()`);
-  await page.click('#tabbar [data-pane="run"]');
-  await page.waitFor(`$('pane-run').classList.contains('other')
-    && $('nowPrompt').textContent === 'Génération incognito'`,
-    { what: 'génération incognito de l\'autre appareil en haut' });
-  assert.doesNotMatch(await page.eval(`$('pane-run').innerText`), /zq5 incognito ailleurs/);
-  assert.equal(await visible('#nowCancel'), false, 'seule sa page peut l\'annuler');
-  // sa ligne de la file ne dit ni son mode ni ses réglages (seule sa page les connaît) : cadre carré, icône incognito
-  assert.equal(await page.eval(`$('nowSub').textContent`), '');
-  bench.release('autreincog');
-  await bench.idle();
-  await page.waitFor(`!$('pane-run').classList.contains('other') && $('nowSub').textContent === ''`,
-    { what: 'haut de la page rendu à la page, réglages vidés' });
-  page.assertNoErrors();
-});
-
 test('une seconde génération de la page prend le haut d\'En cours quand elle démarre', async () => {
   for (const text of ['HOLD=premiere zq5 première', 'HOLD=seconde zq5 seconde']) {
     await page.click('#tabbar [data-pane="create"]');

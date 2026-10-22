@@ -60,17 +60,6 @@ class VariantsTest(bench.BenchCase):
         for j in jobs:
             wait_job(j["id"])
 
-    def test_incognito_lot_hides_its_id_and_campaign_marker_from_the_queue(self):
-        # la ligne d'une génération incognito ne dit que son genre ; sa page lit le marqueur dans sa propre réponse
-        jobs = generate_lot("SLOW=0.05 secret", count=2, steps=8, incognito=True)["jobs"]
-        lot = jobs[0]["lot"]["id"]
-        self.assertEqual(jobs[0]["lot"]["campaign"], False)
-        s = call("GET", "/api/status", remote=True)[1]
-        self.assertEqual([e["lot"] for e in s["queue"]], [{"rank": 1, "size": 2}, {"rank": 2, "size": 2}])
-        self.assertNotIn(lot, str(s))
-        for j in jobs:
-            wait_job(j["id"])
-
     def test_variants_are_accepted_in_every_mode(self):
         image = bench.data_url(bench.png_bytes())
         for body in ({"mode": "edit", "ref_images": [image]}, {"mode": "annot", "ref_images": [image]},
@@ -166,11 +155,6 @@ class LotNotificationTest(bench.BenchCase):
             self.assertEqual(msg["title"], "2 images prêtes")
             self.assertTrue(msg["body"].startswith("Lot de 2 images terminé en "), msg["body"])
 
-    def test_incognito_lot(self):
-        with bench.capture_push() as sent:
-            self.wait_lot(generate_lot("secret", count=2, incognito=True)["jobs"])
-            self.assertEqual(self.only(sent)["title"], "2 images incognito prêtes")
-
     def test_lot_ending_with_cancelled_generations_notifies_once(self):
         with bench.capture_push() as sent:
             jobs = generate_lot("SLOW=0.05 lot", count=3, steps=8)["jobs"]
@@ -193,12 +177,6 @@ class HistoryLotTest(bench.BenchCase):
         self.assertEqual([e["lot"]["campaign"] for e in journal() if e.get("lot")], [False, False])
         self.assertIsNone(items[single["name"]]["lot"])
         self.assertTrue(all(isinstance(it["seed"], int) for it in items.values()))
-
-    def test_incognito_lot_stays_out_of_the_history(self):
-        jobs = generate_lot("secret", count=2, incognito=True)["jobs"]
-        for j in jobs:
-            wait_job(j["id"])
-        self.assertEqual(call("GET", "/api/history")[1], [])
 
 
 if __name__ == "__main__":

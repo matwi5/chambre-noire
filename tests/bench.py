@@ -263,7 +263,7 @@ def gen_body(prompt="a red car", mode="t2i", **kw):
     """Corps de /api/generate tel que l'envoie l'interface (512×512, 4 étapes, sans aperçu)."""
     body = {"mode": mode, "prompt": prompt, "width": 512, "height": 512, "steps": 4, "cfg": 1, "seed": -1,
             "preview": False, "preview_interval": 5, "ref_images": [], "init_image": None, "mask_image": None,
-            "strength": 1.0, "incognito": False}
+            "strength": 1.0}
     body.update(kw)
     return body
 
@@ -309,10 +309,10 @@ def wait_until(cond, timeout=10, what="la condition"):
 def idle():
     """Thread de calcul au repos : file vide, aucune génération en cours (worker() ne rend S.current qu'après avoir
     rangé les fichiers et décidé la notification d'un lot), et dossiers de travail des générations annulées ou
-    incognito déjà supprimés."""
+    privées déjà supprimés."""
     jobs = list(S.jobs.values())
     return (S.current is None and not S.pending and not any(j.get("status") in ("queued", "running") for j in jobs)
-            and not any(os.path.exists(j["dir"]) for j in jobs if j.get("status") == "cancelled" or j.get("incognito")))
+            and not any(os.path.exists(j["dir"]) for j in jobs if j.get("status") == "cancelled" or j.get("private")))
 
 
 def wait_idle(timeout=30):
@@ -334,6 +334,13 @@ def png_bytes(w=64, h=48, fmt="PNG"):
 
 def data_url(raw):
     return "data:image/png;base64," + base64.b64encode(raw).decode()
+
+
+def all_files():
+    """Tous les fichiers du dossier du banc (sauf le lien vers l'interface du dépôt), triés."""
+    root = launch.ROOT
+    return sorted(fp for fp in glob.glob(os.path.join(root, "**", "*"), recursive=True)
+                  if os.path.isfile(fp) and not fp.startswith(os.path.join(root, "tools", "ui")))
 
 
 def files(*pattern):

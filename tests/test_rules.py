@@ -16,10 +16,10 @@ def lines(*text):
 
 
 class IdShadowTest(unittest.TestCase):
-    HTML = "\n".join(['<button id="incog"></button><div id="log"></div>',
+    HTML = "\n".join(['<button id="lamp"></button><div id="log"></div>',
                       "<script>",
-                      "let incog = false;",                  # 3 : refusée (le bug du 15/10/2026)
-                      "let incogOn = false, x = 1;",         # permise
+                      "let lamp = false;",                   # 3 : refusée (le bug du 15/10/2026)
+                      "let lampOn = false, x = 1;",          # permise
                       "function log(t){ }",                  # 5 : refusée
                       "const logs = [];",                    # permise
                       "</script>"])

@@ -86,10 +86,6 @@ _À éviter_ : template, modèle de prompt
 Le code qui ouvre l'application aux appareils autres que l'ordinateur.
 _À éviter_ : mot de passe, code privé
 
-**Incognito** :
-Un mode où l'image produite n'est gardée nulle part sur l'ordinateur : elle est remise une fois à l'appareil, puis oubliée.
-_À éviter_ : mode privé
-
 **Espace public** :
 L'espace où l'on arrive en ouvrant l'application : ses tirages, sa pile, sa file, sa saisie et ses prompts enregistrés,
 protégés par le seul code d'accès.

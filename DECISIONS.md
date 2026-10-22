@@ -19,6 +19,24 @@ les messages de commit.
     et Apple en plein cadre).
 - **Écarté** : les motifs lampe, cuve et film ; le paysage dans un cadre de tirage ; les autres variantes du paysage.
 
+## 2026-10-22 · Retrait de l'incognito : journaux sans détail, restes incognito supprimés au démarrage
+
+- **Contexte** : session du groupe A de la refonte (retrait de l'incognito). La spec rend neutres les trois lignes
+  d'échec d'une génération dans le journal du serveur et retire le ménage des dossiers `jobs/incognito_*` au démarrage ;
+  la session relève deux autres lignes qui distinguent encore une génération privée, et un reste possible en clair.
+- **Décision** (porteur, 22/10/2026, dans la session du groupe A) :
+  - « Journal du serveur : la spec rend neutres les trois lignes d'échec d'une génération (fait). Deux autres lignes
+    donnent encore un détail pour une génération normale et rien pour une privée, donc les distinguent : « [job] erreur
+    du thread de calcul : <erreur> » et « [push] notification du lot impossible : <erreur> ». Les rendre neutres
+    aussi, sans détail pour personne ? » → « Oui, neutres aussi (Recommandé) » ;
+  - « La spec retire aussi le ménage au démarrage des dossiers jobs/incognito_*. Un tel dossier ne reste que si
+    l'ancien serveur s'est arrêté brutalement pendant une génération incognito ; il contient alors images d'entrée et
+    PNG en clair, et le nouveau serveur ne le supprimerait plus. Que faire ? » → « Garder ce ménage (Recommandé) ».
+- **Écarté** : garder le détail de ces deux lignes pour les générations normales ; retirer le ménage de
+  `jobs/incognito_*` comme la spec le prévoyait.
+- **Conséquences** : `tools/launch.py` écrit « [job] erreur du thread de calcul » et « [push] notification du lot
+  impossible » sans détail pour toutes les générations, et supprime toujours `jobs/incognito_*` au démarrage.
+
 ## 2026-10-22 · Refonte : groupes B et C en parallèle, icône à part
 
 - **Contexte** : les cinq groupes de la refonte touchent tous `README.md`, et tous sauf l'icône `tools/ui/index.html`
@@ -165,6 +183,9 @@ les messages de commit.
 
 ## 2026-10-21 · « Éditer » et « Dessiner » sur une image incognito allument aussi l'incognito
 
+_Remplacée le 22/10/2026 par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo et Tirages, pile à trier »
+(incognito retiré)._
+
 - **Contexte** : la passe « bogues » du ticket incognito du groupe D trouve un comportement antérieur au parcours :
   « Éditer » ou « Dessiner » sur une image incognito, interrupteur éteint, met l'image dans la saisie publique ; un
   « Générer » ensuite part en normal et le serveur copie l'image incognito dans `outputs/.inputs/` (image d'entrée de
@@ -175,6 +196,9 @@ les messages de commit.
   lequel la frappe suivante l'écrit (formulation du README gardée).
 
 ## 2026-10-21 · Une image incognito reste incognito quand on la reprend ou la relance
+
+_Remplacée le 22/10/2026 par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo et Tirages, pile à trier »
+(incognito retiré)._
 
 - **Contexte** : à la fin du groupe D, « Relancer » suivait l'interrupteur incognito du moment (choix de la
   rédaction de la spécification, pas du porteur) : relancer une image incognito interrupteur éteint enregistrait la
@@ -199,6 +223,9 @@ les messages de commit.
 
 ## 2026-10-20 · Suites du groupe B : lot en tête, « Rien en cours », terminées incognito
 
+_Révisée le 22/10/2026 (terminées incognito hors du plafond) par « Refonte « Chambre noire » : lumière inactinique,
+pixel, Labo et Tirages, pile à trier » (incognito retiré)._
+
 - **Contexte** : la session du groupe B (page En cours) remonte trois écarts entre la lettre des textes et ce qu'elle a
   fait.
 - **Décision** (porteur, 20/10/2026 : « oui pour les points 1 à 4 ») : « Passer en tête » d'un lot n'est offert que si
@@ -210,6 +237,9 @@ les messages de commit.
 
 ## 2026-10-20 · Suites du groupe A : marqueur de campagne caché des lignes incognito, annulation au démarrage
 
+_Révisée le 22/10/2026 (ligne incognito de la file) par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo
+et Tirages, pile à trier » (incognito retiré)._
+
 - **Contexte** : la revue de sécurité du groupe A (file réordonnable, variantes en édition) relève que le marqueur de
   campagne, posé aussi sur la ligne d'un lot incognito comme le demandait la spécification, dit aux autres appareils
   qu'il s'agit d'une campagne ; la session du groupe retrouve aussi une piste ouverte le 14/10/2026 : une annulation
@@ -220,6 +250,9 @@ les messages de commit.
   devient un ticket du groupe B. Pièges de `CLAUDE.md` complétés (`S.turn`, étiquette `tag` qui n'ouvre aucune route).
 
 ## 2026-10-19 · Une seule page Créer, une page En cours pour la file et les résultats
+
+_Révisée le 22/10/2026 (parties sur l'incognito : file, terminées, étiquette `tag`) par « Refonte « Chambre noire » :
+lumière inactinique, pixel, Labo et Tirages, pile à trier » (incognito retiré)._
 
 - **Contexte** : trois onglets (Créer, Éditer, Dessiner) font la même chose à une image d'entrée près ; l'image en
   cours et le résultat s'affichent sous le compositeur ; la file d'attente, dans une feuille ouverte par la pastille du
@@ -314,6 +347,9 @@ les messages de commit.
 
 ## 2026-10-15 · Espaces public et privé étanches
 
+_Révisée le 22/10/2026 (« Génération incognito » dans la file) par « Refonte « Chambre noire » : lumière inactinique,
+pixel, Labo et Tirages, pile à trier » (incognito retiré)._
+
 - **Contexte** : en essayant l'espace privé sur le téléphone, le porteur voit passer d'un espace à l'autre ce qui
   devrait rester d'un seul côté : un prompt enregistré dans l'espace privé apparaît dans l'espace public (la spec du
   14/10/2026 laissait les prompts enregistrés hors de l'espace privé), la file d'attente montre à chaque espace les
@@ -353,6 +389,9 @@ les messages de commit.
   file en clair.
 
 ## 2026-10-15 · Espace privé durci après la revue de sécurité
+
+_Révisée le 22/10/2026 (notification incognito) par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo et
+Tirages, pile à trier » (incognito retiré)._
 
 - **Contexte** : la revue de sécurité du groupe D a relevé ce qui trahit ou expose l'espace privé hors du chiffrement
   du disque : le texte des notifications, le contenu laissé à l'écran après la sortie, la suppression sans code depuis
@@ -412,6 +451,9 @@ les messages de commit.
 ## 2026-10-14 · Espace privé discret : on y entre, on en sort
 
 _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par « Espaces public et privé étanches »._
+
+_Révisée le 22/10/2026 (bouton Incognito masqué dans l'espace) par « Refonte « Chambre noire » : lumière inactinique,
+pixel, Labo et Tirages, pile à trier » (incognito retiré)._
 
 - **Contexte** : la spécification prévoyait un bouton « Privé » à côté de « Générer » et un mode Privé à allumer.
   En voyant l'interface, le porteur ne veut rien qui signale l'espace privé à l'arrivée sur l'application.
@@ -518,6 +560,9 @@ _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par �
 
 ## 2026-10-13 · Notification de fin de génération par Web Push
 
+_Révisée le 22/10/2026 (message « Image incognito prête ») par « Refonte « Chambre noire » : lumière inactinique, pixel,
+Labo et Tirages, pile à trier » (incognito retiré)._
+
 - **Contexte** : le porteur veut être prévenu à la fin d'une génération (souvent plus de 10 minutes) sur son téléphone,
   où Android met en pause une application en arrière-plan.
 - **Décision** (porteur) : l'ordinateur envoie une notification Web Push (bibliothèque `pywebpush`, qui ajoute
@@ -552,6 +597,9 @@ _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par �
 
 ## 2026-10-13 · Images d'entrée conservées avec chaque image
 
+_Révisée le 22/10/2026 (exception de l'incognito) par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo et
+Tirages, pile à trier » (incognito retiré)._
+
 - **Contexte** : le porteur veut revoir depuis la galerie les images de départ d'une édition ou d'un dessin guidé, et
   repartir de l'une d'elles. Elles n'existaient que dans `jobs/<id>/`, dont seuls les 20 derniers sont gardés.
 - **Décision** : en fin de job (hors incognito et calibration), copier `init.png` et `ref_N.png` dans
@@ -562,6 +610,9 @@ _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par �
 - **Conséquences** : plus de place sur le disque (une ou plusieurs images PNG par édition).
 
 ## 2026-10-13 · Incognito : fermer l'application arrête la génération
+
+_Remplacée le 22/10/2026 par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo et Tirages, pile à trier »
+(incognito retiré)._
 
 - **Contexte** : une génération incognito a été perdue après un redémarrage de l'application sur le téléphone. Sur
   Android, le système peut aussi libérer une application restée en arrière-plan.
@@ -576,6 +627,9 @@ _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par �
   (adresse `http://` du Wi-Fi), au lieu d'afficher un bouton qui échoue.
 
 ## 2026-10-13 · Mode incognito : image gardée en mémoire, remise une seule fois
+
+_Remplacée le 22/10/2026 par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo et Tirages, pile à trier »
+(incognito retiré)._
 
 - **Contexte** : le porteur veut une image téléchargeable mais gardée nulle part sur l'ordinateur, perdue à la
   génération suivante ou au rechargement de l'application, avec tout ce qui s'y rattache (job, aperçus).

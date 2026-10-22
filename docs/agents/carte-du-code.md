@@ -20,7 +20,7 @@ Dans l'ordre du fichier :
 - **Constantes et moteur** (en tête) : `ROOT`, `P()` (chemin sous la racine, relu à chaque appel : le banc repointe
   `ROOT`), `MODELS` et `DIFFUSION` (noms des fichiers de modèles, à garder égaux à ceux de `setup.py`), `BACKENDS`
   (options de sd-cli par moteur, réglages Metal justifiés en commentaire), `PLATFORM_BACKENDS`, `PROGRESS_RE` et
-  `TAKING_RE` (lecture de la sortie de sd-cli), `MAX_VARIANTS`, `MAX_CAMPAIGN`, `INCOGNITO_TTL`, `PAGE_TOKEN_RE`.
+  `TAKING_RE` (lecture de la sortie de sd-cli), `MAX_VARIANTS`, `MAX_CAMPAIGN`, `PRIVATE_JOB_TTL`.
   `record_calib`, `load_config`, `code_version` (commit, date et branche du dossier servi, empreinte `server`
   de `launch.py` et `estimate.py`, relus toutes les `VERSION_TTL` s ; git seulement s'il y a un `.git`, jamais après un
   échec, sauf un délai dépassé ; `S.started` : la même chose au lancement, posé par `main()`), `engine_tag`,
@@ -59,25 +59,24 @@ Dans l'ordre du fichier :
   tous les `preview_interval` pas), `latest_preview`, `start_job` (passage « en cours » : par `worker()` sous `S.turn`,
   et par `tools/calibrate.py`, qui appelle `run_job` hors de la file), `run_job` (lit
   la sortie ligne à ligne : étape, phase, durées pour la calibration ; écrit l'image, le journal, les entrées),
-  `secret(job)` (incognito ou privée : rien en clair), `kind_of`, `keep_private` (chiffre une génération privée),
-  `discard_cancelled`, `forget_files`, `fail_job`.
+  `secret(job)` (génération privée : rien en clair), `keep_private` (chiffre une génération privée),
+  `discard_cancelled`, `forget_files`, `fail_job` (tout échec écrit la même ligne neutre dans `logs/`).
 - **File** : `ACTIVE`, `cancel_job` (statut changé sous `S.turn`), `forget_job`, `sweep()` (appelé en tête de chaque
-  requête : oublie les générations incognito ou privées terminées depuis `INCOGNITO_TTL`, ferme les sessions privées
+  requête : oublie les générations privées terminées depuis `PRIVATE_JOB_TTL`, ferme les sessions privées
   inactives depuis `PRIVATE_IDLE`), `worker()` (thread de calcul : un job à la fois, pris en tête de `S.pending`,
   posé dans `S.current` et passé « en cours » sous `S.turn` en une seule opération ; une génération annulée en
   attente est sautée, une annulée après sa prise en tête ne lance pas le moteur (`run_job`) ; une exception fait
   échouer ce job seul ; dans son `finally`, fichiers d'une génération secrète supprimés, fin de lot, puis
   `S.current` rendu en dernier), `end_of_lot`.
-- **Demandes** : `request_error` (400 pour tout champ que `build_cmd` utilise tel quel), `expand_request` (une demande
-  par image d'un lot : variantes `count`, campagne `campaign`), `draw_seeds` (graines -1 tirées par le serveur pour être
-  écrites au journal), `active_jobs` (génération en cours puis `S.pending`, lus sous `S.turn`), `move_first` (« Passer
-  en tête » : routes `/api/job/<id>/first` et `/api/lot/<id>/first`, réponse par `moved_first`), `in_space` (génération
-  de l'espace public ou privé), `queue_ranks` (rang dans l'espace), `queue_position`, `request_inputs`, `job_estimate`
-  (estimation par `estimate.predict`, seule source), `queue_entry` (ligne de `queue` dans `/api/status` ; une incognito
-  y porte le jeton de sa page et son étiquette `tag`), `queue_view` (file vue depuis un espace, `ahead` : travail caché
-  de l'autre espace devant chaque entrée), `new_job` (`input_names` : noms des images d'entrée gardées), `public(job)`
-  (ce que `/api/job/<id>` montre, `mode` et `inputs` compris), `launched` (réponse de `/api/generate` : `public` plus
-  l'étiquette d'une incognito), `quiet_request`.
+- **Demandes** : `request_error` (400 pour tout champ que `build_cmd` utilise tel quel, et pour une demande incognito),
+  `expand_request` (une demande par image d'un lot : variantes `count`, campagne `campaign`), `draw_seeds` (graines -1
+  tirées par le serveur pour être écrites au journal), `active_jobs` (génération en cours puis `S.pending`, lus sous
+  `S.turn`), `move_first` (« Passer en tête » : routes `/api/job/<id>/first` et `/api/lot/<id>/first`, réponse par
+  `moved_first`), `in_space` (génération de l'espace public ou privé), `queue_ranks` (rang dans l'espace),
+  `queue_position`, `request_inputs`, `job_estimate` (estimation par `estimate.predict`, seule source), `queue_entry`
+  (ligne de `queue` dans `/api/status`), `queue_view` (file vue depuis un espace, `ahead` : travail caché de l'autre
+  espace devant chaque entrée), `new_job` (`input_names` : noms des images d'entrée gardées), `public(job)` (ce que
+  `/api/job/<id>` et `/api/generate` montrent, `mode` et `inputs` compris), `quiet_request`.
 - **HTTP** : `class Server` (file de 128 connexions : la galerie en ouvre une par miniature), `class H` : `log_message`
   (tait `/api/private/`), `_send` ; contrôles dans l'ordre `_host_ok` (liste blanche de `Host`), `_post_refused`
   (POST : `Sec-Fetch-Site`, `Origin`, `Content-Type: application/json`), `_allowed` (le Mac passe, les autres
@@ -117,10 +116,10 @@ dernier bloc, après le HTML.
   - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
     privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
     (`refPx`, `inputsFor`, `parts` : copies de `estimate.py`) ; réglages `opt` (`localStorage` `qwen-opt`),
-    `refreshChoices` (exemple du champ, `PLACEHOLDERS`), `setIncog` (activer l'incognito efface le brouillon) ; nature
-    de la demande lue dans la saisie : `inputKind` (`t2i` sans image d'entrée, `edit` avec, `mask` dessin actif :
-    `drawOn`), `singleImage`, `campaignShown` (interrupteur proposé à partir de 2 images), `inCampaign`, `variants` ;
-    brouillon unique `qwen-prompt` (dans `init` : reprise une fois des anciens `qwen-<onglet>_prompt`).
+    `refreshChoices` (exemple du champ, `PLACEHOLDERS`) ; nature de la demande lue dans la saisie : `inputKind` (`t2i`
+    sans image d'entrée, `edit` avec, `mask` dessin actif : `drawOn`), `singleImage`, `campaignShown` (interrupteur
+    proposé à partir de 2 images), `inCampaign`, `variants` ; brouillon unique `qwen-prompt` (dans `init` : reprise une
+    fois des anciens `qwen-<onglet>_prompt`).
   - « onglets & statut » : `TABS`, changement d'onglet (`mode`) ; « panneaux du bas » : `openSheet`, `closeSheet`
     (un seul ouvert, `openedSheet`) ; `refreshStatus()` (interroge `/api/status` toutes les 5 s, 2 s tant que la file
     n'est pas vide ; met à jour `queueState`, l'île, la page En cours et l'espace privé par `applyPrivate`, et le
@@ -140,13 +139,13 @@ dernier bloc, après le HTML.
     décodée à part (image du dessin, lue par `toEntry`), posée tout de suite sans passer par `ready` ; `fit`, `dims` :
     miniature des visionneuses à la taille de l'image complète, par `fitThumb`, en unités de la scène `cqw`, `cqh`),
     `preload` et `ready` (les 10 dernières images décodées : miniatures des voisines de la visionneuse, image complète
-    de la suivante dans le sens du parcours `vStep`, première image d'entrée ; une image incognito en sort à son oubli),
+    de la suivante dans le sens du parcours `vStep`, première image d'entrée),
     `clearImage`, `forgetPrivateImages` (sortie de l'espace privé : images privées et aperçus affichés, attendus ou
     chargés en avance, chargements en cours abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne
     jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
     de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
   - « générations de la page, page En cours, île et file » : `pageJobs` (générations lancées par cette page),
-    `PAGE_TOKEN`, `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `isDone` (image prête ou échec),
+    `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `isDone` (image prête ou échec),
     `isCampaignLot`, `lotOf`, `show` (`showOwn` : une génération active de la page, ou rien ; puis `renderRun`),
     `pageItem` (image de la page pour la visionneuse : vrai mode et images d'entrée, `mode` et `inputs` de son suivi),
     `spaceNow` (état de l'espace pour l'île et l'onglet ; `entryFrac`, `firstWait`, `ringOffset`), `renderIsland` (île)
@@ -159,15 +158,15 @@ dernier bloc, après le HTML.
     une carte, `lotCases` ses cases (`lotCancels` : rangs annulés pendant la vie de la page), `lotSubs` ses lignes une
     fois dépliée (`openLots`) ; `lotLabel` : « N variantes » ou « Campagne · N photos » ; `qbtn` : bouton d'annulation
     ou de « Passer en tête », chemin fixé à l'affichage ; `hhmm` : heure de fin, `resLabel` : résolution), `ownOf`
-    (ligne de `queue` → génération de la page : par identifiant, ou par l'étiquette `tag` d'une incognito), `ofSpace`,
-    `spaceActive`, `firstActive` (celle qui tourne, sinon la prochaine dans l'ordre de calcul) et `nextActive` (la même,
-    parmi les générations de l'espace affiché), `track` (suit une génération, avec sa demande `req` si la page l'a
-    envoyée, un objet par lot, en mémoire de la page seulement ; `pollJobs` chaque seconde ; une privée «
-    inconnue » quitte la page sans message), `finish` (fin d'une génération : terminée gardée, échec compris, ou annulée
-    retirée), `drop` (retire une génération de la page ; image incognito révoquée) ; bouton `#go` ; reprise :
-    `followQueue` (suit des entrées de la file), `resumeOwn` (générations normales de ce navigateur, après un
-    rechargement et au retour dans l'espace public), `resume`, `adoptPrivate` (dans l'espace privé, toutes les
-    générations privées actives de la file, `adopted` : pas lancées par la page, qui ne les fait pas oublier).
+    (ligne de `queue` → génération de la page, par identifiant), `ofSpace`, `spaceActive`, `firstActive` (celle qui
+    tourne, sinon la prochaine dans l'ordre de calcul) et `nextActive` (la même, parmi les générations de l'espace
+    affiché), `track` (suit une génération, avec sa demande `req` si la page l'a envoyée, un objet par lot, en mémoire
+    de la page seulement ; `pollJobs` chaque seconde ; une privée « inconnue » quitte la page sans message), `finish`
+    (fin d'une génération : terminée gardée, échec compris, ou annulée retirée), `drop` (retire une génération de la
+    page) ; bouton `#go` ; reprise : `followQueue` (suit des entrées de la file), `resumeOwn` (générations normales de
+    ce navigateur, après un rechargement et au retour dans l'espace public), `resume`, `adoptPrivate` (dans l'espace
+    privé, toutes les générations privées actives de la file, `adopted` : pas lancées par la page, qui ne les fait pas
+    oublier).
   - « notifications » : `pushSubscribe`, `askNotifications`.
   - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts` (ouverte par le
     bouton, filtre `promptUsage` sur la catégorie de la saisie, `inputKind`), `renderPrompts`, `usePrompt`,
@@ -178,17 +177,15 @@ dernier bloc, après le HTML.
     molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les images d'entrée).
   - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;
-    `keepIncognito` (« Reprendre », « Éditer » ou « Dessiner » une image incognito l'allume ; message `INCOG_NOTE`) ;
-    « Reprendre » : `resumeFrom` (saisie remplacée, confirmation si elle n'est pas vide ; une image incognito
-    allume l'incognito), `resumeImages` (images
+    « Reprendre » : `resumeFrom` (saisie remplacée, confirmation si elle n'est pas vide), `resumeImages` (images
     d'entrée selon le mode, `RESUME_FILES` : demande gardée `req`, sinon galerie), `canResume` (bouton `#vResume`),
     `settingsFor` (format, résolution et étapes qui redonnent l'image) ; « Relancer » (visionneuse `#vAgain`, terminées
     `data-again`) : `keptRequest` (demande gardée : l'image seule ou tout le lot), `againFrom` (reconstruite de l'image
-    sinon), `canAgain`, `relaunch` (graine, espace et incognito du moment, sauf une image incognito, relancée en
-    incognito ; estimation), puis `launch` (envoi commun avec « Générer » : suivi, `accepted` (vidage de la saisie de
-    « Générer »), message, page En cours), `again` (un geste à la fois) ;
+    sinon), `canAgain`, `relaunch` (graine et espace du moment ; estimation), puis `launch` (envoi commun avec
+    « Générer » : suivi, `accepted` (vidage de la saisie de « Générer »), message, page En cours), `again` (un geste à
+    la fois) ;
     actions de la visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`, `keepThis` (« Garder celle-ci »),
-    `deleteItem` (« Supprimer », ou « Effacer » une image incognito : visionneuse et terminées), `forgetResult`.
+    `deleteItem` (« Supprimer » : visionneuse et terminées), `forgetResult`.
   - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
     `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,
     `putInput`, `swapInput`, `emptyInput` (vidage après « Générer », dans l'espace d'où la demande est partie) ; un
@@ -235,7 +232,7 @@ invariants ».
   photos avec leurs dimensions, en `edit`) : `expand_request` en tire une demande par image, `/api/generate` une
   génération par demande (`new_job`), reliées par `job["lot"]` (`id`, `rank`, `size`, et `campaign`, le marqueur qui
   distingue une campagne de variantes, posé par `/api/generate` : le mode ne le dit plus) et gardées dans `S.lots`
-  même quand une génération incognito quitte `S.jobs`. Côté interface, `isCampaignLot` lit le marqueur (un lot d'avant
+  même quand une génération privée quitte `S.jobs`. Côté interface, `isCampaignLot` lit le marqueur (un lot d'avant
   lui : campagne s'il est du mode `edit`) pour le titre d'un lot, son repère et « Garder celle-ci ». Les graines à -1
   sont tirées par le serveur (`draw_seeds`) pour être écrites au journal. Une seule notification par lot (`notify_lot`),
   envoyée par `end_of_lot` depuis le `finally` de `worker()` quand plus aucune génération du lot n'est active ; le lot
@@ -245,25 +242,21 @@ invariants ».
   notification que si aucune fenêtre de l'application n'est visible. Tester sans réseau : `bench.capture_push()`, ou
   intercepter `requests.post` et déchiffrer avec `http_ece`.
 - **Prompts enregistrés** : titre et texte seulement, jamais de réglages ; `used` (secondes) ordonne la liste.
-  Enregistrer un prompt est un geste explicite, permis aussi en incognito (décision de la spec) ; choisir un prompt en
-  incognito (espace public) ne met pas à jour `used`, dans l'espace privé
-  si. Le banc lit `tools/prompt_types.json` du dépôt (pas de repointage). Chaque
-  espace a sa liste : dans l'espace privé, la feuille passe par `/api/private/prompts` (`private_prompts`, chiffrée) ;
-  `changedSpace` ferme ses feuilles (confirmation comprise) et vide la liste de l'espace quitté ; une réponse reçue
-  après un changement d'espace est ignorée.
+  Choisir un prompt enregistré met à jour son `used`, dans chaque espace. Le banc lit `tools/prompt_types.json` du dépôt
+  (pas de repointage). Chaque espace a sa liste : dans l'espace privé, la feuille passe par `/api/private/prompts`
+  (`private_prompts`, chiffrée) ; `changedSpace` ferme ses feuilles (confirmation comprise) et vide la liste de l'espace
+  quitté ; une réponse reçue après un changement d'espace est ignorée.
 - **Interface et serveur** : l'interface suit les générations qu'elle a lancées (`pageJobs`) en interrogeant chacune par
   `/api/job/<id>` chaque seconde, et la file de son espace (`queue` de `/api/status`, entrées produites par
   `queue_view`) toutes les 2 s tant qu'elle n'est pas vide ; la file et l'île ne parlent que des générations de l'espace
   affiché (`ofSpace`, `spaceActive`), le temps d'attente ajoute `ahead` ; après un rechargement, elle se rattache aux
   seules générations normales lancées depuis ce navigateur (identifiants dans `localStorage`, `qwen-own`), et dans
   l'espace privé à toutes les générations privées actives (`adoptPrivate`), avec le prompt complet que donne leur suivi
-  (`followQueue` ; `public(job)` le tait pour l'incognito). À la sortie de l'espace privé, `changedSpace` retire de la
-  page ses générations privées ; dans l'espace privé, les publiques restent suivies hors de l'écran. Ses lignes
-  incognito de `queue` se reconnaissent à l'étiquette `tag` que la réponse de `/api/generate` donne à la page, même
-  après un passage en tête (à défaut, serveur plus ancien : au jeton de la page, `PAGE_TOKEN`, et au rang). Les
-  générations finies vont dans les terminées (`renderDone`, un lot fini en grille) ; la visionneuse parcourt `vList` (la
-  galerie, ou les terminées de la page, incognito comprises par leur adresse `blob:`). Réglages, brouillons de la saisie
-  publique et générations à reprendre dans `localStorage` (`qwen-opt`, `qwen-prompt`, `qwen-own`).
+  (`followQueue`). À la sortie de l'espace privé, `changedSpace` retire de la
+  page ses générations privées ; dans l'espace privé, les publiques restent suivies hors de l'écran. Les générations
+  finies vont dans les terminées (`renderDone`, un lot fini en grille) ; la visionneuse parcourt `vList` (la galerie, ou
+  les terminées de la page). Réglages, brouillons de la saisie publique et générations à reprendre dans `localStorage`
+  (`qwen-opt`, `qwen-prompt`, `qwen-own`).
 - **Contrôle d'accès** : `_host_ok` (liste blanche de `Host` contre le rebinding DNS, noms du Wi-Fi et de Tailscale
   figés au démarrage), `_post_refused` (tout POST : `Sec-Fetch-Site`, `Origin` égal à l'origine du `Host`,
   `Content-Type: application/json` exigé, sinon 403/415), puis `_allowed` (le Mac lui-même passe ; les autres
@@ -281,30 +274,25 @@ invariants ».
   `space.json`. Côté interface, déverrouillé = « dans l'espace privé » (`inPrivate()`, classe `html.priv`) : aucun
   bouton ne le signale à l'arrivée (entrée : cadenas `#privEntry` de la galerie ; sortie : `#privExit`), décision du
   porteur.
-- **Mode incognito** (`"incognito": true` dans `/api/generate`) : dossier `jobs/incognito_<id>/` supprimé en fin de
-  job (et au démarrage), PNG gardé en mémoire (`job["png"]`) et servi une fois par `/api/job/<id>/result`, puis oublié
-  par `/api/job/<id>/forget` (ou `/api/forget` avec toutes celles de la page, envoyé à sa fermeture) ; ni `outputs/`,
-  ni journal, ni calibration, ni détail dans `logs/`. Son identifiant (et celui de son lot) fait 128 bits tirés au
-  hasard et n'est connu que de sa page : ni `queue`, ni `current_job` ne le montrent. Une génération incognito
-  terminée que sa page n'a jamais fait oublier l'est par `sweep()`, `INCOGNITO_TTL` (24 h) après sa fin.
-- **Génération privée** (`"private": true`, session exigée) : même chemin que l'incognito pendant le calcul
-  (`jobs/private_<id>/`, `sd-cli.log` vers `os.devnull`, identifiant de 128 bits, rien dans les journaux ; dans
-  `queue`, une entrée complète vue depuis l'espace privé seulement),
+- **Génération privée** (`"private": true`, session exigée) : pendant le calcul, dossier `jobs/private_<id>/`
+  supprimé en fin de job (et au démarrage), `sd-cli.log` vers `os.devnull`, identifiant de 128 bits (comme celui de
+  son lot), rien dans les journaux ; dans `queue`, une entrée complète vue depuis l'espace privé seulement,
   puis `keep_private` chiffre image, miniature (en mémoire), entrées et réglages avec la clé publique notée au
-  lancement (`store_private`). Une génération privée ne s'arrête pas à la fermeture de la page (`/api/forget` ne vise
-  que l'incognito, décision du porteur). Au lancement sur Mac, `exclude_from_backup` exclut `jobs/` de Time Machine.
+  lancement (`store_private`). Une génération privée ne s'arrête pas à la fermeture de la page ; finie, elle est
+  oubliée par `/api/job/<id>/forget` (envoyé par sa page), sinon par `sweep()`, `PRIVATE_JOB_TTL` (24 h) après sa
+  fin. Une demande `"incognito": true` (mode retiré, d'une page d'avant) est refusée (400) sans rien écrire. Au
+  lancement sur Mac, `exclude_from_backup` exclut `jobs/` de Time Machine.
 - **Estimation des durées** : `tools/estimate.py` (`predict`, priors par moteur, mesures par `"<moteur>/<modèle>"`
   dans `tools/calibration.json`, filtrées sur la release de sd.cpp installée lue dans `sdcpp/<moteur>/.installed`). Les
   coefficients partent vers l'interface par `/api/status`.
 
 ## Pièges de l'interface
 
-- **Brouillon et mémoire de la page** : rien de l'incognito ni de l'espace privé dans `localStorage`, brouillon
-  compris : une seule clé, `qwen-prompt` (`DRAFT_KEY`), où un texte incognito ou privé n'est jamais écrit, même quand
-  la demande est refusée, et qu'activer l'incognito efface aussitôt (`tests/ui/brouillons.test.mjs`). La demande
-  gardée par la page (`req` de `pageJobs`, images en data URL, incognito et privée comprises, pour « Reprendre » et
-  « Relancer ») vit en mémoire de la page seulement, jamais dans `localStorage` (`saveOwn` n'écrit que des
-  identifiants).
+- **Brouillon et mémoire de la page** : rien de l'espace privé dans `localStorage`, brouillon compris : une seule
+  clé, `qwen-prompt` (`DRAFT_KEY`), où un texte privé n'est jamais écrit, même quand la demande est refusée
+  (`tests/ui/brouillons.test.mjs`). La demande gardée par la page (`req` de `pageJobs`, images en data URL, privée
+  comprise, pour « Reprendre » et « Relancer ») vit en mémoire de la page seulement, jamais dans `localStorage`
+  (`saveOwn` n'écrit que des identifiants).
 - **Visionneuse et images affichées** : la visionneuse parcourt `vList`, jamais `histItems` directement (la galerie
   peut être rechargée pendant qu'elle est ouverte). `#paintImg` (image du dessin) passe aussi par `showImage`, avec
   l'image décodée par `toEntry` (`decoded`) ; `tests/check.py` la surveille (`IMAGE_IDS`).

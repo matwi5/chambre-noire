@@ -1,7 +1,6 @@
 // File d'attente de la page En cours, dans la vue du téléphone : une carte par demande (un lot sur une carte, une case
 // par image, réglages, heure « prête vers », « autre appareil »), cloisonnée par espace comme la pastille ; « Passer en
-// tête » et l'annulation d'une carte ou d'une image d'un lot dépliée, les générations incognito de la page restant
-// reconnues.
+// tête » et l'annulation d'une carte ou d'une image d'un lot dépliée, les générations de la page restant reconnues.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/file.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -62,7 +61,7 @@ test('espace privé : la file ne montre que les générations privées, avec leu
   assert.match(mine, /zq9secret de cette page/);
   const all = (await cards()).join(' ');
   // rien de tel dans l'espace privé
-  assert.doesNotMatch(all, /zq9public|incognito|Génération privée|· autre appareil/);
+  assert.doesNotMatch(all, /zq9public|Génération privée|· autre appareil/);
   // lot privé d'un autre appareil : une carte, annulée en entier depuis la file
   await page.launch('zq9secret lot', { private: true, count: 2 });
   await page.eval(`refreshStatus()`);
@@ -251,26 +250,23 @@ test('cartes : un lot de la page sur une carte avec ses cases, réglages, heure 
   page.assertNoErrors();
 });
 
-test('« Passer en tête » : juste après la génération en cours, incognito de la page reconnues', async () => {
+test('« Passer en tête » : juste après la génération en cours, générations de la page reconnues', async () => {
   const held = await page.launch('HOLD=tete zq9 d\'un autre appareil');
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`, { what: 'génération en cours' });
-  await page.eval(`setIncog(true)`);
-  for (const [k, text] of [[1, 'zq9 incognito un'], [2, 'zq9 incognito deux']]) {
+  for (const [k, text] of [[1, 'zq9 page un'], [2, 'zq9 page deux']]) {
     await page.generate(text);
-    await page.waitFor(`pageJobs.filter(p => p.incognito && isActive(p)).length === ${k}`,
-      { what: `incognito ${k} suivie` });
+    await page.waitFor(`pageJobs.filter(isActive).length === ${k}`, { what: `génération ${k} suivie` });
   }
-  await page.eval(`setIncog(false)`);
   await page.eval(`refreshStatus()`);
   await page.waitFor(count(2), { what: 'deux cartes (la génération en cours est en haut de la page)' });
   // génération de la page derrière chaque entrée (état lu, pas l'écran), et chemin porté par chaque carte affichée
   const owners = () => page.eval(`queueState.map(e => ownOf(e) ? ownOf(e).prompt : e.id ? 'autre appareil' : '?')`);
-  const idOf = word => page.eval(`pageJobs.find(p => p.prompt === 'zq9 incognito ${word}').id`);
-  assert.deepEqual(await owners(), ['autre appareil', 'zq9 incognito un', 'zq9 incognito deux']);
+  const idOf = word => page.eval(`pageJobs.find(p => p.prompt === 'zq9 page ${word}').id`);
+  assert.deepEqual(await owners(), ['autre appareil', 'zq9 page un', 'zq9 page deux']);
   await page.eval(`$('queueList').querySelectorAll('.qcard')[1].querySelector('[data-kind="first"]').click()`);
-  await page.waitFor(`queueState.length === 3 && ownOf(queueState[1])?.prompt === 'zq9 incognito deux'`,
+  await page.waitFor(`queueState.length === 3 && ownOf(queueState[1])?.prompt === 'zq9 page deux'`,
     { what: 'file réordonnée' });
-  assert.deepEqual(await owners(), ['autre appareil', 'zq9 incognito deux', 'zq9 incognito un']);
+  assert.deepEqual(await owners(), ['autre appareil', 'zq9 page deux', 'zq9 page un']);
   const want = JSON.stringify([`/api/job/${await idOf('deux')}/first`, `/api/job/${await idOf('un')}/first`]);
   await waitUntil(async () => JSON.stringify(await firstPaths()) === want,
     { what: 'cartes redessinées dans le nouvel ordre' });

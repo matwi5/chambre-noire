@@ -2,10 +2,8 @@
 // depuis un autre appareil) : la page en retrouve le prompt complet (la file n'en donne que les 80 premiers
 // caractères). Geste « Reprendre » de la visionneuse : texte, images d'entrée et dessin de l'image selon son mode
 // (édition, masque, annotation reprise en édition, texte → image), réglages de l'image, confirmation si la saisie n'est
-// pas vide ; images lues dans la galerie publique, privée ou la mémoire de la page (incognito) ; absent sans images
-// d'entrée connues ; saisie visée notée avant la lecture (espace changé pendant l'attente). Une image incognito reste
-// incognito : « Reprendre », « Éditer » et « Dessiner » allument l'interrupteur, sans brouillon, et rien d'elle
-// n'arrive sur le disque du banc après « Générer ».
+// pas vide ; images lues dans la galerie publique, privée ou la demande gardée par la page ; absent sans images
+// d'entrée connues ; saisie visée notée avant la lecture (espace changé pendant l'attente).
 //   venv/bin/python tests/check.py --quick --ui tests/ui/reprise.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -224,32 +222,28 @@ test('« Reprendre » un texte → image : le texte seul, sans images ; absent s
   page.assertNoErrors();
 });
 
-test('« Reprendre » une image incognito : images gardées par la page, incognito rallumé, sans brouillon', async () => {
+test('« Reprendre » une terminée de la page : images de la demande gardée, brouillon public écrit', async () => {
   await fresh();
-  await page.click('#incog');
   await page.eval(`(async () => { inputImages.push(await toEntry('b.png', ${ref('#d08020')})); renderInputs(); })()`);
   await page.waitFor(`inputImages.length === 1`, { what: 'une image dans la saisie' });
-  await page.typePrompt('zr5 incognito');
+  await page.typePrompt('zr5 terminee');
   await page.click('#go');
   await page.waitFor(`mode === 'run' && !!$('doneList').querySelector('[data-open]')`,
-    { what: 'image incognito dans les terminées', timeout: 30000 });
-  await page.eval(`$('incog').click()`);           // incognito éteint : la reprise le rallume (DECISIONS, 21/10/2026)
+    { what: 'image dans les terminées', timeout: 30000 });
   await page.click('#doneList [data-open]');
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
   assert.equal(await resumable(), true);
+  // la visionneuse charge en avance la première image d'entrée (par /api/input) : attendue avant de compter
+  await page.waitFor(`ready.has(inputUrl(vList[vIndex], vList[vIndex].inputs[0]))`,
+    { what: 'image d\'entrée préchargée' });
   await page.eval(`performance.clearResourceTimings()`);
   await page.click('#vResume');
   await page.waitFor(`mode === 'create' && inputImages.length === 1`, { what: 'image reprise' });
   assert.deepEqual(await page.eval(`performance.getEntriesByType('resource').map(e => e.name)
-    .filter(u => u.includes('/api/input'))`), [], 'lue dans la mémoire de la page (le Mac ne la garde pas)');
-  assert.equal(await page.eval(`$('prompt').value`), 'zr5 incognito');
+    .filter(u => u.includes('/api/input'))`), [], 'lue dans la demande gardée par la page');
+  assert.equal(await page.eval(`$('prompt').value`), 'zr5 terminee');
   assert.deepEqual(await colors(), ['#d08020']);
-  assert.deepEqual(await page.eval(`[incogOn, $('incog').classList.contains('on'),
-    document.documentElement.classList.contains('incog')]`), [true, true, true], 'incognito rallumé, visible');
-  await page.typePrompt('zr5 incognito, retouché');          // une frappe après la reprise
-  assert.equal(await draft(), null, 'rien de l\'incognito dans le navigateur');
-  assert.deepEqual(await page.eval(`Object.values({ ...localStorage }).filter(v => v.includes('zr5'))`), [],
-    'localStorage fouillé');
+  assert.equal(await draft(), 'zr5 terminee', 'texte repris écrit en brouillon public');
   page.assertNoErrors();
 });
 
@@ -307,79 +301,19 @@ test('« Reprendre » : un texte tapé pendant la lecture n\'est pas remplacé s
   page.assertNoErrors();
 });
 
-// « Éditer » et « Dessiner » sur une image incognito ------------------------------------------------------------------
-// une image incognito dans les terminées, l'interrupteur éteint ensuite, un brouillon public tapé
-async function incognitoDone(prompt) {
-  await fresh();
-  await page.click('#incog');
-  await page.eval(`(async () => { inputImages.push(await toEntry('c.png', ${ref('#d08020')})); renderInputs(); })()`);
-  await page.waitFor(`inputImages.length === 1`, { what: 'une image dans la saisie' });
-  await page.typePrompt(prompt);
-  await page.click('#go');
-  await page.waitFor(`mode === 'run' && pageJobs[0]?.result?.blob && !!$('doneList').querySelector('[data-open]')`,
-    { what: 'image incognito dans les terminées', timeout: 30000 });
-  await page.eval(`$('incog').click(); goTab('create')`);   // éteint, puis un texte public : brouillon écrit
-  await page.typePrompt('texte public');
-  assert.equal(await draft(), 'texte public');
-  await page.eval(`goTab('run')`);
-}
-const kept = () => page.eval(`Object.values({ ...localStorage }).filter(v => v.includes('zr9') || v.includes('zr10'))`);
-const lit = () => page.eval(`[incogOn, $('incog').classList.contains('on'),
-  document.documentElement.classList.contains('incog'), $('toast').textContent.endsWith('incognito activé'),
-  localStorage.getItem('qwen-prompt')]`);
-
-test('« Éditer » une image incognito : incognito rallumé, sans brouillon, rien sur le disque ensuite', async () => {
-  await incognitoDone('zr9 incognito');
-  await bench.idle({ page });
-  const disk = bench.disk();                       // fichiers créés ou changés par le serveur à partir d'ici
-  await page.click('#doneList .dcard [data-act="edit"]');
-  await page.waitFor(`mode === 'create' && inputImages.length === 1`, { what: 'image ajoutée, page Créer' });
-  assert.deepEqual(await lit(), [true, true, true, true, null], 'interrupteur allumé, à la vue, sans brouillon');
-  await page.typePrompt('zr9 suite');
-  await page.click('#go');
-  await page.waitFor(`mode === 'run' && pageJobs.length === 2`, { what: 'demande acceptée' });
-  await bench.idle({ page });
-  assert.equal(await page.eval(`pageJobs[1].incognito`), true, 'partie en incognito');
-  assert.deepEqual(await kept(), [], 'rien de l\'incognito dans localStorage');
-  assert.deepEqual(disk.written(), [], 'rien d\'écrit sur le disque du banc');
-  page.assertNoErrors();
-});
-
-test('« Dessiner » une image incognito (visionneuse) : incognito rallumé, brouillon retiré', async () => {
-  await incognitoDone('zr10 incognito');
-  await page.click('#doneList [data-open]');
-  await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
-  await page.eval(`viewerAction('mask')`);
-  await page.waitFor(`mode === 'create' && drawOn`, { what: 'dessin sur l\'image' });
-  assert.deepEqual(await lit(), [true, true, true, true, null], 'interrupteur allumé, à la vue, sans brouillon');
-  assert.deepEqual(await kept(), [], 'rien de l\'incognito dans localStorage');
-  page.assertNoErrors();
-});
-
-test('image incognito : « Éditer » (visionneuse) et « Dessiner » (terminées) allument aussi l\'incognito', async () => {
-  await incognitoDone('zr10 visionneuse');
-  await page.click('#doneList [data-open]');
-  await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
-  await page.eval(`viewerAction('edit')`);
-  await page.waitFor(`mode === 'create' && inputImages.length === 1`, { what: 'image ajoutée' });
-  assert.deepEqual(await lit(), [true, true, true, true, null], 'Éditer depuis la visionneuse');
-
-  await incognitoDone('zr10 terminees');
-  await page.click('#doneList .dcard [data-act="mask"]');
-  await page.waitFor(`mode === 'create' && drawOn`, { what: 'dessin sur l\'image' });
-  assert.deepEqual(await lit(), [true, true, true, true, null], 'Dessiner depuis les terminées');
-  assert.deepEqual(await kept(), [], 'rien de l\'incognito dans localStorage');
-  page.assertNoErrors();
-});
-
-test('« Éditer » une image normale : l\'interrupteur ne bouge pas', async () => {
+test('« Éditer » une terminée : image ajoutée à la saisie, brouillon public gardé', async () => {
   await fresh();
   await page.typePrompt('zr11 normale');
   await page.click('#go');
   await page.waitFor(`mode === 'run' && !!$('doneList').querySelector('[data-act="edit"]')`,
     { what: 'image dans les terminées', timeout: 30000 });
+  await page.eval(`goTab('create')`);
+  await page.typePrompt('texte public');
+  await page.eval(`goTab('run')`);
   await page.click('#doneList .dcard [data-act="edit"]');
   await page.waitFor(`mode === 'create' && inputImages.length === 1`, { what: 'image ajoutée' });
-  assert.equal(await page.eval(`incogOn`), false);
+  assert.deepEqual(await page.eval(`[$('toast').textContent, $('prompt').value]`),
+    ['Ajoutée aux images d\'entrée', 'texte public']);
+  assert.equal(await draft(), 'texte public');
   page.assertNoErrors();
 });

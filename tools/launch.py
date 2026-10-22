@@ -9,13 +9,11 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
 - Chaque génération lance sd-cli (rechargement quasi instantané grâce à --mmap et au cache disque),
   lit sa progression (étape k/N, secondes par étape), expose des aperçus intermédiaires optionnels et enregistre
   le PNG final dans outputs/.
-- Mode incognito ({"incognito": true} dans /api/generate) : rien n'est gardé sur le disque. Les fichiers de travail
-  (références, aperçus, PNG final) vivent dans jobs/incognito_<id>/, supprimé dès la fin du job ; l'image reste en
-  mémoire jusqu'à ce que l'interface la récupère (GET /api/job/<id>/result), puis l'interface fait oublier le job
-  (POST /api/job/<id>/forget). Ni journal, ni galerie, ni calibration, ni ligne dans logs/.
-- Espace privé ({"private": true} dans /api/generate, session de l'espace exigée) : comme l'incognito pendant le
-  calcul (jobs/private_<id>/, ni journal, ni calibration, ni logs/), puis l'image, sa miniature, ses entrées et ses
-  réglages sont chiffrés avec la clé publique de l'espace dans private/items/<id au hasard>/ ; voir DECISIONS.md.
+- Espace privé ({"private": true} dans /api/generate, session de l'espace exigée) : pendant le calcul, fichiers de
+  travail dans jobs/private_<id>/, supprimé dès la fin du job (ni journal, ni calibration, ni logs/), puis l'image, sa
+  miniature, ses entrées et ses réglages sont chiffrés avec la clé publique de l'espace dans
+  private/items/<id au hasard>/ ; voir DECISIONS.md. Une demande {"incognito": true} (mode retiré) est refusée
+  (400).
 - Lots : {"count": 2 à 4} dans /api/generate (tous les modes, jamais avec une campagne) lance autant de générations
   de la même demande, à la suite dans la file, chacune avec sa graine ; {"campaign": [{"image", "width", "height"}, …]}
   (mode Éditer, 10 photos au plus) lance une édition par photo, avec cette seule photo en référence ; le lot porte
@@ -23,7 +21,7 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   tête (POST /api/lot/<id>/first) et notifiées ensemble.
 - API : POST /api/generate, GET /api/job/<id>, GET /api/job/<id>/preview, POST /api/job/<id>/cancel, POST /api/lot/<id>/cancel,
         POST /api/job/<id>/first et POST /api/lot/<id>/first (« Passer en tête »),
-        GET /api/job/<id>/result et POST /api/job/<id>/forget (incognito ; forget aussi pour une génération privée),
+        POST /api/job/<id>/forget (génération privée),
         espace privé : POST /api/private/create|unlock|lock|code|reset|delete, GET /api/private/history,
         GET /api/private/image|thumb?id=<id>, GET /api/private/input?id=<id>&file=<init.png|ref_N.png>,
         prompts enregistrés de l'espace privé (private/prompts, chiffré) : GET /api/private/prompts,
@@ -82,8 +80,7 @@ TAKING_RE = re.compile(r"taking ([\d.]+)\s*s")
 CALIB = P("tools", "calibration.json")
 MAX_VARIANTS = 4                          # images d'un lot de variantes (tous les modes, hors campagne)
 MAX_CAMPAIGN = 10                         # photos d'une campagne (mode Éditer), comme les références d'une édition
-INCOGNITO_TTL = 24 * 3600                 # image incognito jamais récupérée par sa page (page tuée) : oubliée après ce délai
-PAGE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")   # jeton opaque de la page qui lance une génération (voir queue_entry)
+PRIVATE_JOB_TTL = 24 * 3600               # génération privée finie, jamais oubliée par sa page : oubliée après ce délai
 # Répartition par backend. CUDA : tout sur la carte (l'encodeur int8 convrot a un chemin CUDA natif, RTX 20xx+) ;
 # --offload-to-cpu garde les poids en RAM et les copie à la demande, ce qui s'adapte à toute taille de VRAM.
 # --mmap : rechargement quasi instantané du modèle d'une génération à l'autre grâce au cache disque.
@@ -758,8 +755,7 @@ def notify_job(job):
         return
     if job.get("status") == "done":
         dims = "×".join(str(d) for d in job.get("dims") or [])
-        title = "Image incognito prête" if job.get("incognito") else "Image prête"
-        push_notify({"title": title,
+        push_notify({"title": "Image prête",
                      "body": f"Générée en {duration_text(job.get('seconds') or 0)}" + (f" · {dims}" if dims else "")})
     else:
         push_notify({"title": "Échec de la génération", "body": "Ouvrez l'application pour voir le détail."})
@@ -767,7 +763,7 @@ def notify_job(job):
 
 def notify_lot(lot):
     """Une seule notification pour tout un lot, quand sa dernière génération se termine : images prêtes et en échec ;
-    rien si tout le lot a été annulé. Compte d'après les statuts seuls (une génération incognito a déjà oublié sa demande).
+    rien si tout le lot a été annulé. Compte d'après les statuts seuls (une génération privée a déjà oublié sa demande).
     Un lot privé notifie comme un lot normal."""
     jobs = lot["jobs"]
     done, failed = (sum(j.get("status") == s for j in jobs) for s in ("done", "failed"))
@@ -775,8 +771,7 @@ def notify_lot(lot):
         return
     if done:
         s = "s" if done > 1 else ""
-        kind = " incognito" if lot["incognito"] else ""
-        title = f"{done} image{s}{kind} prête{s}" + (f", {failed} en échec" if failed else "")
+        title = f"{done} image{s} prête{s}" + (f", {failed} en échec" if failed else "")
         span = max(j.get("finished") or 0 for j in jobs) - min(j["started"] for j in jobs if j.get("started"))
         what = f"Campagne de {len(jobs)} photos terminée" if lot["campaign"] else f"Lot de {len(jobs)} images terminé"
         push_notify({"title": title, "body": f"{what} en {duration_text(span)}"})
@@ -1022,9 +1017,9 @@ class State:
     cfg = {}
     ui_port = 7860
     jobs = {}
-    lots = {}                # lots en cours par identifiant : {"jobs": [...], "incognito", "private", "campaign"} ;
-                             # garde les générations d'un lot même quand une génération incognito ou privée a quitté
-                             # S.jobs, jusqu'à la fin du lot
+    lots = {}                # lots en cours par identifiant : {"jobs": [...], "campaign"} ; garde les
+                             # générations d'un lot même quand une génération privée a quitté S.jobs, jusqu'à la fin
+                             # du lot
     private_sessions = {}    # sessions de l'espace privé : {jeton du cookie : {"key": clé privée, "seen": dernière requête privée}}
     rekeyed = {}             # clé publique remplacée par un changement de code → la suivante : une génération privée lancée
                              # avant le changement est rangée avec la nouvelle clé (store_private)
@@ -1226,12 +1221,6 @@ def run_job(job):
         except Exception:
             job["dims"] = [job["req"]["width"], job["req"]["height"]]
         job["size"] = os.path.getsize(job["out"])
-        if job.get("incognito"):                 # image gardée en mémoire seulement ; dossier supprimé par worker()
-            with open(job["out"], "rb") as f:
-                job["png"] = f.read()
-            job["status"] = "done"
-            job["phase"] = "terminé"
-            return
         if job.get("private"):                   # chiffrée dans l'espace privé ; dossier supprimé par worker()
             job["item"] = keep_private(job)
             job["status"] = "done"
@@ -1258,19 +1247,14 @@ def run_job(job):
     else:
         job["status"] = "failed"
         job["error"] = "sd-cli code " + str(rc) + " — " + " | ".join((job.get("error_lines") or tail)[-4:])
-        # en incognito, le détail (qui peut citer le prompt) reste en mémoire pour l'interface, hors de logs/
-        print("[job] échec : " + (f"génération {kind_of(job)}, sd-cli code {rc}" if secret(job) else job["error"]), flush=True)
+        # même ligne pour toutes les générations : le détail (qui peut citer le prompt) reste en mémoire pour
+        # l'interface, hors de logs/, et rien n'y distingue une génération privée
+        print(f"[job] échec : génération, sd-cli code {rc}", flush=True)
 
 
 def secret(job):
-    """Génération incognito ou privée : rien d'elle ne doit rester en clair (journal, calibration, logs/, disque)."""
-    return bool(job.get("incognito") or job.get("private"))
-
-
-def kind_of(job):
-    """Genre d'une génération secrète, pour un message de journal qui n'en dit pas plus : « incognito » aussi pour une
-    génération privée, pour que logs/ ne révèle pas l'espace privé."""
-    return "incognito"
+    """Génération privée : rien d'elle ne doit rester en clair (journal, calibration, logs/, disque)."""
+    return bool(job.get("private"))
 
 
 def keep_private(job):
@@ -1299,9 +1283,8 @@ def discard_cancelled(job):
 
 
 def forget_files(job):
-    """Fin d'un job incognito ou privé : supprime son dossier de travail et retire de la mémoire le prompt, les images
-    d'entrée et la ligne de commande ; seule l'image finale d'un job incognito (job["png"]) reste, jusqu'à sa
-    récupération par l'interface."""
+    """Fin d'un job privé : supprime son dossier de travail et retire de la mémoire le prompt, les images d'entrée et la
+    ligne de commande."""
     shutil.rmtree(job["dir"], ignore_errors=True)
     for k in ("req", "cmd", "error_lines", "preview", "step_times"):
         job.pop(k, None)
@@ -1318,13 +1301,14 @@ def fail_job(job, e):
         discard_cancelled(job)
         return
     if job.get("status") == "done":             # image produite, journal ou calibration en échec : elle reste réussie
-        print("[job] fin de génération incomplète" + ("" if secret(job) else f" : {e}"), flush=True)
+        print("[job] fin de génération incomplète", flush=True)   # sans détail, qui peut citer un fichier
         return
     job["status"], job["phase"] = "failed", "échec"
     job["error"] = f"génération impossible : {e}"
     job.setdefault("finished", time.time())
-    # en incognito, le détail (qui peut citer un fichier de travail) reste en mémoire pour l'interface, hors de logs/
-    print("[job] échec : " + (f"génération {kind_of(job)}, erreur de préparation" if secret(job) else job["error"]), flush=True)
+    # même ligne pour toutes les générations : le détail (qui peut citer un fichier de travail) reste en mémoire pour
+    # l'interface, hors de logs/
+    print("[job] échec : génération, erreur de préparation", flush=True)
 
 
 ACTIVE = ("queued", "running")             # statuts d'une génération de la file
@@ -1347,23 +1331,23 @@ def cancel_job(job):
 
 
 def forget_job(job):
-    """Génération incognito récupérée par sa page, ou page quittée : arrêtée si elle tournait encore, puis plus rien en
-    mémoire (le dossier de travail est supprimé par worker() à la fin de la génération)."""
+    """Génération privée que sa page fait oublier, ou trop ancienne (sweep) : arrêtée si elle tournait encore, puis plus
+    rien en mémoire (le dossier de travail est supprimé par worker() à la fin de la génération)."""
     cancel_job(job)
     S.jobs.pop(job["id"], None)
-    job.pop("png", None)
 
 
 def sweep():
-    """Ménage fait à chaque requête : une génération incognito terminée (réussie, en échec ou annulée) que sa page n'a
-    jamais fait oublier (page tuée sans prévenir) est oubliée INCOGNITO_TTL secondes après sa fin ; une session de
-    l'espace privé sans requête privée depuis PRIVATE_IDLE secondes est fermée (clé privée oubliée)."""
+    """Ménage fait à chaque requête : une génération privée terminée (réussie, en échec ou annulée) que sa page n'a
+    jamais fait oublier (page fermée ou tuée avant la fin) est oubliée PRIVATE_JOB_TTL secondes après sa fin ; une
+    session de l'espace privé sans requête privée depuis PRIVATE_IDLE secondes est fermée (clé privée oubliée)."""
     now = time.time()
     for token, session in list(S.private_sessions.items()):
         if now - session["seen"] > PRIVATE_IDLE:
             S.private_sessions.pop(token, None)
     for job in list(S.jobs.values()):
-        if secret(job) and job.get("status") not in ACTIVE and now - (job.get("finished") or job["created"]) > INCOGNITO_TTL:
+        if (secret(job) and job.get("status") not in ACTIVE
+                and now - (job.get("finished") or job["created"]) > PRIVATE_JOB_TTL):
             forget_job(job)
 
 
@@ -1390,8 +1374,8 @@ def worker():
                 fail_job(job, e)
             if job.get("status") in ("done", "failed") and not job.get("lot"):
                 notify_job(job)
-        except Exception as e:
-            print("[job] erreur du thread de calcul" + ("" if secret(job) else f" : {e}"), flush=True)
+        except Exception:
+            print("[job] erreur du thread de calcul", flush=True)   # sans détail : même ligne pour toutes
         finally:
             # S.current rendu en dernier : « plus de génération en cours » veut dire fichiers rangés et notification
             # du lot décidée (le banc s'y synchronise au lieu d'attendre au hasard)
@@ -1407,7 +1391,7 @@ def worker():
 
 def end_of_lot(job):
     """Après chaque génération d'un lot, terminée ou annulée en file : le lot est fini quand aucune de ses générations
-    n'attend ni ne tourne. Il quitte alors S.lots (rien n'en reste en mémoire pour un lot incognito oublié par sa page)
+    n'attend ni ne tourne. Il quitte alors S.lots (rien n'en reste en mémoire pour un lot privé oublié par sa page)
     et sa notification part, une seule fois : une génération annulée en file passe encore par worker() après la fin
     du lot, mais ne le trouve plus."""
     lot = S.lots.get(job["lot"]["id"])
@@ -1415,8 +1399,8 @@ def end_of_lot(job):
         S.lots.pop(job["lot"]["id"], None)
         try:
             notify_lot(lot)
-        except Exception as e:
-            print("[push] notification du lot impossible" + ("" if secret(lot["jobs"][0]) else f" : {e}"), flush=True)
+        except Exception:
+            print("[push] notification du lot impossible", flush=True)   # sans détail : même ligne pour tous
 
 
 def request_error(req):
@@ -1449,10 +1433,8 @@ def request_error(req):
         return "mode : texte attendu"
     if req.get("private") is not None and not isinstance(req["private"], bool):
         return "private : vrai ou faux attendu"
-    if req.get("private") and req.get("incognito"):
-        return "private et incognito s'excluent"
-    if req.get("page") is not None and not (isinstance(req["page"], str) and PAGE_TOKEN_RE.fullmatch(req["page"])):
-        return "page : jeton de 1 à 64 lettres, chiffres, - ou _ attendu"
+    if req.get("incognito"):                    # ancienne page restée ouverte : jamais une image en clair à sa place
+        return "L'incognito n'existe plus : passez par l'espace privé."
     count = req.get("count")
     if count is not None:
         if not is_int(count) or not 1 <= count <= MAX_VARIANTS:
@@ -1527,7 +1509,7 @@ def moved_first(jobs, error):
 
 
 def in_space(job, private):
-    """La génération est-elle de cet espace : privée pour l'espace privé, normale ou incognito pour l'espace public."""
+    """La génération est-elle de cet espace : privée pour l'espace privé, normale pour l'espace public."""
     return bool(job.get("private")) == private
 
 
@@ -1578,34 +1560,22 @@ def job_estimate(job, r, coefs):
 
 
 def queue_entry(job, position, ahead, coefs):
-    """Entrée de la liste de la file (/api/status), vue depuis l'espace de la génération. Une génération incognito
-    (espace public) n'y montre que son genre, le jeton de sa page et son étiquette (tag) : ni identifiant (seule la page
-    qui l'a lancée peut la suivre, l'annuler ou la faire passer en tête), ni prompt, ni mode, ni réglages, ni marqueur
-    de campagne (son lot ne dit que son rang et sa taille). Une génération privée n'est vue que depuis l'espace privé,
-    où elle a une entrée complète comme une génération normale, genre « private ». ahead : durée restante estimée des
-    générations de l'autre espace placées devant elle. None si la génération vient de finir."""
+    """Entrée de la liste de la file (/api/status), vue depuis l'espace de la génération. Une génération privée n'est
+    vue que depuis l'espace privé, où elle a une entrée complète comme une génération normale, genre « private ».
+    ahead : durée restante estimée des générations de l'autre espace placées devant elle. None si la génération vient
+    de finir."""
     r = job.get("req")
     if r is None:
         return None
     est, lot = job_estimate(job, r, coefs), job.get("lot")
-    e = {"status": job["status"], "position": position, "ahead": round(ahead, 1),
-         # lot incognito : ni son identifiant (connu de sa seule page, comme ceux de ses générations) ni son marqueur
-         # de campagne (sa page l'a dans sa réponse de /api/generate) : son rang et sa taille
-         "lot": lot and ({k: lot[k] for k in ("rank", "size")} if job.get("incognito") else dict(lot)),
-         "estimate": round(est, 1),
-         "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None}
-    if job.get("incognito"):
-        # jeton de la page qui l'a lancée et étiquette de la génération, que sa page seule connaît : elle y reconnaît
-        # sa ligne ; ni l'un ni l'autre n'ouvre de route (ni suivi, ni annulation)
-        e.update(kind="incognito", page=job.get("page"), tag=job.get("tag"))
-    else:
-        prompt = " ".join(r["prompt"].split())
-        # réglages de la demande : proportions de la vignette et ligne des réglages de la file (une incognito les tait,
-        # sa page les connaît)
-        e.update(kind="private" if job.get("private") else "normal", id=job["id"], mode=job["mode"],
-                 width=r["width"], height=r["height"], steps=r["steps"],
-                 prompt=prompt[:80] + ("…" if len(prompt) > 80 else ""))
-    return e
+    prompt = " ".join(r["prompt"].split())
+    # réglages de la demande : proportions de la vignette et ligne des réglages de la file
+    return {"status": job["status"], "position": position, "ahead": round(ahead, 1), "lot": lot and dict(lot),
+            "estimate": round(est, 1),
+            "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None,
+            "kind": "private" if job.get("private") else "normal", "id": job["id"], "mode": job["mode"],
+            "width": r["width"], "height": r["height"], "steps": r["steps"],
+            "prompt": prompt[:80] + ("…" if len(prompt) > 80 else "")}
 
 
 def queue_view(private, coefs):
@@ -1628,24 +1598,22 @@ def queue_view(private, coefs):
 
 def new_job(req, inputs, lot=None):
     """Génération en attente pour une demande validée (sa graine déjà fixée), avec son dossier de travail. Identifiant
-    d'une génération incognito : 128 bits tirés au hasard, impossible à deviner pour un autre appareil (lui seul ouvre
-    son suivi, son image et son annulation) ; celui d'une génération normale dit sa date."""
-    incognito, private = req.get("incognito") is True, req.get("private") is True
-    jid = secrets.token_hex(16) if incognito or private else datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+    d'une génération privée : 128 bits tirés au hasard, impossible à deviner pour un autre appareil ; celui d'une
+    génération normale dit sa date."""
+    private = req.get("private") is True
+    jid = (secrets.token_hex(16) if private
+           else datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6])
     mode = re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
-    d = P("jobs", ("incognito_" if incognito else "private_" if private else "") + jid)
+    d = P("jobs", ("private_" if private else "") + jid)
     os.makedirs(d, exist_ok=True)
-    # en incognito et en privé, le PNG reste dans le dossier de travail (supprimé en fin de job)
-    out = os.path.join(d, f"{jid}_{mode}.png") if incognito or private else P("outputs", f"{jid}_{mode}.png")
+    # en privé, le PNG reste dans le dossier de travail (supprimé en fin de job)
+    out = os.path.join(d, f"{jid}_{mode}.png") if private else P("outputs", f"{jid}_{mode}.png")
     return {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
-            "incognito": incognito, "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot,
+            "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot,
             # noms des images d'entrée que build_cmd écrit et que save_inputs garde (init.png, puis ref_N.png) : la page
             # qui suit la génération les montre, même après l'oubli de la demande
             "input_names": (["init.png"] if req.get("init_image") else [])
             + [f"ref_{i + 1}.png" for i in range(len(req.get("ref_images") or []))],
-            "page": req.get("page") if incognito else None,   # jeton de la page, montré dans queue à la place de l'id
-            # étiquette d'une incognito, montrée dans queue : sa page y reconnaît sa ligne même après un déplacement
-            "tag": secrets.token_hex(8) if incognito else None,
             "public": private and (read_space() or {}).get("public")}    # clé publique de l'espace au lancement
 
 
@@ -1655,23 +1623,16 @@ def public(job):
     d = {k: job.get(k) for k in keys}
     d["queue_position"] = queue_position(job)
     d["elapsed"] = round(time.time() - job["started"], 1) if job.get("started") and not job.get("finished") else job.get("seconds")
-    d["incognito"], d["private"] = bool(job.get("incognito")), bool(job.get("private"))
+    d["private"] = bool(job.get("private"))
     d["item"] = job.get("item")                   # image privée rangée : identifiant dans la galerie privée
     d["lot"], d["seed"] = job.get("lot"), job.get("seed")
     d["mode"], d["inputs"] = job.get("mode"), job.get("input_names") or []   # vrai mode, images d'entrée gardées
     # prompt complet, pour la page qui reprend une génération (la file n'en montre que le début) : tant que la demande
-    # est en mémoire (une privée l'oublie à sa fin), jamais pour une incognito (sa seule page le connaît déjà) ; une
-    # privée n'est suivie que dans l'espace privé (_hidden)
-    d["prompt"] = None if job.get("incognito") else (job.get("req") or {}).get("prompt")
+    # est en mémoire (une privée l'oublie à sa fin) ; une privée n'est suivie que dans l'espace privé (_hidden)
+    d["prompt"] = (job.get("req") or {}).get("prompt")
     d["path"] = job["out"] if job.get("status") == "done" and not secret(job) else None
     d["name"] = os.path.basename(job["out"])
     return d
-
-
-def launched(job):
-    """Génération telle que /api/generate la rend à la page qui l'a lancée : son suivi (public), plus l'étiquette d'une
-    génération incognito, qui ne se lit nulle part ailleurs que dans sa ligne de queue."""
-    return {**public(job), "tag": job["tag"]} if job.get("tag") else public(job)
 
 
 def quiet_request(msg):
@@ -1951,11 +1912,11 @@ class H(BaseHTTPRequestHandler):
             missing = [k for k, v in MODELS.items() if not os.path.exists(v)]
             # espace de l'appareil : la file, la génération en cours et la dernière image ne montrent que les siennes
             inside = self._in_private()
-            # un job incognito n'est jamais repris après un rechargement de la page : il est perdu avec elle
+            # dernière génération normale (jamais une privée)
             last = None if inside else max((j for j in list(S.jobs.values()) if not secret(j)), key=lambda j: j["created"],
                                            default=None)
             # génération en cours lue une seule fois : relu plus bas, S.current pourrait déjà désigner la suivante (une
-            # incognito, dont l'identifiant partirait dans current_job)
+            # privée, dont l'identifiant partirait dans current_job hors de l'espace privé)
             current_id = S.current
             coefs, current = S.store.coefficients(S.backend, S.model, S.engine), S.jobs.get(current_id) or {}
             queue = queue_view(inside, coefs)
@@ -1964,9 +1925,7 @@ class H(BaseHTTPRequestHandler):
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model,
                                     "queued": sum(e["status"] == "queued" for e in queue),
                                     "queue": queue,
-                                    # identifiant d'une génération incognito : connu de sa seule page
-                                    "current_job": current_id if current and in_space(current, inside)
-                                                   and not current.get("incognito") else None,
+                                    "current_job": current_id if current and in_space(current, inside) else None,
                                     "last_job": public(last) if last else None,
                                     "estimates": coefs,
                                     # code servi (git) : l'interface maintenant, le serveur à son lancement
@@ -1978,16 +1937,11 @@ class H(BaseHTTPRequestHandler):
                                     # (le Mac lui-même seulement)
                                     "private": {"available": HAVE_CRYPTO, "exists": HAVE_CRYPTO and os.path.exists(os.path.join(PRIVATE, "space.json")),
                                                 "unlocked": inside, "secure": self._secure(), "local": self._local()}})
-        m = re.match(r"^/api/job/([\w-]+)(/preview|/result)?$", path)
+        m = re.match(r"^/api/job/([\w-]+)(/preview)?$", path)
         if m:
             job = S.jobs.get(m.group(1))
             if not job or self._hidden(job):
                 return self._send(404, {"error": "job inconnu"})
-            if m.group(2) == "/result":           # image d'un job incognito, gardée en mémoire seulement
-                png = job.get("png")
-                if not png:
-                    return self._send(404, {"error": "image incognito indisponible"})
-                return self._send(200, png, "image/png")
             if m.group(2):                        # aperçu (privé : par une requête sûre seulement, _hidden)
                 if not job.get("preview"):
                     return self._send(404, {"error": "pas d'aperçu"})
@@ -2135,33 +2089,20 @@ class H(BaseHTTPRequestHandler):
             campaign = req.get("campaign") is not None
             reqs = expand_request(req)
             n = len(reqs)
-            # identifiant d'un lot incognito : connu de sa seule page, aussi impossible à deviner que ses générations
-            secret_lot = req.get("incognito") is True or req.get("private") is True
-            lot = {"id": secrets.token_hex(16) if secret_lot else uuid.uuid4().hex[:12], "size": n,
+            # identifiant d'un lot privé : aussi impossible à deviner que ses générations
+            lot = {"id": secrets.token_hex(16) if req.get("private") is True else uuid.uuid4().hex[:12], "size": n,
                    "campaign": campaign} if n > 1 else None
             # variantes : mêmes images d'entrée et dimensions pour toutes, lues une fois ; campagne : une photo chacune
             inputs = [request_inputs(r) for r in reqs] if campaign else [request_inputs(reqs[0])] * n
             jobs = [new_job(r, inputs[k], lot and {**lot, "rank": k + 1}) for k, r in enumerate(reqs)]
             if lot:
-                S.lots[lot["id"]] = {"jobs": jobs, "incognito": jobs[0]["incognito"], "private": jobs[0]["private"],
-                                     "campaign": campaign}
+                S.lots[lot["id"]] = {"jobs": jobs, "campaign": campaign}
             with S.turn:                         # générations d'un lot : à la suite dans la file, dans l'ordre
                 for job in jobs:
                     S.jobs[job["id"]] = job
                     S.pending.append(job)
                 S.turn.notify()
-            return self._send(202, {"lot": lot, "jobs": [launched(j) for j in jobs]} if lot else launched(jobs[0]))
-        if path == "/api/forget":                # page fermée ou rechargée : ses générations incognito, en un seul envoi
-            try:
-                ids = json.loads(raw).get("ids")
-            except Exception:
-                ids = None
-            if not (isinstance(ids, list) and all(isinstance(i, str) for i in ids)):
-                return self._send(400, {"error": "ids : liste d'identifiants attendue"})
-            jobs = [j for j in (S.jobs.get(i) for i in ids) if j and j.get("incognito")]   # une génération normale reste
-            for job in jobs:
-                forget_job(job)
-            return self._send(200, {"forgotten": len(jobs)})
+            return self._send(202, {"lot": lot, "jobs": [public(j) for j in jobs]} if lot else public(jobs[0]))
         m = re.match(r"^/api/lot/([\w-]+)/(cancel|first)$", path)
         if m:                                    # toutes les générations non terminées du lot, ou celles qui attendent
             lot = S.lots.get(m.group(1))
@@ -2183,8 +2124,8 @@ class H(BaseHTTPRequestHandler):
             if m.group(2) == "first":            # testé après _hidden : l'état d'une génération privée ne se devine pas
                 return self._send(*moved_first([job], "génération plus en attente"))
             if m.group(2) == "forget" and not secret(job):
-                return self._send(400, {"error": "seul un job incognito ou privé peut être oublié"})
-            if m.group(2) == "forget":            # image récupérée par l'interface, ou page quittée : plus rien en mémoire
+                return self._send(400, {"error": "seul un job privé peut être oublié"})
+            if m.group(2) == "forget":            # privée finie (rangée, en échec ou annulée) : plus rien en mémoire
                 forget_job(job)
                 return self._send(200, {"ok": True})
             cancel_job(job)
@@ -2194,7 +2135,7 @@ class H(BaseHTTPRequestHandler):
 
 def exclude_from_backup(path):
     """Exclut le dossier de travail de Time Machine (tmutil, sans droits administrateur) : une sauvegarde faite pendant
-    une génération incognito ou privée ne capte pas ses fichiers de passage. Un échec est noté sans bloquer."""
+    une génération privée ne capte pas ses fichiers de passage. Un échec est noté sans bloquer."""
     try:
         r = subprocess.run(["tmutil", "addexclusion", path], capture_output=True, text=True, timeout=15)
         if r.returncode:
@@ -2243,8 +2184,10 @@ def main():
         finish_rekey()                                 # (rien n'est écrit au journal sur l'espace privé)
     except (OSError, ValueError):                      # ValueError : space.json illisible ; le serveur démarre quand même
         pass
-    # restes d'un job incognito ou privé interrompu par un arrêt brutal, et d'une image privée à moitié rangée
-    for old in glob.glob(P("jobs", "incognito_*")) + glob.glob(P("jobs", "private_*")) + glob.glob(os.path.join(PRIVATE, "items", ".*")):
+    # restes d'un job privé interrompu par un arrêt brutal, d'une image privée à moitié rangée, et d'un job incognito
+    # d'avant son retrait (images en clair : porteur, 22/10/2026)
+    for old in (glob.glob(P("jobs", "private_*")) + glob.glob(os.path.join(PRIVATE, "items", ".*"))
+                + glob.glob(P("jobs", "incognito_*"))):
         shutil.rmtree(old, ignore_errors=True)
     if sys.platform == "darwin":
         exclude_from_backup(P("jobs"))

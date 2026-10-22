@@ -1,7 +1,7 @@
 // « Relancer », dans la vue du téléphone : la même demande avec une nouvelle graine, sans toucher la saisie, depuis une
 // terminée (demande gardée par la page : une image, ou tout le lot depuis sa carte, variantes ou campagne), un échec ou
-// la visionneuse (galerie : demande reconstruite de l'image, absente pour un masque), dans l'espace affiché et avec
-// l'interrupteur incognito du moment, sauf une image incognito, toujours relancée en incognito, puis la page En cours.
+// la visionneuse (galerie : demande reconstruite de l'image, absente pour un masque), dans l'espace affiché, puis la
+// page En cours.
 // La demande envoyée est lue au passage (fetch enveloppé).
 //   venv/bin/python tests/check.py --quick --ui tests/ui/relance.test.mjs
 import { test, before, after } from 'node:test';
@@ -165,17 +165,14 @@ test('galerie : demande reconstruite de l\'image (édition, annotation) ; absent
   page.assertNoErrors();
 });
 
-test('espace et incognito du moment : incognito activé, puis dans l\'espace privé', async () => {
+test('espace du moment : dans l\'espace public, puis dans l\'espace privé', async () => {
   await fresh();
   assert.equal(await send(`{ mode: 't2i', prompt: 'zl9 publique' }`), 202);
   await bench.idle({ page });
-  await page.click('#tabbar [data-pane="create"]');
-  await page.click('#incog');
   await view('zl9 publique');
-  const incog = await again('#vAgain');
-  assert.deepEqual([incog.incognito, incog.private], [true, undefined], 'incognito');
+  const pub = await again('#vAgain');
+  assert.deepEqual([pub.private, 'incognito' in pub, 'page' in pub], [undefined, false, false], 'publique');
   await bench.idle({ page });
-  await page.eval(`$('incog').click()`);
   const exists = await page.eval(`privState.exists`);
   assert.equal(await post(exists ? '/api/private/unlock' : '/api/private/create', { code: CODE }), 200);
   await page.eval(`refreshStatus()`);
@@ -184,7 +181,8 @@ test('espace et incognito du moment : incognito activé, puis dans l\'espace pri
   await bench.idle({ page });
   await view('zl8 privee');
   const priv = await again('#vAgain');
-  assert.deepEqual([priv.private, priv.incognito, priv.prompt], [true, false, 'zl8 privee']);
+  assert.deepEqual([priv.private, 'incognito' in priv, 'page' in priv, priv.prompt],
+    [true, false, false, 'zl8 privee']);
   await bench.idle({ page });
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
@@ -211,56 +209,5 @@ test('double appui sur « Relancer » d\'une terminée : une seule relance', asy
   await page.waitFor(`pageJobs.length === 2`, { what: 'relance suivie' });
   await bench.idle({ page });
   assert.equal(await page.eval(`sentBodies.length`), 2, 'une seule demande en plus');
-  page.assertNoErrors();
-});
-
-test('image incognito : relancée en incognito, interrupteur éteint (terminée, carte de lot, visionneuse)', async () => {
-  await fresh();
-  await page.click('#tabbar [data-pane="create"]');
-  await page.click('#incog');
-  await page.generate('zl12 incognito');
-  await bench.idle({ page });
-  await page.eval(`opt.count = 2; saveOpt(); refreshChoices()`);
-  await page.generate('zl13 lot incognito');
-  await bench.idle({ page });
-  await page.eval(`opt.count = 1; saveOpt(); $('incog').click()`);   // interrupteur éteint
-  assert.equal(await page.eval(`incogOn`), false);
-  const one = await again('#doneList .dcard:not(.dlot):not(.fail) [data-again]');
-  assert.deepEqual([one.prompt, one.incognito], ['zl12 incognito', true], 'terminée');
-  await bench.idle({ page });
-  const lot = await again('#doneList .dlot [data-again]');
-  assert.deepEqual([lot.prompt, lot.count, lot.incognito], ['zl13 lot incognito', 2, true], 'carte du lot');
-  await bench.idle({ page });
-  await page.click('#doneList .dlot [data-open]');
-  await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
-  const viewed = await again('#vAgain');
-  assert.deepEqual([viewed.count, viewed.incognito], [undefined, true], 'visionneuse');
-  await bench.idle({ page });
-  assert.deepEqual(await page.eval(`Object.values({ ...localStorage }).filter(v => v.includes('zl1'))`), [],
-    'localStorage fouillé');
-  page.assertNoErrors();
-});
-
-test('échec incognito : relancé en incognito, interrupteur éteint', async () => {
-  await fresh();
-  await page.click('#tabbar [data-pane="create"]');
-  await page.click('#incog');
-  await page.generate('zl14 FAIL incognito');
-  await bench.idle({ page });
-  await page.eval(`$('incog').click()`);
-  const b = await again('#doneList .dcard.fail [data-again]');
-  assert.equal(b.incognito, true);
-  await bench.idle({ page });
-  page.assertNoErrors();
-});
-
-test('terminée normale : relancée en incognito quand l\'interrupteur est allumé', async () => {
-  await fresh();
-  await page.generate('zl15 normale');
-  await bench.idle({ page });
-  await page.eval(`$('incog').click()`);           // allumé après la génération
-  const b = await again('#doneList .dcard [data-again]');
-  assert.deepEqual([b.prompt, b.incognito], ['zl15 normale', true]);
-  await bench.idle({ page });
   page.assertNoErrors();
 });

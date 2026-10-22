@@ -1,21 +1,25 @@
-// Brouillon du navigateur (localStorage, clé unique qwen-prompt), dans la vue du téléphone : une demande incognito ou
-// de l'espace privé, même refusée par le Mac, ne laisse aucun texte de prompt dans le navigateur ; activer l'incognito
-// retire le brouillon aussitôt ; les brouillons des anciens onglets (qwen-<onglet>_prompt) sont repris une fois.
+// Brouillon du navigateur (localStorage, clé unique qwen-prompt), dans la vue du téléphone : une demande de l'espace
+// privé, même refusée par le Mac, ne laisse aucun texte de prompt dans le navigateur ; l'incognito retiré n'a plus ni
+// bouton ni thème, son ancien réglage est ignoré et une demande ne le porte plus ; les brouillons des anciens onglets
+// (qwen-<onglet>_prompt) sont repris une fois.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/brouillons.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome } from './driver.mjs';
 
-let bench, chrome, page;
+let bench, chrome, page, sentBody;               // sentBody : la dernière demande interceptée
 
 before(async () => {
   bench = await startBench();
   chrome = await launchChrome();
   page = await chrome.phonePage();
   // demandes de génération interceptées le temps d'un refus : le Mac répond « moteur non prêt »
-  page.on('Fetch.requestPaused', p => page.send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: 503,
-    responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
-    body: Buffer.from('{"error":"moteur non prêt"}').toString('base64') }));
+  page.on('Fetch.requestPaused', p => {
+    sentBody = JSON.parse(p.request.postData || 'null');
+    page.send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: 503,
+      responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+      body: Buffer.from('{"error":"moteur non prêt"}').toString('base64') });
+  });
 });
 
 after(async () => {
@@ -45,21 +49,20 @@ async function refusedGenerate() {
   await page.send('Fetch.disable');
 }
 
-test('incognito : un texte tapé en mode normal ne reste pas en brouillon après une demande refusée', async () => {
+test('incognito retiré : réglage d\'avant ignoré, brouillon retenu, demande sans incognito ni jeton', async () => {
   await fresh();
+  await page.eval(`localStorage.setItem('qwen-opt', JSON.stringify({ v: 2, incognito: true }))`);
+  await page.goto(bench.url + '/');
+  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  assert.deepEqual(await page.eval(`[!!document.getElementById('incog'),
+    document.documentElement.classList.contains('incog')]`), [false, false], 'ni bouton ni thème incognito');
   await page.typePrompt('un phare au crépuscule');
   assert.deepEqual(await drafts(), ['qwen-prompt'], 'brouillon public retenu');
-  await page.click('#incog');
-  await page.waitFor(`incogOn`, { what: 'incognito activé' });
-  assert.deepEqual(await drafts(), [], 'brouillon retiré dès l\'activation, sans attendre la frappe suivante');
-  assert.equal(await page.eval(`$('prompt').value`), 'un phare au crépuscule', 'le texte reste dans le champ');
-  await page.typePrompt('un phare au crépuscule, la nuit');
+  sentBody = null;
   await refusedGenerate();
-  assert.deepEqual(await drafts(), []);
-  assert.equal(await page.eval(`$('prompt').value`), 'un phare au crépuscule, la nuit',
-    'le texte reste après le refus');
-  await page.click('#incog');
-  await page.waitFor(`!incogOn`, { what: 'incognito désactivé' });
+  assert.equal(sentBody.prompt, 'un phare au crépuscule');
+  assert.deepEqual(['incognito', 'page'].filter(k => k in sentBody), [], 'ni incognito ni jeton de page envoyés');
+  assert.deepEqual(await drafts(), ['qwen-prompt'], 'brouillon gardé après le refus');
   assertNoOtherErrors();
 });
 

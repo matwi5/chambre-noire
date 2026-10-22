@@ -48,20 +48,13 @@ class JobModeAndInputsTest(bench.BenchCase):
         cases = [(dict(mode="t2i"), []),
                  (dict(mode="edit", ref_images=[ref, ref]), ["ref_1.png", "ref_2.png"]),
                  (dict(mode="mask", init_image=ref, mask_image=ref, ref_images=[ref]), ["init.png", "ref_1.png"]),
-                 (dict(mode="annot", ref_images=[ref], incognito=True), ["ref_1.png"])]
+                 (dict(mode="annot", ref_images=[ref]), ["ref_1.png"])]
         for kw, inputs in cases:
             with self.subTest(mode=kw["mode"]):
                 job = bench.generate("zq6 inputs", **kw)
                 self.assertEqual((job["mode"], job["inputs"]), (kw["mode"], inputs))
                 done = wait_job(job["id"])
                 self.assertEqual((done["status"], done["mode"], done["inputs"]), ("done", kw["mode"], inputs))
-
-    def test_an_incognito_generation_never_gives_its_prompt(self):
-        job = bench.generate(LONG, steps=10, incognito=True)
-        self.assertIsNone(job["prompt"])
-        self.assertIsNone(bench.job(job["id"])["prompt"])
-        bench.release()
-        self.assertIsNone(wait_job(job["id"])["prompt"])
 
 
 if __name__ == "__main__":
