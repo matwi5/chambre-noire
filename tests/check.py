@@ -38,7 +38,7 @@ Le Python des contrôles est celui du venv du dépôt (venv/ à la racine, sinon
 dans un worktree), sinon l'interpréteur qui lance ce script (cas de la CI) : check.py se relance de lui-même avec le
 bon. Code de sortie non nul au moindre échec.
 """
-import argparse, concurrent.futures, glob, os, re, subprocess, sys, tempfile, time
+import argparse, concurrent.futures, glob, os, re, signal, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENV_PY = os.path.join("Scripts", "python.exe") if os.name == "nt" else os.path.join("bin", "python")
@@ -57,6 +57,10 @@ NOTES = ("CLAUDE.md", "ETAT_DU_PROJET.md", "travail", "docs/specs")
 AGENT_NOTES, CODE_MAP = "docs/agents", "carte-du-code.md"
 HOOKS = ".githooks"                                  # hooks versionnés (core.hooksPath), posés par --link-venv
 UI_TESTS = "tests/ui/*.test.mjs"
+# délais des tests d'interface : par test (ms, node --test-timeout ; QWEN_UI_TEST_TIMEOUT le change), par fichier (s)
+UI_TEST_TIMEOUT = int(os.environ.get("QWEN_UI_TEST_TIMEOUT") or 180000)
+UI_FILE_TIMEOUT = 1200
+UI_WAIT_LOADED = 30000                               # attente par défaut du pilote quand le banc tourne en même temps
 SHOWN_FAULTS = 12                                    # fautes nommées au plus par contrôle dans la dernière ligne
 
 
@@ -388,32 +392,82 @@ def ui_counts(out):
                                                              out, re.M)}
 
 
-def run_ui(files):
-    """Tests d'interface (tous, ou les seuls files), un fichier après l'autre : (réussi, lignes à afficher, fautes :
-    fichiers en échec)."""
-    env = dict(os.environ, PYTHON=sys.executable)
-    files = files or sorted(os.path.relpath(f, ROOT).replace(os.sep, "/") for f in glob.glob(os.path.join(ROOT,
+def ui_files(files):
+    """Fichiers d'interface à lancer : ceux donnés, ou tous (UI_TESTS), relatifs à ROOT."""
+    return files or sorted(os.path.relpath(f, ROOT).replace(os.sep, "/") for f in glob.glob(os.path.join(ROOT,
                                                                                                          UI_TESTS)))
+
+
+def ui_titles(files):
+    """Titres des tests (test('…', …)) des fichiers d'interface, lus dans leur source."""
+    titles = []
+    for f in files:
+        with open(os.path.join(ROOT, f), encoding="utf-8") as fh:
+            src = fh.read()
+        for m in re.finditer(r"\btest\(\s*(['\"`])((?:\\.|(?!\1).)*)\1", src, re.S):
+            titles.append(re.sub(r"\\(.)", r"\1", m.group(2)))
+    return titles
+
+
+def run_ui(files, name=None, wait=None):
+    """Tests d'interface (tous, ou les seuls files ; name : motif des noms de tests, --test-name-pattern), un fichier
+    après l'autre, chacun dans son groupe de processus : un test dépasse UI_TEST_TIMEOUT, un fichier
+    UI_FILE_TIMEOUT, et Chrome et le banc sont arrêtés à la fin de chaque fichier, même bloqué. wait : délai par
+    défaut des attentes du pilote (QWEN_UI_WAIT). Renvoie (réussi, lignes à afficher, fautes : fichiers en échec)."""
+    files = ui_files(files)
+    env = dict(os.environ, PYTHON=sys.executable, **({"QWEN_UI_WAIT": str(wait)} if wait else {}))
+    env.pop("NODE_TEST_CONTEXT", None)                # lancé depuis un test node : sinon node --test ne lance rien
+    flags = ["--test-concurrency=1", "--test-reporter=spec", f"--test-timeout={UI_TEST_TIMEOUT}", "--test-force-exit",
+             *([f"--test-name-pattern={name}"] if name else [])]
     shown, faults, total, start = [], [], {}, time.monotonic()
     for f in files:
         began = time.monotonic()
         try:
-            r = subprocess.run(["node", "--test", "--test-concurrency=1", "--test-reporter=spec", f], cwd=ROOT,
-                               env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            proc = subprocess.Popen(["node", "--test", *flags, f], cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+                                    start_new_session=os.name != "nt")
         except OSError:
             return False, ["Interface : node introuvable"], ["node introuvable"]
-        out = (r.stdout + r.stderr).rstrip()
+        try:
+            out, _ = proc.communicate(timeout=UI_FILE_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            stop_group(proc)
+            out = proc.communicate()[0] + f"\nfichier arrêté au bout de {seconds(UI_FILE_TIMEOUT)}"
+        stop_group(proc)                              # restes du fichier (Chrome, banc) : arrêtés dans tous les cas
+        out = out.rstrip()
         counts = ui_counts(out)
         for k, v in counts.items():
             total[k] = total.get(k, 0) + v
-        if r.returncode:
+        if proc.returncode or not counts.get("tests"):    # aucun test lancé : pas une réussite
             faults.append(f)
             shown.append(out)
-        shown.append(f"Interface : {f} : {counts.get('tests', '?')} tests, {counts.get('fail', '?')} en échec "
+        failed = counts.get("fail", 0) + counts.get("cancelled", 0)
+        shown.append(f"Interface : {f} : {counts.get('tests', '?')} tests, {failed} en échec "
                      f"({seconds(time.monotonic() - began)})")
+    failed = total.get("fail", 0) + total.get("cancelled", 0)
     shown.append(f"Interface : {len(files)} fichier(s), {total.get('tests', 0)} tests, {total.get('pass', 0)} "
-                 f"réussis, {total.get('fail', 0)} en échec ({seconds(time.monotonic() - start)})")
+                 f"réussis, {failed} en échec ({seconds(time.monotonic() - start)})")
     return not faults, shown + ["Interface : " + ("ÉCHEC" if faults else "OK")], faults
+
+
+def stop_group(proc):
+    """Arrête le groupe de processus de proc (node et ce qu'il a lancé : Chrome, serveur du banc) : SIGTERM d'abord,
+    pour que le banc supprime son dossier temporaire, SIGKILL à ce qui reste après 5 s."""
+    if os.name == "nt":
+        if proc.poll() is None:
+            proc.kill()
+        return
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(proc.pid, sig)
+        except (ProcessLookupError, PermissionError):
+            return
+        for _ in range(50):
+            try:
+                os.killpg(proc.pid, 0)
+            except (ProcessLookupError, PermissionError):
+                return
+            time.sleep(0.1)
 
 
 class Tee:
@@ -432,8 +486,10 @@ class Tee:
 
 
 def journal_path():
-    """Journal de la sortie complète : dans le dossier temporaire du système, un par dossier de travail."""
-    return os.path.join(tempfile.gettempdir(), f"qwen-check-{os.path.basename(ROOT)}.log")
+    """Journal de la sortie complète : QWEN_CHECK_JOURNAL, sinon dans le dossier temporaire du système, un par dossier
+    de travail."""
+    return os.environ.get("QWEN_CHECK_JOURNAL") or os.path.join(tempfile.gettempdir(),
+                                                                f"qwen-check-{os.path.basename(ROOT)}.log")
 
 
 def summary(failed):
@@ -459,6 +515,9 @@ def run_checks(args):
     if failed:
         print("Banc et interface : pas lancés (contrôles ci-dessus en échec : les corriger d'abord)")
         return failed
+    if args.ui is not None and args.name and not any(re.search(args.name, t) for t in ui_titles(ui_files(args.ui))):
+        print(f"Interface : aucun test ne correspond au motif « {args.name} » : rien n'est lancé")
+        return {"Interface": [f"motif « {args.name} » sans test"]}
     jobs = []                                         # banc et interface : en parallèle (bancs indépendants)
     if args.no_bench:
         pass
@@ -467,8 +526,9 @@ def run_checks(args):
         jobs.append(("Banc", lambda: run_bench("test_public_repo.py")))
     else:
         jobs.append(("Banc", run_bench))
-    if args.ui is not None:
-        jobs.append(("Interface", lambda: run_ui(args.ui)))
+    if args.ui is not None:                           # banc en même temps : machine chargée, attentes allongées
+        wait = UI_WAIT_LOADED if jobs else None
+        jobs.append(("Interface", lambda: run_ui(args.ui, args.name, wait)))
     with concurrent.futures.ThreadPoolExecutor(max(len(jobs), 1)) as pool:
         futures = [(name, pool.submit(job)) for name, job in jobs]
         for name, future in futures:
@@ -487,6 +547,8 @@ def main():
                     help="sauter le banc si aucun .py n'a changé depuis la base (le test du dépôt public tourne)")
     ap.add_argument("--ui", nargs="*", metavar="FICHIER",
                     help="lancer aussi les tests d'interface (Chrome, en local), tous ou les seuls fichiers donnés")
+    ap.add_argument("--name", metavar="MOTIF", help="avec --ui : seuls les tests dont le nom correspond (expression "
+                    "régulière) ; échoue tout de suite si aucun ne correspond")
     ap.add_argument("--lines", action="store_true",
                     help=f"seulement la longueur des lignes ajoutées depuis la base ({LINE_MAX} caractères)")
     ap.add_argument("--cached", action="store_true", help="avec --lines : juger l'index (hook avant commit)")

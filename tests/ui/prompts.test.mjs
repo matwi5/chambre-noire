@@ -1,7 +1,7 @@
 // Prompts enregistrés, dans la vue du téléphone : chaque espace (public, privé) ne voit que les siens, et les prompts
 // types ; la feuille s'ouvre filtrée sur la catégorie de la saisie (sans image : Créer ; avec images : Éditer ; dessin
 // actif : Dessiner), et un nouveau prompt prend cette catégorie.
-//   node --test tests/ui/prompts.test.mjs   (ou : venv/bin/python tests/check.py --ui)
+//   venv/bin/python tests/check.py --quick --ui tests/ui/prompts.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome } from './driver.mjs';
@@ -30,8 +30,7 @@ async function openPrompts(expected) {             // feuille des prompts, une f
 }
 // « Enregistrer le texte actuel » avec ce titre, depuis la feuille ouverte
 async function saveCurrent(title, text) {
-  await page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
-    t.dispatchEvent(new Event('input')); })()`);
+  await page.typePrompt(text);
   await page.click('#promptSheet .pnew');
   await page.waitFor(`openedSheet === $('promptEditSheet')`, { what: 'feuille d\'enregistrement' });
   await page.eval(`$('peTitle').value = ${JSON.stringify(title)}`);

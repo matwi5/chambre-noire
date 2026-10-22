@@ -2,7 +2,7 @@
 git, est contrôlé comme un fichier suivi ; une adresse donnée à la main à une image affichée est refusée ; une ligne
 trop longue est refusée par --lines, par le hook avant commit et par le contrôle complet, qui s'arrête alors avant le
 banc ; --link-venv relie les notes du dossier principal dans un worktree."""
-import contextlib, io, os, shutil, subprocess, sys, tempfile, unittest
+import argparse, contextlib, io, os, shutil, subprocess, sys, tempfile, time, unittest
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -99,7 +99,7 @@ class LinesTest(RepoCase):
 
     def test_the_full_check_stops_before_the_bench_and_names_the_line_last(self):
         self.write("b.mjs", "const x = 1;\n" + "//" + LONG + "\n")
-        args = mock.Mock(no_bench=False, quick=False, ui=[], lines=False, link_venv=False)
+        args = argparse.Namespace(no_bench=False, quick=False, ui=[], name=None, lines=False, link_venv=False)
         with mock.patch.object(check, "check_python", return_value=[]), \
                 mock.patch.object(check, "check_js", return_value=[]), \
                 mock.patch.object(check, "run_bench") as bench, mock.patch.object(check, "run_ui") as ui, \
@@ -114,6 +114,29 @@ class LinesTest(RepoCase):
         self.assertEqual(lines[-1], "Contrôles : ÉCHEC : Lignes : b.mjs:2")
         with open(os.path.join(self.tmp.name, "journal.log"), encoding="utf-8") as f:
             self.assertEqual(f.read().strip().splitlines()[-1], lines[-1])
+
+
+class UiNameTest(unittest.TestCase):
+    """--ui --name : un motif qui ne vise aucun test échoue tout de suite, sans lancer Chrome ni le banc."""
+    def test_titles_are_read_from_the_test_files(self):
+        titles = check.ui_titles(["tests/ui/smoke.test.mjs"])
+        self.assertGreater(len(titles), 0)
+        self.assertTrue(all(isinstance(t, str) and t for t in titles))
+        self.assertTrue(any(t.startswith("« Générer » mène à la page En cours") for t in titles), titles)
+
+    def test_a_pattern_without_test_fails_at_once(self):
+        with tempfile.TemporaryDirectory(prefix="qwen-check-test-") as tmp:
+            start = time.monotonic()
+            r = subprocess.run([sys.executable, os.path.join(HERE, "check.py"), "--no-bench", "--ui",
+                                "tests/ui/smoke.test.mjs", "--name", "zz-aucun-test"], capture_output=True,
+                               text=True, env=dict(os.environ, QWEN_CHECK_REEXEC="1",
+                                                   QWEN_CHECK_JOURNAL=os.path.join(tmp, "journal.log")))
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("aucun test ne correspond au motif « zz-aucun-test »", r.stdout)
+        self.assertEqual(r.stdout.strip().splitlines()[-1],
+                         "Contrôles : ÉCHEC : Interface : motif « zz-aucun-test » sans test")
+        self.assertNotIn("Interface : tests/ui/smoke.test.mjs", r.stdout)   # aucun fichier lancé
+        self.assertLess(time.monotonic() - start, 30)
 
 
 class LinkNotesTest(unittest.TestCase):

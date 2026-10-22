@@ -2,7 +2,7 @@
 // par image, réglages, heure « prête vers », « autre appareil »), cloisonnée par espace comme la pastille ; « Passer en
 // tête » et l'annulation d'une carte ou d'une image d'un lot dépliée, les générations incognito de la page restant
 // reconnues.
-//   node --test tests/ui/file.test.mjs   (ou : venv/bin/python tests/check.py --ui)
+//   venv/bin/python tests/check.py --quick --ui tests/ui/file.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome, waitUntil } from './driver.mjs';
@@ -30,15 +30,6 @@ async function enterPrivate() {
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
 }
-// génération lancée hors de l'interface, comme depuis un autre appareil (private : génération privée)
-async function launch(prompt, extra = {}) {
-  const r = await post('/api/generate', { mode: 't2i', prompt, width: 512, height: 512, steps: 20, cfg: 1, seed: -1,
-    preview: false, ref_images: [], ...extra });
-  assert.equal(r.status, 202);
-  return r.body;
-}
-const type = text => page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
-  t.dispatchEvent(new Event('input')); })()`);
 // génération de la page annulée depuis la file de la page En cours
 async function cancelOwnFromQueue() {
   await page.click('#tabbar [data-pane="run"]');
@@ -46,23 +37,16 @@ async function cancelOwnFromQueue() {
     { what: 'carte de la génération' });
   await page.click('#queueList .qcard.own [data-kind="cancel"]');
 }
-// texte tapé dans Créer puis « Générer », qui mène à la page En cours
-async function go(text) {
-  if (await page.eval(`mode`) !== 'create') await page.click('#tabbar [data-pane="create"]');
-  await type(text);
-  await page.click('#go');
-  await page.waitFor(`mode === 'run'`, { what: 'page En cours après « Générer »' });
-}
 const cards = () => page.eval(`[...$('queueList').querySelectorAll('.qcard')].map(r => r.textContent)`);
 const count = n => `$('queueList').querySelectorAll('.qcard').length === ${n}`;
 
 test('espace privé : la file ne montre que les générations privées, avec leur prompt, derrière le travail caché', async () => {
   await enterPrivate();
-  const pub = await launch('SLOW=1 zq9public en cours');
+  const pub = await page.launch('SLOW=1 zq9public en cours');
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`,
     { what: 'génération publique en cours' });
-  await launch('zq9secret d\'un autre appareil', { private: true });
-  await go('zq9secret de cette page');
+  await page.launch('zq9secret d\'un autre appareil', { private: true });
+  await page.generate('zq9secret de cette page');
   await page.waitFor(`pageJobs.some(p => p.private && isActive(p))`, { what: 'génération privée suivie par la page' });
   await page.eval(`refreshStatus()`);
   // pastille : rien de l'espace ne tourne : « En attente », durée jusqu'au début (travail caché compris), « +2 »
@@ -80,7 +64,7 @@ test('espace privé : la file ne montre que les générations privées, avec leu
   // rien de tel dans l'espace privé
   assert.doesNotMatch(all, /zq9public|incognito|Génération privée|· autre appareil/);
   // lot privé d'un autre appareil : une carte, annulée en entier depuis la file
-  await launch('zq9secret lot', { private: true, count: 2 });
+  await page.launch('zq9secret lot', { private: true, count: 2 });
   await page.eval(`refreshStatus()`);
   const lotCancel = `#queueList [data-post^="/api/lot/"][data-kind="cancel"]`;
   await page.waitFor(`${count(3)} && !!document.querySelector('${lotCancel}')`, { what: 'carte du lot privé' });
@@ -108,16 +92,17 @@ const onScreen = () => page.eval(`({ shown: shown && (shown.private ? 'privée '
 const PUB = 'HOLD=sortie zq9public de la page', SECRET = 'SLOW=0.05 zq9secret de la page';
 
 test('sortie : la génération privée quitte l\'écran et la page ; elle revient au retour, aussi après un rechargement', async () => {
+  await bench.idle();
   await page.goto(bench.url + '/');
   await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
-  await go(PUB);                                   // génération publique de la page, en cours
+  await page.generate(PUB);                                   // génération publique de la page, en cours
   await page.waitFor(`pageJobs.some(p => !p.private && p.j.status === 'running')`,
     { what: 'génération publique en cours' });
 
   await enterPrivate();                            // elle quitte l'écran, reste suivie en mémoire
   assert.deepEqual(await onScreen(), { shown: null, stage: false, island: false });
   assert.deepEqual(await jobs(), ['publique ' + PUB]);
-  await go(SECRET);                                // génération privée, en attente derrière la publique
+  await page.generate(SECRET);                                // génération privée, en attente derrière la publique
   await page.waitFor(`shown && shown.private`, { what: 'génération privée à l\'écran' });
 
   await page.click('#privExit');                   // « Sortir » : la privée quitte l'écran et la page, la publique revient
@@ -147,17 +132,17 @@ test('sortie : la génération privée quitte l\'écran et la page ; elle revien
   bench.release('sortie');
   await page.waitFor(`pageJobs.some(p => !p.private && p.prompt === ${JSON.stringify(PUB)})`,
     { what: 'génération publique reprise' });
-  await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy)`,
-    { what: 'Mac au repos', timeout: 20000 });
+  await bench.idle();
   page.assertNoErrors();
 });
 
 test('fermé par le Mac : la génération privée quitte l\'écran comme après « Sortir »', async () => {
+  await bench.idle();
   await page.goto(bench.url + '/');
   await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
-  const pub = await launch('SLOW=1 zq9public d\'un autre appareil');   // la privée attend derrière
+  const pub = await page.launch('SLOW=1 zq9public d\'un autre appareil');   // la privée attend derrière
   await enterPrivate();
-  await go(SECRET);
+  await page.generate(SECRET);
   await page.waitFor(`shown && shown.private`, { what: 'génération privée à l\'écran' });
   assert.equal((await post('/api/private/lock')).status, 200);   // session fermée sans « Sortir »
   await page.eval(`refreshStatus()`);
@@ -179,7 +164,7 @@ test('fermé par le Mac : la génération privée quitte l\'écran comme après 
 
 test('espace public : une génération privée en cours n\'allume pas la pastille et n\'est pas dans la file', async () => {
   await enterPrivate();
-  const priv = await launch('SLOW=1 zq9secret en cours', { private: true });
+  const priv = await page.launch('SLOW=1 zq9secret en cours', { private: true });
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`,
@@ -190,7 +175,7 @@ test('espace public : une génération privée en cours n\'allume pas la pastill
   await page.waitFor(`$('engineSheet').classList.contains('on')`, { what: 'panneau Moteur, pas la file' });
   await page.eval(`closeSheet()`);
   // une génération publique derrière elle : « En attente », sans ligne pour la privée
-  await go('zq9public derrière');
+  await page.generate('zq9public derrière');
   await page.waitFor(`pageJobs.some(p => !p.private && isActive(p))`, { what: 'génération publique suivie' });
   await page.eval(`refreshStatus()`);
   await page.waitFor(`$('islStep').textContent === 'En attente' && $('islEta').textContent.startsWith('≈')`,
@@ -214,17 +199,16 @@ test('espace public : une génération privée en cours n\'allume pas la pastill
 // ------------------------------------------------------------ cartes et « Passer en tête »
 const firstPaths = () => page.eval(`[...$('queueList').querySelectorAll('.qcard')]
   .map(c => c.querySelector('[data-kind="first"]')?.dataset.post || '')`);
-const idle = () => page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)`,
-  { what: 'Mac au repos', timeout: 30000 });
 
 test('cartes : un lot de la page sur une carte avec ses cases, réglages, heure ; « autre appareil »', async () => {
+  await bench.idle();
   await page.goto(bench.url + '/');
   await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
-  const held = await launch('HOLD=cartes zq9 d\'un autre appareil');
+  const held = await page.launch('HOLD=cartes zq9 d\'un autre appareil');
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`, { what: 'génération en cours' });
-  const other = await launch('zq9 attend ailleurs', { width: 960, height: 640, steps: 12 });
+  const other = await page.launch('zq9 attend ailleurs', { width: 960, height: 640, steps: 12 });
   await page.eval(`opt.count = 3; opt.res = 'low'; opt.steps = 'low'; saveOpt(); refreshChoices()`);
-  await go('SLOW=0.4 zq9 trois essais');
+  await page.generate('SLOW=0.4 zq9 trois essais');
   await page.eval(`opt.count = 1; saveOpt(); refreshChoices(); refreshStatus()`);
   // en cours (pas de carte), l'autre appareil, puis le lot de la page sur une seule carte
   await page.waitFor(`${count(2)} && $('queueList').querySelectorAll('.qcard.own .qcase').length === 3`,
@@ -261,18 +245,18 @@ test('cartes : un lot de la page sur une carte avec ses cases, réglages, heure 
     && $('doneList').querySelectorAll('.dlot [data-open]').length === 2`,
     { what: 'lot terminé', timeout: 30000 });
   assert.equal((await post(`/api/job/${other.id}/cancel`)).status, 200);
-  await idle();
+  await bench.idle();
   assert.equal((await post(`/api/job/${held.id}/cancel`)).status, 200);   // déjà finie : rien ne change
   await page.eval(`$('doneClear').click()`);
   page.assertNoErrors();
 });
 
 test('« Passer en tête » : juste après la génération en cours, incognito de la page reconnues', async () => {
-  const held = await launch('HOLD=tete zq9 d\'un autre appareil');
+  const held = await page.launch('HOLD=tete zq9 d\'un autre appareil');
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`, { what: 'génération en cours' });
   await page.eval(`setIncog(true)`);
   for (const [k, text] of [[1, 'zq9 incognito un'], [2, 'zq9 incognito deux']]) {
-    await go(text);
+    await page.generate(text);
     await page.waitFor(`pageJobs.filter(p => p.incognito && isActive(p)).length === ${k}`,
       { what: `incognito ${k} suivie` });
   }
@@ -295,16 +279,16 @@ test('« Passer en tête » : juste après la génération en cours, incognito d
   }
   assert.equal((await post(`/api/job/${held.id}/cancel`)).status, 200);
   bench.release('tete');
-  await idle();
+  await bench.idle();
   page.assertNoErrors();
 });
 
 test('« Passer en tête » d\'une image du lot d\'un autre appareil, carte dépliée ; puis tout le lot annulé',
   async () => {
-    const held = await launch('HOLD=entete zq9 en cours');
+    const held = await page.launch('HOLD=entete zq9 en cours');
     await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`, { what: 'génération en cours' });
-    const other = await launch('zq9 avant le lot');
-    const lot = await launch('zq9 lot', { count: 3 });
+    const other = await page.launch('zq9 avant le lot');
+    const lot = await page.launch('zq9 lot', { count: 3 });
     await page.eval(`refreshStatus()`);
     await page.click('#tabbar [data-pane="create"]');
     await page.click('#island');
@@ -336,15 +320,15 @@ test('« Passer en tête » d\'une image du lot d\'un autre appareil, carte dép
     await page.waitFor(count(1), { what: 'lot annulé' });
     for (const id of [other.id, held.id]) assert.equal((await post(`/api/job/${id}/cancel`)).status, 200);
     bench.release('entete');
-    await idle();
+    await bench.idle();
     page.assertNoErrors();
   });
 
 test('rien ne dépasse à 367 px : cartes, cases et lignes dépliées', async () => {
-  const held = await launch('HOLD=largeur zq9 en cours');
+  const held = await page.launch('HOLD=largeur zq9 en cours');
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`, { what: 'génération en cours' });
-  await launch('zq9 Portrait of an old fisherman mending his nets at dawn, golden light, 85 mm', { count: 4 });
-  await launch('zq9 seule', { width: 1536, height: 2752 });
+  await page.launch('zq9 Portrait of an old fisherman mending his nets at dawn, golden light, 85 mm', { count: 4 });
+  await page.launch('zq9 seule', { width: 1536, height: 2752 });
   await page.eval(`refreshStatus()`);
   await page.click('#tabbar [data-pane="run"]');
   await page.waitFor(count(2), { what: 'deux cartes' });
@@ -361,7 +345,7 @@ test('rien ne dépasse à 367 px : cartes, cases et lignes dépliées', async ()
   for (const id of await page.eval(`queueState.filter(e => e.id).map(e => e.id)`))
     await post(`/api/job/${id}/cancel`);
   bench.release('largeur');
-  await idle();
+  await bench.idle();
   assert.equal((await post(`/api/job/${held.id}/cancel`)).status, 200);
   page.assertNoErrors();
 });

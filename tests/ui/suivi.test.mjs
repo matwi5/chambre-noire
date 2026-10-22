@@ -1,7 +1,7 @@
 // Suivi d'une génération privée qui devient « inconnue » (404), dans la vue du téléphone : deux pages du même
 // navigateur suivent la même génération (oubliée par celle qui l'a lancée), ou l'espace se ferme avant que la page le
 // sache ; la génération quitte la page sans faux message « Échec : génération introuvable ».
-//   node --test tests/ui/suivi.test.mjs   (ou : venv/bin/python tests/check.py --ui tests/ui/suivi.test.mjs)
+//   venv/bin/python tests/check.py --quick --ui tests/ui/suivi.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome } from './driver.mjs';
@@ -30,8 +30,6 @@ const watchToasts = page => page.eval(`(() => { window.seenToasts = []; window.t
 const failures = async page => (await page.eval(`seenToasts`)).filter(t => t.startsWith('Échec'));
 // la console note le 404 du suivi comme une ressource en échec : c'est la réponse attendue, pas une erreur de la page
 const assertNoOtherErrors = page => assert.deepEqual(page.errors.filter(e => !/status of 404/.test(e)), []);
-const idle = page => page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy)`,
-  { what: 'Mac au repos', timeout: 30000 });
 
 async function open(page) {
   await page.goto(bench.url + '/');
@@ -44,8 +42,7 @@ async function enterPrivate(page) {
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
 }
 async function launch(page, prompt) {
-  await page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(prompt)};
-    t.dispatchEvent(new Event('input')); })()`);
+  await page.typePrompt(prompt);
   await page.click('#go');
   await page.waitFor(`pageJobs.some(p => p.private && !p.adopted)`, { what: 'génération privée suivie par la page' });
   return page.eval(`pageJobs.find(p => p.private).id`);
@@ -81,7 +78,7 @@ test('deux pages : celle qui a repris la génération la voit oubliée par l\'au
   assert.equal(await second.eval(`inPrivate()`), true, 'la seconde page reste dans l\'espace privé');
   assertNoOtherErrors(first);
   assertNoOtherErrors(second);
-  await idle(first);
+  await bench.idle();
 });
 
 test('espace fermé avant que /api/status le dise : le 404 du suivi ne donne pas « Échec »', async () => {
@@ -97,5 +94,5 @@ test('espace fermé avant que /api/status le dise : le 404 du suivi ne donne pas
   assert.deepEqual(await failures(first), []);
   assertNoOtherErrors(first);
   bench.release('ferme');                          // la génération continue sur le Mac et se range dans l'espace
-  await idle(first);
+  await bench.idle();
 });

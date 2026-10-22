@@ -1,6 +1,6 @@
 // Test de fumée de l'interface, dans la vue du téléphone : chaque écran principal s'ouvre sans erreur de console
 // (page En cours comprise, avec la file), et le panneau Moteur dit quelle version du code est servie.
-//   node --test "tests/ui/*.test.mjs"   (ou : venv/bin/python tests/check.py --ui)
+//   venv/bin/python tests/check.py --ui   (tous les fichiers ; --quick --ui tests/ui/smoke.test.mjs pour celui-ci)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome } from './driver.mjs';
@@ -45,8 +45,7 @@ test('feuille des prompts', async () => {
 
 test('« Générer » mène à la page En cours, puis annulation depuis le haut de la page', async () => {
   // une génération lente lancée depuis l'interface (le faux moteur ralentit sur SLOW=…)
-  await page.eval(`(() => { const t = $('prompt'); t.value = 'SLOW=0.3 essai de la file';
-    t.dispatchEvent(new Event('input')); })()`);
+  await page.typePrompt('SLOW=0.3 essai de la file');
   await page.click('#go');
   await page.waitFor(`pageJobs.some(isActive) && mode === 'run'`, { what: 'génération suivie, page En cours' });
   await page.waitFor(`shown && shown.j.status === 'running'`, { what: 'génération en cours en haut de la page' });

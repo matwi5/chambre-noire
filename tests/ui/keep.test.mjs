@@ -59,8 +59,7 @@ async function launchLot(extra) {
   const body = { prompt: 'à départager', width: 512, height: 512, steps: 2, cfg: 1, seed: -1, preview: false,
     preview_interval: 5, init_image: null, mask_image: null, strength: 1, ...extra(image) };
   const reply = await page.eval(`postJson('/api/generate', ${JSON.stringify(body)}).then(r => r.json())`);
-  await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)`,
-    { what: 'lot terminé' });
+  await bench.idle();                              // lot terminé
   return reply.lot.id;
 }
 // « Garder celle-ci » offert sur la première image du lot, ouverte depuis la galerie

@@ -937,15 +937,19 @@ ajoutées, en moins d'une seconde ; le hook avant commit du dépôt (`.githooks/
 `--all`) sans toucher aux titres, listes, tableaux, blocs de code ni lignes vides.
 
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps que
-le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier. Ils ouvrent l'interface servie par le banc dans un
-Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du navigateur. Ils couvrent
-les écrans principaux, la page En cours (onglets, pastilles, génération d'un autre appareil ou cachée, rien qui dépasse
-à la largeur du téléphone), les terminées (cartes, grille d'un lot, échecs, « × » et « Tout retirer », plafond, message
+le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier, et `--name <motif>` pour les seuls tests dont le
+nom correspond (échec immédiat si aucun ne correspond). Un test bloqué échoue au bout de 3 minutes (20 pour un
+fichier), et Chrome et le banc sont arrêtés à la fin de chaque fichier. Les tests ouvrent l'interface servie par le
+banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du
+navigateur. Ils couvrent les écrans principaux, la page En cours (onglets, pastilles, génération d'un autre appareil
+ou cachée, rien qui dépasse à la largeur du téléphone), les terminées (cartes, grille d'un lot, échecs, « × » et « Tout
+retirer », plafond, message
 « Image prête »), « Garder celle-ci » après un rechargement de la galerie, la saisie (page Créer unique, Dessiner,
 collage, campagne à partir de 2 images, plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque
 espace), l'en-tête (cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés, la reprise d'une
-génération, le suivi d'une génération privée devenue inconnue (sans faux « Échec ») et le brouillon unique (reprise des
-anciens, aucun brouillon incognito ou privé dans le navigateur).
+génération, le suivi d'une génération privée devenue inconnue (sans faux « Échec »), le brouillon unique (reprise des
+anciens, aucun brouillon incognito ou privé dans le navigateur) et le pilote lui-même (recherche de données restées dans
+la page, fichiers écrits par le banc, délais).
 
 Tests de bout en bout, interface lancée :
 

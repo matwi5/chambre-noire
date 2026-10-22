@@ -3,7 +3,7 @@
 // Éditer, Dessiner, Supprimer), « × » et « Tout retirer » (confirmation avec une image incognito, qui reste jusque-là),
 // plafond de 12 (hors incognito), liste vide au rechargement, vrai mode et images d'entrée de chaque image, et le
 // message « Image prête » ou « Lot prêt » quand on est ailleurs dans l'application.
-//   node --test tests/ui/terminees.test.mjs   (ou : venv/bin/python tests/check.py --ui tests/ui/terminees.test.mjs)
+//   venv/bin/python tests/check.py --quick --ui tests/ui/terminees.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome } from './driver.mjs';
@@ -25,18 +25,6 @@ after(async () => {
   await bench?.stop();
 });
 
-const type = text => page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
-  t.dispatchEvent(new Event('input')); })()`);
-// texte tapé dans Créer puis « Générer » : la page passe à En cours
-async function go(text) {
-  if (await page.eval(`mode`) !== 'create') await page.click('#tabbar [data-pane="create"]');
-  await type(text);
-  const before = await page.eval(`pageJobs.length`);
-  await page.click('#go');
-  await page.waitFor(`mode === 'run' && pageJobs.length > ${before}`, { what: 'demande acceptée, page En cours' });
-}
-const idle = () => page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)
-  && !pageJobs.some(isActive)`, { what: 'Mac au repos', timeout: 30000 });
 const cards = () => page.eval(`[...$('doneList').children].map(c => c.textContent)`);
 const watchToasts = () => page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
   window.toastWatch = new MutationObserver(() => seenToasts.push($('toast').textContent));
@@ -61,7 +49,7 @@ async function clearAll() {
 }
 
 test('une image finie : carte sous la file, visionneuse d\'un appui, « × » la retire sans la supprimer', async () => {
-  await go('zq4 un phare');
+  await page.generate('zq4 un phare');
   await page.waitFor(`$('doneList').children.length === 1 && $('doneList').querySelector('img').naturalWidth > 0`,
     { what: 'carte de l\'image finie' });
   assert.match((await cards())[0], /zq4 un phare/);
@@ -85,15 +73,15 @@ test('une image finie : carte sous la file, visionneuse d\'un appui, « × » la
 });
 
 test('échec : carte avec le message du Mac ; annulée : absente', async () => {
-  await go('FAIL zq4 échec');
+  await page.generate('FAIL zq4 échec');
   await page.waitFor(`$('doneList').querySelector('.fail')`, { what: 'carte de l\'échec' });
   assert.match(await page.eval(`$('doneList').querySelector('.fail').textContent`), /zq4 échec/);
   assert.match(await page.eval(`$('doneList').querySelector('.fail .dmeta.err').textContent`), /^Échec : /);
-  await go('HOLD=termine zq4 annulée');
+  await page.generate('HOLD=termine zq4 annulée');
   await page.waitFor(`shown && shown.j.status === 'running'`, { what: 'génération en cours' });
   await page.click('#cancelLoader');
   bench.release('termine');
-  await idle();
+  await bench.idle({ page });
   assert.equal(await page.eval(`$('doneList').children.length`), 1, 'seul l\'échec');
   assert.doesNotMatch((await cards()).join(), /annulée/);
   await clearAll();
@@ -102,7 +90,7 @@ test('échec : carte avec le message du Mac ; annulée : absente', async () => {
 
 test('ailleurs : « Image prête » mène à En cours ; lot en grille, « Lot prêt » avec ses échecs', async () => {
   await watchToasts();
-  await go('HOLD=pret zq4 depuis Créer');
+  await page.generate('HOLD=pret zq4 depuis Créer');
   await page.click('#tabbar [data-pane="create"]');
   bench.release('pret');                           // elle finit pendant qu'on est sur Créer
   await page.waitFor(`seenToasts.includes('Image prête')`, { what: 'message « Image prête »' });
@@ -111,7 +99,7 @@ test('ailleurs : « Image prête » mène à En cours ; lot en grille, « Lot pr
   // lot de 3 variantes dont la deuxième échoue (graines 20, 21, 22 ; le faux moteur échoue sur la graine 21)
   await page.eval(`opt.count = 3; saveOpt(); refreshChoices();
     window.realBuild = window.realBuild || buildRequest; window.buildRequest = () => ({ ...realBuild(), seed: 20 })`);
-  await go('HOLD=lotpret FAILSEED=21 zq4 lot');
+  await page.generate('HOLD=lotpret FAILSEED=21 zq4 lot');
   await page.eval(`opt.count = 1; saveOpt(); refreshChoices(); window.buildRequest = realBuild`);
   await page.click('#tabbar [data-pane="create"]');
   bench.release('lotpret');
@@ -135,7 +123,7 @@ test('ailleurs : « Image prête » mène à En cours ; lot en grille, « Lot pr
 
 test('incognito : l\'image reste après la Galerie ; « Tout retirer » confirme, puis l\'oublie', async () => {
   await page.eval(`setIncog(true)`);
-  await go('zq4 incognito');
+  await page.generate('zq4 incognito');
   await page.eval(`setIncog(false)`);
   await page.waitFor(`pageJobs.some(p => p.incognito && p.result)`, { what: 'image incognito reçue' });
   const url = await page.eval(`pageJobs.find(p => p.incognito).result.url`);
@@ -157,9 +145,9 @@ test('incognito : l\'image reste après la Galerie ; « Tout retirer » confirme
 
 test('plafond : 12 terminées hors incognito, la plus ancienne sort d\'elle-même ; les incognito restent', async () => {
   await page.eval(`setIncog(true)`);
-  for (const k of [1, 2]) await go(`zq4 garde incognito ${k}`);
+  for (const k of [1, 2]) await page.generate(`zq4 garde incognito ${k}`);
   await page.eval(`setIncog(false)`);
-  for (let k = 1; k <= 13; k++) { await go(`zq4 image ${k}`); await idle(); }
+  for (let k = 1; k <= 13; k++) { await page.generate(`zq4 image ${k}`); await bench.idle({ page }); }
   const prompts = () => page.eval(`[...$('doneList').querySelectorAll('.dprompt')].map(x => x.textContent)`);
   await page.waitFor(`$('doneList').children.length === 14`, { what: 'douze images et deux incognito' });
   const shown = await prompts();
@@ -178,7 +166,7 @@ test('vrai mode et images d\'entrée : une édition à deux références les mon
     x.fillStyle = c; x.fillRect(0, 0, 256, 256);
     inputImages.push(await toEntry(c + '.png', cv.toDataURL('image/png'))); }
     renderInputs(); })()`);
-  await go('zq4 édition');
+  await page.generate('zq4 édition');
   await page.waitFor(`$('doneList').children.length === 1 && !pageJobs.some(isActive)`, { what: 'édition finie' });
   await page.click('#doneList [data-open]');
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse' });
@@ -191,8 +179,9 @@ test('vrai mode et images d\'entrée : une édition à deux références les mon
 });
 
 test('rechargement : la liste repart vide', async () => {
-  await go('zq4 avant rechargement');
+  await page.generate('zq4 avant rechargement');
   await page.waitFor(`$('doneList').children.length === 1`, { what: 'une terminée' });
+  await bench.idle();
   await page.goto(bench.url + '/');
   await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
   await page.click('#tabbar [data-pane="run"]');

@@ -34,14 +34,25 @@ class RewrapTest(unittest.TestCase):
         self.assertTrue(all(len(l) <= 120 for l in lines if l not in (code, "| a | " + "b" * 130 + " |")))
         self.assertEqual(structure(new), structure(text))
         self.assertEqual(new.split(), text.split())           # mêmes mots, dans le même ordre
-        k = lines.index("suite du paragraphe")
-        self.assertEqual(" ".join(lines[2:k]), "Début " + WORDS)  # paragraphe : la suite sans retrait
-        bullet = lines[k + 2:lines.index("  suite de la puce")]
+        blank = [k for k, l in enumerate(lines) if not l]
+        paragraph = lines[blank[0] + 1:blank[1]]    # la suite sans retrait, bout repris par la ligne d'après
+        self.assertTrue(len(paragraph) > 1 and all(not l[0].isspace() for l in paragraph), paragraph)
+        self.assertTrue(paragraph[-1].endswith("suite du paragraphe"), paragraph)
+        start = lines.index(next(l for l in lines if l.startswith("1. ")))
+        bullet = lines[blank[1] + 1:start]
         self.assertTrue(bullet[0].startswith("- mot0") and len(bullet) > 1)
-        self.assertTrue(all(l.startswith("  mot") for l in bullet[1:]), bullet)
-        numbered = lines[lines.index("  suite de la puce") + 1:lines.index("```text") - 1]
+        self.assertTrue(all(l.startswith("  ") and not l[2].isspace() for l in bullet[1:]), bullet)
+        self.assertTrue(bullet[-1].endswith("suite de la puce"), bullet)
+        numbered = lines[start:blank[2]]
         self.assertTrue(all(l.startswith("   mot") for l in numbered[1:]) and len(numbered) > 1, numbered)
         self.assertEqual(lines[lines.index("```text") + 1], code)   # bloc de code : intact
+
+    def test_the_tail_stays_alone_before_another_block(self):
+        line = "Texte " + WORDS
+        for after in ("", "- une puce", "    code en retrait", "# Titre"):
+            new = rewrap.rewrap(line + "\n" + after)[0].split("\n")
+            self.assertEqual(new[-1], after)
+            self.assertEqual(" ".join(new[:-1]), line)
 
     def test_a_cut_never_starts_a_line_with_a_block_mark(self):
         line = "a" * 110 + " - b 1. c # d > e | f " + "g " * 20

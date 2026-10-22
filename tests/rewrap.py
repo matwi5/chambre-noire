@@ -60,9 +60,22 @@ def cut(line, width=check.LINE_MAX):
     return out + [lead + body + trail]
 
 
+def joins(tail, nxt, width):
+    """Ligne faite du bout coupé tail et de la ligne suivante nxt, quand nxt continue le même paragraphe au même
+    retrait et que le tout tient ; sinon None (le bout reste seul sur sa ligne)."""
+    indent = tail[:len(tail) - len(tail.lstrip())]
+    rest = nxt[len(indent):]
+    if (not nxt.startswith(indent) or not rest.strip() or rest[0].isspace() or BLOCK_RE.match(rest)
+            or SKIPPED_RE.match(nxt) or tail != tail.rstrip() or QUOTE_RE.match(tail)):
+        return None
+    merged = f"{tail} {rest}"
+    return merged if len(merged) <= width else None
+
+
 def rewrap(text, numbers=None, width=check.LINE_MAX):
     """Texte recoupé : (nouveau texte, nombre de lignes coupées, numéros des lignes trop longues laissées telles
-    quelles). numbers : seuls numéros de ligne (à partir de 1) à recouper, toutes les lignes si None."""
+    quelles). numbers : seuls numéros de ligne (à partir de 1) à recouper, toutes les lignes si None. Le bout d'une
+    ligne coupée rejoint la ligne suivante du même paragraphe quand le tout tient (pas de mot seul sur sa ligne)."""
     newline = "\r\n" if "\r\n" in text else "\n"
     lines = text.split(newline)
     out, cuts, left, fenced = [], 0, [], False
@@ -72,11 +85,14 @@ def rewrap(text, numbers=None, width=check.LINE_MAX):
         elif (len(line) > width and not fenced and not SKIPPED_RE.match(line)
               and (numbers is None or k in numbers)):
             pieces = cut(line, width)
-            out += pieces
             if len(pieces) > 1:
                 cuts += 1
+                merged = joins(pieces[-1], lines[k], width) if k < len(lines) else None
+                if merged:                            # la ligne suivante, traitée au tour d'après, porte le bout
+                    pieces, lines[k] = pieces[:-1], merged
             else:
                 left.append(k)
+            out += pieces
             continue
         out.append(line)
     return newline.join(out), cuts, left

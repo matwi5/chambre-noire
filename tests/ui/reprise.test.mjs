@@ -6,11 +6,9 @@
 // d'entrée connues ; saisie visée notée avant la lecture (espace changé pendant l'attente). Une image incognito reste
 // incognito : « Reprendre », « Éditer » et « Dessiner » allument l'interrupteur, sans brouillon, et rien d'elle
 // n'arrive sur le disque du banc après « Générer ».
-//   node --test tests/ui/reprise.test.mjs   (ou : venv/bin/python tests/check.py --ui)
+//   venv/bin/python tests/check.py --quick --ui tests/ui/reprise.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import { startBench, launchChrome } from './driver.mjs';
 
 let bench, chrome, page, held = null;
@@ -39,15 +37,14 @@ const LONG = 'HOLD=lot' + TEXT, LONG_PRIV = 'HOLD=privee' + TEXT;
 const CODE = 'code-du-banc-1';
 const post = (url, body = {}) => page.eval(`postJson(${JSON.stringify(url)}, ${JSON.stringify(body)}).then(r => r.status)`);
 const queue = () => page.eval(`fetch('/api/status').then(r => r.json()).then(s => s.queue.map(e => e.prompt))`);
-const idle = () => page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy)`, { what: 'Mac au repos', timeout: 30000 });
 
 test('rechargement : un lot repris montre le prompt complet et « Reprendre » rend le texte entier', async () => {
   await page.goto(bench.url + '/');
   await page.eval(`localStorage.clear()`);
   await page.goto(bench.url + '/');
   await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
-  await page.eval(`opt.count = 2; saveOpt(); refreshChoices();
-    (() => { const t = $('prompt'); t.value = ${JSON.stringify(LONG)}; t.dispatchEvent(new Event('input')); })()`);
+  await page.eval(`opt.count = 2; saveOpt(); refreshChoices();`);
+  await page.typePrompt(LONG);
   await page.click('#go');
   await page.waitFor(`pageJobs.length === 2`, { what: 'lot de deux images suivi par la page' });
 
@@ -89,7 +86,7 @@ test('espace privé : une génération privée lancée d\'un autre appareil est 
   bench.release('privee');
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
-  await idle();
+  await bench.idle();
   page.assertNoErrors();
 });
 
@@ -101,8 +98,6 @@ const ref = color => `(() => { const c = document.createElement('canvas'); c.wid
 // une génération envoyée hors de l'interface (comme d'un autre appareil), 512×512 en 8 étapes : Carré, 360p, Low
 const send = body => page.eval(`postJson('/api/generate', { width: 512, height: 512, steps: 8, cfg: 1, seed: -1,
   preview: false, ref_images: [], ...${body} }).then(r => r.status)`);
-const settled = () => page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)`,
-  { what: 'file vide', timeout: 30000 });
 // couleur du centre de chaque image d'entrée de la saisie affichée
 const colors = () => page.eval(`inputImages.map(x => { const c = document.createElement('canvas');
   c.width = c.height = 1; const g = c.getContext('2d'); g.drawImage(x.img, x.w / 2, x.h / 2, 1, 1, 0, 0, 1, 1);
@@ -110,10 +105,9 @@ const colors = () => page.eval(`inputImages.map(x => { const c = document.create
   return '#' + [...g.getImageData(0, 0, 1, 1).data.slice(0, 3)].map(hex).join(''); })`);
 const saisie = () => page.eval(`({ text: $('prompt').value, n: inputImages.length, drawOn, mask: maskMode(),
   traced: paintedPixels(), kind: inputKind(), ratio: opt.ratio, res: opt.res, steps: opt.steps })`);
-const typed = text => page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
-  t.dispatchEvent(new Event('input')); })()`);
 const draft = () => page.eval(`localStorage.getItem('qwen-prompt')`);
 async function fresh() {
+  await bench.idle();                              // rien en file : la page rechargée ne reprend rien
   await page.goto(bench.url + '/');
   await page.eval(`localStorage.clear()`);
   await page.goto(bench.url + '/');
@@ -151,10 +145,10 @@ test('« Reprendre » une édition : texte, références, réglages, confirmée 
   await fresh();
   assert.equal(await send(`{ mode: 'edit', prompt: 'zr1 edition',
     ref_images: [${ref('#c02020')}, ${ref('#2060c0')}] }`), 202);
-  await settled();
+  await bench.idle();
   await page.eval(`opt.ratio = '16:9'; opt.res = 'high'; opt.steps = 'max'; campaignOn = $('campChk').checked = true;
     saveOpt(); refreshChoices()`);
-  await typed('texte en cours');
+  await page.typePrompt('texte en cours');
   await view('zr1 edition');
   assert.equal(await resumable(), true);
   await page.click('#vResume');
@@ -181,7 +175,7 @@ test('« Reprendre » un dessin : masque sur l\'image de départ, tracé vide ; 
   assert.equal(await send(`{ mode: 'mask', prompt: 'zr2 masque', init_image: ${ref('#30a050')},
     mask_image: ${ref('#ffffff')}, ref_images: [${ref('#808080')}] }`), 202);
   assert.equal(await send(`{ mode: 'annot', prompt: 'zr3 annotation', ref_images: [${ref('#a040c0')}] }`), 202);
-  await settled();
+  await bench.idle();
   await page.eval(`setMaskMode('annotation')`);
   await view('zr2 masque');
   await page.click('#vResume');                   // saisie vide : sans confirmation
@@ -206,7 +200,7 @@ test('« Reprendre » un texte → image : le texte seul, sans images ; absent s
   await fresh();
   assert.equal(await send(`{ mode: 't2i', prompt: 'zr4 texte' }`), 202);
   assert.equal(await send(`{ mode: 'edit', prompt: 'zr4 edition', ref_images: [${ref('#c02020')}] }`), 202);
-  await settled();
+  await bench.idle();
   await page.eval(`(async () => { inputImages.push(await toEntry('a.png', ${ref('#204080')})); renderInputs(); })()`);
   await page.waitFor(`inputImages.length === 1`, { what: 'une image dans la saisie' });
   await view('zr4 texte');
@@ -235,7 +229,7 @@ test('« Reprendre » une image incognito : images gardées par la page, incogni
   await page.click('#incog');
   await page.eval(`(async () => { inputImages.push(await toEntry('b.png', ${ref('#d08020')})); renderInputs(); })()`);
   await page.waitFor(`inputImages.length === 1`, { what: 'une image dans la saisie' });
-  await typed('zr5 incognito');
+  await page.typePrompt('zr5 incognito');
   await page.click('#go');
   await page.waitFor(`mode === 'run' && !!$('doneList').querySelector('[data-open]')`,
     { what: 'image incognito dans les terminées', timeout: 30000 });
@@ -252,7 +246,7 @@ test('« Reprendre » une image incognito : images gardées par la page, incogni
   assert.deepEqual(await colors(), ['#d08020']);
   assert.deepEqual(await page.eval(`[incogOn, $('incog').classList.contains('on'),
     document.documentElement.classList.contains('incog')]`), [true, true, true], 'incognito rallumé, visible');
-  await typed('zr5 incognito, retouché');          // une frappe après la reprise
+  await page.typePrompt('zr5 incognito, retouché');          // une frappe après la reprise
   assert.equal(await draft(), null, 'rien de l\'incognito dans le navigateur');
   assert.deepEqual(await page.eval(`Object.values({ ...localStorage }).filter(v => v.includes('zr5'))`), [],
     'localStorage fouillé');
@@ -264,7 +258,7 @@ test('« Reprendre » une image privée : images lues dans l\'espace privé, rie
   await enterPrivate();
   assert.equal(await send(`{ mode: 'edit', prompt: 'zr6 privee', ref_images: [${ref('#106070')}], private: true }`),
     202);
-  await settled();
+  await bench.idle();
   await view('zr6 privee');
   await page.click('#vResume');
   await page.waitFor(`mode === 'create' && inputImages.length === 1`, { what: 'image privée reprise' });
@@ -280,7 +274,7 @@ test('« Reprendre » : espace changé pendant la lecture, l\'image va dans la s
   await fresh();
   assert.equal(await send(`{ mode: 'edit', prompt: 'zr7 course', ref_images: [${ref('#c02020')}, ${ref('#2060c0')}] }`),
     202);
-  await settled();
+  await bench.idle();
   await view('zr7 course');
   await holdInput();
   await page.click('#vResume');                    // saisie publique vide : lecture tout de suite
@@ -300,12 +294,12 @@ test('« Reprendre » : espace changé pendant la lecture, l\'image va dans la s
 test('« Reprendre » : un texte tapé pendant la lecture n\'est pas remplacé sans confirmation', async () => {
   await fresh();
   assert.equal(await send(`{ mode: 'edit', prompt: 'zr8 frappe', ref_images: [${ref('#c02020')}] }`), 202);
-  await settled();
+  await bench.idle();
   await view('zr8 frappe');
   await holdInput();
   await page.click('#vResume');                    // saisie vide : sans confirmation, lecture en cours
   await held.promise;
-  await typed('tapé pendant la lecture');
+  await page.typePrompt('tapé pendant la lecture');
   await releaseInput();
   await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation demandée' });
   await page.eval(`answer(false)`);
@@ -320,21 +314,15 @@ async function incognitoDone(prompt) {
   await page.click('#incog');
   await page.eval(`(async () => { inputImages.push(await toEntry('c.png', ${ref('#d08020')})); renderInputs(); })()`);
   await page.waitFor(`inputImages.length === 1`, { what: 'une image dans la saisie' });
-  await typed(prompt);
+  await page.typePrompt(prompt);
   await page.click('#go');
   await page.waitFor(`mode === 'run' && pageJobs[0]?.result?.blob && !!$('doneList').querySelector('[data-open]')`,
     { what: 'image incognito dans les terminées', timeout: 30000 });
   await page.eval(`$('incog').click(); goTab('create')`);   // éteint, puis un texte public : brouillon écrit
-  await typed('texte public');
+  await page.typePrompt('texte public');
   assert.equal(await draft(), 'texte public');
   await page.eval(`goTab('run')`);
 }
-// fichiers que le serveur du banc écrit (le faux moteur fait la même image à chaque fois : on compare les listes) ;
-// tools/ui y est un lien vers le dépôt : pas parcouru
-const WRITTEN = ['outputs', 'jobs', 'logs', 'private'];
-const files = () => WRITTEN.map(d => path.join(bench.dir, d)).filter(d => fs.existsSync(d))
-  .flatMap(d => fs.readdirSync(d, { withFileTypes: true, recursive: true }).filter(e => e.isFile())
-    .map(e => path.join(e.parentPath, e.name)));
 const kept = () => page.eval(`Object.values({ ...localStorage }).filter(v => v.includes('zr9') || v.includes('zr10'))`);
 const lit = () => page.eval(`[incogOn, $('incog').classList.contains('on'),
   document.documentElement.classList.contains('incog'), $('toast').textContent.endsWith('incognito activé'),
@@ -342,21 +330,18 @@ const lit = () => page.eval(`[incogOn, $('incog').classList.contains('on'),
 
 test('« Éditer » une image incognito : incognito rallumé, sans brouillon, rien sur le disque ensuite', async () => {
   await incognitoDone('zr9 incognito');
-  await page.waitFor(`fetch('/api/status').then(r => r.json())
-    .then(s => !s.busy && !s.queue.length && !pageJobs.some(isActive))`, { what: 'Mac au repos', timeout: 30000 });
-  assert.ok(['outputs', 'jobs'].every(d => fs.existsSync(path.join(bench.dir, d))), 'dossier du banc trouvé');
-  const known = new Set(files());
+  await bench.idle({ page });
+  const disk = bench.disk();                       // fichiers créés ou changés par le serveur à partir d'ici
   await page.click('#doneList .dcard [data-act="edit"]');
   await page.waitFor(`mode === 'create' && inputImages.length === 1`, { what: 'image ajoutée, page Créer' });
   assert.deepEqual(await lit(), [true, true, true, true, null], 'interrupteur allumé, à la vue, sans brouillon');
-  await typed('zr9 suite');
+  await page.typePrompt('zr9 suite');
   await page.click('#go');
   await page.waitFor(`mode === 'run' && pageJobs.length === 2`, { what: 'demande acceptée' });
-  await page.waitFor(`fetch('/api/status').then(r => r.json())
-    .then(s => !s.busy && !s.queue.length && !pageJobs.some(isActive))`, { what: 'Mac au repos', timeout: 30000 });
+  await bench.idle({ page });
   assert.equal(await page.eval(`pageJobs[1].incognito`), true, 'partie en incognito');
   assert.deepEqual(await kept(), [], 'rien de l\'incognito dans localStorage');
-  assert.deepEqual(files().filter(f => !known.has(f)), [], 'aucun fichier nouveau sur le disque du banc');
+  assert.deepEqual(disk.written(), [], 'rien d\'écrit sur le disque du banc');
   page.assertNoErrors();
 });
 
@@ -389,7 +374,7 @@ test('image incognito : « Éditer » (visionneuse) et « Dessiner » (terminée
 
 test('« Éditer » une image normale : l\'interrupteur ne bouge pas', async () => {
   await fresh();
-  await typed('zr11 normale');
+  await page.typePrompt('zr11 normale');
   await page.click('#go');
   await page.waitFor(`mode === 'run' && !!$('doneList').querySelector('[data-act="edit"]')`,
     { what: 'image dans les terminées', timeout: 30000 });

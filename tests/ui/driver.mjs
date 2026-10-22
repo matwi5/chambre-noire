@@ -8,11 +8,22 @@
 //   …; page.assertNoErrors(); await chrome.close(); await bench.stop();
 //   bench.release('nom')                         // libère les générations HOLD=nom du faux moteur
 //   bench.dir                                    // dossier temporaire du banc (outputs/, jobs/…) : ce qu'il écrit
+//   await bench.idle()                           // rien en cours ni en file (avant un rechargement de la page)
+//   const disk = bench.disk(); …; disk.written() // fichiers écrits ou changés par le serveur depuis l'instantané
+//   await page.typePrompt('texte')               // texte tapé dans le champ de Créer (événement input)
+//   await page.generate('texte')                 // tapé dans Créer puis « Générer » : demande acceptée, page En cours
+//   await page.launch('texte', { private: true })   // génération demandée hors de l'interface (autre appareil)
+//   await page.leaks(['mot', 'id'])              // marqueurs restés dans la page (texte, attributs, champs, mémoire)
 //   const bench = await startBench({ relay: true }); await bench.login(page);   // comme le téléphone par Tailscale :
 //                                                // bench.url passe par tests/ui/relay.py (adresse HTTPS relayée)
 //
+// Délais : une attente (waitFor, waitUntil) échoue après WAIT ms, une évaluation dans la page (page.eval, goto) après
+// EVAL_TIMEOUT ms, le démarrage du banc ou de Chrome après START_TIMEOUT ms : un test bloqué échoue, il n'attend pas
+// sans fin (check.py ajoute un délai par test et arrête Chrome et le banc à la fin de chaque fichier).
+//
 // Variables d'environnement : CHROME (chemin de Chrome), PYTHON (Python du banc ; défaut : venv/ du dépôt, sinon
-// celui du dossier principal quand on est dans un worktree, sinon python3).
+// celui du dossier principal quand on est dans un worktree, sinon python3), QWEN_UI_WAIT (délai par défaut des
+// attentes, en ms : check.py le double quand le banc tourne en même temps).
 import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -25,17 +36,41 @@ const VENV_PY = process.platform === 'win32' ? path.join('Scripts', 'python.exe'
 const CHROMES = { darwin: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   win32: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', linux: 'google-chrome' };
 export const PHONE = { width: 367, height: 760, deviceScaleFactor: 2.5, mobile: true };
+export const WAIT = Number(process.env.QWEN_UI_WAIT) || 15000;
+export const EVAL_TIMEOUT = 30000;
+export const START_TIMEOUT = 60000;
+// dossiers que le serveur du banc écrit (tools/ui y est un lien vers le dépôt : les liens ne sont pas parcourus)
+const WRITTEN = ['outputs', 'jobs', 'logs', 'private', 'tools'];
 
 const pause = ms => new Promise(r => setTimeout(r, ms));
 
+// promesse qui échoue si elle n'est pas tenue dans les ms millisecondes
+function within(promise, ms, what) {
+  let timer;
+  const late = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} : pas de réponse après ${ms / 1000} s`)), ms);
+  });
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+}
+
 // attend que cond() (synchrone ou promesse) soit vraie, interrogée toutes les 50 ms ; échoue après timeout ms
-export async function waitUntil(cond, { timeout = 15000, what = 'la condition' } = {}) {
+export async function waitUntil(cond, { timeout = WAIT, what = 'la condition' } = {}) {
   const end = Date.now() + timeout;
   for (;;) {
     if (await cond()) return;
     if (Date.now() > end) throw new Error(`${what} : toujours fausse après ${timeout / 1000} s`);
     await pause(50);
   }
+}
+
+// fichiers sous dir (liens non suivis) : { chemin : taille et date de modification }
+function files(dir, out = {}) {
+  for (const e of fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }) : []) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) files(p, out);
+    else if (e.isFile()) { const s = fs.statSync(p); out[p] = `${s.size} ${s.mtimeMs}`; }
+  }
+  return out;
 }
 
 function python() {
@@ -54,11 +89,11 @@ async function startPython(script, args, what) {
   const proc = spawn(python(), [path.join(HERE, script), ...args], { cwd: ROOT, stdio: ['pipe', 'pipe', 'inherit'] });
   const killer = () => proc.kill();
   process.on('exit', killer);
-  const first = await new Promise((resolve, reject) => {
+  const first = await within(new Promise((resolve, reject) => {
     const rl = readline.createInterface({ input: proc.stdout });
     rl.once('line', line => resolve(line));
     proc.once('exit', code => reject(new Error(`${what} arrêté au démarrage (code ${code})`)));
-  });
+  }), START_TIMEOUT, `${what} : démarrage`).catch(e => { killer(); process.off('exit', killer); throw e; });
   async function stop() {
     process.off('exit', killer);
     if (proc.exitCode !== null) return;
@@ -66,7 +101,7 @@ async function startPython(script, args, what) {
     proc.stdin.end();
     await Promise.race([gone, pause(10000).then(() => proc.kill())]);
   }
-  return { first, stop };
+  return { first, stop, pid: proc.pid };
 }
 
 // serveur du banc ; relay : l'interface passe par tests/ui/relay.py, comme le téléphone par « tailscale serve »
@@ -74,10 +109,27 @@ async function startPython(script, args, what) {
 export async function startBench({ relay = false } = {}) {
   const server = await startPython('serve.py', [], 'serveur du banc');
   const { url: direct, hold, https, cookie } = JSON.parse(server.first);
-  const relayed = relay ? await startPython('relay.py', [direct, https], 'relais du banc') : null;
+  const relayed = relay ? await startPython('relay.py', [direct, https], 'relais du banc')
+    .catch(async e => { await server.stop(); throw e; }) : null;
   const url = relayed ? `http://127.0.0.1:${relayed.first.trim()}` : direct;
+  const dir = path.dirname(hold);                   // dossier temporaire du banc (hold/ en est un sous-dossier)
+  const written = () => Object.assign({}, ...WRITTEN.map(d => files(path.join(dir, d))));
   return {
-    url, direct, dir: path.dirname(hold),           // dossier temporaire du banc (hold/ en est un sous-dossier)
+    url, direct, dir, pids: [server.pid, ...relayed ? [relayed.pid] : []],   // processus du banc (et du relais)
+    // attend que le Mac soit au repos : rien en cours ni en file, toutes origines et tous espaces confondus (à faire
+    // avant de recharger la page : une génération encore en file serait reprise par la page rechargée) ; page : puis
+    // plus aucune génération active suivie par cette page (son dernier suivi rendu)
+    async idle({ timeout = 2 * WAIT, page = null } = {}) {
+      await waitUntil(async () => { const s = await (await fetch(direct + '/api/status')).json();
+        return !s.busy && !s.queue.length; }, { timeout, what: 'Mac au repos (rien en cours ni en file)' });
+      if (page) await page.waitFor(`!pageJobs.some(isActive)`, { timeout, what: 'page au repos' });
+    },
+    // instantané des fichiers des dossiers que le serveur écrit ; written() : ceux créés ou changés depuis
+    disk() {
+      const before = written();
+      return { written: () => Object.entries(written()).filter(([p, v]) => before[p] !== v)
+        .map(([p]) => path.relative(dir, p)).sort() };
+    },
     // par le relais : le cookie du code d'accès (celui que pose la saisie du code), puis l'interface ouverte
     async login(page) {
       await page.send('Network.setCookie', { ...cookie, url, httpOnly: true, sameSite: 'Lax' });
@@ -100,10 +152,12 @@ export async function launchChrome() {
   process.on('exit', cleanup);
   const portFile = path.join(profile, 'DevToolsActivePort');
   await waitUntil(() => fs.existsSync(portFile) && fs.readFileSync(portFile, 'utf8').includes('\n'),
-    { timeout: 20000, what: `Chrome démarré (${exe})` });
+    { timeout: START_TIMEOUT, what: `Chrome démarré (${exe})` })
+    .catch(e => { process.off('exit', cleanup); cleanup(); throw e; });
   const port = fs.readFileSync(portFile, 'utf8').split('\n')[0];
   const pages = [];
   return {
+    pid: proc.pid,
     async phonePage() {
       const target = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
       const page = await connect(target.webSocketDebuggerUrl);
@@ -148,19 +202,54 @@ async function connect(wsUrl) {
 
   const page = {
     send, on, errors,
-    // évalue une expression dans la page (promesse attendue) et renvoie sa valeur (JSON)
-    async eval(expression) {
-      const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture: true });
+    // évalue une expression dans la page (promesse attendue) et renvoie sa valeur (JSON) ; échoue après timeout ms
+    // (une promesse jamais tenue, comme une confirmation qui attend sa réponse, ne bloque pas le test)
+    async eval(expression, { timeout = EVAL_TIMEOUT } = {}) {
+      const r = await within(send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true,
+        userGesture: true }), timeout, `dans la page : ${expression}`);
       if (r.exceptionDetails) throw new Error(`dans la page : ${r.exceptionDetails.exception?.description || r.exceptionDetails.text}\n  ${expression}`);
       return r.result.value;
     },
     async goto(url) {
       const loaded = new Promise(r => on('Page.loadEventFired', r));
       await send('Page.navigate', { url });
-      await loaded;
+      await within(loaded, EVAL_TIMEOUT, `chargement de ${url}`);
     },
     // attend qu'une expression de la page soit vraie
     waitFor(expression, opts = {}) { return waitUntil(() => page.eval(expression), { what: expression, ...opts }); },
+    // texte tapé dans le champ de Créer, comme au clavier (événement input : le brouillon est écrit)
+    typePrompt(text) {
+      return page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
+        t.dispatchEvent(new Event('input')); })()`);
+    },
+    // texte tapé dans Créer puis « Générer » : attend la demande acceptée (une génération de plus suivie par la page)
+    // et la page En cours
+    async generate(text) {
+      if (await page.eval(`mode`) !== 'create') await page.click('#tabbar [data-pane="create"]');
+      await page.typePrompt(text);
+      const before = await page.eval(`pageJobs.length`);
+      await page.click('#go');
+      await page.waitFor(`mode === 'run' && pageJobs.length > ${before}`,
+        { what: `« ${text} » acceptée, page En cours` });
+    },
+    // génération demandée hors de l'interface, comme depuis un autre appareil (texte → image 512×512, 20 étapes ;
+    // extra : champs changés ou ajoutés, private: true pour une génération privée) ; échoue si le Mac la refuse,
+    // renvoie sa réponse ({ id, … })
+    async launch(prompt, extra = {}) {
+      const r = await page.eval(`postJson('/api/generate', { mode: 't2i', prompt: ${JSON.stringify(prompt)},
+        width: 512, height: 512, steps: 20, cfg: 1, seed: -1, preview: false, ref_images: [],
+        ...${JSON.stringify(extra)} }).then(async r => ({ status: r.status, body: await r.json() }))`);
+      if (r.status !== 202) throw new Error(`génération « ${prompt} » refusée : ${r.status} ${JSON.stringify(r.body)}`);
+      return r.body;
+    },
+    // marqueurs (mots de prompts, identifiants, réglages) restés dans la page : texte et attributs du document (caché
+    // compris, scripts exceptés), valeurs des champs, localStorage et sessionStorage, et tout l'état global de la page
+    // (variables let, const, var et fonctions de premier niveau, avec le contenu de leurs objets, tableaux, Map et Set,
+    // éléments détachés compris) ; skip : variables à ne pas fouiller. Renvoie « endroit : marqueur » par trouvaille.
+    async leaks(markers, { skip = [] } = {}) {
+      const { names } = await send('Runtime.globalLexicalScopeNames');
+      return page.eval(`(${scanPage})(${JSON.stringify(markers)}, ${JSON.stringify(names)}, ${JSON.stringify(skip)})`);
+    },
     // appui sur un élément (événement click du DOM, comme un toucher) ; échoue s'il est absent ou masqué
     async click(selector) {
       const ok = await page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
@@ -185,4 +274,64 @@ async function connect(wsUrl) {
     close() { try { ws.close(); } catch { /* déjà fermée */ } },
   };
   return page;
+}
+
+// fouille de page.leaks, exécutée dans la page (sa source y est envoyée : rien d'extérieur) ; lexical : noms des
+// variables let et const de premier niveau (Runtime.globalLexicalScopeNames)
+function scanPage(markers, lexical, skip) {
+  const found = new Set();
+  const look = (where, text) => markers.forEach(m => { if (text.includes(m)) found.add(`${where} : ${m}`); });
+  const doc = document.documentElement.cloneNode(true);   // le code de la page nomme des routes : écarté
+  doc.querySelectorAll('script').forEach(s => s.remove());
+  look('page', doc.outerHTML);
+  look('champs', [...document.querySelectorAll('input, textarea, select')].map(e => e.value).join('\n'));
+  for (const name of ['localStorage', 'sessionStorage']) {
+    try { look(name, JSON.stringify({ ...window[name] })); } catch { /* stockage refusé */ }
+  }
+  // variables globales de la page : celles que n'a pas une fenêtre vide, et les let/const de premier niveau
+  const frame = document.createElement('iframe');
+  frame.hidden = true;
+  document.documentElement.append(frame);
+  const native = new Set(Object.getOwnPropertyNames(frame.contentWindow));
+  frame.remove();
+  const names = [...Object.keys(window).filter(n => !native.has(n)), ...lexical].filter(n => !skip.includes(n));
+  const seen = new Set();
+  let budget = 500000;                                       // valeurs visitées au plus
+  const walk = (v, where, depth) => {
+    if (v === null || v === undefined || --budget < 0) return;
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'bigint') return look(where, String(v));
+    if (typeof v !== 'object' || seen.has(v) || depth > 12) return;   // fonctions : pas de données lisibles
+    seen.add(v);
+    if (v === window || v === document || ArrayBuffer.isView(v) || v instanceof ArrayBuffer
+      || v instanceof Blob) return;
+    if (v instanceof Node) {                                 // un élément de la page est déjà fouillé par son texte
+      if (!document.contains(v)) look(where, v.outerHTML ?? v.textContent ?? '');
+      return;
+    }
+    if (v instanceof Map) {
+      for (const [k, x] of v) {
+        walk(k, `${where}.clé`, depth + 1);
+        walk(x, `${where}.get(${String(k).slice(0, 40)})`, depth + 1);
+      }
+    } else if (v instanceof Set || Array.isArray(v)) {
+      let i = 0;
+      for (const x of v) walk(x, `${where}[${i++}]`, depth + 1);
+    } else {
+      for (const k of Object.keys(v)) {
+        look(where, k);
+        let x;
+        try { x = v[k]; } catch { continue; }
+        walk(x, `${where}.${k}`, depth + 1);
+      }
+    }
+  };
+  for (const name of names) {
+    let v;
+    try { v = (0, eval)(name); } catch (e) {                // eval indirect : portée globale, let/const compris
+      if (!(e instanceof ReferenceError)) found.add(`mémoire ${name} : illisible (${e})`);   // pas de fouille muette
+      continue;
+    }
+    walk(v, `mémoire ${name}`, 0);
+  }
+  return [...found];
 }

@@ -1,7 +1,7 @@
 // Interface servie comme au téléphone par Tailscale (tests/ui/relay.py : nom HTTPS de « tailscale serve », en-têtes
 // de relais, code d'accès), dans la vue du téléphone : l'espace privé s'y ouvre, et l'aperçu d'une génération privée
 // s'affiche toutes les 5 étapes.
-//   node --test tests/ui/relais.test.mjs   (ou : venv/bin/python tests/check.py --ui tests/ui/relais.test.mjs)
+//   venv/bin/python tests/check.py --quick --ui tests/ui/relais.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome } from './driver.mjs';
@@ -26,9 +26,8 @@ test('par l\'adresse HTTPS relayée : espace privé ouvert, aperçus d\'une gén
   assert.equal(created, 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
-  await page.eval(`$('previewChk').checked = true;
-    (() => { const t = $('prompt'); t.value = 'SLOW=0.2 zq8 aperçu relayé';
-      t.dispatchEvent(new Event('input')); })()`);
+  await page.eval(`$('previewChk').checked = true`);
+  await page.typePrompt('SLOW=0.2 zq8 aperçu relayé');
   await page.click('#go');
   await page.waitFor(`shown && shown.private && $('stageImg').classList.contains('preview')
     && $('stageImg').getAttribute('src').includes('/preview?v=') && $('stageImg').naturalWidth > 0`,
