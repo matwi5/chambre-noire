@@ -4,6 +4,18 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-22 · Refonte : groupes B et C en parallèle, icône à part
+
+- **Contexte** : les cinq groupes de la refonte touchent tous `README.md`, et tous sauf l'icône `tools/ui/index.html`
+  ou `tools/launch.py` ; la règle du tableau de bord les ferait tourner l'un après l'autre. B (pile côté serveur :
+  journal, galerie, espace privé de `launch.py`) et C (CSS d'`index.html`, `LOGIN_PAGE` et `PUBLIC_FILES` de
+  `launch.py`, section « Crédits et licences » du README) ne modifient pas les mêmes zones.
+- **Décision** (porteur, 22/10/2026) : « Le meilleur enchaînement possible serait donc : A, puis B et C en même temps,
+  puis D, puis E, avec l'icône à côté dès maintenant. » → « ok ». L'icône devient le groupe F, lançable tout de suite.
+- **Conséquences** : B et C partent tous deux de `dev` après la fusion de A ; le second fusionné dans `dev` règle les
+  conflits de texte de `launch.py`, `README.md` et `docs/agents/carte-du-code.md`, puis relance `tests/check.py --ui`
+  avant le commit de fusion.
+
 ## 2026-10-22 · Pile : emplacement des images à trier, effacement complet, journaux neutres
 
 - **Contexte** : rédaction de la spec de la refonte (`docs/specs/2026-10-22_refonte-chambre-noire.md`). Faits lus dans
