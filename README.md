@@ -99,7 +99,8 @@ Sur Mac : `venv/bin/python setup.py`. Ce script, à lancer une seule fois :
 - sous Windows, prépare l'encodeur de texte pour stable-diffusion.cpp ;
 - crée le raccourci **`Qwen-Image.lnk`** (Windows) ou **`Qwen-Image.command`** (Mac) dans le dossier ;
 - lance trois courtes générations pour calibrer les estimations de durée sur votre machine
-  (voir [Performances](#performances) ; `--no-calibrate` pour s'en passer).
+  (voir [Performances](#performances) ; `--no-calibrate` pour s'en passer). Si elles échouent, l'erreur est affichée
+  et l'installation continue sans calibration (rappel à la fin, avec la commande pour réessayer).
 
 **Plus de fidélité ?** Ajoutez `--q8` : le modèle Q8_0 (≈ 7,6 Go de plus) est installé à côté du modèle Q4_K_M.
 Il rend mieux les détails fins et le texte écrit dans l'image ; il demande ≈ 3 Go de mémoire de plus.
