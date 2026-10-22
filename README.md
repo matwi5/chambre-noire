@@ -900,6 +900,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     ├── bench.py          banc de test du serveur, sans GPU : serveur sur un port libre, dossier temporaire
     ├── fake_sdcli.py     faux moteur du banc
     ├── check.py          tous les contrôles en une commande (compilation, JavaScript, banc, interface)
+    ├── rewrap.py         recoupe les lignes trop longues d'un fichier Markdown
     ├── test_*.py         tests du banc
     └── ui/               tests de l'interface dans Chrome sans écran (pilote driver.mjs, tests *.test.mjs)
 ```
@@ -925,6 +926,15 @@ dépôt contient un repère propre à une machine (chemin de dossier personnel, 
 dépôt est public. Un avis, sans échec, signale un changement de code qui touche l'incognito ou l'espace privé. Sur
 GitHub, la même commande, complète, tourne sur chaque pull request vers `main` et chaque envoi sur `dev`
 (`.github/workflows/checks.yml`, sur macOS).
+
+Les contrôles rapides (compilation, JavaScript, longueur des lignes) passent d'abord : si l'un échoue, le banc et
+l'interface ne sont pas lancés. La dernière ligne de la sortie nomme chaque faute (`fichier:ligne`, test du banc,
+fichier d'interface) et la sortie complète va aussi dans un journal, dont le chemin est affiché ; le banc et chaque
+fichier d'interface affichent leur durée. `python3 tests/check.py --lines` ne vérifie que la longueur des lignes
+ajoutées, en moins d'une seconde ; le hook avant commit du dépôt (`.githooks/pre-commit`, activé par
+`python3 tests/check.py --link-venv`) le lance sur ce qui va être enregistré et refuse le commit fautif.
+`python3 tests/rewrap.py <fichier>.md` recoupe les lignes trop longues ajoutées à un fichier Markdown (toutes avec
+`--all`) sans toucher aux titres, listes, tableaux, blocs de code ni lignes vides.
 
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps que
 le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier. Ils ouvrent l'interface servie par le banc dans un

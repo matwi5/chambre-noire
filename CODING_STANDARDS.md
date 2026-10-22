@@ -10,7 +10,8 @@ ticket.
 - **120 caractères au plus par ligne** (caractères, pas octets) dans les `.py`, `.md`, `.mjs` et `.js`, hors
   `tools/ui/index.html`, tableaux Markdown et blocs de code : une ligne plus longue se lit mal dans un diff et sur un
   écran étroit. Vérifiée par `tests/check.py` sur les seules lignes ajoutées depuis la base (`git merge-base HEAD
-  origin/main`) : les lignes existantes ne sont reprises que quand on les touche.
+  origin/main`) : les lignes existantes ne sont reprises que quand on les touche. `check.py --lines` (moins d'une
+  seconde) et le hook avant commit la vérifient seule ; `tests/rewrap.py` recoupe un Markdown sans le casser.
 
 ## Données et disque
 
