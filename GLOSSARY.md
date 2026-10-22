@@ -31,8 +31,8 @@ Une édition d'une seule image d'entrée sur laquelle on peint la zone à change
 _À éviter_ : inpainting, mode Dessiner
 
 **Variantes** :
-Un lot de plusieurs images d'une même demande, chacune avec sa propre graine, parmi lesquelles on garde la meilleure ;
-avec ou sans image d'entrée, jamais en campagne.
+Un lot de plusieurs images d'une même demande, chacune avec sa propre graine, parmi lesquelles on garde celles qu'on
+veut ; avec ou sans image d'entrée, jamais en campagne.
 _À éviter_ : batch, multi-génération
 
 **Campagne** :
@@ -46,6 +46,24 @@ _À éviter_ : seed (sauf dans le code)
 **Modèle** :
 Le réseau de génération d'images utilisé (Q4_K_M ou Q8_0).
 _À éviter_ : employer « modèle » pour un prompt réutilisable
+
+## Trier
+
+**Pile** :
+Les images terminées qui attendent d'être triées, la dernière arrivée sur le dessus ; chaque espace a la sienne.
+_À éviter_ : file (réservé aux générations qui attendent leur calcul), brouillons, à valider
+
+**Tirage** :
+Une image gardée ; les tirages d'un espace forment sa page Tirages.
+_À éviter_ : galerie, image enregistrée
+
+**Garder** :
+Faire passer une image de la pile aux tirages (balayage vers la droite).
+_À éviter_ : enregistrer, valider
+
+**Jeter** :
+Retirer une image de la pile et la supprimer de l'ordinateur (balayage vers la gauche).
+_À éviter_ : supprimer (réservé à un tirage), rejeter
 
 ## Prompts
 
@@ -73,11 +91,13 @@ Un mode où l'image produite n'est gardée nulle part sur l'ordinateur : elle es
 _À éviter_ : mode privé
 
 **Espace public** :
-L'espace où l'on arrive en ouvrant l'application : sa galerie, sa file, sa saisie et ses prompts enregistrés, protégés par le seul code d'accès.
+L'espace où l'on arrive en ouvrant l'application : ses tirages, sa pile, sa file, sa saisie et ses prompts enregistrés,
+protégés par le seul code d'accès.
 _À éviter_ : galerie normale, mode normal
 
 **Espace privé** :
-Un espace étanche à l'espace public (galerie, file, saisie et prompts enregistrés propres) dont tout le contenu est chiffré sur l'ordinateur, lisible seulement dans l'application avec le code privé.
+Un espace étanche à l'espace public (tirages, pile, file, saisie et prompts enregistrés propres) dont tout le contenu
+est chiffré sur l'ordinateur, lisible seulement dans l'application avec le code privé.
 _À éviter_ : coffre, mode privé, galerie cachée
 
 **Code privé** :

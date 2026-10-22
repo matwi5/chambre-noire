@@ -4,6 +4,73 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-22 · Refonte « Chambre noire » : lumière inactinique, pixel, Labo et Tirages, pile à trier
+
+- **Contexte** : après le renommage, le porteur demande : « Je veux modifier complètement les couleurs de l'app, l'UI,
+  l'UX, l'icon etc... pour refléter ce changement de nom. De plus reprendre garder et reprendre dans l'app le coté
+  pixel de l'icon de l'app. » Cadrage par grilling, quatre tours ; réponses recopiées telles quelles.
+- **Décision** (porteur, 22/10/2026) :
+  - « Périmètre de « UX » » (a identité seule, b mise en page, c tout, parcours compris) → « C » ;
+  - « Direction artistique » → « A » : **lumière inactinique** (noir chaud, accent de lampe de labo, textes papier
+    photo, matières mates au lieu du verre liquide, grain léger) ;
+  - « Place du pixel dans l'app » → « B » : touches (logo, icônes de navigation, révélation, états vides) + nom et
+    titres en police pixel, texte courant en police normale ;
+  - « Motif de l'icône » (garder le paysage en carrés recoloré ?) → « oui garder mais tester B et C (plusieurs
+    versions) » (B : nouveau motif pixel, lampe, cuve ou film ; C : paysage dans un cadre de tirage) ;
+  - « Mode clair » (le supprimer ?) → « oui » ;
+  - « Pages et navigation » (deux pages « Labo » et « Tirages » ?) → « B. Un swip de la génération l'ajoute au
+    tirages (enregistrer), un swip vers la gauche la supprime, les générations se superposent comme une pile » ;
+  - « Ce qui te gêne aujourd'hui » (réglages qui débordent, en-tête chargé, bouton Rafraîchir, états vides) → « oui
+    pour les 4 » ;
+  - « Vocabulaire de labo » → « B » : bouton « Révéler », pages « Labo » et « Tirages », le reste en mots clairs ;
+  - « Thèmes incognito et espace privé » (incognito noir et blanc, privé en lumière inactinique verte) → « oui » ;
+  - « Accent et couleurs d'état » → « a » : accent orange-ambre, halo rouge dans l'ambiance, rouge vif réservé aux
+    erreurs, toujours avec une icône ;
+  - « Coins et formes » → « a » : petits arrondis (4 à 6 px), boutons rectangulaires ;
+  - « Typographie » (police pixel libre OFL servie par le serveur, texte courant en police du téléphone, chiffres
+    techniques en chasse fixe) → « oui » ;
+  - « Animation de la génération » → « a » : carrés au hasard avant le premier aperçu, puis aperçu en mosaïque qui
+    s'affine étape après étape ;
+  - « Où vit une image pas encore triée ? » → « a » : sur le disque dès la fin du calcul, marquée « à trier », sans
+    limite de temps ;
+  - « Que se passe-t-il quand on balaie une image vers la gauche ? » → « a » : bandeau « Image jetée · Annuler »
+    quelques secondes, suppression sur le disque à la fin du délai seulement ; si l'app se ferme pendant le délai,
+    l'image reste dans la pile ;
+  - « Images déjà dans la galerie » (deviennent des tirages ?) → « oui » ;
+  - « Vocabulaire » (Pile, Tirage, Garder, Jeter ; Variantes : « on garde celles qu'on veut ») → « ok » ;
+  - « Ordre de la pile » (dernière terminée sur le dessus, génération en cours derrière ou sur le dessus si la pile
+    est vide, « +N en attente », notification qui ouvre la pile) → « oui » ;
+  - « Carte en cours ou en attente » (pas balayable, bouton « Annuler » confirmé) → « oui » ;
+  - « Lots, variantes et campagnes » (une carte par image, « 2/4 », « Garder celle-ci » retiré) → « oui » ;
+  - « Pile en incognito » → « on retire le mode incognito puisque le fait de balayer la génération à gauche est comme
+    le mode incognito, la confidentialité se passe dans l'espace privé » ; écarts montrés (prompt écrit en clair dans
+    le journal et le dossier de travail pendant le calcul, mesure de calibration gardée, suppression non physique),
+    puis « Retrait de l'incognito » → « a » : retiré, Jeter efface l'image, sa vignette, ses images d'entrée, son
+    dossier de travail et sa ligne de journal ;
+  - « Pile de l'espace privé » (pile propre et étanche, Garder vers les tirages privés, Jeter supprime le fichier
+    chiffré avec le même bandeau) → « oui » ;
+  - « Autres actions sur une carte » (toucher = visionneuse, boutons ✕ et ✓ sous la pile) → « oui » ;
+  - « Disposition du Labo » (pile au centre, champ replié en bas, déplié quand la pile est vide, réglages en grille
+    qui ne déborde pas) → « oui » ;
+  - « En-tête » (logo, nom en pixel, lampe d'état qui ouvre la feuille Moteur et « Ouvrir depuis le téléphone ») →
+    « oui » ;
+  - « Page Tirages » (mise à jour seule, sans Rafraîchir, cadenas au même endroit) → « oui mais mettre dle cadenas de
+    l'espace privé autre part », puis « Où mettre le cadenas de l'espace privé ? » → « a » : dans la feuille de la
+    lampe d'état ; dans l'espace, « Sortir » reste en haut à droite ;
+  - « Vue large sur le Mac » (une colonne centrée, Tirages plus larges) → « oui » ;
+  - « Validation par maquettes » → « non tu fais directement » ;
+  - « Livraison » (`/to-spec`, `/to-tickets`, groupes : retrait de l'incognito, pile côté serveur, identité, Labo et
+    pile, Tirages-en-tête-espace privé) → « ok » ;
+  - résumé final, avec deux points : rendus des icônes B et C sur une planche avant intégration, police pixel choisie
+    par Claude et signalée → « ok ».
+- **Écarté** : maquettes de l'interface avant le code ; corbeille « Rebuts » ; image non triée gardée en mémoire
+  seulement ; garder la page « En cours » ; police pixel partout ; garder l'incognito en option.
+- **Conséquences** : remplace « Une seule page Créer, une page En cours pour la file et les résultats » (19/10/2026)
+  pour les pages, l'emplacement du cadenas de « Espaces public et privé étanches » (15/10/2026), et toutes les
+  décisions sur l'incognito (dont « « Éditer » et « Dessiner » sur une image incognito allument aussi l'incognito »,
+  21/10/2026), qui seront marquées « remplacées » par la spec. Tant que le retrait n'est pas livré, l'incognito reste
+  dans le code et le glossaire.
+
 ## 2026-10-22 · Renommage en « Chambre noire »
 
 - **Contexte** : « Qwen-Image 2.1 local » décrit le modèle, pas ce que l'app promet (génération d'images privée, sur
