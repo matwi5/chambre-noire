@@ -12,6 +12,8 @@ les tests viennent de bugs passés à travers les revues par ticket.
   écran étroit. Vérifiée par `tests/check.py` sur les seules lignes ajoutées depuis la base (`git merge-base HEAD
   origin/main`) : les lignes existantes ne sont reprises que quand on les touche. `check.py --lines` (moins d'une
   seconde) et le hook avant commit la vérifient seule ; `tests/rewrap.py` recoupe un Markdown sans le casser.
+- **Un comportement qui change change partout où il est décrit** : chercher son ancienne formulation (`grep`) dans le
+  README, les docstrings et commentaires, et la carte du code, et la reprendre dans le même commit.
 
 ## Données et disque
 
@@ -36,7 +38,11 @@ les tests viennent de bugs passés à travers les revues par ticket.
   `fetch`, lecture d'un fichier) : l'espace (`inPrivate()`), la liste, l'onglet ou la route ; après l'attente, elle
   écrit dans ce qu'elle a noté, ou abandonne si l'espace a changé, sans relire l'état global. Sinon une image privée
   tombe dans la saisie publique, une confirmation montre un titre privé dans l'espace public (groupes A et C du
-  15/10/2026). `changedSpace` ferme toute feuille qui montre une donnée de l'espace quitté.
+  15/10/2026). `changedSpace` ferme toute feuille qui montre une donnée de l'espace quitté. Une garde (plafond,
+  dessin, confirmation) se refait à l'arrivée sur la liste notée, et une question au porteur ne porte que sur la
+  saisie affichée.
+- **Un élément montré ou caché par `hidden` dont le CSS fixe `display` a sa règle `[hidden]{display:none}`** : sinon
+  le `display` du CSS l'emporte et l'élément reste visible.
 - **Une génération suivie se rapproche de la file par son identifiant, jamais par son rang** : la page interroge
   `/api/job/<id>` chaque seconde et `/api/status` toutes les 2 à 5 s ; entre les deux, la file a pu avancer, et un
   404 peut arriver avant que `applyPrivate` sache l'espace fermé (groupe B du 15/10/2026).
@@ -57,6 +63,10 @@ les tests viennent de bugs passés à travers les revues par ticket.
   garder une génération en cours ou en file, `HOLD` dans le prompt plutôt que `SLOW` (voir `tests/fake_sdcli.py`).
 - **Une correction de l'interface reçoit un test dans `tests/ui/`** quand le banc ne peut pas la voir : deux bugs
   d'interface ne sont apparus que dans Chrome, banc au vert.
+- **Le test d'une garde d'une zone sensible (incognito, espace privé, suppression) est prouvé rouge** sur le code
+  sans la branche qu'il protège (retirée le temps de l'essai), puis vert ; le message du commit le dit.
+- **Une assertion « rien ne change » attend d'abord la fin de l'action qui pourrait changer quelque chose** (réponse
+  reçue, Mac au repos : `bench.idle()`) : vérifiée trop tôt, elle passe avant que le changement arrive.
 - **Un fichier de test se termine par `if __name__ == "__main__": unittest.main()`**, pour se lancer seul.
 
 ## Vérifiées par `tests/check.py`
