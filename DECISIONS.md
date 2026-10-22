@@ -4,6 +4,31 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-22 · Pile : emplacement des images à trier, effacement complet, journaux neutres
+
+- **Contexte** : rédaction de la spec de la refonte (`docs/specs/2026-10-22_refonte-chambre-noire.md`). Faits lus dans
+  `tools/launch.py` : le journal ne fait que s'allonger ; « Supprimer » laisse la ligne du journal (avec le prompt) et
+  le dossier de travail `jobs/<id>/` ; une image privée est un dossier de fichiers scellés chacun à part (`meta`,
+  image, vignette, entrées) ; un échec privé s'écrit « génération incognito » dans `logs/`, déguisement qui ne tient
+  plus sans l'incognito.
+- **Décision** (porteur, 22/10/2026, réponse « 1 oui, 2 a, 3 a, 4 oui, 5 oui, 6 a ») :
+  - « Points de test » (banc du serveur et pilote d'interface, plus une aide de balayage tactile dans le pilote) →
+    « oui » ;
+  - « Où vit une image publique à trier, et ce que Jeter efface » → « a » : dans `outputs/.pile/` ; Garder la déplace
+    dans `outputs/` en une opération atomique ; Jeter efface PNG, vignette, images d'entrée, dossier de travail
+    `jobs/<id>/` et ligne du journal (réécrit sous `JOURNAL_LOCK`, fichier temporaire puis remplacement) ; les images
+    d'avant restent dans `outputs/`, tirages d'office ;
+  - « La marque « à trier » d'une image privée » → « a » : dans sa fiche chiffrée (`meta`), que Garder déchiffre,
+    modifie et rescelle sous `PRIVATE_LOCK` après `finish_rekey()`, sans toucher à l'image ni à la vignette ;
+  - « « Supprimer » un tirage » (aussi complet que Jeter ?) → « oui » ;
+  - « Deux appareils trient la même image » (premier arrivé l'emporte, le second reçoit 404 « déjà triée » ; Jeter ne
+    vise que la pile ; bandeau Annuler dans la page seulement) → « oui » ;
+  - « Lignes d'échec dans le journal du serveur » → « a » : tous les échecs écrivent la même ligne neutre (« échec :
+    génération, sd-cli code N » ou « échec : génération, erreur de préparation »), le détail reste en mémoire pour
+    l'interface.
+- **Écarté** : marque « à trier » dans le journal ; fichier témoin en clair pour une image privée ; « Supprimer » qui
+  garde la ligne du journal ; neutralité réservée aux échecs privés.
+
 ## 2026-10-22 · Refonte « Chambre noire » : lumière inactinique, pixel, Labo et Tirages, pile à trier
 
 - **Contexte** : après le renommage, le porteur demande : « Je veux modifier complètement les couleurs de l'app, l'UI,
