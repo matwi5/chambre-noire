@@ -4,6 +4,19 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-22 · Rétro du parcours des pages : hook avant commit, notes reliées, pistes hors du dépôt
+
+- **Contexte** : la rétro du parcours (discussion principale et quatre sessions de groupe) relève 18 pistes ; les
+  plus coûteuses sont le contrôle des lignes de plus de 120 caractères, découvert seulement au bout d'un contrôle
+  complet, et les notes non suivies par git, recopiées à la main entre le dossier principal et les worktrees.
+- **Décision** (porteur, 22/10/2026 : « oui » aux quatre questions) : les pistes qui touchent `mathis-plugins` sont
+  rendues en liste pour l'agent des plugins, pas appliquées ici ; un hook git versionné (`.githooks/pre-commit`,
+  activé par `tests/check.py --link-venv`) refuse un commit qui ajoute une ligne trop longue ; les notes non suivies
+  (`CLAUDE.md`, `ETAT_DU_PROJET.md`, `travail/`, `docs/specs/`, `docs/agents/` sauf la carte du code) ne sont plus
+  copiées dans les worktrees mais reliées au dossier principal ; la session des pistes écrit directement
+  `docs/agents/session-deleguee.md`, et propose le texte des pièges de `CLAUDE.md`, validé par le porteur avant
+  d'être écrit.
+
 ## 2026-10-21 · « Éditer » et « Dessiner » sur une image incognito allument aussi l'incognito
 
 - **Contexte** : la passe « bogues » du ticket incognito du groupe D trouve un comportement antérieur au parcours :
