@@ -4,6 +4,21 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-22 · Icône de l'application : le paysage en carrés sous la lumière inactinique
+
+- **Contexte** : groupe F de la refonte (ticket « Choisir et intégrer la nouvelle icône pixel ») ; le porteur avait
+  demandé au cadrage de garder le paysage en carrés « mais tester B et C (plusieurs versions) ». Choix fait dans la
+  session du groupe, sur deux planches ; phrases du porteur relayées par le compte rendu de la session.
+- **Décision** (porteur, 22/10/2026) : « Quelle icône retiens-tu pour Chambre noire ? »
+  - première planche (A1 et A2 : paysage recoloré ; B1 lampe, B2 cuve, B3 film ; C1 tirage à marge, C2 tirage qui
+    sèche) → « J'aime bien A1, A2 et C2. C2 n'est pas adapté pour la version ronde, modifie. Fait moi d'autre
+    porpositions dans cette directement en gardant ces 3 là » ;
+  - deuxième planche (A1, A2, C2 recentré, A3, A4, A5, C3, C4) → « A1 · paysage recoloré ».
+  - Palette de l'icône : plaque mate `#0d0a08`, halo rouge `#be1c12`, grain léger, soleil ambre `#ffa53a`, montagnes
+    papier `#f1e6d2` ; `tools/ui/logo.svg` reste la source des quatre PNG (192 et 512 à coins transparents, adaptable
+    et Apple en plein cadre).
+- **Écarté** : les motifs lampe, cuve et film ; le paysage dans un cadre de tirage ; les autres variantes du paysage.
+
 ## 2026-10-22 · Refonte : groupes B et C en parallèle, icône à part
 
 - **Contexte** : les cinq groupes de la refonte touchent tous `README.md`, et tous sauf l'icône `tools/ui/index.html`
