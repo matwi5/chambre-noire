@@ -3,7 +3,7 @@ r"""macOS : lance l'interface à l'ouverture de session, sans fenêtre, accessib
   venv/bin/python tools/make_service.py            # installe le service et le démarre
   venv/bin/python tools/make_service.py --remove   # l'arrête et le retire
 
-Le service est un LaunchAgent (~/Library/LaunchAgents/com.matwi5.qwen-image-local.plist) : macOS le démarre à chaque
+Le service est un LaunchAgent (~/Library/LaunchAgents/com.matwi5.chambre-noire.plist) : macOS le démarre à chaque
 ouverture de session et le relance s'il s'arrête sur une erreur. Journal : logs/service.log. Le Mac reste éveillé tant
 qu'il tourne (caffeinate, voir launch.py) ; le code d'accès du téléphone est dans tools/access_code.txt et s'affiche
 en haut de l'interface ouverte sur le Mac.
@@ -11,8 +11,15 @@ en haut de l'interface ouverte sur le Mac.
 import os, plistlib, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LABEL = "com.matwi5.qwen-image-local"
-PLIST = os.path.expanduser(f"~/Library/LaunchAgents/{LABEL}.plist")
+LABEL = "com.matwi5.chambre-noire"
+OLD_LABEL = "com.matwi5.qwen-image-local"   # service de l'ancien nom de l'application, retiré à chaque appel
+
+
+def plist_path(label):
+    return os.path.expanduser(f"~/Library/LaunchAgents/{label}.plist")
+
+
+PLIST = plist_path(LABEL)
 DOMAIN = f"gui/{os.getuid()}"
 
 
@@ -20,10 +27,16 @@ def launchctl(*args):
     return subprocess.run(["launchctl", *args], capture_output=True, text=True)
 
 
+def unload(label):
+    launchctl("bootout", f"{DOMAIN}/{label}")          # sans erreur si le service ne tourne pas
+    plist = plist_path(label)
+    if os.path.exists(plist):
+        os.remove(plist)
+
+
 def remove():
-    launchctl("bootout", f"{DOMAIN}/{LABEL}")          # sans erreur si le service ne tourne pas
-    if os.path.exists(PLIST):
-        os.remove(PLIST)
+    unload(OLD_LABEL)
+    unload(LABEL)
     print("service retiré : l'interface ne démarre plus avec la session")
 
 
@@ -43,6 +56,7 @@ def install():
         "StandardOutPath": log,
         "StandardErrorPath": log,
     }
+    unload(OLD_LABEL)
     launchctl("bootout", f"{DOMAIN}/{LABEL}")               # remplace une version déjà installée
     with open(PLIST, "wb") as f:
         plistlib.dump(spec, f)

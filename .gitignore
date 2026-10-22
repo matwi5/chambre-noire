@@ -16,6 +16,7 @@ logs/
 tests/bench_*.png
 
 # fichiers générés localement
+Chambre noire.lnk
 Qwen-Image.lnk
 __pycache__/
 *.pyc
@@ -29,6 +30,7 @@ tools/calibration.json
 tools/config.local.json
 
 # raccourci macOS généré par setup.py
+Chambre noire.command
 Qwen-Image.command
 
 # code d'accès des appareils du Wi-Fi (launch.py --lan)

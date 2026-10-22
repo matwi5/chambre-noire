@@ -193,7 +193,7 @@ PUBLIC_FILES = {
     "/logo.svg": ("logo.svg", "image/svg+xml"),
 }
 LOGIN_PAGE = """<!doctype html><html lang="fr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Qwen-Image 2.1 local</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Chambre noire</title>
 <link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <meta name="theme-color" content="#0b0a16" media="(prefers-color-scheme: dark)">
@@ -228,7 +228,7 @@ button:disabled{opacity:.6}
 .shake{animation:shake .4s}
 @keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 @media (prefers-reduced-motion:reduce){.shake{animation:none}}
-</style></head><body><form id="f"><img class="logo" src="/logo.svg" alt=""><h1>Qwen-Image</h1>
+</style></head><body><form id="f"><img class="logo" src="/logo.svg" alt=""><h1>Chambre noire</h1>
 <p>Saisissez le code d'accès affiché sur le Mac, sous le bouton « Téléphone » en haut de l'interface. Il n'est demandé qu'une fois sur cet appareil.</p>
 <input id="c" aria-label="Code d'accès" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="xxxx-xxxx" autofocus>
 <button id="b">Entrer</button><div id="err" role="alert"></div></form>

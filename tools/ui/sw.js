@@ -2,7 +2,7 @@
 // une page d'explication quand l'ordinateur ne répond pas (éteint, en veille, ou téléphone hors de Tailscale), et
 // affiche les notifications de fin de génération envoyées par l'ordinateur (Web Push).
 const OFFLINE = `<!doctype html><html lang="fr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Qwen-Image</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Chambre noire</title>
 <style>body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#0b0a16;color:#f6f4ff;
 font:16px/1.5 system-ui,sans-serif;text-align:center;padding:24px}p{color:rgba(236,233,255,.68);max-width:320px}
 button{margin-top:12px;height:44px;padding:0 22px;border:0;border-radius:999px;background:#8f7cff;color:#fff;font:inherit;font-weight:600}</style>
@@ -22,7 +22,7 @@ self.addEventListener("push", (e) => {
   e.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     if (wins.some((w) => w.visibilityState === "visible")) return;   // application à l'écran : elle montre déjà l'image
-    await self.registration.showNotification(d.title || "Qwen-Image", {
+    await self.registration.showNotification(d.title || "Chambre noire", {
       body: d.body || "", tag: d.tag || "qwen-image-job", icon: "/icon-192.png", badge: "/icon-192.png",
       data: { url: d.url || "/" } });
   })());
