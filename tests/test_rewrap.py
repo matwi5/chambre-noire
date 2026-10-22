@@ -31,6 +31,7 @@ class RewrapTest(unittest.TestCase):
         new, cuts, left = rewrap.rewrap(text)
         self.assertEqual((cuts, left), (3, []))
         lines = new.split("\n")
+        self.assertGreater(len(lines), len(text.split("\n")))
         self.assertTrue(all(len(l) <= 120 for l in lines if l not in (code, "| a | " + "b" * 130 + " |")))
         self.assertEqual(structure(new), structure(text))
         self.assertEqual(new.split(), text.split())           # mêmes mots, dans le même ordre
@@ -74,7 +75,7 @@ class RewrapTest(unittest.TestCase):
         with open(os.path.join(HERE, "..", "README.md"), encoding="utf-8") as f:
             readme = f.read()
         with tempfile.TemporaryDirectory(prefix="qwen-rewrap-test-") as tmp:
-            for rel in ("tests/rewrap.py", "tests/check.py"):
+            for rel in ("tests/rewrap.py", "tests/check.py", "tests/rules.py"):
                 os.makedirs(os.path.join(tmp, "tests"), exist_ok=True)
                 shutil.copy2(os.path.join(HERE, "..", rel), os.path.join(tmp, rel))
             with open(os.path.join(tmp, "README.md"), "w", encoding="utf-8") as f:

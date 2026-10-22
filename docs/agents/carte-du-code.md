@@ -2,9 +2,11 @@
 
 Où trouver quoi dans les deux gros fichiers, pour s'orienter sans les lire en entier (`tools/launch.py` ≈ 110 Ko,
 `tools/ui/index.html` ≈ 170 Ko). Repères par noms de fonctions, de constantes et de sections, jamais par numéros de
-ligne : chercher le nom (`grep -n "def worker" tools/launch.py`), puis lire autour. L'API locale (routes, champs,
-codes d'erreur) est décrite dans le README, « Fonctionnement technique » ; les formats et les raisons dans
-`DECISIONS.md`.
+ligne : `venv/bin/python tests/check.py --map worker` donne la ligne de chaque fonction, classe ou constante dont le
+nom contient « worker » (`--map` seul : tout l'index des deux fichiers), puis lire autour. `check.py` échoue si un nom
+cité ici entre accents graves n'existe plus dans le code : un renommage met la carte à jour dans le même commit.
+L'API locale (routes, champs, codes d'erreur) est décrite dans le README, « Fonctionnement technique » ; les formats
+et les raisons dans `DECISIONS.md`.
 
 ```text
 navigateur ──HTTP──▶ tools/launch.py ──lance une fois par génération──▶ sdcpp/<moteur>/sd-cli ──▶ PNG

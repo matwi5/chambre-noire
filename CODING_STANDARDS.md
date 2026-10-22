@@ -2,8 +2,8 @@
 
 Lues à la revue (axe Standards de `/code-review`) : des jugements qu'aucun contrôle ne fait. Ce que `tests/check.py`
 vérifie (compilation, syntaxe du JavaScript, banc, dépôt public) n'est pas répété ici, sauf la longueur des lignes,
-que la revue lit aussi. Les règles sur les données et les tests viennent de bugs passés à travers les revues par
-ticket.
+que la revue lit aussi, et les règles devenues contrôles, rappelées en une ligne à la fin. Les règles sur les données et
+les tests viennent de bugs passés à travers les revues par ticket.
 
 ## Forme
 
@@ -32,8 +32,6 @@ ticket.
   `index.html` est relu à chaque requête, donc servi avant que le serveur qui envoie le champ soit relancé.
 - **Une constante ou une formule recopiée entre Python et JavaScript est notée dans les pièges de `CLAUDE.md`**,
   avec les deux emplacements : sinon l'un change sans l'autre et rien ne casse visiblement.
-- **Un nom de variable JavaScript ne reprend pas l'`id` d'un élément du DOM** : chaque `id` est aussi une globale de
-  `window` : une variable du même nom la masque, et le code lit l'une en croyant lire l'autre.
 - **Une action asynchrone de l'interface liée à un espace note ce qu'elle vise avant sa première attente** (`await`,
   `fetch`, lecture d'un fichier) : l'espace (`inPrivate()`), la liste, l'onglet ou la route ; après l'attente, elle
   écrit dans ce qu'elle a noté, ou abandonne si l'espace a changé, sans relire l'état global. Sinon une image privée
@@ -57,9 +55,21 @@ ticket.
   `wait_job`, `wait_idle`, `sent.decided`, `threading.Event`) : un `sleep` est trop court sur une machine chargée et
   rend le test instable, ou trop long partout. Seul un faux qui simule une lenteur (faux moteur) peut dormir. Pour
   garder une génération en cours ou en file, `HOLD` dans le prompt plutôt que `SLOW` (voir `tests/fake_sdcli.py`).
-- **Une assertion sur tous les éléments d'une liste vérifie d'abord que la liste n'est pas vide** (`[].every(...)`,
-  `all([])` sont toujours vrais) : `excerpts.length > 0 && excerpts.every(...)`. Sinon une file déjà vide (génération
-  finie plus tôt que prévu) fait passer le test sans rien vérifier.
 - **Une correction de l'interface reçoit un test dans `tests/ui/`** quand le banc ne peut pas la voir : deux bugs
   d'interface ne sont apparus que dans Chrome, banc au vert.
 - **Un fichier de test se termine par `if __name__ == "__main__": unittest.main()`**, pour se lancer seul.
+
+## Vérifiées par `tests/check.py`
+
+Règles devenues des contrôles (`tests/rules.py`, sur les lignes ajoutées depuis la base) : la revue n'a plus à les
+relire, un échec dit la ligne et la raison.
+
+- Un nom de variable ou de fonction JavaScript de `index.html` ne reprend pas l'`id` d'un élément (chaque `id` est
+  aussi une globale de `window`, que la variable masque).
+- Une assertion sur tous les éléments d'une liste (`.every(`, `all(`) vérifie d'abord sa longueur, sur la même ligne ou
+  la précédente : `[].every(...)` et `all([])` sont toujours vrais.
+- Une promesse n'est pas prise pour un booléen (`.then(…) &&`, `.then(…) ||`).
+- Un nom `HOLD=<nom>` n'est employé que dans un seul fichier de test.
+- `wait_job(…, ("running",))` attend une génération dont le prompt porte `HOLD` ou `SLOW` : sinon elle peut finir
+  avant d'être vue en cours (CI rouge du 21/10/2026).
+- Chaque nom cité entre accents graves dans `docs/agents/carte-du-code.md` existe dans le code.

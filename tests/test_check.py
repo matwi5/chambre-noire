@@ -2,7 +2,7 @@
 git, est contrôlé comme un fichier suivi ; une adresse donnée à la main à une image affichée est refusée ; une ligne
 trop longue est refusée par --lines, par le hook avant commit et par le contrôle complet, qui s'arrête alors avant le
 banc ; --link-venv relie les notes du dossier principal dans un worktree."""
-import argparse, contextlib, io, os, shutil, subprocess, sys, tempfile, time, unittest
+import argparse, contextlib, io, os, shutil, subprocess, sys, tempfile, unittest
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -58,7 +58,7 @@ class LinesTest(RepoCase):
     qui s'arrête avant le banc et la nomme dans sa dernière ligne."""
     def install_check(self):
         """check.py et le hook dans le dépôt temporaire, dans la base ; hook activé comme par --link-venv."""
-        for rel in ("tests/check.py", ".githooks/pre-commit"):
+        for rel in ("tests/check.py", "tests/rules.py", ".githooks/pre-commit"):
             os.makedirs(os.path.dirname(os.path.join(self.root, rel)), exist_ok=True)
             shutil.copy2(os.path.join(HERE, "..", rel), os.path.join(self.root, rel))
         sh(self.root, "git", "add", "tests", ".githooks")
@@ -99,9 +99,11 @@ class LinesTest(RepoCase):
 
     def test_the_full_check_stops_before_the_bench_and_names_the_line_last(self):
         self.write("b.mjs", "const x = 1;\n" + "//" + LONG + "\n")
-        args = argparse.Namespace(no_bench=False, quick=False, ui=[], name=None, lines=False, link_venv=False)
+        args = argparse.Namespace(no_bench=False, quick=False, ui=[], name=None, lines=False, link_venv=False,
+                                  map=None)
         with mock.patch.object(check, "check_python", return_value=[]), \
                 mock.patch.object(check, "check_js", return_value=[]), \
+                mock.patch.object(check, "check_rules", return_value=[]), \
                 mock.patch.object(check, "run_bench") as bench, mock.patch.object(check, "run_ui") as ui, \
                 mock.patch.object(check, "journal_path", return_value=os.path.join(self.tmp.name, "journal.log")), \
                 mock.patch.object(check, "reexec_in_venv"), \
@@ -125,18 +127,30 @@ class UiNameTest(unittest.TestCase):
         self.assertTrue(any(t.startswith("« Générer » mène à la page En cours") for t in titles), titles)
 
     def test_a_pattern_without_test_fails_at_once(self):
-        with tempfile.TemporaryDirectory(prefix="qwen-check-test-") as tmp:
-            start = time.monotonic()
-            r = subprocess.run([sys.executable, os.path.join(HERE, "check.py"), "--no-bench", "--ui",
-                                "tests/ui/smoke.test.mjs", "--name", "zz-aucun-test"], capture_output=True,
-                               text=True, env=dict(os.environ, QWEN_CHECK_REEXEC="1",
-                                                   QWEN_CHECK_JOURNAL=os.path.join(tmp, "journal.log")))
-        self.assertEqual(r.returncode, 1, r.stdout)
-        self.assertIn("aucun test ne correspond au motif « zz-aucun-test »", r.stdout)
-        self.assertEqual(r.stdout.strip().splitlines()[-1],
+        args = argparse.Namespace(no_bench=False, quick=False, ui=["tests/ui/smoke.test.mjs"], name="zz-aucun-test",
+                                  lines=False, link_venv=False, map=None)
+        with tempfile.TemporaryDirectory(prefix="qwen-check-test-") as tmp, \
+                mock.patch.object(check, "check_python", return_value=[]), \
+                mock.patch.object(check, "check_js", return_value=[]), \
+                mock.patch.object(check, "check_line_length", return_value=[]), \
+                mock.patch.object(check, "check_rules", return_value=[]), \
+                mock.patch.object(check, "run_bench") as bench, mock.patch.object(check, "run_ui") as ui, \
+                mock.patch.object(check, "journal_path", return_value=os.path.join(tmp, "journal.log")), \
+                mock.patch.object(check, "reexec_in_venv"), \
+                mock.patch("argparse.ArgumentParser.parse_args", return_value=args), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(check.main(), 1)
+        bench.assert_not_called()                     # rien n'est lancé, ni le banc ni Chrome
+        ui.assert_not_called()
+        self.assertIn("aucun test ne correspond au motif « zz-aucun-test »", out.getvalue())
+        self.assertEqual(out.getvalue().strip().splitlines()[-1],
                          "Contrôles : ÉCHEC : Interface : motif « zz-aucun-test » sans test")
-        self.assertNotIn("Interface : tests/ui/smoke.test.mjs", r.stdout)   # aucun fichier lancé
-        self.assertLess(time.monotonic() - start, 30)
+        args.name = "Générer"                         # un motif qui vise un test : l'interface est lancée
+        with mock.patch.object(check, "run_ui", return_value=(True, [], [])) as ui, \
+                mock.patch.object(check, "run_bench", return_value=(True, [], [])), \
+                mock.patch.object(check, "sensitive_notice"), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(check.run_checks(args), {})
+        ui.assert_called_once()
 
 
 class LinkNotesTest(unittest.TestCase):

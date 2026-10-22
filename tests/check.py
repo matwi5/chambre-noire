@@ -40,6 +40,8 @@ bon. Code de sortie non nul au moindre échec.
 """
 import argparse, concurrent.futures, glob, os, re, signal, subprocess, sys, tempfile, time
 
+import rules                                          # tests/rules.py : règles mécaniques, index de la carte
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENV_PY = os.path.join("Scripts", "python.exe") if os.name == "nt" else os.path.join("bin", "python")
 SCRIPT_RE = re.compile(r"<script\b([^>]*)>(.*?)</script\s*>", re.S | re.I)
@@ -56,6 +58,7 @@ IMAGE_SRC_RE = re.compile(r"\$\(\s*['\"](" + "|".join(IMAGE_IDS) + r")['\"]\s*\)
 NOTES = ("CLAUDE.md", "ETAT_DU_PROJET.md", "travail", "docs/specs")
 AGENT_NOTES, CODE_MAP = "docs/agents", "carte-du-code.md"
 HOOKS = ".githooks"                                  # hooks versionnés (core.hooksPath), posés par --link-venv
+MAPPED = ("tools/launch.py", "tools/ui/index.html")  # fichiers que la carte du code décrit (--map en donne l'index)
 UI_TESTS = "tests/ui/*.test.mjs"
 # délais des tests d'interface : par test (ms, node --test-timeout ; QWEN_UI_TEST_TIMEOUT le change), par fichier (s)
 UI_TEST_TIMEOUT = int(os.environ.get("QWEN_UI_TEST_TIMEOUT") or 180000)
@@ -322,6 +325,60 @@ def check_line_length(base, cached=False):
     return bad
 
 
+def read(f):
+    with open(os.path.join(ROOT, f), encoding="utf-8") as fh:
+        return fh.read()
+
+
+def check_rules(base):
+    """Règles mécaniques de CODING_STANDARDS.md (tests/rules.py) sur les lignes ajoutées depuis base : variable
+    JavaScript qui porte l'id d'un élément (index.html), « .every( » ou « all( » sans test de longueur, promesse prise
+    pour un booléen, HOLD=<nom> repris d'un fichier de test à l'autre, attente de « running » sans HOLD ni SLOW
+    (tests) ; et sur toute la carte du code : chaque nom cité existe dans le code. Liste des fautes (fichier:ligne)."""
+    bad = []
+
+    def report(f, found):
+        for k, why in found:
+            print(f"  {f}:{k} : {why}")
+            bad.append(f"{f}:{k}")
+
+    if base:
+        added = added_lines(base, "tools/ui/index.html", "tests/")
+        report("tools/ui/index.html", rules.id_shadows(read("tools/ui/index.html"),
+                                                       added.get("tools/ui/index.html", set())))
+        for f in checked_files("tests/*.mjs"):           # pathspec git : « * » traverse les dossiers
+            lines = read(f).splitlines()
+            report(f, rules.unchecked_every(lines, added.get(f, set())) + rules.unawaited_then(lines,
+                                                                                               added.get(f, set())))
+        for f in checked_files("tests/*.py"):
+            if f == "tests/test_rules.py":                # ses exemples fautifs sont voulus
+                continue
+            src = read(f)
+            report(f, rules.unchecked_all(src.splitlines(), added.get(f, set())))
+            try:
+                report(f, rules.running_without_hold(src, added.get(f, set())))
+            except SyntaxError:                         # déjà signalé par le contrôle Python
+                pass
+        texts = {f: read(f) for f in checked_files("tests/test_*.py", "tests/ui/*.test.mjs")}
+        for f, k, why in rules.hold_reuse(texts, {f: added.get(f, set()) for f in texts}):
+            report(f, [(k, why)])
+    else:
+        print("Règles : avis : base introuvable, règles des lignes ajoutées non vérifiées")
+    code = "\n".join(read(f) for f in checked_files("*.py", "*.html", "*.mjs", "*.js"))
+    report(f"{AGENT_NOTES}/{CODE_MAP}", rules.missing_map_names(read(f"{AGENT_NOTES}/{CODE_MAP}"), code))
+    print(f"Règles : {len(bad)} faute(s) (CODING_STANDARDS.md, noms de la carte du code)" + (" : ÉCHEC" if bad else ""))
+    return bad
+
+
+def print_index(pattern):
+    """Index des fonctions, classes et constantes de MAPPED (fichier:ligne nom), filtré par pattern (sous-chaîne)."""
+    for f in MAPPED:
+        for k, name in rules.code_index(f, read(f)):
+            if pattern.lower() in name.lower():
+                print(f"{f}:{k} {name}")
+    return 0
+
+
 def sensitive_notice(base):
     """Avis (jamais un échec) quand une ligne ajoutée depuis base dans le code de l'application (tools/, hors .md)
     touche une zone sensible (SENSITIVE) : le ticket demande alors la passe bogues de /code-review. Les tests, qui
@@ -508,7 +565,7 @@ def run_checks(args):
     base = merge_base()
     failed = {}
     for name, check in (("Python", check_python), ("JavaScript", check_js),
-                        ("Lignes", lambda: check_line_length(base))):
+                        ("Lignes", lambda: check_line_length(base)), ("Règles", lambda: check_rules(base))):
         faults = check()
         if faults:
             failed[name] = faults
@@ -554,9 +611,13 @@ def main():
     ap.add_argument("--cached", action="store_true", help="avec --lines : juger l'index (hook avant commit)")
     ap.add_argument("--link-venv", action="store_true",
                     help="worktree : liens vers venv et les notes du dossier principal ; hook avant commit")
+    ap.add_argument("--map", nargs="?", const="", metavar="NOM",
+                    help="index fonction → ligne de launch.py et index.html (les noms qui contiennent NOM)")
     args = ap.parse_args()
     if args.link_venv:
         return link_venv()
+    if args.map is not None:
+        return print_index(args.map)
     if args.lines:                                    # bibliothèque standard seulement : pas de relance dans le venv
         return 1 if check_line_length(merge_base(), cached=args.cached) else 0
     reexec_in_venv()
