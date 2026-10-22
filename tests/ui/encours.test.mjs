@@ -2,7 +2,7 @@
 // sur Créer), « Générer » et la pastille du haut qui y mènent, pastille de l'onglet (nombre de la file de l'espace),
 // génération en cours en grand (de la page, d'un autre appareil, ou cachée dans l'autre espace : « En attente »),
 // « Rien en cours », et rien qui dépasse à 367 px.
-//   node --test tests/ui/encours.test.mjs   (ou : venv/bin/python tests/check.py --ui tests/ui/encours.test.mjs)
+//   venv/bin/python tests/check.py --quick --ui tests/ui/encours.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome, PHONE } from './driver.mjs';
@@ -26,17 +26,6 @@ after(async () => {
 const CODE = 'code-du-banc-1';
 const post = (url, body = {}) => page.eval(`postJson(${JSON.stringify(url)}, ${JSON.stringify(body)})
   .then(async r => ({ status: r.status, body: await r.json() }))`);
-// génération lancée hors de l'interface, comme depuis un autre appareil
-async function launch(prompt, extra = {}) {
-  const r = await post('/api/generate', { mode: 't2i', prompt, width: 512, height: 512, steps: 20, cfg: 1, seed: -1,
-    preview: false, ref_images: [], ...extra });
-  assert.equal(r.status, 202);
-  return r.body;
-}
-const type = text => page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
-  t.dispatchEvent(new Event('input')); })()`);
-const idle = () => page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)`,
-  { what: 'Mac au repos', timeout: 30000 });
 const cancelAll = () => page.eval(`fetch('/api/status').then(r => r.json())
   .then(s => Promise.all(s.queue.filter(e => e.id).map(e => postJson('/api/job/' + e.id + '/cancel', {}))))`);
 const visible = sel => page.eval(`(() => { const el = document.querySelector(${JSON.stringify(sel)});
@@ -89,8 +78,8 @@ test('file qui attend, rien qui tourne (rangement de la précédente) : pas « R
 });
 
 test('« Générer » mène à En cours ; pastille de l\'onglet et pastille du haut', async () => {
-  await launch('HOLD=encours zq5 d\'un autre appareil', { width: 768, height: 512 });
-  await type('zq5 de cette page');
+  await page.launch('HOLD=encours zq5 d\'un autre appareil', { width: 768, height: 512 });
+  await page.typePrompt('zq5 de cette page');
   await page.click('#go');
   await page.waitFor(`mode === 'run' && pageJobs.some(isActive)`, { what: 'page En cours après « Générer »' });
   await page.eval(`refreshStatus()`);
@@ -113,7 +102,7 @@ test('« Générer » mène à En cours ; pastille de l\'onglet et pastille du h
   if (process.env.SHOT_DIR) await page.screenshot(process.env.SHOT_DIR + '/encours-autre.png');
   await cancelAll();
   bench.release('encours');
-  await idle();
+  await bench.idle();
   page.assertNoErrors();
 });
 
@@ -122,9 +111,9 @@ test('génération cachée de l\'autre espace : « En attente » et la durée av
   assert.equal((await post(exists ? '/api/private/unlock' : '/api/private/create', { code: CODE })).status, 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
-  const pub = await launch('HOLD=cachee zq5public');
+  const pub = await page.launch('HOLD=cachee zq5public');
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`, { what: 'publique en cours' });
-  await launch('zq5secret d\'un autre appareil', { private: true });
+  await page.launch('zq5secret d\'un autre appareil', { private: true });
   await page.eval(`refreshStatus()`);
   await page.click('#tabbar [data-pane="run"]');
   await page.waitFor(`$('pane-run').classList.contains('other') && $('nowTitle').textContent === 'En attente'
@@ -135,12 +124,12 @@ test('génération cachée de l\'autre espace : « En attente » et la durée av
   assert.doesNotMatch(await page.eval(`document.body.innerHTML`), /zq5secret/, 'rien de privé dans la page');
   assert.equal((await post(`/api/job/${pub.id}/cancel`)).status, 200);
   bench.release('cachee');
-  await idle();                                    // la privée, sans HOLD, passe ensuite
+  await bench.idle();                                    // la privée, sans HOLD, passe ensuite
   page.assertNoErrors();
 });
 
 test('génération incognito d\'un autre appareil : « Génération incognito », sans annulation', async () => {
-  await launch('HOLD=autreincog zq5 incognito ailleurs', { incognito: true });
+  await page.launch('HOLD=autreincog zq5 incognito ailleurs', { incognito: true });
   await page.eval(`refreshStatus()`);
   await page.click('#tabbar [data-pane="run"]');
   await page.waitFor(`$('pane-run').classList.contains('other')
@@ -151,7 +140,7 @@ test('génération incognito d\'un autre appareil : « Génération incognito »
   // sa ligne de la file ne dit ni son mode ni ses réglages (seule sa page les connaît) : cadre carré, icône incognito
   assert.equal(await page.eval(`$('nowSub').textContent`), '');
   bench.release('autreincog');
-  await idle();
+  await bench.idle();
   await page.waitFor(`!$('pane-run').classList.contains('other') && $('nowSub').textContent === ''`,
     { what: 'haut de la page rendu à la page, réglages vidés' });
   page.assertNoErrors();
@@ -160,7 +149,7 @@ test('génération incognito d\'un autre appareil : « Génération incognito »
 test('une seconde génération de la page prend le haut d\'En cours quand elle démarre', async () => {
   for (const text of ['HOLD=premiere zq5 première', 'HOLD=seconde zq5 seconde']) {
     await page.click('#tabbar [data-pane="create"]');
-    await type(text);
+    await page.typePrompt(text);
     await page.click('#go');
     await page.waitFor(`mode === 'run' && pageJobs.some(p => p.prompt === ${JSON.stringify(text)})`,
       { what: 'demande acceptée, page En cours' });

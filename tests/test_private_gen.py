@@ -70,6 +70,16 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
         self.assertEqual(calibration(), calib_before)
         self.assertFalse([line for line in bench.LOG if "zq9private" in line or job["id"] in line])
 
+    def test_reference_the_engine_cannot_read_is_kept_as_png(self):
+        # cas vu sur le téléphone : une référence WebP faisait échouer l'édition privée (« load image … failed »)
+        job = self.generate(mode="edit", ref_images=[bench.data_url(bench.png_bytes(fmt="WEBP"))])
+        done = self.wait_job(job["id"])
+        self.assertEqual(done["status"], "done", done.get("error"))
+        bench.wait_idle()
+        [item] = self.history()
+        code, inp = call("GET", f"/api/private/input?id={item['id']}&file=ref_1.png", private=self.session)
+        self.assertEqual((code, inp[:8]), (200, b"\x89PNG\r\n\x1a\n"))
+
     def test_history_lists_settings_and_reads_need_the_session(self):
         job = self.generate("zq9 a fox", seed=1234, steps=6)
         self.wait_job(job["id"])

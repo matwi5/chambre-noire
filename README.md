@@ -99,7 +99,8 @@ Sur Mac : `venv/bin/python setup.py`. Ce script, à lancer une seule fois :
 - sous Windows, prépare l'encodeur de texte pour stable-diffusion.cpp ;
 - crée le raccourci **`Qwen-Image.lnk`** (Windows) ou **`Qwen-Image.command`** (Mac) dans le dossier ;
 - lance trois courtes générations pour calibrer les estimations de durée sur votre machine
-  (voir [Performances](#performances) ; `--no-calibrate` pour s'en passer).
+  (voir [Performances](#performances) ; `--no-calibrate` pour s'en passer). Si elles échouent, l'erreur est affichée
+  et l'installation continue sans calibration (rappel à la fin, avec la commande pour réessayer).
 
 **Plus de fidélité ?** Ajoutez `--q8` : le modèle Q8_0 (≈ 7,6 Go de plus) est installé à côté du modèle Q4_K_M.
 Il rend mieux les détails fins et le texte écrit dans l'image ; il demande ≈ 3 Go de mémoire de plus.
@@ -325,7 +326,8 @@ Les variantes marchent de la même façon avec des images d'entrée (hors campag
 de la même édition, chacun avec sa graine, à départager par **Garder celle-ci**.
 
 **Édition** : ajouter 1 à 10 images d'entrée par **Ajouter des images**, au-dessus du texte (elles sont numérotées 1,
-2, 3…, et un « × » retire une image), une à une ou plusieurs d'un coup dans le sélecteur (elles sont ajoutées dans
+2, 3…, et un « × » retire une image ; PNG et JPEG partent tels quels, WebP, AVIF ou TIFF, que le moteur ne lit pas,
+sont convertis en PNG par le serveur), une à une ou plusieurs d'un coup dans le sélecteur (elles sont ajoutées dans
 l'ordre de sélection), en les déposant sur **Ajouter des images**, en collant une image copiée (Cmd+V sur le Mac,
 « Coller » sur le téléphone ; un texte collé dans le champ reste un texte), ou par **Éditer** sur une image de la
 galerie, des terminées ou des images d'entrée, puis écrire une **instruction** :
@@ -899,6 +901,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     ├── bench.py          banc de test du serveur, sans GPU : serveur sur un port libre, dossier temporaire
     ├── fake_sdcli.py     faux moteur du banc
     ├── check.py          tous les contrôles en une commande (compilation, JavaScript, banc, interface)
+    ├── rewrap.py         recoupe les lignes trop longues d'un fichier Markdown
+    ├── rules.py          règles mécaniques de CODING_STANDARDS.md et index de la carte du code (pour check.py)
     ├── test_*.py         tests du banc
     └── ui/               tests de l'interface dans Chrome sans écran (pilote driver.mjs, tests *.test.mjs)
 ```
@@ -925,16 +929,32 @@ dépôt est public. Un avis, sans échec, signale un changement de code qui touc
 GitHub, la même commande, complète, tourne sur chaque pull request vers `main` et chaque envoi sur `dev`
 (`.github/workflows/checks.yml`, sur macOS).
 
+Il vérifie aussi, sur les lignes ajoutées, les règles de `CODING_STANDARDS.md` devenues mécaniques (`tests/rules.py`),
+et que chaque nom cité par la carte du code existe encore ; `--map <nom>` imprime la ligne des fonctions de
+`tools/launch.py` et `tools/ui/index.html` dont le nom le contient. Les contrôles rapides (compilation, JavaScript,
+longueur des lignes, règles) passent d'abord : si l'un échoue, le banc et l'interface ne sont pas lancés. La dernière
+ligne de la sortie nomme chaque faute (`fichier:ligne`, test du banc, fichier d'interface) et la sortie complète
+va aussi dans un journal, dont le chemin est affiché ; le banc et chaque
+fichier d'interface affichent leur durée. `python3 tests/check.py --lines` ne vérifie que la longueur des lignes
+ajoutées, en moins d'une seconde ; le hook avant commit du dépôt (`.githooks/pre-commit`, activé par
+`python3 tests/check.py --link-venv`) le lance sur ce qui va être enregistré et refuse le commit fautif.
+`python3 tests/rewrap.py <fichier>.md` recoupe les lignes trop longues ajoutées à un fichier Markdown (toutes avec
+`--all`) sans toucher aux titres, listes, tableaux, blocs de code ni lignes vides.
+
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps que
-le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier. Ils ouvrent l'interface servie par le banc dans un
-Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du navigateur. Ils couvrent
-les écrans principaux, la page En cours (onglets, pastilles, génération d'un autre appareil ou cachée, rien qui dépasse
-à la largeur du téléphone), les terminées (cartes, grille d'un lot, échecs, « × » et « Tout retirer », plafond, message
+le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier, et `--name <motif>` pour les seuls tests dont le
+nom correspond (échec immédiat si aucun ne correspond). Un test bloqué échoue au bout de 3 minutes (20 pour un
+fichier), et Chrome et le banc sont arrêtés à la fin de chaque fichier. Les tests ouvrent l'interface servie par le
+banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du
+navigateur. Ils couvrent les écrans principaux, la page En cours (onglets, pastilles, génération d'un autre appareil
+ou cachée, rien qui dépasse à la largeur du téléphone), les terminées (cartes, grille d'un lot, échecs, « × » et « Tout
+retirer », plafond, message
 « Image prête »), « Garder celle-ci » après un rechargement de la galerie, la saisie (page Créer unique, Dessiner,
 collage, campagne à partir de 2 images, plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque
 espace), l'en-tête (cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés, la reprise d'une
-génération, le suivi d'une génération privée devenue inconnue (sans faux « Échec ») et le brouillon unique (reprise des
-anciens, aucun brouillon incognito ou privé dans le navigateur).
+génération, le suivi d'une génération privée devenue inconnue (sans faux « Échec »), le brouillon unique (reprise des
+anciens, aucun brouillon incognito ou privé dans le navigateur) et le pilote lui-même (recherche de données restées dans
+la page, fichiers écrits par le banc, délais).
 
 Tests de bout en bout, interface lancée :
 

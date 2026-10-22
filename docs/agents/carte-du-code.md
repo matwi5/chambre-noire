@@ -2,9 +2,11 @@
 
 Où trouver quoi dans les deux gros fichiers, pour s'orienter sans les lire en entier (`tools/launch.py` ≈ 110 Ko,
 `tools/ui/index.html` ≈ 170 Ko). Repères par noms de fonctions, de constantes et de sections, jamais par numéros de
-ligne : chercher le nom (`grep -n "def worker" tools/launch.py`), puis lire autour. L'API locale (routes, champs,
-codes d'erreur) est décrite dans le README, « Fonctionnement technique » ; les formats et les raisons dans
-`DECISIONS.md`.
+ligne : `venv/bin/python tests/check.py --map worker` donne la ligne de chaque fonction, classe ou constante dont le
+nom contient « worker » (`--map` seul : tout l'index des deux fichiers), puis lire autour. `check.py` échoue si un nom
+cité ici entre accents graves n'existe plus dans le code : un renommage met la carte à jour dans le même commit.
+L'API locale (routes, champs, codes d'erreur) est décrite dans le README, « Fonctionnement technique » ; les formats
+et les raisons dans `DECISIONS.md`.
 
 ```text
 navigateur ──HTTP──▶ tools/launch.py ──lance une fois par génération──▶ sdcpp/<moteur>/sd-cli ──▶ PNG
@@ -52,9 +54,10 @@ Dans l'ordre du fichier :
   générations en attente dans l'ordre de calcul, seule source de l'ordre) protégée avec `S.current` par la condition
   `S.turn`, lots `S.lots`, génération en cours `S.current`, sessions privées `S.private_sessions`, noms `S.lan_hosts`
   et `S.https_hosts`).
-- **Préparer et lancer une génération** : `data_url_bytes`, `write_data_url`, `image_size`, `build_cmd` (ligne de
-  commande de sd-cli ; aperçu tous les `preview_interval` pas), `latest_preview`, `start_job` (passage « en cours » :
-  par `worker()` sous `S.turn`, et par `tools/calibrate.py`, qui appelle `run_job` hors de la file), `run_job` (lit
+- **Préparer et lancer une génération** : `data_url_bytes`, `write_data_url` (PNG ou JPEG écrit tel quel, autre
+  format converti en PNG : sd-cli ne le lirait pas), `image_size`, `build_cmd` (ligne de commande de sd-cli ; aperçu
+  tous les `preview_interval` pas), `latest_preview`, `start_job` (passage « en cours » : par `worker()` sous `S.turn`,
+  et par `tools/calibrate.py`, qui appelle `run_job` hors de la file), `run_job` (lit
   la sortie ligne à ligne : étape, phase, durées pour la calibration ; écrit l'image, le journal, les entrées),
   `secret(job)` (incognito ou privée : rien en clair), `kind_of`, `keep_private` (chiffre une génération privée),
   `discard_cancelled`, `forget_files`, `fail_job`.
@@ -206,7 +209,8 @@ rapprocher une génération de la file par son identifiant, et traiter un 404 qu
 l'espace (voir `CODING_STANDARDS.md`).
 
 Fichiers voisins : `tools/ui/sw.js` (service worker : navigation seulement, jamais `/api/*`),
-`tools/ui/manifest.webmanifest` et les icônes (installation sur le téléphone).
+`tools/ui/manifest.webmanifest` et les icônes (installation sur le téléphone) ; `tools/ui/logo.svg` (logo de la barre
+du haut, de la page du code d'accès et de l'onglet) est la source des icônes PNG, à régénérer depuis lui s'il change.
 
 ## Mécanismes
 
@@ -290,6 +294,39 @@ invariants ».
 - **Estimation des durées** : `tools/estimate.py` (`predict`, priors par moteur, mesures par `"<moteur>/<modèle>"`
   dans `tools/calibration.json`, filtrées sur la release de sd.cpp installée lue dans `sdcpp/<moteur>/.installed`). Les
   coefficients partent vers l'interface par `/api/status`.
+
+## Pièges de l'interface
+
+- **Brouillon et mémoire de la page** : rien de l'incognito ni de l'espace privé dans `localStorage`, brouillon
+  compris : une seule clé, `qwen-prompt` (`DRAFT_KEY`), où un texte incognito ou privé n'est jamais écrit, même quand
+  la demande est refusée, et qu'activer l'incognito efface aussitôt (`tests/ui/brouillons.test.mjs`). La demande
+  gardée par la page (`req` de `pageJobs`, images en data URL, incognito et privée comprises, pour « Reprendre » et
+  « Relancer ») vit en mémoire de la page seulement, jamais dans `localStorage` (`saveOwn` n'écrit que des
+  identifiants).
+- **Visionneuse et images affichées** : la visionneuse parcourt `vList`, jamais `histItems` directement (la galerie
+  peut être rechargée pendant qu'elle est ouverte). `#paintImg` (image du dessin) passe aussi par `showImage`, avec
+  l'image décodée par `toEntry` (`decoded`) ; `tests/check.py` la surveille (`IMAGE_IDS`).
+- **Saisie par espace** : la saisie de Créer (texte, images d'entrée, dessin et son tracé) est propre à chaque
+  espace, et non plus à chaque onglet. Tout ajout à la saisie qui attend (lecture d'image, sélecteur de fichiers,
+  collage, « Éditer », « Dessiner », « Reprendre », envoi d'une demande) note sa liste et son espace avant la
+  première attente (`noteInput()`) ; « Relancer », qui ne touche pas la saisie, note l'espace avant de lire les images
+  et ne part pas s'il a changé ; sinon un changement d'espace pendant l'attente le fait tomber dans la saisie de
+  l'autre espace (une image privée dans la saisie publique) ; à l'arrivée de l'image, il revérifie le dessin
+  (`refuseWhileDrawing(list)`).
+
+## Copies entre Python et JavaScript
+
+Registre des constantes et formules recopiées d'un côté à l'autre : une modification se fait des deux côtés
+(`CODING_STANDARDS.md`).
+
+- `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()` et `ref_px()` de `estimate.py` (jetons de
+  16×16 px, arrondi à 32) : formule et coefficients.
+- `PREVIEW_EVERY = 5` côté interface égale le défaut `preview_interval` de `build_cmd`.
+- La longueur minimale du code privé (`MIN_PRIVATE_CODE`, 8) est aussi vérifiée dans `index.html` (feuilles
+  privées).
+- Pas une copie : l'estimation de chaque génération de la file (`job_estimate`, pour `queue_entry` et le travail caché
+  `ahead`) appelle `estimate.predict` ; l'estimation de « Relancer » (`relaunch`) est approchée (chaque référence
+  comptée à la taille de la sortie, pas de `refPx`).
 
 ## Tests
 

@@ -48,6 +48,20 @@ class GenerationTest(bench.BenchCase):
         item = next(it for it in call("GET", "/api/history")[1] if it["name"] == j["name"])
         self.assertEqual(item["inputs"], ["ref_1.png"])
 
+    def test_inputs_the_engine_cannot_read_are_converted_to_png(self):
+        # WebP, AVIF, TIFF : lus par le navigateur et par Pillow, pas par sd-cli (stb_image)
+        for fmt in ("WEBP", "AVIF", "TIFF"):
+            with self.subTest(fmt=fmt):
+                img = bench.data_url(bench.png_bytes(fmt=fmt))
+                j = wait_job(generate("edit it", mode="edit", ref_images=[img])["id"])
+                self.assertEqual(j["status"], "done", j.get("error"))
+                j = wait_job(generate("fix it", mode="mask", init_image=img, mask_image=img)["id"])
+                self.assertEqual(j["status"], "done", j.get("error"))
+        kept = files("outputs", ".inputs", "*", "*.png")
+        self.assertEqual(len(kept), 6)
+        for fp in kept:
+            with open(fp, "rb") as f:
+                self.assertEqual(f.read(8), b"\x89PNG\r\n\x1a\n", fp)
 
 class CancelTest(bench.BenchCase):
     def test_cancel_a_queued_generation(self):

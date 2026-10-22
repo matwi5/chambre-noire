@@ -1,7 +1,7 @@
 // Brouillon du navigateur (localStorage, clé unique qwen-prompt), dans la vue du téléphone : une demande incognito ou
 // de l'espace privé, même refusée par le Mac, ne laisse aucun texte de prompt dans le navigateur ; activer l'incognito
 // retire le brouillon aussitôt ; les brouillons des anciens onglets (qwen-<onglet>_prompt) sont repris une fois.
-//   node --test tests/ui/brouillons.test.mjs   (ou : venv/bin/python tests/check.py --ui tests/ui/brouillons.test.mjs)
+//   venv/bin/python tests/check.py --quick --ui tests/ui/brouillons.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome } from './driver.mjs';
@@ -24,14 +24,13 @@ after(async () => {
 });
 
 const CODE = 'code-du-banc-1';
-const type = text => page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
-  t.dispatchEvent(new Event('input')); })()`);
 // Chrome note dans sa console la réponse 503 du refus simulé : seule erreur attendue
 const assertNoOtherErrors = () => assert.deepEqual(page.errors.filter(e => !/status of 503/.test(e)), []);
 // brouillons de texte (clé actuelle et anciennes clés par onglet)
 const drafts = () => page.eval(`Object.keys(localStorage).filter(k => /^qwen-(\\w+_)?prompt$/.test(k)).sort()`);
 
 async function fresh() {
+  await bench.idle();                              // rien en file : la page rechargée ne reprend rien
   await page.goto(bench.url + '/');
   await page.eval(`localStorage.clear()`);
   await page.goto(bench.url + '/');
@@ -48,13 +47,13 @@ async function refusedGenerate() {
 
 test('incognito : un texte tapé en mode normal ne reste pas en brouillon après une demande refusée', async () => {
   await fresh();
-  await type('un phare au crépuscule');
+  await page.typePrompt('un phare au crépuscule');
   assert.deepEqual(await drafts(), ['qwen-prompt'], 'brouillon public retenu');
   await page.click('#incog');
   await page.waitFor(`incogOn`, { what: 'incognito activé' });
   assert.deepEqual(await drafts(), [], 'brouillon retiré dès l\'activation, sans attendre la frappe suivante');
   assert.equal(await page.eval(`$('prompt').value`), 'un phare au crépuscule', 'le texte reste dans le champ');
-  await type('un phare au crépuscule, la nuit');
+  await page.typePrompt('un phare au crépuscule, la nuit');
   await refusedGenerate();
   assert.deepEqual(await drafts(), []);
   assert.equal(await page.eval(`$('prompt').value`), 'un phare au crépuscule, la nuit',
@@ -70,7 +69,7 @@ test('espace privé : un texte tapé puis une demande refusée ne laissent aucun
   assert.equal(await page.eval(create), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
-  await type('une forêt sous la neige');
+  await page.typePrompt('une forêt sous la neige');
   assert.deepEqual(await drafts(), [], 'rien écrit pendant la saisie');
   await refusedGenerate();
   assert.deepEqual(await drafts(), []);

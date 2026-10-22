@@ -2,7 +2,7 @@
 // téléphone : jamais l'image d'avant le temps d'un chargement, rien de l'espace privé à l'écran ni dans la page après
 // en être sorti (galerie privée comprise, sortie faite depuis un autre onglet), image voisine et image d'entrée
 // montrées sans attente, zoom au pincement sur les images d'entrée comme sur les images générées.
-//   node --test tests/ui/images.test.mjs   (ou : venv/bin/python tests/check.py --ui tests/ui/images.test.mjs)
+//   venv/bin/python tests/check.py --quick --ui tests/ui/images.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome, waitUntil, PHONE } from './driver.mjs';
@@ -32,8 +32,6 @@ const ref = color => `(() => { const c = document.createElement('canvas'); c.wid
 const edit = (prompt, color, priv = false) => page.eval(`postJson('/api/generate', { mode: 'edit',
   prompt: ${JSON.stringify(prompt)}, width: 512, height: 512, steps: 2, cfg: 1, seed: -1, preview: false,
   ref_images: [${ref(color)}], private: ${priv} }).then(r => r.status)`);
-const idle = () => page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)`,
-  { what: 'Mac au repos', timeout: 30000 });
 // adresse d'une image privée dans la page : attribut src ou image réellement peinte (currentSrc)
 const PRIVATE_IMAGES = `[...document.images].filter(i => (i.getAttribute('src') || '').includes('/api/private/')
   || i.currentSrc.includes('/api/private/')).map(i => i.id || i.parentElement.id || i.parentElement.className)`;
@@ -42,12 +40,12 @@ const loaded = id => `$('${id}').complete && $('${id}').naturalWidth > 0`;
 test('espace privé : après la sortie, ni visionneuse ni images d\'entrée ne montrent une image privée', async () => {
   assert.equal(await edit('zq3 publique a', '#2060c0'), 202);
   assert.equal(await edit('zq3 publique b', '#20a040'), 202);
-  await idle();
+  await bench.idle();
   assert.equal(await privatePost('/api/private/create'), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
   assert.equal(await edit('zq3 privée', '#c02020', true), 202);
-  await idle();
+  await bench.idle();
 
   // dans l'espace privé : la galerie, la visionneuse et l'image d'entrée de l'image privée, chargées
   await page.click('#tabbar [data-pane="hist"]');
@@ -189,7 +187,7 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
   assert.equal(await page.eval(`postJson('/api/generate', { mode: 't2i', prompt: 'zq7 lot privé', width: 512,
     height: 512, steps: 2, cfg: 1, seed: -1, preview: false, ref_images: [], private: true, count: 2 })
     .then(r => r.status)`), 202);
-  await idle();
+  await bench.idle();
   await page.eval(`goTab('create'); goTab('hist')`);   // galerie rechargée, lot compris
   await page.waitFor(`histItems.filter(it => it.lot).length === 2`, { what: 'lot privé dans la galerie' });
   await page.eval(`openViewer(histItems.findIndex(it => it.lot), histItems); openLot()`);
@@ -208,8 +206,8 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
 
 test('terminées : une image retirée de la liste, son lien de téléchargement part avec elle', async () => {
   await page.waitFor(`!inPrivate()`, { what: 'espace public' });
-  await page.eval(`goTab('create'); (() => { const t = $('prompt'); t.value = 'zq3 retirée';
-    t.dispatchEvent(new Event('input')); })()`);
+  await page.eval(`goTab('create')`);
+  await page.typePrompt('zq3 retirée');
   await page.click('#go');
   await page.waitFor(`!!$('doneList').querySelector('.dcard a[download]')`,
     { what: 'carte de l\'image finie', timeout: 30000 });
@@ -231,7 +229,7 @@ async function inputSizes(prompt, w, h, during) {
       x.fillStyle = '#3080a0'; x.fillRect(0, 0, ${w}, ${h}); return c.toDataURL('image/png'); })()] })
     .then(r => r.status)`),
   202);
-  await idle();
+  await bench.idle();
   await page.eval(`goTab('create'); goTab('hist')`);
   const index = `histItems.findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
   await page.waitFor(`${index} >= 0`, { what: 'image dans la galerie' });

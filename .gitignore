@@ -47,7 +47,7 @@ tools/saved_prompts.json.tmp
 # notes de travail locales (gardées sur le disque, hors du dépôt public)
 /CLAUDE.md
 /ETAT_DU_PROJET.md
-/travail/
-/docs/specs/
+/travail
+/docs/specs
 /docs/agents/*
 !/docs/agents/carte-du-code.md

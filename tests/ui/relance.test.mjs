@@ -3,7 +3,7 @@
 // la visionneuse (galerie : demande reconstruite de l'image, absente pour un masque), dans l'espace affiché et avec
 // l'interrupteur incognito du moment, sauf une image incognito, toujours relancée en incognito, puis la page En cours.
 // La demande envoyée est lue au passage (fetch enveloppé).
-//   node --test tests/ui/relance.test.mjs   (ou : venv/bin/python tests/check.py --ui tests/ui/relance.test.mjs)
+//   venv/bin/python tests/check.py --quick --ui tests/ui/relance.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome } from './driver.mjs';
@@ -26,6 +26,7 @@ const post = (url, body = {}) => page.eval(`postJson(${JSON.stringify(url)}, ${J
   .then(r => r.status)`);
 // page neuve, générations courtes ; les demandes envoyées à /api/generate sont notées (sentBodies)
 async function fresh() {
+  await bench.idle();                              // rien en file : la page rechargée ne reprend rien
   await page.goto(bench.url + '/');
   await page.eval(`localStorage.clear()`);
   await page.goto(bench.url + '/');
@@ -34,18 +35,6 @@ async function fresh() {
     window.sentBodies = []; const f = window.fetch; window.fetch = (u, o) => {
       if (String(u).endsWith('/api/generate')) sentBodies.push(JSON.parse(o.body)); return f(u, o); }`);
 }
-const type = text => page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
-  t.dispatchEvent(new Event('input')); })()`);
-// texte tapé dans Créer puis « Générer » : la page passe à En cours
-async function go(text) {
-  if (await page.eval(`mode`) !== 'create') await page.click('#tabbar [data-pane="create"]');
-  await type(text);
-  const n = await page.eval(`sentBodies.length`);
-  await page.click('#go');
-  await page.waitFor(`mode === 'run' && sentBodies.length > ${n}`, { what: 'demande acceptée, page En cours' });
-}
-const settled = () => page.waitFor(`fetch('/api/status').then(r => r.json())
-  .then(s => !s.busy && !s.queue.length && !pageJobs.some(isActive))`, { what: 'Mac au repos', timeout: 30000 });
 // « Relancer » (sélecteur) : la demande suivante part, la page est sur En cours ; rend cette demande, images réduites à
 // leur nombre (les dimensions seules pour une campagne)
 async function again(selector) {
@@ -77,10 +66,10 @@ const shown = sel => page.eval(`(el => !!el && !el.hidden && el.getClientRects()
 
 test('terminée : la même demande, nouvelle graine, saisie intacte, page En cours', async () => {
   await fresh();
-  await go('zl1 phare');
-  await settled();
+  await page.generate('zl1 phare');
+  await bench.idle({ page });
   await page.click('#tabbar [data-pane="create"]');
-  await type('texte suivant');
+  await page.typePrompt('texte suivant');
   await page.click('#tabbar [data-pane="run"]');
   await page.waitFor(`!!$('doneList').querySelector('.dcard [data-again]')`, { what: 'Relancer sur la terminée' });
   const b = await again('#doneList .dcard [data-again]');
@@ -89,28 +78,28 @@ test('terminée : la même demande, nouvelle graine, saisie intacte, page En cou
   assert.equal(await page.eval(`pageJobs.length`), 2, 'suivie par la page');
   await page.click('#tabbar [data-pane="create"]');
   assert.equal(await page.eval(`$('prompt').value`), 'texte suivant', 'saisie intacte');
-  await settled();
+  await bench.idle({ page });
   page.assertNoErrors();
 });
 
 test('lot de variantes : la carte relance tout le lot, une image du lot (visionneuse) une seule image', async () => {
   await fresh();
   await page.eval(`opt.count = 2; saveOpt(); refreshChoices()`);
-  await go('zl2 variantes');
-  await settled();
+  await page.generate('zl2 variantes');
+  await bench.idle({ page });
   await page.eval(`opt.count = 1; saveOpt(); refreshChoices()`);   // le réglage du moment ne compte pas
   await page.waitFor(`!!$('doneList').querySelector('.dlot [data-again]')`, { what: 'Relancer sur la carte du lot' });
   const lot = await again('#doneList .dlot [data-again]');
   assert.equal(lot.count, 2, 'tout le lot');
   assert.equal(lot.prompt, 'zl2 variantes');
-  await settled();
+  await bench.idle({ page });
   await page.click('#doneList .dlot [data-open]');
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
   const one = await again('#vAgain');
   assert.equal(one.count, undefined, 'une seule image');
   assert.equal(one.prompt, 'zl2 variantes');
   assert.equal(await page.eval(`$('viewer').classList.contains('on')`), false, 'visionneuse fermée');
-  await settled();
+  await bench.idle({ page });
   page.assertNoErrors();
 });
 
@@ -120,15 +109,15 @@ test('campagne : la carte relance les mêmes photos, une image du lot sa seule p
   await addImage('#c02020');
   await addImage('#2060c0');
   await page.eval(`$('campChk').click()`);
-  await go('zl3 campagne');
+  await page.generate('zl3 campagne');
   await page.eval(`$('campChk').click()`);
-  await settled();
+  await bench.idle({ page });
   await page.waitFor(`!!$('doneList').querySelector('.dlot [data-again]')`, { what: 'Relancer sur la carte du lot' });
   const lot = await again('#doneList .dlot [data-again]');
   assert.deepEqual(lot.campaign, (await sent(0)).campaign, 'les mêmes photos');
   assert.equal(await page.eval(`sentBodies[1].campaign.length === 2
     && sentBodies[1].campaign.every((c, k) => c.image === sentBodies[0].campaign[k].image)`), true);
-  await settled();
+  await bench.idle({ page });
   await page.eval(`openViewer(doneView.findIndex(it => it.lot && it.lot.rank === 2 && it.page.req === pageJobs[0].req),
     doneView)`);
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
@@ -137,18 +126,18 @@ test('campagne : la carte relance les mêmes photos, une image du lot sa seule p
   assert.deepEqual([one.mode, one.ref_images], ['edit', 1]);
   assert.equal(await page.eval(`sentBodies.at(-1).ref_images[0] === sentBodies[0].campaign[1].image
     && sentBodies.at(-1).width === sentBodies[0].campaign[1].width`), true, 'la photo 2, à ses dimensions');
-  await settled();
+  await bench.idle({ page });
   page.assertNoErrors();
 });
 
 test('échec : « Relancer » sur la carte de l\'échec', async () => {
   await fresh();
-  await go('zl4 FAIL');
-  await settled();
+  await page.generate('zl4 FAIL');
+  await bench.idle({ page });
   await page.waitFor(`!!$('doneList').querySelector('.dcard.fail [data-again]')`, { what: 'Relancer sur l\'échec' });
   const b = await again('#doneList .dcard.fail [data-again]');
   assert.equal(b.prompt, 'zl4 FAIL');
-  await settled();
+  await bench.idle({ page });
   page.assertNoErrors();
 });
 
@@ -160,16 +149,16 @@ test('galerie : demande reconstruite de l\'image (édition, annotation) ; absent
     202);
   assert.equal(await send(`{ mode: 'mask', prompt: 'zl7 masque', init_image: ${ref('#30a050')},
     mask_image: ${ref('#ffffff')}, ref_images: [${ref('#808080')}] }`), 202);
-  await settled();
+  await bench.idle({ page });
   await view('zl5 edition');
   const edit = await again('#vAgain');
   assert.deepEqual([edit.mode, edit.prompt, edit.width, edit.height, edit.steps, edit.ref_images, edit.seed],
     ['edit', 'zl5 edition', 512, 512, 8, 2, -1]);
-  await settled();
+  await bench.idle({ page });
   await view('zl6 annotation');
   const annot = await again('#vAgain');
   assert.deepEqual([annot.mode, annot.ref_images, annot.seed], ['annot', 1, -1], 'graine 1234 de l\'image : nouvelle');
-  await settled();
+  await bench.idle({ page });
   await view('zl7 masque');
   assert.equal(await shown('#vAgain'), false, 'pas de Relancer pour un masque de la galerie');
   await page.eval(`closeViewer()`);
@@ -179,24 +168,24 @@ test('galerie : demande reconstruite de l\'image (édition, annotation) ; absent
 test('espace et incognito du moment : incognito activé, puis dans l\'espace privé', async () => {
   await fresh();
   assert.equal(await send(`{ mode: 't2i', prompt: 'zl9 publique' }`), 202);
-  await settled();
+  await bench.idle({ page });
   await page.click('#tabbar [data-pane="create"]');
   await page.click('#incog');
   await view('zl9 publique');
   const incog = await again('#vAgain');
   assert.deepEqual([incog.incognito, incog.private], [true, undefined], 'incognito');
-  await settled();
+  await bench.idle({ page });
   await page.eval(`$('incog').click()`);
   const exists = await page.eval(`privState.exists`);
   assert.equal(await post(exists ? '/api/private/unlock' : '/api/private/create', { code: CODE }), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
   assert.equal(await send(`{ mode: 't2i', prompt: 'zl8 privee', private: true }`), 202);
-  await settled();
+  await bench.idle({ page });
   await view('zl8 privee');
   const priv = await again('#vAgain');
   assert.deepEqual([priv.private, priv.incognito, priv.prompt], [true, false, 'zl8 privee']);
-  await settled();
+  await bench.idle({ page });
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   page.assertNoErrors();
@@ -207,20 +196,20 @@ test('« Générer » avec une image : le format choisi reste pour la demande su
   await page.click('#tabbar [data-pane="create"]');
   await addImage('#c02020');
   await page.eval(`opt.ratio = '16:9'; saveOpt(); refreshChoices()`);
-  await go('zl10 format');
+  await page.generate('zl10 format');
   assert.equal(await page.eval(`opt.ratio`), '16:9', 'pas remplacé par « Image », puis 1:1');
-  await settled();
+  await bench.idle({ page });
   page.assertNoErrors();
 });
 
 test('double appui sur « Relancer » d\'une terminée : une seule relance', async () => {
   await fresh();
-  await go('zl11 double');
-  await settled();
+  await page.generate('zl11 double');
+  await bench.idle({ page });
   await page.waitFor(`!!$('doneList').querySelector('.dcard [data-again]')`, { what: 'Relancer sur la terminée' });
   await page.eval(`(b => { b.click(); b.click(); })($('doneList').querySelector('.dcard [data-again]'))`);
   await page.waitFor(`pageJobs.length === 2`, { what: 'relance suivie' });
-  await settled();
+  await bench.idle({ page });
   assert.equal(await page.eval(`sentBodies.length`), 2, 'une seule demande en plus');
   page.assertNoErrors();
 });
@@ -229,24 +218,24 @@ test('image incognito : relancée en incognito, interrupteur éteint (terminée,
   await fresh();
   await page.click('#tabbar [data-pane="create"]');
   await page.click('#incog');
-  await go('zl12 incognito');
-  await settled();
+  await page.generate('zl12 incognito');
+  await bench.idle({ page });
   await page.eval(`opt.count = 2; saveOpt(); refreshChoices()`);
-  await go('zl13 lot incognito');
-  await settled();
+  await page.generate('zl13 lot incognito');
+  await bench.idle({ page });
   await page.eval(`opt.count = 1; saveOpt(); $('incog').click()`);   // interrupteur éteint
   assert.equal(await page.eval(`incogOn`), false);
   const one = await again('#doneList .dcard:not(.dlot):not(.fail) [data-again]');
   assert.deepEqual([one.prompt, one.incognito], ['zl12 incognito', true], 'terminée');
-  await settled();
+  await bench.idle({ page });
   const lot = await again('#doneList .dlot [data-again]');
   assert.deepEqual([lot.prompt, lot.count, lot.incognito], ['zl13 lot incognito', 2, true], 'carte du lot');
-  await settled();
+  await bench.idle({ page });
   await page.click('#doneList .dlot [data-open]');
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
   const viewed = await again('#vAgain');
   assert.deepEqual([viewed.count, viewed.incognito], [undefined, true], 'visionneuse');
-  await settled();
+  await bench.idle({ page });
   assert.deepEqual(await page.eval(`Object.values({ ...localStorage }).filter(v => v.includes('zl1'))`), [],
     'localStorage fouillé');
   page.assertNoErrors();
@@ -256,22 +245,22 @@ test('échec incognito : relancé en incognito, interrupteur éteint', async () 
   await fresh();
   await page.click('#tabbar [data-pane="create"]');
   await page.click('#incog');
-  await go('zl14 FAIL incognito');
-  await settled();
+  await page.generate('zl14 FAIL incognito');
+  await bench.idle({ page });
   await page.eval(`$('incog').click()`);
   const b = await again('#doneList .dcard.fail [data-again]');
   assert.equal(b.incognito, true);
-  await settled();
+  await bench.idle({ page });
   page.assertNoErrors();
 });
 
 test('terminée normale : relancée en incognito quand l\'interrupteur est allumé', async () => {
   await fresh();
-  await go('zl15 normale');
-  await settled();
+  await page.generate('zl15 normale');
+  await bench.idle({ page });
   await page.eval(`$('incog').click()`);           // allumé après la génération
   const b = await again('#doneList .dcard [data-again]');
   assert.deepEqual([b.prompt, b.incognito], ['zl15 normale', true]);
-  await settled();
+  await bench.idle({ page });
   page.assertNoErrors();
 });

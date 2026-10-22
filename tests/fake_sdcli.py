@@ -2,7 +2,9 @@
 
 Il lit les options utiles de la ligne de commande construite par tools/launch.py (-p, -W, -H, --steps, -o,
 --preview-path, --preview-interval), imprime les lignes que le serveur analyse (progression « k/N - x.xxs/it » et
-lignes « … completed, taking x.xxs »), écrit les aperçus et l'image finale en PNG.
+lignes « … completed, taking x.xxs »), écrit les aperçus et l'image finale en PNG. Comme le vrai moteur (stb_image),
+il refuse avant tout calcul une image d'entrée (-r, -i, --mask) qui n'est ni PNG, ni JPEG, ni BMP, ni GIF (WebP, AVIF,
+TIFF…), avec le même message d'erreur.
 
 Commandes glissées dans le prompt, pour un test :
 - FAIL (mot entier) : échoue après la première étape (ligne [ERROR], code de sortie 1, aucune image) ;
@@ -18,6 +20,7 @@ Commandes glissées dans le prompt, pour un test :
 import os, re, struct, sys, time, zlib
 
 HOLD_LIMIT = 120
+READABLE = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"BM", b"GIF8")   # en-têtes que stb_image sait lire
 ALL = "ALL"                                     # fichier qui libère tous les noms (ménage du banc)
 
 
@@ -47,6 +50,17 @@ def png(path, w, h, row):
         f.write(data)
 
 
+def unreadable_inputs(argv):
+    """Images d'entrée de la ligne de commande que le vrai moteur ne saurait pas lire."""
+    paths = [argv[i + 1] for i, a in enumerate(argv[:-1]) if a in ("-r", "-i", "--mask")]
+    bad = []
+    for p in paths:
+        with open(p, "rb") as f:
+            if not f.read(8).startswith(READABLE):
+                bad.append(p)
+    return bad
+
+
 def main(argv):
     prompt = arg(argv, "-p", "")
     w, h, steps = int(arg(argv, "-W", 512)), int(arg(argv, "-H", 512)), int(arg(argv, "--steps", 8))
@@ -57,6 +71,9 @@ def main(argv):
     delay = float(slow.group(1) or 0.3) if slow else 0.01
     held = re.search(r"\bHOLD(?:=([\w-]+))?(?![\w=-])", prompt)
     print("Version: faux sd-cli du banc de test", flush=True)
+    for p in unreadable_inputs(argv):
+        print(f"[E] load image from '{p}' failed --- media_io.cpp:543", flush=True)
+        return 1
     print("loading diffusion model", flush=True)
     if held and not hold(held.group(1) or "hold"):
         print(f"[ERROR] faux moteur jamais libéré (HOLD, {HOLD_LIMIT} s)", flush=True)

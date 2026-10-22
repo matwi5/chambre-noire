@@ -279,15 +279,34 @@ def step_shortcut(check_only):
 
 
 def step_calibrate(versions, check_only, skip):
-    """Trois courtes générations par modèle installé : les estimations de durée sont justes dès la première image."""
+    """Trois courtes générations par modèle installé : les estimations de durée sont justes dès la première image.
+    Un échec n'arrête pas l'installation, mais son erreur est affichée (la sortie d'erreur de tools/calibrate.py est
+    lue, puis montrée). Renvoie les modèles dont la calibration a échoué."""
+    failed = []
     if check_only or skip:
-        return
+        return failed
     for v in versions:
         print(f"[calibration] modèle {v} : trois courtes générations pour mesurer la vitesse de cette machine "
               "(quelques minutes, davantage sur un GPU intégré ; --no-calibrate pour passer cette étape)", flush=True)
-        r = subprocess.run([sys.executable, P("tools", "calibrate.py"), "--model", v, "--if-needed"])
-        if r.returncode:
-            print("[calibration] échec : les estimations partent des valeurs par défaut et se calibreront à l'usage")
+        try:
+            # le Python enfant écrit en UTF-8 même sous Windows (sinon page de code ANSI, lue ici en UTF-8)
+            r = subprocess.run([sys.executable, P("tools", "calibrate.py"), "--model", v, "--if-needed"],
+                               stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                               env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+            code, error = r.returncode, (r.stderr or "").strip()
+        except OSError as e:
+            code, error = 1, str(e)
+        prefix = "[calibration] "            # calibrate.py préfixe déjà ses propres messages
+        error = "\n".join(line[len(prefix):] if line.startswith(prefix) else line for line in error.splitlines())
+        if error:
+            print("\n".join(prefix + line for line in error.splitlines()[-20:]), flush=True)
+        if code:
+            failed.append(v)
+            print(f"[calibration] ÉCHEC du modèle {v} ({error.splitlines()[-1] if error else f'code {code}'}) : "
+                  "l'installation continue sans calibration ; les estimations partent des valeurs par défaut et se "
+                  f"calibreront à l'usage (pour réessayer : {PY} {os.path.join('tools', 'calibrate.py')} --model {v})",
+                  flush=True)
+    return failed
 
 
 def main():
@@ -319,8 +338,7 @@ def main():
     ok = step_fix(a.check) and ok
     step_config(backends, a.check)
     step_shortcut(a.check)
-    if ok:
-        step_calibrate(versions, a.check, a.no_calibrate)
+    uncalibrated = step_calibrate(versions, a.check, a.no_calibrate) if ok else []
     launch = f"{PY} {os.path.join('tools', 'launch.py')}"
     if a.check:
         print("\nÉtat : " + ("complet" if ok else f"incomplet, lancez : {PY} setup.py"))
@@ -329,6 +347,9 @@ def main():
         print(f"ou : {launch}   puis http://127.0.0.1:7860/")
         for v in versions[1:]:
             print(f"Modèle {v} : {launch} --model {v}   (ou \"model\": \"{v}\" dans tools/config.local.json)")
+        for v in uncalibrated:
+            print(f"Calibration du modèle {v} en échec (erreur « [calibration] » plus haut), pour réessayer : "
+                  f"{PY} {os.path.join('tools', 'calibrate.py')} --model {v}")
 
 
 if __name__ == "__main__":

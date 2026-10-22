@@ -190,10 +190,12 @@ PUBLIC_FILES = {
     "/icon-512.png": ("icon-512.png", "image/png"),
     "/icon-maskable-512.png": ("icon-maskable-512.png", "image/png"),
     "/apple-touch-icon.png": ("apple-touch-icon.png", "image/png"),
+    "/logo.svg": ("logo.svg", "image/svg+xml"),
 }
 LOGIN_PAGE = """<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Qwen-Image 2.1 local</title>
 <link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
 <meta name="theme-color" content="#0b0a16" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#eceef7" media="(prefers-color-scheme: light)">
 <style>
@@ -210,8 +212,8 @@ radial-gradient(45% 40% at 60% 92%,rgba(60,200,255,.3),transparent 70%)}
 form{width:100%;max-width:360px;padding:28px 22px 22px;border-radius:30px;text-align:center;border:1px solid var(--rim);
 background:linear-gradient(180deg,var(--glass-hi),var(--glass));-webkit-backdrop-filter:blur(26px) saturate(185%);backdrop-filter:blur(26px) saturate(185%);
 box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 18px 50px -18px rgba(0,0,0,.6)}
-.logo{width:52px;height:52px;margin:0 auto 14px;border-radius:16px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:24px;
-background:radial-gradient(120% 120% at 25% 15%,#d4c9ff,var(--iris) 45%,#5a3fd8);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 10px 26px -6px rgba(143,124,255,.75)}
+.logo{display:block;width:52px;height:52px;margin:0 auto 14px;border-radius:23%;
+box-shadow:0 10px 26px -6px rgba(143,124,255,.75)}
 h1{font-size:22px;letter-spacing:-.02em;margin:0 0 6px}
 p{color:var(--ink2);margin:0 0 20px;font-size:14.5px}
 input{width:100%;font:inherit;font-size:24px;font-weight:650;letter-spacing:.16em;text-align:center;padding:14px;border-radius:18px;
@@ -226,7 +228,7 @@ button:disabled{opacity:.6}
 .shake{animation:shake .4s}
 @keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 @media (prefers-reduced-motion:reduce){.shake{animation:none}}
-</style></head><body><form id="f"><div class="logo" aria-hidden="true">Q</div><h1>Qwen-Image</h1>
+</style></head><body><form id="f"><img class="logo" src="/logo.svg" alt=""><h1>Qwen-Image</h1>
 <p>Saisissez le code d'accès affiché sur le Mac, sous le bouton « Téléphone » en haut de l'interface. Il n'est demandé qu'une fois sur cet appareil.</p>
 <input id="c" aria-label="Code d'accès" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="xxxx-xxxx" autofocus>
 <button id="b">Entrer</button><div id="err" role="alert"></div></form>
@@ -1046,11 +1048,20 @@ def data_url_bytes(data_url):
 
 def write_data_url(data_url, path, what="image d'entrée"):
     """Écrit l'image d'une data URL dans path et renvoie ses dimensions ; ValueError « <what> illisible » si ce n'est
-    pas une image que Pillow sait lire."""
+    pas une image que Pillow sait lire. Un PNG ou un JPEG est écrit tel quel ; un autre format (WebP, AVIF, TIFF…),
+    que la page envoie tel qu'elle l'a reçu et que sd-cli (stb_image) refuse, est converti en PNG."""
+    from PIL import Image
     try:
+        raw = data_url_bytes(data_url)
+        with Image.open(io.BytesIO(raw)) as im:
+            size = im.size
+            if im.format not in ("PNG", "JPEG"):
+                buf = io.BytesIO()
+                im.convert("RGBA" if "A" in im.getbands() or "transparency" in im.info else "RGB").save(buf, "PNG")
+                raw = buf.getvalue()
         with open(path, "wb") as f:
-            f.write(data_url_bytes(data_url))
-        return image_size(path)
+            f.write(raw)
+        return size
     except (ValueError, OSError) as e:          # base64 invalide, fichier qui n'est pas une image
         raise ValueError(f"{what} illisible") from e
 

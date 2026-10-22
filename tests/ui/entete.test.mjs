@@ -1,6 +1,6 @@
 // En-tête, dans la vue du téléphone : cadenas de l'espace privé aussi visible que Rafraîchir, pastille du haut qui
 // tient dans sa bulle.
-//   node --test tests/ui/entete.test.mjs   (ou : venv/bin/python tests/check.py --ui)
+//   venv/bin/python tests/check.py --quick --ui tests/ui/entete.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome, PHONE } from './driver.mjs';

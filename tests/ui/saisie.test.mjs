@@ -4,7 +4,7 @@
 // pendant le dessin, tracé gardé en désactivant et effacé avec son image), geste « Dessiner », collage d'une image,
 // images choisies d'un coup, champs vidés après « Générer », saisie propre à chaque espace (public, privé), variantes
 // avec ou sans images et en dessin, hors campagne.
-//   node --test tests/ui/saisie.test.mjs   (ou : venv/bin/python tests/check.py --ui)
+//   venv/bin/python tests/check.py --quick --ui tests/ui/saisie.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -44,6 +44,7 @@ after(async () => {
 
 // page neuve (brouillons effacés) sur un onglet
 async function fresh(pane = 'create') {
+  await bench.idle();                              // rien en file : la page rechargée ne reprend rien
   await page.goto(bench.url + '/');
   await page.eval(`localStorage.clear()`);
   await page.goto(bench.url + '/');
@@ -97,7 +98,7 @@ test('Créer : un fichier illisible est annoncé et n\'arrête pas les images su
 
 test('« Éditer » depuis la galerie : l\'image rejoint les images d\'entrée, page Créer, 10 au plus', async () => {
   await fresh();
-  await type('un phare à éditer');
+  await page.typePrompt('un phare à éditer');
   await generate();
   await page.waitFor(`pageJobs.at(-1).result`, { what: 'image finie', timeout: 30000 });
   await page.click('#tabbar [data-pane="hist"]');
@@ -115,9 +116,6 @@ test('« Éditer » depuis la galerie : l\'image rejoint les images d\'entrée, 
   page.assertNoErrors();
 });
 
-// texte tapé dans le champ unique, comme au clavier (le brouillon est écrit)
-const type = text => page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
-  t.dispatchEvent(new Event('input')); })()`);
 const draft = () => page.eval(`localStorage.getItem('qwen-prompt')`);
 const settings = () => page.eval(`JSON.stringify({ opt, incogOn, campaignOn, preview: $('previewChk').checked })`);
 
@@ -217,7 +215,7 @@ test('Dessiner : ajout refusé pendant le dessin ; tracé gardé en désactivant
 test('Dessiner : la demande part en masque, ou en annotation ; sans zone peinte, refusée', async () => {
   await fresh();
   await drawOne();
-  await type('une fenêtre ouverte');
+  await page.typePrompt('une fenêtre ouverte');
   await page.click('#go');
   await toastSays('Peignez une zone.');
   await paint();
@@ -226,7 +224,7 @@ test('Dessiner : la demande part en masque, ou en annotation ; sans zone peinte,
   await drawOne();
   await page.eval(`$('mask_mode').querySelector('[value=annotation]').click()`);
   await paint();
-  await type('une fenêtre ouverte');
+  await page.typePrompt('une fenêtre ouverte');
   await generate();
   assert.deepEqual(await lastJob(), { mode: 'annot', lot: null });
   page.assertNoErrors();
@@ -259,7 +257,7 @@ test('Collage : une image collée s\'ajoute ; un texte reste un texte ; refusé 
 
 test('geste « Dessiner » : l\'image seule, dessin actif ; confirmation s\'il y avait des images', async () => {
   await fresh();
-  await type('un phare à dessiner');
+  await page.typePrompt('un phare à dessiner');
   await generate();
   await page.waitFor(`pageJobs.at(-1).result`, { what: 'image finie', timeout: 30000 });
   await page.click('#tabbar [data-pane="hist"]');
@@ -303,13 +301,13 @@ test('Créer : sans image d\'entrée la demande part du texte, avec des images c
   assert.equal(await page.eval(`$('pane-create').classList.contains('active')
     && !!$('inDrop').getClientRects().length`), true, 'ajout d\'images offert sur Créer');
   assert.match(await page.eval(`$('prompt').placeholder`), /^Décrivez l'image/);
-  await type('un phare au crépuscule');
+  await page.typePrompt('un phare au crépuscule');
   await generate();
   assert.deepEqual(await lastJob(), { mode: 't2i', lot: null });
   await page.setFiles('#inFiles', photos(2));
   await page.waitFor(`inputImages.length === 2`, { what: 'deux images' });
   assert.match(await page.eval(`$('prompt').placeholder`), /^Que faut-il changer/);
-  await type('mettre un chapeau');
+  await page.typePrompt('mettre un chapeau');
   await generate();
   assert.deepEqual(await lastJob(), { mode: 'edit', lot: null });
   assert.match(await page.eval(`$('prompt').placeholder`), /^Décrivez l'image/,
@@ -319,7 +317,7 @@ test('Créer : sans image d\'entrée la demande part du texte, avec des images c
 
 test('Créer : texte et brouillon vidés quand la demande est acceptée, Réglages inchangés', async () => {
   await fresh();
-  await type('un phare au crépuscule');
+  await page.typePrompt('un phare au crépuscule');
   assert.equal(await draft(), 'un phare au crépuscule');
   const opts = await settings();
   await generate();
@@ -334,7 +332,7 @@ test('Créer avec des images : texte et images vidés quand la demande est accep
   await fresh();
   await page.setFiles('#inFiles', photos(2));
   await page.waitFor(`inputImages.length === 2`, { what: 'deux images' });
-  await type('mettre un chapeau');
+  await page.typePrompt('mettre un chapeau');
   const opts = await settings();
   await generate();
   assert.equal(await settings(), opts);
@@ -350,7 +348,7 @@ test('Dessiner : texte, image et tracé vidés quand la demande est acceptée', 
   await drawOne();
   await paint();
   assert.match(await page.eval(`$('prompt').placeholder`), /^Que mettre dans la zone peinte/);
-  await type('une fenêtre ouverte');
+  await page.typePrompt('une fenêtre ouverte');
   const opts = JSON.parse(await settings());
   await generate();
   // le format « Image » suit l'image à retoucher : il part avec elle, comme quand on la retire à la main ; le reste des
@@ -381,7 +379,7 @@ test('Campagne : proposée dès 2 images, ignorée sinon ; photos vidées, inter
   await page.waitFor(`inputImages.length === 1`, { what: 'image retirée' });
   assert.equal(await shown(), false);
   assert.doesNotMatch(await page.eval(`$('pills').textContent`), /Campagne/);
-  await type('voiture bleue');
+  await page.typePrompt('voiture bleue');
   await generate();
   assert.deepEqual(await lastJob(), { mode: 'edit', lot: null });
   assert.equal(await page.eval(`campaignOn`), true, 'réglage gardé');
@@ -389,7 +387,7 @@ test('Campagne : proposée dès 2 images, ignorée sinon ; photos vidées, inter
   await page.waitFor(`inputImages.length === 2`, { what: 'deux photos' });
   assert.equal(await page.eval(`$('campChk').checked && !!$('campSwitch').getClientRects().length`), true,
     'de nouveau proposée, active');
-  await type('voiture bleue');
+  await page.typePrompt('voiture bleue');
   await generate();
   assert.deepEqual(await lastJob(), { mode: 'edit', lot: { size: 2, campaign: true } });
   assert.equal(await page.eval(`inputImages.length + $('inThumbs').children.length`), 0);
@@ -411,7 +409,7 @@ test('Variantes : proposées avec des images et en Dessiner hors campagne, la de
   assert.equal(await countShown(), true, 'rangée des images avec une image d\'entrée');
   await pick(2);
   // HOLD : chaque lot ne finit qu'une fois la page revenue sur Créer (fini sur En cours, il n'aurait pas de message)
-  await type('HOLD=chapeau deux essais d\'un chapeau');
+  await page.typePrompt('HOLD=chapeau deux essais d\'un chapeau');
   await generate();
   assert.deepEqual(await lastJob(), { mode: 'edit', lot: { size: 2, campaign: false } });
   // campagne : la rangée disparaît et le nombre choisi est ignoré (une image par photo)
@@ -420,7 +418,7 @@ test('Variantes : proposées avec des images et en Dessiner hors campagne, la de
   await page.click('#campChk');
   await page.waitFor(`campaignOn`, { what: 'campagne activée' });
   assert.equal(await countShown(), false, 'pas de variantes en campagne');
-  await type('HOLD=voiture voiture bleue');
+  await page.typePrompt('HOLD=voiture voiture bleue');
   await generate();
   bench.release('chapeau');                        // les deux lots, une fois revenu sur Créer
   bench.release('voiture');
@@ -436,7 +434,7 @@ test('Variantes : proposées avec des images et en Dessiner hors campagne, la de
   assert.equal(await countShown(), true, 'rangée des images en dessin');
   await pick(3);
   await paint();
-  await type('une fenêtre ouverte');
+  await page.typePrompt('une fenêtre ouverte');
   await generate();
   assert.deepEqual(await lastJob(), { mode: 'mask', lot: { size: 3, campaign: false } });
   assert.equal(await page.eval(`pageJobs.slice(-3).every(p => p.j.mode === 'mask' && p.lot.size === 3)`), true);
@@ -447,7 +445,7 @@ test('Créer : rien n\'est vidé quand le Mac refuse la demande ou est injoignab
   await fresh();
   await page.setFiles('#inFiles', photos(2));
   await page.waitFor(`inputImages.length === 2`, { what: 'deux images' });
-  await type('mettre un chapeau');
+  await page.typePrompt('mettre un chapeau');
   for (const refuse of ['error', 'unreachable']) {
     await generate({ refuse });
     assert.equal(await page.eval(`$('prompt').value`), 'mettre un chapeau', refuse);
@@ -486,20 +484,20 @@ test('espaces : la saisie privée disparaît à « Sortir », la saisie publique
   await drawOne();
   await paint();
   await page.eval(`$('mask_mode').querySelector('[value=annotation]').click()`);
-  await type('chapeau public');
+  await page.typePrompt('chapeau public');
 
   await enterPrivate();                            // première entrée : saisie privée vide
   assert.deepEqual(await page.eval(`[$('prompt').value, inputImages.length, drawOn, ${SHOWN}]`), ['', 0, false, false]);
   assert.equal(await page.eval(`paintedPixels()`), 0, 'aucun tracé public sur le canevas');
   await page.setFiles('#inFiles', photos(2));
   await page.waitFor(`inputImages.length === 2`, { what: 'deux images privées' });
-  await type('chapeau secret');
+  await page.typePrompt('chapeau secret');
   await generate();                                // génération privée : la saisie privée est vidée
   assert.equal(await page.eval(`pageJobs.at(-1).private`), true);
   assert.deepEqual(await page.eval(`[$('prompt').value, inputImages.length]`), ['', 0]);
   await page.setFiles('#inFiles', photos(1));
   await page.waitFor(`inputImages.length === 1`, { what: 'une image privée' });
-  await type('texte secret');
+  await page.typePrompt('texte secret');
   assert.equal(await draft(), 'chapeau public',
     'la saisie privée n\'est jamais écrite dans le navigateur, le brouillon public reste');
 
@@ -602,9 +600,9 @@ test('espaces : un trait commencé dans l\'espace privé ne continue pas sur le 
 
 test('espaces : fermée par le Mac, la saisie privée attend le retour dans la page ; supprimée avec l\'espace', async () => {
   await fresh();
-  await type('texte public');
+  await page.typePrompt('texte public');
   await enterPrivate();
-  await type('un long texte privé');
+  await page.typePrompt('un long texte privé');
   await page.setFiles('#inFiles', photos(1));
   await page.waitFor(`inputImages.length === 1`, { what: 'une image privée' });
   await closedByMac();
@@ -664,9 +662,9 @@ test('espaces : fermé sans « Sortir », le champ perd le curseur et un message
 
 test('espaces : une demande privée acceptée après la fermeture par le Mac ne vide pas la saisie publique', async () => {
   await fresh();
-  await type('texte public');
+  await page.typePrompt('texte public');
   await enterPrivate();
-  await type('demande privée');
+  await page.typePrompt('demande privée');
   refusal = 'hold'; held = Promise.withResolvers();
   await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/generate', requestStage: 'Response' }] });
   await page.click('#go');
@@ -690,13 +688,13 @@ test('espaces : une demande privée acceptée après la fermeture par le Mac ne 
 
 test('Créer : un texte tapé pendant l\'envoi reste quand la demande est acceptée', async () => {
   await fresh();
-  await type('premier texte');
+  await page.typePrompt('premier texte');
   refusal = 'hold'; held = Promise.withResolvers();
   await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/generate', requestStage: 'Response' }] });
   const jobsBefore = await page.eval(`pageJobs.length`);
   await page.click('#go');
   const requestId = await held.promise;            // le Mac a accepté, la page n'a pas encore sa réponse
-  await type('texte suivant');
+  await page.typePrompt('texte suivant');
   await page.send('Fetch.continueRequest', { requestId });
   await page.send('Fetch.disable');
   refusal = null;
