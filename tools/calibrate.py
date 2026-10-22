@@ -42,6 +42,7 @@ def main():
                "created": time.time(), "calibration": True}
         print(f"[calibration] {i}/{len(RUNS)} : {'édition' if kind == 'edit' else 'texte → image'} {w}×{h}, "
               f"{a.steps} étapes ({launch.S.backend}/{launch.S.model})", flush=True)
+        launch.start_job(job)
         launch.run_job(job)
         if job["status"] != "done":
             sys.exit(f"[calibration] échec : {job.get('error')} (détail : {os.path.join(d, 'sd-cli.log')})")

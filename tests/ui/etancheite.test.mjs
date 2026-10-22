@@ -1,5 +1,5 @@
 // Étanchéité de l'espace privé, dans la vue du téléphone : après un parcours privé complet (galerie, visionneuse,
-// images d'entrée, lot, zone de résultat, file, prompts enregistrés, saisie, suppression), puis la sortie par
+// images d'entrée, lot, page En cours et sa file, prompts enregistrés, saisie, suppression), puis la sortie par
 // « Sortir » ou par la fermeture que décide le Mac, rien de privé ne reste dans la page : ni dans le HTML (attributs et
 // textes cachés compris), ni dans les champs, ni dans la mémoire de la page (listes d'images, générations suivies,
 // images prêtes, prompts, file), ni dans localStorage. La recherche porte sur des marqueurs : identifiants des images
@@ -33,14 +33,14 @@ const ref = `(() => { const c = document.createElement('canvas'); c.width = c.he
   return c.toDataURL('image/png'); })()`;
 const generate = extra => page.eval(`postJson('/api/generate', { width: 512, height: 512, steps: 2, cfg: 1, seed: -1,
   preview: false, ref_images: [], private: true, ...${extra} }).then(r => r.status)`);
-// texte tapé dans Créer (événement input, comme au clavier)
-const type = text => page.eval(`(() => { const t = $('t2i_prompt'); t.value = ${JSON.stringify(text)};
+// texte tapé dans le champ de Créer (événement input, comme au clavier)
+const type = text => page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
   t.dispatchEvent(new Event('input')); })()`);
 const idle = () => page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)`,
   { what: 'Mac au repos', timeout: 30000 });
 // mots des prompts privés : chacun n'apparaît que dans l'espace privé
 const WORDS = ['zqE1edition', 'zqE2lot', 'zqE3resultat', 'zqE4file', 'zqE5titre', 'zqE5texte', 'zqE6saisie',
-  'zqE7supprimee'];
+  'zqE7supprimee', 'zqE8vignette', 'zqE9saisie'];
 
 async function enter() {
   const exists = await page.eval(`fetch('/api/status').then(r => r.json()).then(s => s.private.exists)`);
@@ -55,16 +55,30 @@ async function privateTour() {
   assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE2lot', count: 2 }`), 202);
   assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE7supprimee' }`), 202);
   await idle();
-  // une génération de la page jusqu'à la zone de résultat, puis une autre gardée en file
-  await page.click('#tabbar [data-pane="t2i"]');
+  // une génération de la page jusqu'aux terminées de la page En cours, puis une autre gardée en file
+  await page.click('#tabbar [data-pane="create"]');
   await type('zqE3resultat');
   await page.click('#go');
-  await page.waitFor(`shown && shown.result && $('stageImg').complete && $('stageImg').naturalWidth > 0`,
-    { what: 'image privée dans la zone de résultat', timeout: 30000 });
+  await page.waitFor(`(img => img && img.complete && img.naturalWidth > 0)($('doneList').querySelector('img'))`,
+    { what: 'image privée dans les terminées', timeout: 30000 });
   assert.equal(await generate(`{ mode: 't2i', prompt: 'HOLD=etanche zqE4file' }`), 202);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`pageJobs.some(p => p.private && p.adopted)`, { what: 'génération privée suivie en file' });
-  await type('zqE6saisie');
+  // une édition de la page en file derrière elle : sa carte porte la vignette de son image d'entrée (data:)
+  await page.click('#tabbar [data-pane="create"]');
+  await page.eval(`(async () => { const c = document.createElement('canvas'); c.width = c.height = 200;
+    const x = c.getContext('2d'); x.fillStyle = '#5040c0'; x.fillRect(0, 0, 200, 200); x.fillStyle = '#e0b030';
+    x.fillRect(40, 60, 90, 30); inputImages.push(await toEntry('zqE8.png', c.toDataURL('image/png')));
+    renderInputs(); })()`);
+  await page.eval(`(() => { const t = $('prompt'); t.value = 'zqE8vignette';
+    t.dispatchEvent(new Event('input')); })()`);
+  await page.click('#go');
+  await page.waitFor(`mode === 'run' && !!$('queueList').querySelector('.qcard.own img[src^="data:"]')
+    && $('queueList').textContent.includes('zqE8vignette')`, { what: 'carte privée avec sa vignette d\'entrée' });
+  const thumb = await page.eval(`$('queueList').querySelector('.qcard.own img').getAttribute('src')`);
+  await page.click('#tabbar [data-pane="create"]');
+  await type('zqE6saisie');                        // saisie privée laissée en place : texte et image d'entrée
+  await page.eval(`(async () => { inputImages.push(await toEntry('zqE9saisie.png', ${ref})); renderInputs(); })()`);
   // prompts enregistrés de l'espace
   assert.equal(await post('/api/private/prompts', { title: 'zqE5titre', text: 'zqE5texte', usage: 't2i' }), 200);
   await page.eval(`openPrompts()`);
@@ -84,7 +98,7 @@ async function privateTour() {
   await page.waitFor(`$('ivImg').complete && $('ivImg').naturalWidth > 0`, { what: 'image d\'entrée privée' });
   await page.eval(`closeInputs(); openViewer(histItems.findIndex(it => it.lot), histItems); openLot()`);
   await page.waitFor(`openedSheet === $('lotSheet')`, { what: 'feuille du lot privé' });
-  return [...new Set([...markers, ...WORDS, '/api/private/', 'prive_'])];
+  return [...new Set([...markers, ...WORDS, '/api/private/', 'prive_', thumb.slice(-120, -40)])];
 }
 
 // marqueurs trouvés dans la page : HTML, champs, mémoire de la page (aside : la saisie privée mise de côté compte)
@@ -95,8 +109,8 @@ const scan = (markers, aside) => page.eval(`((m) => {
   doc.querySelectorAll('script').forEach(s => s.remove());
   const places = { page: doc.outerHTML,
     champs: [...document.querySelectorAll('input, textarea')].map(e => e.value).join('\\n'),
-    mémoire: text({ vList, histItems, pageJobs, ready: [...ready.keys()], prompts, queueState, lastResult, shown,
-      ivOwner, editImages: editImages.map(x => x.name)${aside ? ', asideInput' : ''} }),
+    mémoire: text({ vList, histItems, pageJobs, ready: [...ready.keys()], prompts, queueState, doneView, shown,
+      ivOwner, inputImages: inputImages.map(x => x.name)${aside ? ', asideInput' : ''} }),
     localStorage: store };
   return Object.entries(places).flatMap(([where, t]) => m.filter(k => t.includes(k)).map(k => where + ' : ' + k));
 })(${JSON.stringify(markers)})`);

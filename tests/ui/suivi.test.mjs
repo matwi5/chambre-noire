@@ -44,7 +44,7 @@ async function enterPrivate(page) {
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
 }
 async function launch(page, prompt) {
-  await page.eval(`(() => { const t = $('t2i_prompt'); t.value = ${JSON.stringify(prompt)};
+  await page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(prompt)};
     t.dispatchEvent(new Event('input')); })()`);
   await page.click('#go');
   await page.waitFor(`pageJobs.some(p => p.private && !p.adopted)`, { what: 'génération privée suivie par la page' });
@@ -71,7 +71,7 @@ test('deux pages : celle qui a repris la génération la voit oubliée par l\'au
         if (!heldFollow) { clearInterval(t); r(f(u, ...a)); } }, 50); })
       : f(u, ...a); })()`);
   bench.release('deux');
-  await first.waitFor(`!pageJobs.some(p => p.private && p.j.status !== 'done') && $('resultMeta').textContent !== ''`,
+  await first.waitFor(`!pageJobs.some(p => p.private && p.j.status !== 'done') && $('doneList').children.length > 0`,
     { what: 'génération finie sur la première page', timeout: 30000 });
   await first.waitFor(`fetch('/api/job/${id}').then(r => r.status === 404)`, { what: 'génération oubliée par le Mac' });
   await second.eval(`heldFollow = false`);

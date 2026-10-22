@@ -16,12 +16,27 @@ _À éviter_ : générations parallèles
 Un ensemble de générations lancées d'une seule demande, suivies, annulées et notifiées ensemble.
 _À éviter_ : batch, série
 
+**Image d'entrée** :
+Une image fournie avec la demande ; sans image d'entrée, la génération part du seul texte, avec une ou plusieurs elle
+devient une édition.
+_À éviter_ : upload, image source
+
+**Édition** :
+Une génération qui part d'une ou plusieurs images d'entrée et d'un texte qui dit quoi changer.
+_À éviter_ : mode Éditer
+
+**Dessin** :
+Une édition d'une seule image d'entrée sur laquelle on peint la zone à changer (masque) ou un repère pour le modèle
+(annotation).
+_À éviter_ : inpainting, mode Dessiner
+
 **Variantes** :
-Un lot du mode Créer : plusieurs images d'un même prompt, chacune avec sa propre graine, parmi lesquelles on garde la meilleure.
+Un lot de plusieurs images d'une même demande, chacune avec sa propre graine, parmi lesquelles on garde la meilleure ;
+avec ou sans image d'entrée, jamais en campagne.
 _À éviter_ : batch, multi-génération
 
 **Campagne** :
-Un lot du mode Éditer : le même prompt appliqué séparément à chaque photo, une image par photo.
+Un lot d'édition : le même prompt appliqué séparément à chaque photo, une image par photo.
 _À éviter_ : édition en masse, traitement par lot
 
 **Graine** :
@@ -37,6 +52,11 @@ _À éviter_ : employer « modèle » pour un prompt réutilisable
 **Prompt enregistré** :
 Un prompt de l'utilisateur, avec un titre, qu'il peut réutiliser, modifier ou supprimer ; il appartient à l'espace où il a été enregistré.
 _À éviter_ : favori, preset
+
+**Catégorie d'un prompt** :
+Ce à quoi sert un prompt enregistré ou un prompt type : Créer (sans image d'entrée), Éditer (avec des images d'entrée)
+ou Dessiner (dessin) ; elle trie la liste des prompts.
+_À éviter_ : usage (sauf dans le code), mode
 
 **Prompt type** :
 Un prompt prêt à l'emploi livré avec l'application, en lecture seule, que l'on peut dupliquer en prompt enregistré.

@@ -4,6 +4,110 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-21 · « Éditer » et « Dessiner » sur une image incognito allument aussi l'incognito
+
+- **Contexte** : la passe « bogues » du ticket incognito du groupe D trouve un comportement antérieur au parcours :
+  « Éditer » ou « Dessiner » sur une image incognito, interrupteur éteint, met l'image dans la saisie publique ; un
+  « Générer » ensuite part en normal et le serveur copie l'image incognito dans `outputs/.inputs/` (image d'entrée de
+  la nouvelle image, visible dans la galerie).
+- **Décision** (porteur, 21/10/2026 : « oui et oui ») : « Éditer » et « Dessiner » sur une image incognito allument
+  l'interrupteur incognito, comme « Reprendre » (ticket du groupe D). Le texte repris d'une image incognito n'est pas
+  écrit comme brouillon tant que l'interrupteur reste allumé ; l'éteindre est un geste explicite du porteur, après
+  lequel la frappe suivante l'écrit (formulation du README gardée).
+
+## 2026-10-21 · Une image incognito reste incognito quand on la reprend ou la relance
+
+- **Contexte** : à la fin du groupe D, « Relancer » suivait l'interrupteur incognito du moment (choix de la
+  rédaction de la spécification, pas du porteur) : relancer une image incognito interrupteur éteint enregistrait la
+  nouvelle image sur le disque ; reprendre une image incognito mettait son texte dans la saisie publique, écrit comme
+  brouillon à la première frappe.
+- **Décision** (porteur, 21/10/2026 : « a, oui pour le ticket et oui pour les pièges ») : une image incognito reste
+  incognito : « Relancer » la relance toujours en incognito ; « Reprendre » allume l'interrupteur incognito, de façon
+  visible, donc son texte n'est jamais écrit comme brouillon. Les autres images suivent l'interrupteur comme
+  « Générer ». Ticket du groupe D ; pièges de `CLAUDE.md` complétés (« Reprendre » et « Relancer », demande gardée en
+  mémoire, estimation de « Relancer », image du dessin).
+- **Écarté** : garder « Relancer » sur l'interrupteur du moment et seulement marquer le texte repris pour qu'il ne
+  soit jamais écrit comme brouillon.
+
+## 2026-10-21 · Suites du groupe C : adresse d'image échappée, image du dessin par `showImage`
+
+- **Contexte** : la revue de sécurité du groupe C (page Créer) relève deux faiblesses non exploitables : l'adresse
+  `data:` d'une image d'entrée insérée sans `esc()` dans la page, et l'image du dessin (`#paintImg`) affichée sans
+  passer par `showImage`, qui peut laisser voir un instant l'image de l'espace quitté.
+- **Décision** (porteur, 21/10/2026 : « oui et oui ») : l'adresse est échappée tout de suite ; l'image du dessin
+  passe par `showImage` et rejoint les images que `tests/check.py` surveille, dans un ticket du groupe D. Pièges
+  « Incognito et espace privé » (brouillon unique) et « Saisie par espace » de `CLAUDE.md` mis à jour.
+
+## 2026-10-20 · Suites du groupe B : lot en tête, « Rien en cours », terminées incognito
+
+- **Contexte** : la session du groupe B (page En cours) remonte trois écarts entre la lettre des textes et ce qu'elle a
+  fait.
+- **Décision** (porteur, 20/10/2026 : « oui pour les points 1 à 4 ») : « Passer en tête » d'un lot n'est offert que si
+  rien du lot ne tourne (spécification, section 8 ; la ligne de la décision du 19/10 est précisée) ; « Rien en cours »
+  ne s'affiche que si rien ne tourne, rien n'attend et aucune terminée n'est là ; les images incognito ne comptent pas
+  dans le plafond de 12 terminées et ne sortent jamais d'elles-mêmes (la liste peut dépasser 12 en incognito, dans la
+  seule mémoire de la page). Piège « Verrous » de `CLAUDE.md` complété (`start_job`, `cancel_job` sous `S.turn`).
+- **Écarté** : oublier d'elle-même la plus ancienne image incognito au-delà de 12 (avec un message).
+
+## 2026-10-20 · Suites du groupe A : marqueur de campagne caché des lignes incognito, annulation au démarrage
+
+- **Contexte** : la revue de sécurité du groupe A (file réordonnable, variantes en édition) relève que le marqueur de
+  campagne, posé aussi sur la ligne d'un lot incognito comme le demandait la spécification, dit aux autres appareils
+  qu'il s'agit d'une campagne ; la session du groupe retrouve aussi une piste ouverte le 14/10/2026 : une annulation
+  posée au démarrage d'une génération est écrasée et la génération va au bout.
+- **Décision** (porteur, 20/10/2026 : « oui poue les points 1 à 4, mets dans le groupe B ») : la ligne de la file
+  d'une génération incognito ne porte pas le marqueur de campagne (elle ne montre que son genre, comme avant) ; sa
+  page le lit dans sa propre réponse de `/api/generate` (ticket « Présenter la file en cartes »). L'annulation écrasée
+  devient un ticket du groupe B. Pièges de `CLAUDE.md` complétés (`S.turn`, étiquette `tag` qui n'ouvre aucune route).
+
+## 2026-10-19 · Une seule page Créer, une page En cours pour la file et les résultats
+
+- **Contexte** : trois onglets (Créer, Éditer, Dessiner) font la même chose à une image d'entrée près ; l'image en
+  cours et le résultat s'affichent sous le compositeur ; la file d'attente, dans une feuille ouverte par la pastille du
+  haut, répète chaque image d'un lot sur sa propre ligne, donne des durées cumulées sans heure et une rangée de cercles
+  « #1 #2… » sans contenu. Demandes du porteur : « Je veux regrouper les pages créer, editer et dessiner en un »,
+  « Améliore la file d'attente sur la page En cours car avant c'était pas terrible », et « garder les promptes
+  sauvegardé dans les gategorie editer, créer, dessiner... C'est utile ».
+- **Décision** (porteur, 19/10/2026, toutes les recommandations du cadrage acceptées) : trois onglets, dans l'ordre
+  « En cours », « Créer », « Galerie » ; l'application s'ouvre sur Créer.
+  - **Créer** : un seul champ de texte (exemple selon la saisie) et un seul brouillon par espace (celui de Créer, à
+    défaut le premier non vide d'Éditer puis de Dessiner). Sans image d'entrée, génération à partir du texte ; avec
+    1 à 10, édition ; images ajoutées par le choix, le glisser-déposer ou le collage. Bouton « Dessiner » sur une seule
+    image (sans image : choix d'une image ; à plusieurs : grisé et expliqué), masque et annotation inchangés.
+    Campagne proposée dès 2 images, dessin éteint. Variantes avec ou sans image d'entrée, dessin compris, jamais en
+    campagne (le serveur lève la restriction au mode t2i). Aucune image de résultat sur la page : « Générer » mène à
+    En cours ; la saisie se vide comme avant.
+  - **En cours** : la génération en cours en grand, une seule fois (aperçus, progression, annuler) ; la file en cartes,
+    une par demande (un lot ou une campagne sur une carte, une case par image, annulation de la carte ou d'une image
+    dépliée), « prête vers HH h MM » et l'heure de fin de la file, vignette (image d'entrée, cadre aux proportions
+    demandées, icône incognito), ligne des réglages, seul « autre appareil » signalé ; « Passer en tête » (génération
+    ou lot), offert à qui peut l'annuler, sur une carte dont rien ne tourne. Puis les terminées de la page (au plus
+    12, lots en grille, « × » et « Tout retirer », échecs avec leur message et « Relancer », vidées au rechargement).
+    Message « Image prête » ou « Lot prêt » quand on est ailleurs dans l'application.
+  - **Navigation** : pastille sur l'onglet En cours (nombre en cours et en attente, anneau de progression) ; la
+    pastille du haut mène à En cours quand une génération tourne, sinon au panneau Moteur ; la feuille « File
+    d'attente » et la rangée « #1 #2… » disparaissent.
+  - **Gestes** : « Éditer » ajoute l'image à la saisie ; « Dessiner » remplace les images de la saisie par la sienne,
+    après confirmation s'il y en avait ; « Reprendre » (désormais texte, images d'entrée et dessin, sans le tracé, qui
+    n'est pas gardé) remplace la saisie, après confirmation si elle n'est pas vide ; « Relancer » refait la même
+    demande avec une nouvelle graine.
+  - **Incognito dans les terminées** (porteur, 19/10/2026, réponse « oui » à la proposition) : une image incognito
+    reste dans les terminées de la page jusqu'à son « × », « Tout retirer », « Supprimer » ou la fermeture de la
+    page ; remplace la garde « jusqu'à ce qu'elle ait été vue puis quittée » de la modification du 14/10/2026 (elle
+    l'aurait fait disparaître dès qu'on quitte En cours). Rien d'autre de l'incognito ne change.
+  - **Prompts** : catégories « Créer », « Éditer », « Dessiner » gardées ; la feuille s'ouvre filtrée sur celle de la
+    saisie (sans image, avec images, dessin actif), « Tous » à un geste ; un nouveau prompt prend la catégorie de la
+    saisie ; choisir un prompt d'une autre catégorie ne remplit que le texte.
+- **Écarté** : dessiner sur une image parmi plusieurs, les autres servant de références (jamais essayé avec le
+  moteur) ; réordonner la file par glisser (« Passer en tête » couvre le cas utile, un essai rapide bloqué derrière
+  une campagne) ; garder la saisie après « Générer » ; garder les terminées après un rechargement (la Galerie les a).
+- **Conséquences** : la file du serveur (`queue.Queue`) devient réordonnable. Une génération publique peut passer
+  devant une génération privée cachée : seule la durée d'attente de cette dernière change. La saisie n'est plus
+  propre à chaque onglet mais à chaque espace : remplace, dans « Espaces public et privé étanches » (15/10/2026), la
+  saisie « onglet par onglet » ; l'étanchéité, l'incognito (sauf sa garde dans les terminées) et le calcul d'une
+  seule génération à la fois ne changent pas. Le serveur gagne aussi un marqueur de campagne dans les lots et une
+  étiquette pour les entrées incognito de la file (spécification `docs/specs/2026-10-19_page-creer-en-cours.md`).
+
 ## 2026-10-16 · Modèle officiel par défaut, variante communautaire en option
 
 - **Contexte** : le dépôt est public. Depuis le renommage du dépôt Hugging Face d'abenzerps (12/10/2026), `setup.py`

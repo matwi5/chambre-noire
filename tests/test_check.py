@@ -50,8 +50,9 @@ class ImageSrcTest(unittest.TestCase):
             "if($('ivImg').src==u) go();",            # comparaison : permise
             "$('vImgX').src=u; img.src=url;",         # autre élément, ou variable (showImage) : permis
             "$('vBg').src  =  thumb;",                # 5 : refusée
+            "$('paintImg').src=im.dataUrl;",          # 6 : refusée (image du dessin)
         ])
-        self.assertEqual(check.image_src_lines(html), [1, 2, 5])
+        self.assertEqual(check.image_src_lines(html), [1, 2, 5, 6])
 
     def test_the_interface_follows_the_rule(self):
         with open(os.path.join(os.path.dirname(check.__file__), "..", "tools", "ui", "index.html"),

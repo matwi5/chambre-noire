@@ -1,7 +1,7 @@
-// Affichage des images (visionneuse, images d'entrée, zone de résultat, galerie), dans la vue du téléphone : jamais
-// l'image d'avant le temps d'un chargement, rien de l'espace privé à l'écran ni dans la page après en être sorti
-// (galerie privée comprise, sortie faite depuis un autre onglet), image voisine et image d'entrée montrées sans
-// attente, zoom au pincement sur les images d'entrée comme sur les images générées.
+// Affichage des images (visionneuse, images d'entrée, terminées de la page En cours, galerie), dans la vue du
+// téléphone : jamais l'image d'avant le temps d'un chargement, rien de l'espace privé à l'écran ni dans la page après
+// en être sorti (galerie privée comprise, sortie faite depuis un autre onglet), image voisine et image d'entrée
+// montrées sans attente, zoom au pincement sur les images d'entrée comme sur les images générées.
 //   node --test tests/ui/images.test.mjs   (ou : venv/bin/python tests/check.py --ui tests/ui/images.test.mjs)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -118,7 +118,7 @@ test('galerie : sortir de l\'espace privé depuis Créer puis revenir à la gale
   await page.waitFor(`histItems.length === 1 && histItems[0].private
     && [...$('histGrid').querySelectorAll('img')].every(i => i.complete && i.naturalWidth > 0)`,
   { what: 'galerie privée affichée' });
-  await page.click('#tabbar [data-pane="t2i"]');
+  await page.click('#tabbar [data-pane="create"]');
   await page.click('#privExit');                   // « Sortir », depuis Créer
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   // retour à la galerie : à chaque image peinte jusqu'à la galerie publique chargée, aucune image privée
@@ -190,7 +190,7 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
     height: 512, steps: 2, cfg: 1, seed: -1, preview: false, ref_images: [], private: true, count: 2 })
     .then(r => r.status)`), 202);
   await idle();
-  await page.eval(`goTab('t2i'); goTab('hist')`);   // galerie rechargée, lot compris
+  await page.eval(`goTab('create'); goTab('hist')`);   // galerie rechargée, lot compris
   await page.waitFor(`histItems.filter(it => it.lot).length === 2`, { what: 'lot privé dans la galerie' });
   await page.eval(`openViewer(histItems.findIndex(it => it.lot), histItems); openLot()`);
   await page.waitFor(`openedSheet === $('lotSheet') && $('lotSheetGrid').querySelectorAll('img').length === 2`,
@@ -206,13 +206,18 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
   page.assertNoErrors();
 });
 
-test('zone de résultat : son image retirée, son lien de téléchargement part avec elle', async () => {
+test('terminées : une image retirée de la liste, son lien de téléchargement part avec elle', async () => {
   await page.waitFor(`!inPrivate()`, { what: 'espace public' });
-  const kept = await page.eval(`fetch('/api/history').then(r => r.json()).then(h => {
-    if (!h.length) throw new Error('aucune image publique au banc');
-    showResult(h[0].name, 512, 512); show(null);   // comme une image supprimée ou effacée : zone vidée
-    return { href: $('dl').hasAttribute('href'), name: $('dl').hasAttribute('download') }; })`);
-  assert.deepEqual(kept, { href: false, name: false }, 'lien vers l\'image retirée resté dans la page');
+  await page.eval(`goTab('create'); (() => { const t = $('prompt'); t.value = 'zq3 retirée';
+    t.dispatchEvent(new Event('input')); })()`);
+  await page.click('#go');
+  await page.waitFor(`!!$('doneList').querySelector('.dcard a[download]')`,
+    { what: 'carte de l\'image finie', timeout: 30000 });
+  const name = await page.eval(`$('doneList').querySelector('.dcard a[download]').getAttribute('download')`);
+  await page.click('#doneList .dcard [data-remove]');
+  await page.waitFor(`!$('doneList').querySelector('.dcard')`, { what: 'carte retirée' });
+  assert.equal(await page.eval(`!!document.querySelector('[href*="${name}"], [download="${name}"]')`), false,
+    'lien vers l\'image retirée resté dans la page');
   page.assertNoErrors();
 });
 
@@ -227,7 +232,7 @@ async function inputSizes(prompt, w, h, during) {
     .then(r => r.status)`),
   202);
   await idle();
-  await page.eval(`goTab('t2i'); goTab('hist')`);
+  await page.eval(`goTab('create'); goTab('hist')`);
   const index = `histItems.findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
   await page.waitFor(`${index} >= 0`, { what: 'image dans la galerie' });
   const held = [], hold = p => held.push(p.requestId);

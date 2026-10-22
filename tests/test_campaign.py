@@ -30,8 +30,8 @@ class CampaignTest(bench.BenchCase):
         code, reply = call("POST", "/api/generate", campaign_body([entry(p, *s) for p, s in zip(photos, sizes)]))
         self.assertEqual(code, 202, reply)
         jobs = reply["jobs"]
-        self.assertEqual(reply["lot"]["size"], 3)
-        self.assertEqual([j["lot"]["rank"] for j in jobs], [1, 2, 3])
+        self.assertEqual((reply["lot"]["size"], reply["lot"]["campaign"]), (3, True))
+        self.assertEqual([(j["lot"]["rank"], j["lot"]["campaign"]) for j in jobs], [(1, True), (2, True), (3, True)])
         done = [wait_job(j["id"]) for j in jobs]
         self.assertEqual([j["status"] for j in done], ["done"] * 3)
         self.assertEqual([tuple(j["dims"]) for j in done], sizes)
@@ -41,6 +41,8 @@ class CampaignTest(bench.BenchCase):
             self.assertEqual(item["inputs"], ["ref_1.png"])            # sa seule photo, gardée comme image d'entrée
             self.assertEqual(item["mode"], "edit")
             self.assertEqual(item["prompt"], "make the car blue")
+            self.assertTrue(item["lot"]["campaign"])
+            self.assertTrue(bench.job(j["id"])["lot"]["campaign"])
             code, kept = call("GET", f"/api/input?name={j['name']}&file=ref_1.png")
             self.assertEqual((code, kept), (200, raw))
 
@@ -48,7 +50,8 @@ class CampaignTest(bench.BenchCase):
         entries = [entry(png_bytes(), 512, 512) for _ in range(2)]
         jobs = call("POST", "/api/generate", campaign_body(entries, prompt="SLOW=0.05 blue", steps=8))[1]["jobs"]
         q = call("GET", "/api/status")[1]["queue"]
-        self.assertEqual([(e["mode"], e["lot"]["rank"]) for e in q], [("edit", 1), ("edit", 2)])
+        self.assertEqual([(e["mode"], e["lot"]["rank"], e["lot"]["campaign"]) for e in q],
+                         [("edit", 1, True), ("edit", 2, True)])
         for j in jobs:
             wait_job(j["id"])
 

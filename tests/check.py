@@ -13,7 +13,8 @@ un fichier créé passe les contrôles avant son premier commit.
 1. compile chaque fichier .py suivi (sans écrire de .pyc) ;
 2. passe à « node --check » chaque bloc <script> de tools/ui/index.html (un bloc sur une seule ligne compris) et chaque
    fichier .js ou .mjs suivi ; échoue si un bloc ouvert n'a pas été extrait ; refuse une adresse donnée à la main à
-   une image des visionneuses ou de la zone de résultat ($('vImg').src=…, IMAGE_IDS) : elles passent par showImage ;
+   une image des visionneuses, de la zone de résultat ou du dessin ($('vImg').src=…, IMAGE_IDS) : elles passent par
+   showImage ;
 3. vérifie que les lignes ajoutées depuis la base (git merge-base HEAD origin/main, arbre de travail compris ; toutes
    celles d'un fichier nouveau) des fichiers .py, .md, .mjs et .js suivis ont 120 caractères au plus, hors tableaux et
    blocs de code Markdown ; base introuvable : un avis, et le contrôle passe ;
@@ -41,7 +42,7 @@ LINE_FILES = ("*.py", "*.md", "*.mjs", "*.js")
 SENSITIVE = ("localStorage", "incognito", "inPrivate", "privState", "asideInput", "secret(", "/api/private/",
              "private/")
 # images de l'interface que seul showImage remplit (sinon l'image d'avant reste à l'écran jusqu'au chargement)
-IMAGE_IDS = ("vImg", "vBg", "ivImg", "stageImg")
+IMAGE_IDS = ("vImg", "vBg", "ivImg", "stageImg", "paintImg")
 IMAGE_SRC_RE = re.compile(r"\$\(\s*['\"](" + "|".join(IMAGE_IDS) + r")['\"]\s*\)\.src\s*=(?!=)")
 
 

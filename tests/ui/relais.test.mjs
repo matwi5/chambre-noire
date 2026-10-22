@@ -27,7 +27,7 @@ test('par l\'adresse HTTPS relayée : espace privé ouvert, aperçus d\'une gén
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
   await page.eval(`$('previewChk').checked = true;
-    (() => { const t = $('t2i_prompt'); t.value = 'SLOW=0.2 zq8 aperçu relayé';
+    (() => { const t = $('prompt'); t.value = 'SLOW=0.2 zq8 aperçu relayé';
       t.dispatchEvent(new Event('input')); })()`);
   await page.click('#go');
   await page.waitFor(`shown && shown.private && $('stageImg').classList.contains('preview')

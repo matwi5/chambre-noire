@@ -7,6 +7,7 @@
 //   await page.goto(bench.url + '/'); await page.waitFor(`$('status').className==='ok'`);
 //   …; page.assertNoErrors(); await chrome.close(); await bench.stop();
 //   bench.release('nom')                         // libère les générations HOLD=nom du faux moteur
+//   bench.dir                                    // dossier temporaire du banc (outputs/, jobs/…) : ce qu'il écrit
 //   const bench = await startBench({ relay: true }); await bench.login(page);   // comme le téléphone par Tailscale :
 //                                                // bench.url passe par tests/ui/relay.py (adresse HTTPS relayée)
 //
@@ -76,7 +77,7 @@ export async function startBench({ relay = false } = {}) {
   const relayed = relay ? await startPython('relay.py', [direct, https], 'relais du banc') : null;
   const url = relayed ? `http://127.0.0.1:${relayed.first.trim()}` : direct;
   return {
-    url, direct,
+    url, direct, dir: path.dirname(hold),           // dossier temporaire du banc (hold/ en est un sous-dossier)
     // par le relais : le cookie du code d'accès (celui que pose la saisie du code), puis l'interface ouverte
     async login(page) {
       await page.send('Network.setCookie', { ...cookie, url, httpOnly: true, sameSite: 'Lax' });
