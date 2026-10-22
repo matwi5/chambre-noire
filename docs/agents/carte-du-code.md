@@ -210,7 +210,9 @@ l'espace (voir `CODING_STANDARDS.md`).
 
 Fichiers voisins : `tools/ui/sw.js` (service worker : navigation seulement, jamais `/api/*`),
 `tools/ui/manifest.webmanifest` et les icônes (installation sur le téléphone) ; `tools/ui/logo.svg` (logo de la barre
-du haut, de la page du code d'accès et de l'onglet) est la source des icônes PNG, à régénérer depuis lui s'il change.
+du haut, de la page du code d'accès et de l'onglet) est la source des icônes PNG, à régénérer depuis lui s'il change,
+par Chrome sans écran : `icon-192.png` et `icon-512.png` tels quels (coins transparents), `icon-maskable-512.png` et
+`apple-touch-icon.png` (180 px) plein cadre, sans le `clip-path` arrondi ni le liseré du bord, sans transparence.
 
 ## Mécanismes
 
