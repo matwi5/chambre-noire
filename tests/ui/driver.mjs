@@ -126,6 +126,9 @@ export async function startBench({ relay = false } = {}) {
     },
     // instantané des fichiers des dossiers que le serveur écrit ; written() : ceux créés ou changés depuis
     disk() {
+      // sans ces dossiers, written() rendrait toujours [] et un test « rien d'écrit » passerait sans rien vérifier
+      const missing = ['outputs', 'jobs'].filter(d => !fs.existsSync(path.join(dir, d)));
+      if (missing.length) throw new Error(`bench.disk : dossier du banc absent (${missing.join(', ')})`);
       const before = written();
       return { written: () => Object.entries(written()).filter(([p, v]) => before[p] !== v)
         .map(([p]) => path.relative(dir, p)).sort() };

@@ -88,7 +88,8 @@ def unchecked_every(lines, added=None):
         window = (lines[k - 2] if k > 1 else "") + "\n" + line
         for m in re.finditer(r"\.every\(", line):
             r = receiver(line, m.start())
-            if r and r.startswith("[") and "..." not in r:
+            # seul un tableau littéral entier ([a, b].every) est sûr ; [a, b].filter(…).every peut être vide
+            if r and r.startswith("[") and matching(r, 0, "[", "]") == len(r) - 1 and "..." not in r:
                 continue
             base = re.match(IDENT, r or "")
             names = [r] + ([base.group(0)] if base else []) if r else []
@@ -196,7 +197,10 @@ def _slow(expr, src, assigned, before, depth=0):
         text = ast.get_source_segment(src, expr) or ""
         if "HOLD" in text or "SLOW" in text:
             return True
-        return False if isinstance(expr, (ast.Constant, ast.JoinedStr)) else None
+        # une f-string qui interpole une valeur (f"{p} chat") peut porter HOLD par cette valeur : inconnu
+        interpolated = isinstance(expr, ast.JoinedStr) and any(isinstance(v, ast.FormattedValue) for v in expr.values)
+        return False if isinstance(expr, ast.Constant) or (isinstance(expr, ast.JoinedStr) and not interpolated) \
+            else None
     if isinstance(expr, ast.Name) and depth < 2:
         values = [v for line, v in assigned.get(expr.id, []) if line < before]
         return _slow(values[-1], src, assigned, before, depth + 1) if values else None

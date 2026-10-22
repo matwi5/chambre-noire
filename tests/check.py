@@ -144,6 +144,13 @@ def link_hooks():
     if current:
         print(f"hooks : core.hooksPath vaut déjà « {current} », gardé ({HOOKS}/pre-commit n'est pas activé)")
         return
+    hooks_dir = git("rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    own = sorted(n for n in os.listdir(os.path.join(hooks_dir, "hooks")) if not n.endswith(".sample")) \
+        if os.path.isdir(os.path.join(hooks_dir, "hooks")) else []
+    if own:                                        # core.hooksPath les ferait ignorer sans le dire
+        print(f"hooks : .git/hooks contient {', '.join(own)}, qui ne tourneraient plus : core.hooksPath pas posé ; "
+              f"les déplacer dans {HOOKS}/ puis relancer --link-venv")
+        return
     git("config", "core.hooksPath", HOOKS)
     print(f"hooks : {HOOKS}/pre-commit activé (refuse un commit qui ajoute une ligne de plus de {LINE_MAX} caractères)")
 
@@ -163,8 +170,10 @@ def link_venv():
                   file=sys.stderr)
             status = 1
         else:
-            print(link_to_main(main, "venv") or f"venv existe déjà ici : "
-                  f"{'lien' if os.path.islink(here) else 'dossier'}, rien à faire")
+            if os.path.isdir(here) and not os.path.islink(here):       # un vrai venv dans ce worktree : il marche
+                print("venv existe déjà ici : dossier, rien à faire")
+            else:
+                print(link_to_main(main, "venv") or "venv existe déjà ici : lien, rien à faire")
         for rel in note_names(main):
             message = link_to_main(main, rel)
             if message:
@@ -520,6 +529,7 @@ def stop_group(proc):
         except (ProcessLookupError, PermissionError):
             return
         for _ in range(50):
+            proc.poll()                            # récupère node s'il a fini : un zombie ferait attendre 5 s pour rien
             try:
                 os.killpg(proc.pid, 0)
             except (ProcessLookupError, PermissionError):
@@ -572,9 +582,14 @@ def run_checks(args):
     if failed:
         print("Banc et interface : pas lancés (contrôles ci-dessus en échec : les corriger d'abord)")
         return failed
-    if args.ui is not None and args.name and not any(re.search(args.name, t) for t in ui_titles(ui_files(args.ui))):
-        print(f"Interface : aucun test ne correspond au motif « {args.name} » : rien n'est lancé")
-        return {"Interface": [f"motif « {args.name} » sans test"]}
+    if args.ui is not None and args.name:
+        try:
+            found = any(re.search(args.name, t) for t in ui_titles(ui_files(args.ui)))
+        except re.error:                           # syntaxe propre à JavaScript : node jugera le motif
+            found = True
+        if not found:
+            print(f"Interface : aucun test ne correspond au motif « {args.name} » : rien n'est lancé")
+            return {"Interface": [f"motif « {args.name} » sans test"]}
     jobs = []                                         # banc et interface : en parallèle (bancs indépendants)
     if args.no_bench:
         pass

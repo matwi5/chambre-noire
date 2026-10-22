@@ -289,13 +289,17 @@ def step_calibrate(versions, check_only, skip):
         print(f"[calibration] modèle {v} : trois courtes générations pour mesurer la vitesse de cette machine "
               "(quelques minutes, davantage sur un GPU intégré ; --no-calibrate pour passer cette étape)", flush=True)
         try:
+            # le Python enfant écrit en UTF-8 même sous Windows (sinon page de code ANSI, lue ici en UTF-8)
             r = subprocess.run([sys.executable, P("tools", "calibrate.py"), "--model", v, "--if-needed"],
-                               stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+                               stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                               env=dict(os.environ, PYTHONIOENCODING="utf-8"))
             code, error = r.returncode, (r.stderr or "").strip()
         except OSError as e:
             code, error = 1, str(e)
+        prefix = "[calibration] "            # calibrate.py préfixe déjà ses propres messages
+        error = "\n".join(line[len(prefix):] if line.startswith(prefix) else line for line in error.splitlines())
         if error:
-            print("\n".join(f"[calibration] {line}" for line in error.splitlines()[-20:]), flush=True)
+            print("\n".join(prefix + line for line in error.splitlines()[-20:]), flush=True)
         if code:
             failed.append(v)
             print(f"[calibration] ÉCHEC du modèle {v} ({error.splitlines()[-1] if error else f'code {code}'}) : "

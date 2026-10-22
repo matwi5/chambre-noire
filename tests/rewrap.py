@@ -3,8 +3,9 @@
   python3 tests/rewrap.py README.md [autre.md …]   # les lignes ajoutées depuis la base, celles que check.py refuse
   python3 tests/rewrap.py --all README.md          # toutes les lignes de plus de 120 caractères
 
-Seule la ligne fautive change : elle est coupée à un espace en lignes de 120 caractères au plus, la suite reprenant
-son retrait (sous le texte d'une puce, « > » d'une citation) ; le paragraphe n'est pas remis en forme. Titres,
+La ligne fautive est coupée à un espace en lignes de 120 caractères au plus, la suite reprenant son retrait (sous le
+texte d'une puce, « > » d'une citation) ; le dernier bout rejoint la ligne suivante quand tout y tient, sinon le
+paragraphe n'est pas remis en forme. Titres,
 tableaux, blocs de code, HTML, lignes vides et toutes les autres lignes restent tels quels. Une coupure évite
 l'intérieur d'un `code` et ne fait jamais commencer une ligne par une marque de bloc (« - », « 1. », « # », « > »,
 « | », « ``` », soulignement « --- » ou « === ») ; une ligne sans espace où couper reste telle quelle et est signalée.

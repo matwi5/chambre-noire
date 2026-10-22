@@ -36,8 +36,9 @@ class EveryAllTest(unittest.TestCase):
                     "await page.waitFor(`histItems.length === 2",
                     "  && histItems.every(it => !it.private)`);",                         # longueur à la ligne d'avant
                     "assert.ok(['outputs', 'jobs'].every(d => ok(d)));",                  # littéral : jamais vide
-                    "assert.ok([...rows].every(r => r.ok));")                              # 6 : refusée
-        self.assertEqual([k for k, _ in rules.unchecked_every(src)], [1, 6])
+                    "assert.ok([...rows].every(r => r.ok));",                              # 6 : refusée
+                    "assert.ok([$('a'), $('b')].filter(Boolean).every(e => e.hidden));")  # 7 : filtré, peut être vide
+        self.assertEqual([k for k, _ in rules.unchecked_every(src)], [1, 6, 7])
         self.assertEqual(rules.unchecked_every(src, {2, 3, 4, 5}), [])
 
     def test_all_needs_a_length_check(self):
@@ -100,6 +101,10 @@ class RunningTest(unittest.TestCase):
         "def test_g(self):",
         "    jid = generate('vite')['id']",
         "    wait_job(jid, ('running', 'done'))",
+        "def test_h(self):",
+        "    p = 'HOLD=x'",
+        "    jid = generate(f'{p} chat')['id']",
+        "    wait_job(jid, ('running',))",                        # HOLD par la valeur interpolée : laissé
     ])
 
     def test_waiting_for_running_needs_hold_or_slow(self):
