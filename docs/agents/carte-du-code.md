@@ -207,7 +207,8 @@ rapprocher une génération de la file par son identifiant, et traiter un 404 qu
 l'espace (voir `CODING_STANDARDS.md`).
 
 Fichiers voisins : `tools/ui/sw.js` (service worker : navigation seulement, jamais `/api/*`),
-`tools/ui/manifest.webmanifest` et les icônes (installation sur le téléphone).
+`tools/ui/manifest.webmanifest` et les icônes (installation sur le téléphone) ; `tools/ui/logo.svg` (logo de la barre
+du haut, de la page du code d'accès et de l'onglet) est la source des icônes PNG, à régénérer depuis lui s'il change.
 
 ## Mécanismes
 
