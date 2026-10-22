@@ -325,7 +325,8 @@ Les variantes marchent de la même façon avec des images d'entrée (hors campag
 de la même édition, chacun avec sa graine, à départager par **Garder celle-ci**.
 
 **Édition** : ajouter 1 à 10 images d'entrée par **Ajouter des images**, au-dessus du texte (elles sont numérotées 1,
-2, 3…, et un « × » retire une image), une à une ou plusieurs d'un coup dans le sélecteur (elles sont ajoutées dans
+2, 3…, et un « × » retire une image ; PNG et JPEG partent tels quels, WebP, AVIF ou TIFF, que le moteur ne lit pas,
+sont convertis en PNG par le serveur), une à une ou plusieurs d'un coup dans le sélecteur (elles sont ajoutées dans
 l'ordre de sélection), en les déposant sur **Ajouter des images**, en collant une image copiée (Cmd+V sur le Mac,
 « Coller » sur le téléphone ; un texte collé dans le champ reste un texte), ou par **Éditer** sur une image de la
 galerie, des terminées ou des images d'entrée, puis écrire une **instruction** :

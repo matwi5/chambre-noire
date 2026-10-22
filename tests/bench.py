@@ -323,12 +323,12 @@ def wait_idle(timeout=30):
         time.sleep(0.05)
 
 
-def png_bytes(w=64, h=48):
-    """Image PNG valide, en mémoire (pour les images d'entrée)."""
+def png_bytes(w=64, h=48, fmt="PNG"):
+    """Image valide, en mémoire (pour les images d'entrée) : PNG, ou un autre format de Pillow (fmt="WEBP")."""
     from PIL import Image
     import io
     buf = io.BytesIO()
-    Image.new("RGB", (w, h), (200, 30, 30)).save(buf, "PNG")
+    Image.new("RGB", (w, h), (200, 30, 30)).save(buf, fmt)
     return buf.getvalue()
 
 

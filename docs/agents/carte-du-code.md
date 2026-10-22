@@ -52,9 +52,10 @@ Dans l'ordre du fichier :
   générations en attente dans l'ordre de calcul, seule source de l'ordre) protégée avec `S.current` par la condition
   `S.turn`, lots `S.lots`, génération en cours `S.current`, sessions privées `S.private_sessions`, noms `S.lan_hosts`
   et `S.https_hosts`).
-- **Préparer et lancer une génération** : `data_url_bytes`, `write_data_url`, `image_size`, `build_cmd` (ligne de
-  commande de sd-cli ; aperçu tous les `preview_interval` pas), `latest_preview`, `start_job` (passage « en cours » :
-  par `worker()` sous `S.turn`, et par `tools/calibrate.py`, qui appelle `run_job` hors de la file), `run_job` (lit
+- **Préparer et lancer une génération** : `data_url_bytes`, `write_data_url` (PNG ou JPEG écrit tel quel, autre
+  format converti en PNG : sd-cli ne le lirait pas), `image_size`, `build_cmd` (ligne de commande de sd-cli ; aperçu
+  tous les `preview_interval` pas), `latest_preview`, `start_job` (passage « en cours » : par `worker()` sous `S.turn`,
+  et par `tools/calibrate.py`, qui appelle `run_job` hors de la file), `run_job` (lit
   la sortie ligne à ligne : étape, phase, durées pour la calibration ; écrit l'image, le journal, les entrées),
   `secret(job)` (incognito ou privée : rien en clair), `kind_of`, `keep_private` (chiffre une génération privée),
   `discard_cancelled`, `forget_files`, `fail_job`.

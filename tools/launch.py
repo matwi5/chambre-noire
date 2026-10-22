@@ -1046,11 +1046,20 @@ def data_url_bytes(data_url):
 
 def write_data_url(data_url, path, what="image d'entrée"):
     """Écrit l'image d'une data URL dans path et renvoie ses dimensions ; ValueError « <what> illisible » si ce n'est
-    pas une image que Pillow sait lire."""
+    pas une image que Pillow sait lire. Un PNG ou un JPEG est écrit tel quel ; un autre format (WebP, AVIF, TIFF…),
+    que la page envoie tel qu'elle l'a reçu et que sd-cli (stb_image) refuse, est converti en PNG."""
+    from PIL import Image
     try:
+        raw = data_url_bytes(data_url)
+        with Image.open(io.BytesIO(raw)) as im:
+            size = im.size
+            if im.format not in ("PNG", "JPEG"):
+                buf = io.BytesIO()
+                im.convert("RGBA" if "A" in im.getbands() or "transparency" in im.info else "RGB").save(buf, "PNG")
+                raw = buf.getvalue()
         with open(path, "wb") as f:
-            f.write(data_url_bytes(data_url))
-        return image_size(path)
+            f.write(raw)
+        return size
     except (ValueError, OSError) as e:          # base64 invalide, fichier qui n'est pas une image
         raise ValueError(f"{what} illisible") from e
 
