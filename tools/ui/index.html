@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b0a16" media="(prefers-color-scheme: dark)" data-normal="#0b0a16">
 <meta name="theme-color" content="#eceef7" media="(prefers-color-scheme: light)" data-normal="#eceef7">
-<title>Qwen-Image 2.1 local</title>
+<title>Chambre noire</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <link rel="icon" href="/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Qwen-Image">
+<meta name="apple-mobile-web-app-title" content="Chambre noire">
 <script>{ const q=new URLSearchParams(location.search).get('lite');
   if(q ? q==='1' : matchMedia('(hover: none) and (pointer: coarse)').matches) document.documentElement.classList.add('lite'); }</script>
 <style>
@@ -103,12 +103,11 @@
   /* logo : plaque de verre liquide, paysage en carrés qui finit de se former (diffusion) ; source des icônes PNG */
   .logo { flex:none; display:block; width:34px; height:34px; border-radius:23%; box-shadow:0 8px 22px -6px rgba(143,124,255,.75); }
   .topbar h1 { font-size:18px; margin:0; letter-spacing:-.02em; font-weight:720; white-space:nowrap; }
-  .topbar h1 small { font-size:12px; font-weight:600; color:var(--ink3); margin-left:4px; letter-spacing:0; }
   .chipbtn { display:inline-flex; align-items:center; gap:8px; height:36px; padding:0 14px; border-radius:999px; cursor:pointer;
     font-size:14px; font-weight:600; color:var(--ink); }
   #phoneBtn { margin-left:auto; } #phoneBtn + .island { margin-left:0; }
   .island { margin-left:auto; flex:none; max-width:62vw; }
-  @media (max-width: 420px) { .topbar h1 small { display:none; } .topbar:has(.island.run) :is(#phoneBtn, h1) { display:none; } }
+  @media (max-width: 420px) { .topbar:has(.island.run) :is(#phoneBtn, h1) { display:none; } }
   #status { display:flex; align-items:center; gap:8px; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #status::before { content:""; flex:none; width:8px; height:8px; border-radius:50%; background:var(--warn); box-shadow:0 0 10px var(--warn); }
   #status.ok::before { background:var(--ok); box-shadow:0 0 10px var(--ok); } #status.err::before { background:var(--err); box-shadow:0 0 10px var(--err); }
@@ -584,7 +583,7 @@
 <body>
 <div class="ambient" aria-hidden="true"><div class="mesh"></div><img id="ambA" alt=""><img id="ambB" alt=""></div>
 <header class="topbar">
-  <div class="brand"><img class="logo" src="/logo.svg" alt=""><h1>Qwen-Image<small>2.1</small></h1></div>
+  <div class="brand"><img class="logo" src="/logo.svg" alt=""><h1>Chambre noire</h1></div>
   <button class="chipbtn glass" id="phoneBtn" hidden onclick="openSheet('engineSheet')" aria-label="Ouvrir depuis le téléphone"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="6.5" y="2.5" width="11" height="19" rx="3"/><path d="M10.5 18.5h3"/></svg><span>Téléphone</span></button>
   <button class="chipbtn glass island" id="island" onclick="onIsland()" aria-label="État du moteur"><span id="status">connexion…</span><span class="isl" aria-live="polite"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="15" pathLength="100"/><circle id="islRing" cx="20" cy="20" r="15" pathLength="100"/></svg><b id="islStep"></b><span id="islEta"></span><span class="isl-more" id="islMore"></span></span></button>
   <button class="chipbtn glass" id="privExit" hidden onclick="privLock()" aria-label="Sortir de l'espace privé" title="Sortir de l'espace privé"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg><span>Sortir</span></button>

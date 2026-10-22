@@ -1,4 +1,4 @@
-# Qwen-Image local
+# Chambre noire
 
 Vocabulaire de l'application : ce que l'utilisateur lance, ce qu'il obtient et où ses images sont gardées.
 

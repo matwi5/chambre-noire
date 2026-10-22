@@ -1,4 +1,4 @@
-r"""Installation de Qwen-Image-2.1 local : moteur, modèle, correctif et raccourci.
+r"""Installation de Chambre noire (Qwen-Image 2.1 en local) : moteur, modèle, correctif et raccourci.
 
 Windows : venv\Scripts\python.exe setup.py [options]   ·   macOS (Apple Silicon) : venv/bin/python setup.py [options]
 
@@ -20,7 +20,7 @@ P = lambda *a: os.path.join(ROOT, *a)
 WINDOWS, MACOS = os.name == "nt", sys.platform == "darwin"
 EXE = "sd-cli.exe" if WINDOWS else "sd-cli"
 PY = r"venv\Scripts\python.exe" if WINDOWS else "venv/bin/python"
-SHORTCUT = "Qwen-Image.lnk" if WINDOWS else "Qwen-Image.command"
+SHORTCUT = "Chambre noire.lnk" if WINDOWS else "Chambre noire.command"
 
 # --- moteur stable-diffusion.cpp (versions testées, épinglées par moteur) ------------------------
 # Windows reste sur master-890 ; le Mac passe à master-959, qui charge les poids en --mmap sur Metal, y rend le VAE
@@ -114,7 +114,7 @@ def download_once(url, dest, expected_size=None):
     if expected_size and have == expected_size:
         os.replace(part, dest)
         return
-    req = urllib.request.Request(url, headers={"User-Agent": "qwen-image-local-setup"})
+    req = urllib.request.Request(url, headers={"User-Agent": "chambre-noire-setup"})
     if have:
         req.add_header("Range", f"bytes={have}-")
     with urllib.request.urlopen(req, timeout=60) as r:

@@ -4,6 +4,24 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-22 · Renommage en « Chambre noire »
+
+- **Contexte** : « Qwen-Image 2.1 local » décrit le modèle, pas ce que l'app promet (génération d'images privée, sur
+  la machine). « Darkroom AI », retenu d'abord, est abandonné : « il y en a trop qui existent déjà avec ce nom ».
+- **Décision** (porteur, 22/10/2026, proposition validée par « Ok ») :
+  - nom : « On va partir sur Chambre noir » ; orthographe « Chambre noire », n minuscule (usage français) ;
+  - « Jusqu'où va le renommage ? » → « Tout, dépôt compris » ;
+  - « Garde-t-on une mention du modèle sous le nom ? » → « « Darkroom AI » seul », repris pour « Chambre noire » ;
+  - « Comment garder les stats du projet sous le nouveau nom ? » → « Dossier inchangé + nom d'affichage dans
+    stats-board (Recommandé) » ;
+  - « […] je crée le ticket Asana […] et je note la décision dans DECISIONS.md. D'accord ? » → « Oui, ticket +
+    décision (Recommandé) ».
+- **Conséquences** : le dossier local reste `qwen-image-local` (clé des discussions Claude et des stats) ; les chaînes
+  « qwen-image-local » du chiffrement de l'espace privé et du code d'accès ne changent jamais (les changer rendrait
+  les images privées illisibles et le code refusé) ; le dépôt GitHub devient `matwi5/chambre-noire` ; le service
+  macOS devient `com.matwi5.chambre-noire`, et `make_service.py` retire l'ancien ; le raccourci devient
+  `Chambre noire.command` (`.lnk` sous Windows), et `make_shortcut.py` retire l'ancien.
+
 ## 2026-10-22 · Rétro du parcours des pages : hook avant commit, notes reliées, pistes hors du dépôt
 
 - **Contexte** : la rétro du parcours (discussion principale et quatre sessions de groupe) relève 18 pistes ; les

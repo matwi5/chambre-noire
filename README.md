@@ -1,4 +1,6 @@
-# Qwen-Image 2.1 en local, sur PC Windows ou Mac Apple Silicon
+# Chambre noire
+
+Génération d'images privée, en local, sur PC Windows ou Mac Apple Silicon.
 
 Une interface web locale pour générer et modifier des images avec **[Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1)**,
 pensée pour les PC portables ordinaires (processeur graphique intégré AMD ou Intel, pas de carte NVIDIA,
@@ -62,8 +64,8 @@ il a été testé sur une puce M6 sous macOS 27.
 **1. Récupérer le projet**
 
 ```bat
-git clone https://github.com/matwi5/qwen-image-local.git
-cd qwen-image-local
+git clone https://github.com/matwi5/chambre-noire.git
+cd chambre-noire
 ```
 
 Sans git : bouton **Code → Download ZIP** sur GitHub, puis décompresser le dossier où vous voulez
@@ -97,7 +99,8 @@ Sur Mac : `venv/bin/python setup.py`. Ce script, à lancer une seule fois :
 - télécharge les fichiers du modèle depuis Hugging Face dans `models\` (≈ 14,6 Go sous Windows, ≈ 15,1 Go sur Mac)
   et vérifie chacun contre son empreinte SHA256 (voir [Le modèle](#le-modèle)) ;
 - sous Windows, prépare l'encodeur de texte pour stable-diffusion.cpp ;
-- crée le raccourci **`Qwen-Image.lnk`** (Windows) ou **`Qwen-Image.command`** (Mac) dans le dossier ;
+- crée le raccourci **`Chambre noire.lnk`** (Windows) ou **`Chambre noire.command`** (Mac) dans le dossier (et retire
+  `Qwen-Image.lnk` ou `Qwen-Image.command`, raccourci de l'ancien nom de l'application, s'il reste) ;
 - lance trois courtes générations pour calibrer les estimations de durée sur votre machine
   (voir [Performances](#performances) ; `--no-calibrate` pour s'en passer). Si elles échouent, l'erreur est affichée
   et l'installation continue sans calibration (rappel à la fin, avec la commande pour réessayer).
@@ -123,8 +126,8 @@ relance la commande. Pour vérifier une installation sans rien télécharger : `
 
 ## Lancement
 
-Double-cliquer sur **`Qwen-Image.lnk`** sous Windows (on peut l'épingler à la barre des tâches ou au menu Démarrer),
-ou sur **`Qwen-Image.command`** sur Mac (on peut le glisser dans le Dock).
+Double-cliquer sur **`Chambre noire.lnk`** sous Windows (on peut l'épingler à la barre des tâches ou au menu Démarrer),
+ou sur **`Chambre noire.command`** sur Mac (on peut le glisser dans le Dock).
 
 Une fenêtre noire (Windows) ou de Terminal (Mac) s'ouvre : c'est le moteur, **laissez-la ouverte**. Le navigateur
 s'ouvre ensuite sur **http://127.0.0.1:7860/**. Pour arrêter, fermez cette fenêtre.
@@ -208,8 +211,9 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
 venv/bin/python tools/make_service.py
 ```
 
-`venv/bin/python tools/make_service.py --remove` retire ce démarrage automatique. Le journal du service est dans
-`logs/service.log`. Le raccourci `Qwen-Image.command` ouvre alors simplement l'interface déjà lancée.
+`venv/bin/python tools/make_service.py --remove` retire ce démarrage automatique. Les deux commandes retirent aussi
+le service de l'ancien nom de l'application (`com.matwi5.qwen-image-local`), s'il est installé. Le journal du service
+est dans `logs/service.log`. Le raccourci `Chambre noire.command` ouvre alors simplement l'interface déjà lancée.
 
 ## Utilisation
 
@@ -700,7 +704,7 @@ devraient prendre ≈ 3 min chacune selon le modèle de coût (non mesurées).
 ## Dépannage
 
 **Double-cliquer sur un fichier `.cmd` ne fait rien.** Certaines entreprises bloquent les scripts dans les dossiers
-utilisateur (stratégie AppLocker). Utilisez le raccourci `Qwen-Image.lnk`, qui lance directement `python.exe`.
+utilisateur (stratégie AppLocker). Utilisez le raccourci `Chambre noire.lnk`, qui lance directement `python.exe`.
 S'il manque : `venv\Scripts\python.exe tools\make_shortcut.py`.
 
 **La pastille d'état en haut à droite indique « Non prêt ».** Le panneau Moteur (un appui sur la pastille) affiche
@@ -885,7 +889,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── ui/index.html     l'interface
 │   ├── ui/manifest.webmanifest, sw.js, icon-*.png   installation sur le téléphone (application)
 │   ├── fix_int8_te.py    correctif de l'encodeur texte int8 (Windows)
-│   ├── make_shortcut.py  crée Qwen-Image.lnk (Windows) ou Qwen-Image.command (Mac)
+│   ├── make_shortcut.py  crée Chambre noire.lnk (Windows) ou Chambre noire.command (Mac)
 │   ├── make_service.py   Mac : démarrage automatique de l'interface, accessible depuis le Wi-Fi
 │   ├── make_mask.py      génère un masque ou une annotation par script
 │   ├── make_test_image.py  génère une image de test (formes et texte) pour essayer l'édition
@@ -908,7 +912,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 ```
 
 Créés par l'installation et l'usage, ignorés par git : `venv/`, `sdcpp/`, `models/`, `outputs/`, `jobs/`, `logs/`,
-`Qwen-Image.lnk`, `Qwen-Image.command`.
+`Chambre noire.lnk`, `Chambre noire.command`.
 
 Banc de test du serveur, sans GPU ni modèle : il sert `tools/launch.py` sur un port libre avec un faux moteur, dans
 un dossier temporaire (rien n'est écrit dans `outputs\`), et vérifie l'API (génération, annulation, incognito,
