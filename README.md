@@ -190,11 +190,10 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   du panneau Réglages les coupe. Elles ne passent que par l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du
   Wi-Fi), ou sur l'ordinateur lui-même. Le message transite chiffré par le service de notification du navigateur
   (Google pour Chrome) et ne contient ni le prompt ni le nom du fichier : « Image prête — Générée en 12 min 14 s ·
-  1024×1024 » (« Image incognito prête » en incognito ; dans l'espace privé, le même message qu'une image normale,
-  pour que rien ne le trahisse). Un lot
+  1024×1024 » (dans l'espace privé, le même message qu'une image normale, pour que rien ne le trahisse). Un lot
   (plusieurs images d'une seule demande, voir [Créer](#créer)) n'envoie qu'une notification, à la fin de
   sa dernière image : « 3 images prêtes », « 2 images prêtes, 1 en échec », « Échec du lot » si aucune n'a réussi
-  (« 2 images incognito prêtes » en incognito, le même message qu'un lot normal dans l'espace privé), et rien si tout le
+  (le même message qu'un lot normal dans l'espace privé), et rien si tout le
   lot a été annulé. Il faut la bibliothèque `pywebpush` (installée par `requirements.txt` ; sur une installation
   antérieure, relancer `pip install -r requirements.txt`). L'ordinateur garde
   sa clé d'envoi dans `tools/push_vapid.pem` et les appareils abonnés dans `tools/push_subscriptions.json` ; supprimer
@@ -738,7 +737,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 - API locale : `POST /api/generate`, `GET /api/job/<id>` (`queue_position` : rang parmi les générations de son espace,
   public ou privé, 0 pour celle qui tourne, sinon les générations de l'espace en attente devant elle, plus une si une
   génération tourne ; recalculé à chaque lecture ; `seed` : graine utilisée ; `lot` ; `prompt` : le prompt complet, tant
-  que la demande est en mémoire, `null` pour une génération incognito et pour une privée une fois finie, rangée, en
+  que la demande est en mémoire, `null` pour une privée une fois finie, rangée, en
   échec ou annulée ; `mode` ; `inputs` : noms des images d'entrée gardées avec l'image, `init.png` puis `ref_1.png`…,
   ceux qu'attend `/api/input`), `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel` (sans effet sur une génération
   déjà terminée, réussie, en échec ou annulée), `POST /api/job/<id>/first` (« Passer en tête » : la génération passe en
@@ -749,17 +748,13 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   rien n'en attend, 404 une fois le lot fini ou pour un lot privé hors de l'espace privé ; aucune ligne dans les
   journaux du serveur, comme l'annulation), `GET /api/status` (`queue` : la file de l'espace de l'appareil, génération
   en cours d'abord, puis l'ordre de calcul : dans l'espace privé, ses seules générations privées ; ailleurs, les
-  générations normales et incognito ; l'appareil est dans l'espace privé quand sa session est ouverte et que la requête
+  générations normales ; l'appareil est dans l'espace privé quand sa session est ouverte et que la requête
   est sûre, comme pour `private.unlocked` ; chaque entrée porte `status`, `position` (rang dans l'espace, comme
   `queue_position`), `ahead` (durée restante estimée, en secondes, des générations de l'autre espace placées devant elle
   : ce qui reste de celle en cours, l'estimation des autres ; 0 sans travail caché), `lot`, `estimate` et `elapsed` en
-  secondes, `kind` (`normal`, `incognito` ou `private`), et pour une génération normale ou privée `id`, `mode`, le début
-  du `prompt`, et `width`, `height` et `steps` de la demande ; une génération incognito porte à la place `page`, le
-  jeton opaque que sa page a envoyé dans `/api/generate` (`"page"`, 1 à 64 lettres, chiffres, `-` ou `_`), pour qu'elle
-  y reconnaisse ses lignes, et `tag`, son étiquette tirée au hasard (distincte de son identifiant), que seule la réponse
-  de `/api/generate` donne à sa page (elle y reconnaît sa ligne même après un passage en tête) : ni l'un ni l'autre
-  n'ouvre de route ; `queued` : générations en attente de l'espace ; `current_job` : la génération en cours si elle est
-  de l'espace et n'est pas incognito, sinon `null` ; `last_job` : dernière génération normale, `null` dans l'espace
+  secondes, `kind` (`normal` ou `private`), `id`, `mode`, le début du `prompt`, et `width`, `height` et `steps` de la
+  demande ; `queued` : générations en attente de l'espace ; `current_job` : la génération en cours si elle est
+  de l'espace, sinon `null` ; `last_job` : dernière génération normale, `null` dans l'espace
   privé ; `busy` : le Mac calcule, quel que soit l'espace ; `version` : `commit`, `date` et `branch` du dernier commit
   du dossier servi (`null` hors git) et `server`, empreinte de `tools/launch.py` et `tools/estimate.py`, relus toutes
   les 30 s ; `server_version` : la même chose au lancement du serveur, `null` sans `main()`) ; lots : `"count"` de 2 à 4
@@ -770,15 +765,10 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   dans la file, et la réponse devient `{"lot": {"id", "size", "campaign"}, "jobs": [...]}` ; chaque génération porte
   `lot` (`id`, `rank`, `size` et `campaign` : vrai pour une campagne, faux pour des variantes, quel que soit le mode ;
   une image d'avant ce marqueur n'en a pas et un lot du mode `edit` y compte comme une campagne), aussi écrit dans
-  `outputs/journal.jsonl`, dans la galerie et dans les réglages d'une image privée (un lot incognito ne montre dans
-  `queue` que `rank` et `size` : ni son identifiant ni son marqueur de campagne, que sa page lit dans sa réponse de
-  `/api/generate`) ; `POST /api/lot/<id>/cancel` annule toutes ses générations non terminées (404 une fois le lot fini).
+  `outputs/journal.jsonl`, dans la galerie et dans les réglages d'une image privée ; `POST /api/lot/<id>/cancel` annule
+  toutes ses générations non terminées (404 une fois le lot fini).
   Graine `-1` : le serveur la tire lui-même (distincte pour chaque image d'un lot) et l'écrit au journal ; graine
-  choisie avec `count` : graine, graine + 1… ; incognito (`"incognito": true` dans `/api/generate` ; identifiant de 32
-  caractères hexadécimaux tirés au hasard, comme celui d'un lot incognito) : `GET /api/job/<id>/result` (image gardée en
-  mémoire, oubliée 24 h après la fin de la génération si elle n'est jamais récupérée), `POST /api/job/<id>/forget`
-  (l'oublier, ou arrêter la génération), `POST /api/forget {"ids": […]}` (toutes les générations incognito d'une page, à
-  sa fermeture ; `current_job` de `/api/status` reste vide pendant une génération incognito) ; historique : `GET
+  choisie avec `count` : graine, graine + 1… ; historique : `GET
   /api/history` (une entrée par image, avec ses réglages, sa `seed` et son `lot` : `id`, `rank`, `size`, `campaign`, ou
   `null` pour une image seule), `GET /api/thumb?name=…` (miniatures gardées dans `outputs/.thumbs/`), `GET
   /api/result?name=…&download=1`, `POST /api/delete` ; images d'entrée d'une image : `GET
@@ -800,15 +790,17 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   supprimer l'espace sans le code) ; sans `cryptography`, ces routes répondent 503. Toutes les routes de l'espace privé
   sauf `lock` et la génération privée répondent 403 hors du Mac lui-même et de l'adresse HTTPS de « tailscale serve »
   (jugé sur l'adresse source 127.0.0.1 et le nom d'hôte, jamais sur les en-têtes de relais) ; génération privée :
-  `"private": true` dans `/api/generate` (403 sans session, 400 avec `incognito` ou si `private` n'est pas un booléen,
-  503 sans `cryptography`), identifiant de 32 caractères hexadécimaux, absente de `queue` hors de l'espace privé (rien
+  `"private": true` dans `/api/generate` (403 sans session, 400 si `private` n'est pas un booléen, 503 sans
+  `cryptography`), identifiant de 32 caractères hexadécimaux tirés au hasard (comme celui d'un lot privé), absente de
+  `queue` hors de l'espace privé (rien
   n'y trahit l'espace privé aux autres appareils), entrée complète dedans (`kind` `private`, `id`, `mode`, `prompt`,
   `lot` avec son `id`) ; `GET /api/job/<id>` porte `private` et, une fois l'image rangée, `item` (son identifiant dans
-  l'espace privé) ; `POST /api/job/<id>/forget` l'oublie (l'image reste dans l'espace) ; suivi (`GET /api/job/<id>`,
+  l'espace privé) ; `POST /api/job/<id>/forget` l'oublie (l'image reste dans l'espace ; sans cela, le serveur oublie
+  une génération privée finie 24 h après sa fin) ; suivi (`GET /api/job/<id>`,
   `…/preview`), annulation, passage en tête et oubli (`POST /api/job/<id>/cancel`, `…/first`, `…/forget`) d'une
   génération privée, et `POST /api/lot/<id>/cancel` et `…/first` d'un lot privé : requête sûre et session exigées, sinon
   404 (« job inconnu », « lot inconnu »), comme un identifiant inconnu, avant tout test d'état ; l'annulation et le
-  passage en tête prolongent la session, ni le suivi ni l'oubli ; `/api/forget` (fermeture de la page) ne l'arrête pas.
+  passage en tête prolongent la session, ni le suivi ni l'oubli ; la fermeture de la page ne l'arrête pas.
   Galerie privée, session exigée (403 sinon), chaque requête prolongeant la session : `GET /api/private/history`
   (réglages déchiffrés de chaque image, avec `id`), `GET /api/private/image?id=…[&download=1]`, `GET
   /api/private/thumb?id=…`, `GET /api/private/input?id=…&file=init.png|ref_N.png[&thumb=1][&download=1]`, `POST
@@ -824,9 +816,16 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   la largeur ou la hauteur n'est pas un entier de 64 à 4096, les étapes un entier de 1 à 200, ou la graine un entier
   (-1 : au hasard), ou `count` qui n'est pas un entier de 1 à 4 ou qui dépasse 1 avec une `campaign`, ou une
   `campaign` hors du mode `edit`, de plus de 10 photos, ou dont une photo n'a pas d'image ou de dimensions valides ;
-  les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Une génération qui ne
-  peut pas se préparer (image d'entrée illisible, par exemple) échoue seule, avec un message, et la file passe à la
-  suivante.
+  les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Elle refuse aussi
+  (400 « L'incognito n'existe plus : passez par l'espace privé. ») une demande `"incognito": true`, qu'enverrait une
+  page d'avant le retrait de l'incognito restée ouverte : rien n'est écrit sur l'ordinateur ; le champ `page` d'une
+  telle page est ignoré. Une génération qui ne peut pas se préparer (image d'entrée illisible, par exemple) échoue
+  seule, avec un message, et la file passe à la suivante.
+- Le journal du serveur (`logs/service.log` pour le service Mac) écrit la même ligne pour tout échec, génération
+  privée ou non : « [job] échec : génération, sd-cli code N » ou « [job] échec : génération, erreur de préparation » ;
+  le détail, qui peut citer le prompt ou un fichier, reste en mémoire pour l'interface (`error` de `/api/job/<id>`).
+  « [job] fin de génération incomplète » (image produite, journal ou calibration en échec), « [job] erreur du thread
+  de calcul » et « [push] notification du lot impossible » n'ont pas non plus de détail.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés
   sous Windows (ROCm Windows ne couvre que les cartes RDNA3/RDNA4, DirectML est limité à d'anciennes versions) :
   il tournerait en CPU pur. Si vous avez une carte NVIDIA, les workflows officiels Comfy-Org
@@ -873,7 +872,7 @@ Créés par l'installation et l'usage, ignorés par git : `venv/`, `sdcpp/`, `mo
 `Chambre noire.lnk`, `Chambre noire.command`.
 
 Banc de test du serveur, sans GPU ni modèle : il sert `tools/launch.py` sur un port libre avec un faux moteur, dans
-un dossier temporaire (rien n'est écrit dans `outputs\`), et vérifie l'API (génération, annulation, incognito,
+un dossier temporaire (rien n'est écrit dans `outputs\`), et vérifie l'API (génération, annulation, espace privé,
 notifications) en quelques secondes :
 
 ```bat
@@ -887,7 +886,7 @@ du JavaScript de l'interface avec Node.js (`node --check`), refuse une ligne ajo
 depuis la séparation d'avec `origin/main`, lance le banc et affiche son résultat (`--no-bench` pour le sauter ;
 `--quick` le saute si aucun fichier Python n'a changé depuis cette séparation). Il échoue aussi si un fichier du
 dépôt contient un repère propre à une machine (chemin de dossier personnel, adresse IP privée, nom Tailscale) : le
-dépôt est public. Un avis, sans échec, signale un changement de code qui touche l'incognito ou l'espace privé. Sur
+dépôt est public. Un avis, sans échec, signale un changement de code qui touche l'espace privé. Sur
 GitHub, la même commande, complète, tourne sur chaque pull request vers `main` et chaque envoi sur `dev`
 (`.github/workflows/checks.yml`, sur macOS).
 

@@ -84,27 +84,6 @@ class CancelTest(bench.BenchCase):
         self.assertEqual(journal(), [])
 
 
-class IncognitoTest(bench.BenchCase):
-    def test_incognito_image_is_delivered_once_then_forgotten(self):
-        jid = generate("a secret garden", incognito=True)["id"]
-        j = wait_job(jid)
-        self.assertEqual((j["status"], j["incognito"], j["path"]), ("done", True, None))
-        bench.wait_idle()
-        code, raw = call("GET", f"/api/job/{jid}/result")
-        self.assertEqual((code, raw[:4]), (200, b"\x89PNG"))
-        self.assertEqual(files("outputs", "*.png"), [])
-        self.assertEqual(files("jobs", "incognito_*"), [])
-        self.assertEqual(journal(), [])
-        self.assertEqual(call("POST", f"/api/job/{jid}/forget")[0], 200)
-        self.assertEqual(call("GET", f"/api/job/{jid}/result")[0], 404)
-        self.assertEqual(call("GET", f"/api/job/{jid}")[0], 404)
-
-    def test_status_never_resumes_an_incognito_generation(self):
-        wait_job(generate("visible")["id"])
-        wait_job(generate("hidden", incognito=True)["id"])
-        self.assertEqual(call("GET", "/api/status")[1]["last_job"]["incognito"], False)
-
-
 class NotificationTest(bench.BenchCase):
     def assertNoPrompt(self, msg, marker):
         self.assertEqual(set(msg), {"title", "body", "tag", "url"})
@@ -118,13 +97,11 @@ class NotificationTest(bench.BenchCase):
         self.assertNoPrompt(sent[0], "zq7marker")
         self.assertNotIn(j["name"], str(sent[0]))
 
-    def test_incognito_and_failure_messages(self):
+    def test_failure_message(self):
         with bench.capture_push() as sent:
-            wait_job(generate("zq7marker hidden", incognito=True)["id"])
-            sent.wait(1)
             wait_job(generate("FAIL zq7marker broken")["id"])
-            sent.wait(2)
-        self.assertEqual([m["title"] for m in sent], ["Image incognito prête", "Échec de la génération"])
+            sent.wait(1)
+        self.assertEqual([m["title"] for m in sent], ["Échec de la génération"])
         for msg in sent:
             self.assertNoPrompt(msg, "zq7marker")
 

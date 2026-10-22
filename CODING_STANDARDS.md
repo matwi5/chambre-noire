@@ -24,7 +24,7 @@ les tests viennent de bugs passés à travers les revues par ticket.
   écrit et de leur dossier ; sinon une coupure laisse une bascule vers des fichiers vides. Un test de panne à chaque
   point d'écriture, en `Exception` et en `BaseException` (interruption), montre qu'on retombe sur l'ancien état ou le
   nouveau, jamais un mélange (modèle : changement du code privé, `DECISIONS.md`).
-- **Toute nouvelle écriture sur le disque ou dans un journal respecte l'incognito et l'espace privé** (`secret(job)` :
+- **Toute nouvelle écriture sur le disque ou dans un journal respecte l'espace privé** (`secret(job)` :
   rien en clair), se fait de façon atomique sous le verrou de ce qu'elle modifie, et un fichier qui contient une
   donnée de l'utilisateur est lisible par son seul propriétaire (`0o600`) : le Mac peut avoir d'autres comptes.
 
@@ -63,7 +63,7 @@ les tests viennent de bugs passés à travers les revues par ticket.
   garder une génération en cours ou en file, `HOLD` dans le prompt plutôt que `SLOW` (voir `tests/fake_sdcli.py`).
 - **Une correction de l'interface reçoit un test dans `tests/ui/`** quand le banc ne peut pas la voir : deux bugs
   d'interface ne sont apparus que dans Chrome, banc au vert.
-- **Le test d'une garde d'une zone sensible (incognito, espace privé, suppression) est prouvé rouge** sur le code
+- **Le test d'une garde d'une zone sensible (espace privé, suppression) est prouvé rouge** sur le code
   sans la branche qu'il protège (retirée le temps de l'essai), puis vert ; le message du commit le dit.
 - **Une assertion « rien ne change » attend d'abord la fin de l'action qui pourrait changer quelque chose** (réponse
   reçue, Mac au repos : `bench.idle()`) : vérifiée trop tôt, elle passe avant que le changement arrive.

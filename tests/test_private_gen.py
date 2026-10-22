@@ -10,13 +10,6 @@ from bench import call, files, wait_job
 CODE = "Mot2passe!"
 
 
-def all_files():
-    """Tous les fichiers du dossier du banc (sauf le lien vers l'interface du dépôt)."""
-    root = bench.launch.ROOT
-    return [fp for fp in glob.glob(os.path.join(root, "**", "*"), recursive=True)
-            if os.path.isfile(fp) and not fp.startswith(os.path.join(root, "tools", "ui"))]
-
-
 class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
     def setUp(self):
         super().setUp()
@@ -38,7 +31,6 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
 
     def test_private_generation_needs_a_session(self):
         self.assertEqual(call("POST", "/api/generate", bench.gen_body("x", private=True))[0], 403)
-        self.assertEqual(call("POST", "/api/generate", bench.gen_body("x", private=True, incognito=True), private=self.session)[0], 400)
         self.assertEqual(job_count(), 0)
 
     def test_nothing_in_clear_on_disk_after_a_private_generation(self):
@@ -60,7 +52,7 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
         # aucun octet de l'image, de sa miniature, de son entrée ni du prompt, nulle part sur le disque
         clear_bytes = [png[len(png) // 2:len(png) // 2 + 64], thumb[len(thumb) // 2:len(thumb) // 2 + 64],
                     ref[len(ref) // 2:len(ref) // 2 + 64], b"zq9private"]
-        for fp in all_files():
+        for fp in bench.all_files():
             raw = open(fp, "rb").read()
             for s in clear_bytes:
                 self.assertNotIn(s, raw, fp)
@@ -168,11 +160,31 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
         self.assertEqual(call("GET", f"/api/job/{job['id']}", private=self.session)[0], 404)
         self.assertEqual(len(self.history()), 1)              # l'image reste dans l'espace privé
 
-    def test_page_close_does_not_cancel_a_private_generation(self):
-        job = self.generate("SLOW=0.05 keep me", steps=8)
-        self.wait_job(job["id"], ("running",))
-        self.assertEqual(call("POST", "/api/forget", {"ids": [job["id"]]})[1]["forgotten"], 0)
-        self.assertEqual(self.wait_job(job["id"])["status"], "done")
+    def test_a_finished_private_generation_its_page_never_forgot_is_forgotten_after_the_delay(self):
+        with mock.patch("launch.PRIVATE_JOB_TTL", 0.4):
+            done = self.generate("never forgotten")["id"]
+            failed = self.generate("FAIL never seen")["id"]
+            self.assertEqual(self.wait_job(done)["status"], "done")
+            self.assertEqual(self.wait_job(failed)["status"], "failed")
+            # chaque requête fait le ménage (sweep) : on interroge jusqu'à l'oubli, passé le délai
+            bench.wait_until(lambda: all(call("GET", f"/api/job/{jid}", private=self.session)[0] == 404
+                                         for jid in (done, failed)), what="générations privées oubliées")
+            self.assertNotIn(done, bench.S.jobs)
+        self.assertEqual(len(self.history()), 1)              # l'image reste dans l'espace privé
+
+    def test_a_running_or_waiting_private_generation_is_not_expired(self):
+        with mock.patch("launch.PRIVATE_JOB_TTL", 0.1):
+            running = self.generate("HOLD long")["id"]
+            waiting = self.generate("waiting")["id"]
+            job = lambda: bench.S.jobs[running]   # en cours depuis plus que le délai, sans être oubliée
+            bench.wait_until(lambda: job().get("status") == "running" and time.time() - job()["created"] > 0.2,
+                             what="génération en cours depuis plus que le délai")
+            for jid in (running, waiting):
+                self.assertEqual(call("GET", f"/api/job/{jid}", private=self.session)[0], 200)
+        # délai rendu avant la fin : avec 0,1 s, la génération finie serait oubliée entre deux interrogations
+        bench.release()
+        self.assertEqual(self.wait_job(running)["status"], "done")
+        self.assertEqual(self.wait_job(waiting)["status"], "done")
 
     def test_reset_during_generation_discards_the_image(self):
         job = self.generate("SLOW=0.05 zq9 reset", steps=10)
@@ -239,13 +251,10 @@ class PrivateTrackingTest(bench.PrivateFilesCheck, bench.BenchCase):
                              timeout=5, what="suivi refusé après la fermeture de la session")
         self.assertNotIn(self.session, bench.S.private_sessions)
 
-    def test_normal_and_incognito_generations_are_followed_as_before(self):
+    def test_normal_generations_are_followed_as_before(self):
         a = bench.generate("SLOW=0.05 normal", steps=6)["id"]
-        b = bench.generate("incognito", incognito=True)["id"]
-        for jid in (a, b):
-            self.assertEqual(call("GET", f"/api/job/{jid}", remote=True)[0], 200)
+        self.assertEqual(call("GET", f"/api/job/{a}", remote=True)[0], 200)
         self.assertEqual(call("POST", f"/api/job/{a}/cancel", {}, remote=True)[1]["status"], "cancelled")
-        wait_job(b)
 
 
 def calibration():

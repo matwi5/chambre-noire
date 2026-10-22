@@ -3,8 +3,7 @@ sur le disque ni dans la file."""
 import unittest
 
 import bench
-from bench import call, files, wait_job
-from test_private_gen import all_files
+from bench import all_files, call, files, wait_job
 
 CODE = "Mot2passe!"
 

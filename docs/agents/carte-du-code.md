@@ -20,7 +20,7 @@ Dans l'ordre du fichier :
 - **Constantes et moteur** (en tête) : `ROOT`, `P()` (chemin sous la racine, relu à chaque appel : le banc repointe
   `ROOT`), `MODELS` et `DIFFUSION` (noms des fichiers de modèles, à garder égaux à ceux de `setup.py`), `BACKENDS`
   (options de sd-cli par moteur, réglages Metal justifiés en commentaire), `PLATFORM_BACKENDS`, `PROGRESS_RE` et
-  `TAKING_RE` (lecture de la sortie de sd-cli), `MAX_VARIANTS`, `MAX_CAMPAIGN`, `INCOGNITO_TTL`, `PAGE_TOKEN_RE`.
+  `TAKING_RE` (lecture de la sortie de sd-cli), `MAX_VARIANTS`, `MAX_CAMPAIGN`, `PRIVATE_JOB_TTL`.
   `record_calib`, `load_config`, `code_version` (commit, date et branche du dossier servi, empreinte `server`
   de `launch.py` et `estimate.py`, relus toutes les `VERSION_TTL` s ; git seulement s'il y a un `.git`, jamais après un
   échec, sauf un délai dépassé ; `S.started` : la même chose au lancement, posé par `main()`), `engine_tag`,
@@ -59,25 +59,24 @@ Dans l'ordre du fichier :
   tous les `preview_interval` pas), `latest_preview`, `start_job` (passage « en cours » : par `worker()` sous `S.turn`,
   et par `tools/calibrate.py`, qui appelle `run_job` hors de la file), `run_job` (lit
   la sortie ligne à ligne : étape, phase, durées pour la calibration ; écrit l'image, le journal, les entrées),
-  `secret(job)` (incognito ou privée : rien en clair), `kind_of`, `keep_private` (chiffre une génération privée),
-  `discard_cancelled`, `forget_files`, `fail_job`.
+  `secret(job)` (génération privée : rien en clair), `keep_private` (chiffre une génération privée),
+  `discard_cancelled`, `forget_files`, `fail_job` (tout échec écrit la même ligne neutre dans `logs/`).
 - **File** : `ACTIVE`, `cancel_job` (statut changé sous `S.turn`), `forget_job`, `sweep()` (appelé en tête de chaque
-  requête : oublie les générations incognito ou privées terminées depuis `INCOGNITO_TTL`, ferme les sessions privées
+  requête : oublie les générations privées terminées depuis `PRIVATE_JOB_TTL`, ferme les sessions privées
   inactives depuis `PRIVATE_IDLE`), `worker()` (thread de calcul : un job à la fois, pris en tête de `S.pending`,
   posé dans `S.current` et passé « en cours » sous `S.turn` en une seule opération ; une génération annulée en
   attente est sautée, une annulée après sa prise en tête ne lance pas le moteur (`run_job`) ; une exception fait
   échouer ce job seul ; dans son `finally`, fichiers d'une génération secrète supprimés, fin de lot, puis
   `S.current` rendu en dernier), `end_of_lot`.
-- **Demandes** : `request_error` (400 pour tout champ que `build_cmd` utilise tel quel), `expand_request` (une demande
-  par image d'un lot : variantes `count`, campagne `campaign`), `draw_seeds` (graines -1 tirées par le serveur pour être
-  écrites au journal), `active_jobs` (génération en cours puis `S.pending`, lus sous `S.turn`), `move_first` (« Passer
-  en tête » : routes `/api/job/<id>/first` et `/api/lot/<id>/first`, réponse par `moved_first`), `in_space` (génération
-  de l'espace public ou privé), `queue_ranks` (rang dans l'espace), `queue_position`, `request_inputs`, `job_estimate`
-  (estimation par `estimate.predict`, seule source), `queue_entry` (ligne de `queue` dans `/api/status` ; une incognito
-  y porte le jeton de sa page et son étiquette `tag`), `queue_view` (file vue depuis un espace, `ahead` : travail caché
-  de l'autre espace devant chaque entrée), `new_job` (`input_names` : noms des images d'entrée gardées), `public(job)`
-  (ce que `/api/job/<id>` montre, `mode` et `inputs` compris), `launched` (réponse de `/api/generate` : `public` plus
-  l'étiquette d'une incognito), `quiet_request`.
+- **Demandes** : `request_error` (400 pour tout champ que `build_cmd` utilise tel quel, et pour une demande incognito),
+  `expand_request` (une demande par image d'un lot : variantes `count`, campagne `campaign`), `draw_seeds` (graines -1
+  tirées par le serveur pour être écrites au journal), `active_jobs` (génération en cours puis `S.pending`, lus sous
+  `S.turn`), `move_first` (« Passer en tête » : routes `/api/job/<id>/first` et `/api/lot/<id>/first`, réponse par
+  `moved_first`), `in_space` (génération de l'espace public ou privé), `queue_ranks` (rang dans l'espace),
+  `queue_position`, `request_inputs`, `job_estimate` (estimation par `estimate.predict`, seule source), `queue_entry`
+  (ligne de `queue` dans `/api/status`), `queue_view` (file vue depuis un espace, `ahead` : travail caché de l'autre
+  espace devant chaque entrée), `new_job` (`input_names` : noms des images d'entrée gardées), `public(job)` (ce que
+  `/api/job/<id>` et `/api/generate` montrent, `mode` et `inputs` compris), `quiet_request`.
 - **HTTP** : `class Server` (file de 128 connexions : la galerie en ouvre une par miniature), `class H` : `log_message`
   (tait `/api/private/`), `_send` ; contrôles dans l'ordre `_host_ok` (liste blanche de `Host`), `_post_refused`
   (POST : `Sec-Fetch-Site`, `Origin`, `Content-Type: application/json`), `_allowed` (le Mac passe, les autres
@@ -231,7 +230,7 @@ invariants ».
   photos avec leurs dimensions, en `edit`) : `expand_request` en tire une demande par image, `/api/generate` une
   génération par demande (`new_job`), reliées par `job["lot"]` (`id`, `rank`, `size`, et `campaign`, le marqueur qui
   distingue une campagne de variantes, posé par `/api/generate` : le mode ne le dit plus) et gardées dans `S.lots`
-  même quand une génération incognito quitte `S.jobs`. Côté interface, `isCampaignLot` lit le marqueur (un lot d'avant
+  même quand une génération privée quitte `S.jobs`. Côté interface, `isCampaignLot` lit le marqueur (un lot d'avant
   lui : campagne s'il est du mode `edit`) pour le titre d'un lot, son repère et « Garder celle-ci ». Les graines à -1
   sont tirées par le serveur (`draw_seeds`) pour être écrites au journal. Une seule notification par lot (`notify_lot`),
   envoyée par `end_of_lot` depuis le `finally` de `worker()` quand plus aucune génération du lot n'est active ; le lot
@@ -251,7 +250,7 @@ invariants ».
   affiché (`ofSpace`, `spaceActive`), le temps d'attente ajoute `ahead` ; après un rechargement, elle se rattache aux
   seules générations normales lancées depuis ce navigateur (identifiants dans `localStorage`, `qwen-own`), et dans
   l'espace privé à toutes les générations privées actives (`adoptPrivate`), avec le prompt complet que donne leur suivi
-  (`followQueue` ; `public(job)` le tait pour l'incognito). À la sortie de l'espace privé, `changedSpace` retire de la
+  (`followQueue`). À la sortie de l'espace privé, `changedSpace` retire de la
   page ses générations privées ; dans l'espace privé, les publiques restent suivies hors de l'écran. Les générations
   finies vont dans les terminées (`renderDone`, un lot fini en grille) ; la visionneuse parcourt `vList` (la galerie, ou
   les terminées de la page). Réglages, brouillons de la saisie publique et générations à reprendre dans `localStorage`
@@ -273,18 +272,14 @@ invariants ».
   `space.json`. Côté interface, déverrouillé = « dans l'espace privé » (`inPrivate()`, classe `html.priv`) : aucun
   bouton ne le signale à l'arrivée (entrée : cadenas `#privEntry` de la galerie ; sortie : `#privExit`), décision du
   porteur.
-- **Mode incognito** (`"incognito": true` dans `/api/generate`) : dossier `jobs/incognito_<id>/` supprimé en fin de
-  job (et au démarrage), PNG gardé en mémoire (`job["png"]`) et servi une fois par `/api/job/<id>/result`, puis oublié
-  par `/api/job/<id>/forget` (ou `/api/forget` avec toutes celles de la page, envoyé à sa fermeture) ; ni `outputs/`,
-  ni journal, ni calibration, ni détail dans `logs/`. Son identifiant (et celui de son lot) fait 128 bits tirés au
-  hasard et n'est connu que de sa page : ni `queue`, ni `current_job` ne le montrent. Une génération incognito
-  terminée que sa page n'a jamais fait oublier l'est par `sweep()`, `INCOGNITO_TTL` (24 h) après sa fin.
-- **Génération privée** (`"private": true`, session exigée) : même chemin que l'incognito pendant le calcul
-  (`jobs/private_<id>/`, `sd-cli.log` vers `os.devnull`, identifiant de 128 bits, rien dans les journaux ; dans
-  `queue`, une entrée complète vue depuis l'espace privé seulement),
+- **Génération privée** (`"private": true`, session exigée) : pendant le calcul, dossier `jobs/private_<id>/`
+  supprimé en fin de job (et au démarrage), `sd-cli.log` vers `os.devnull`, identifiant de 128 bits (comme celui de
+  son lot), rien dans les journaux ; dans `queue`, une entrée complète vue depuis l'espace privé seulement,
   puis `keep_private` chiffre image, miniature (en mémoire), entrées et réglages avec la clé publique notée au
-  lancement (`store_private`). Une génération privée ne s'arrête pas à la fermeture de la page (`/api/forget` ne vise
-  que l'incognito, décision du porteur). Au lancement sur Mac, `exclude_from_backup` exclut `jobs/` de Time Machine.
+  lancement (`store_private`). Une génération privée ne s'arrête pas à la fermeture de la page ; finie, elle est
+  oubliée par `/api/job/<id>/forget` (envoyé par sa page), sinon par `sweep()`, `PRIVATE_JOB_TTL` (24 h) après sa
+  fin. Une demande `"incognito": true` (mode retiré, d'une page d'avant) est refusée (400) sans rien écrire. Au
+  lancement sur Mac, `exclude_from_backup` exclut `jobs/` de Time Machine.
 - **Estimation des durées** : `tools/estimate.py` (`predict`, priors par moteur, mesures par `"<moteur>/<modèle>"`
   dans `tools/calibration.json`, filtrées sur la release de sd.cpp installée lue dans `sdcpp/<moteur>/.installed`). Les
   coefficients partent vers l'interface par `/api/status`.
