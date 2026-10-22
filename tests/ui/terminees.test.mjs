@@ -1,7 +1,7 @@
 // Terminées de la page En cours, dans la vue du téléphone : sous la file, les générations finies de la page, la plus
 // récente en premier (lot en grille, échec avec son message, annulée absente), leurs actions (visionneuse, Télécharger,
-// Éditer, Dessiner, Supprimer), « × » et « Tout retirer » (confirmation avec une image incognito, qui reste jusque-là),
-// plafond de 12 (hors incognito), liste vide au rechargement, vrai mode et images d'entrée de chaque image, et le
+// Éditer, Dessiner, Supprimer), « × » et « Tout retirer » (sans confirmation : les images restent sur le Mac),
+// plafond de 12, liste vide au rechargement, vrai mode et images d'entrée de chaque image, et le
 // message « Image prête » ou « Lot prêt » quand on est ailleurs dans l'application.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/terminees.test.mjs
 import { test, before, after } from 'node:test';
@@ -44,7 +44,6 @@ const overflowing = () => page.eval(`(() => {
 async function clearAll() {
   if (await page.eval(`!$('doneClear') || $('doneClear').closest('[hidden]')`)) return;
   await page.click('#doneClear');
-  if (await page.eval(`openedSheet === $('askSheet')`)) await page.eval(`answer(true)`);
   await page.waitFor(`$('doneList').children.length === 0`, { what: 'liste vidée' });
 }
 
@@ -121,39 +120,23 @@ test('ailleurs : « Image prête » mène à En cours ; lot en grille, « Lot pr
   page.assertNoErrors();
 });
 
-test('incognito : l\'image reste après la Galerie ; « Tout retirer » confirme, puis l\'oublie', async () => {
-  await page.eval(`setIncog(true)`);
-  await page.generate('zq4 incognito');
-  await page.eval(`setIncog(false)`);
-  await page.waitFor(`pageJobs.some(p => p.incognito && p.result)`, { what: 'image incognito reçue' });
-  const url = await page.eval(`pageJobs.find(p => p.incognito).result.url`);
+test('« Tout retirer » : la liste se vide sans confirmation, l\'image reste dans la galerie', async () => {
+  await page.generate('zq4 retiree');
+  await page.waitFor(`$('doneList').children.length === 1 && !pageJobs.some(isActive)`, { what: 'image finie' });
+  await page.click('#doneClear');
+  await page.waitFor(`$('doneList').children.length === 0 && !pageJobs.length`, { what: 'liste vidée' });
+  assert.equal(await page.eval(`openedSheet`), null, 'aucune confirmation');
   await page.click('#tabbar [data-pane="hist"]');
+  await page.waitFor(`histItems.some(it => it.prompt === 'zq4 retiree')`, { what: 'image dans la galerie' });
   await page.click('#tabbar [data-pane="run"]');
-  assert.equal(await page.eval(`$('doneList').children.length`), 1, 'toujours là après la Galerie');
-  await page.click('#doneClear');
-  await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation' });
-  await page.eval(`answer(false)`);
-  assert.equal(await page.eval(`$('doneList').children.length`), 1, 'gardée sans confirmation');
-  await page.click('#doneClear');
-  await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation' });
-  await page.eval(`answer(true)`);
-  await page.waitFor(`$('doneList').children.length === 0 && !pageJobs.length`, { what: 'image incognito oubliée' });
-  assert.equal(await page.eval(`ready.has(${JSON.stringify(url)})
-    || !!document.querySelector('[src="${url}"], [href="${url}"]')`), false, 'plus rien d\'elle dans la page');
   page.assertNoErrors();
 });
 
-test('plafond : 12 terminées hors incognito, la plus ancienne sort d\'elle-même ; les incognito restent', async () => {
-  await page.eval(`setIncog(true)`);
-  for (const k of [1, 2]) await page.generate(`zq4 garde incognito ${k}`);
-  await page.eval(`setIncog(false)`);
+test('plafond : 12 terminées, la plus ancienne sort d\'elle-même', async () => {
   for (let k = 1; k <= 13; k++) { await page.generate(`zq4 image ${k}`); await bench.idle({ page }); }
   const prompts = () => page.eval(`[...$('doneList').querySelectorAll('.dprompt')].map(x => x.textContent)`);
-  await page.waitFor(`$('doneList').children.length === 14`, { what: 'douze images et deux incognito' });
-  const shown = await prompts();
-  assert.deepEqual(shown.filter(t => t.startsWith('zq4 garde')).sort(),
-    ['zq4 garde incognito 1', 'zq4 garde incognito 2']);
-  assert.deepEqual(shown.filter(t => t.startsWith('zq4 image')),
+  await page.waitFor(`$('doneList').children.length === 12`, { what: 'douze images' });
+  assert.deepEqual((await prompts()).filter(t => t.startsWith('zq4 image')),
     Array.from({ length: 12 }, (_, i) => `zq4 image ${13 - i}`), 'la plus récente en premier, l\'image 1 sortie');
   await clearAll();
   page.assertNoErrors();
