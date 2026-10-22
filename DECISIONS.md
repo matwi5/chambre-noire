@@ -26,8 +26,17 @@ les messages de commit.
   - « Lignes d'échec dans le journal du serveur » → « a » : tous les échecs écrivent la même ligne neutre (« échec :
     génération, sd-cli code N » ou « échec : génération, erreur de préparation »), le détail reste en mémoire pour
     l'interface.
+- **Décision** (porteur, 22/10/2026, à la relecture de la spec, réponse « 1 oui, 2 oui, 3 oui ») :
+  - « Si tu changes d'espace pendant le bandeau Annuler, la demande Jeter part dans l'espace où elle a commencé. Si
+    cet espace s'est fermé entre-temps, elle est abandonnée et l'image reste dans la pile. D'accord ? » → « oui » ;
+  - « Un seul bandeau à la fois : jeter une deuxième image envoie tout de suite la suppression de la première, dont le
+    délai d'annulation s'arrête là. D'accord ? » → « oui » ;
+  - « Une ancienne page restée ouverte qui demanderait une génération incognito est refusée avec un message
+    (« L'incognito n'existe plus : passez par l'espace privé »), au lieu d'être acceptée en génération normale. […]
+    D'accord ? » → « oui ».
 - **Écarté** : marque « à trier » dans le journal ; fichier témoin en clair pour une image privée ; « Supprimer » qui
-  garde la ligne du journal ; neutralité réservée aux échecs privés.
+  garde la ligne du journal ; neutralité réservée aux échecs privés ; Jeter envoyé dans l'espace affiché après un
+  changement d'espace ; plusieurs bandeaux Annuler empilés ; demande incognito acceptée en génération normale.
 
 ## 2026-10-22 · Refonte « Chambre noire » : lumière inactinique, pixel, Labo et Tirages, pile à trier
 
