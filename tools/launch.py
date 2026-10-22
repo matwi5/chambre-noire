@@ -1346,9 +1346,9 @@ def sweep():
         if now - session["seen"] > PRIVATE_IDLE:
             S.private_sessions.pop(token, None)
     for job in list(S.jobs.values()):
-        if secret(job) and job.get("status") not in ACTIVE:
-            if now - (job.get("finished") or job["created"]) > PRIVATE_JOB_TTL:
-                forget_job(job)
+        if (secret(job) and job.get("status") not in ACTIVE
+                and now - (job.get("finished") or job["created"]) > PRIVATE_JOB_TTL):
+            forget_job(job)
 
 
 def worker():
