@@ -9,12 +9,14 @@
 //   bench.release('nom')                         // libère les générations HOLD=nom du faux moteur
 //   bench.dir                                    // dossier temporaire du banc (outputs/, jobs/…) : ce qu'il écrit
 //   await bench.idle()                           // rien en cours ni en file (avant un rechargement de la page)
-//   await bench.keepAll(page)                    // au repos, toutes les images des piles gardées (dans la galerie)
 //   const disk = bench.disk(); …; disk.written() // fichiers écrits ou changés par le serveur depuis l'instantané
 //   await page.tab('tirages')                    // appui sur l'onglet Labo ou Tirages : la page affichée a changé
 //   await page.swipe('#runZone', -150)           // doigt glissé de dx px (dy) depuis le centre d'un élément
 //   await page.typePrompt('texte')               // texte tapé dans le champ du Labo (événement input)
 //   await page.generate('texte')                 // tapé dans le Labo puis « Générer » : demande acceptée
+//   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
+//   await page.viewPile('texte')                 // visionneuse ouverte sur l'image de la pile à ce prompt
+//   await bench.api('/api/pile')                 // réponse JSON d'une route du banc (sans cookie : le Mac)
 //   await page.launch('texte', { private: true })   // génération demandée hors de l'interface (autre appareil)
 //   await page.leaks(['mot', 'id'])              // marqueurs restés dans la page (texte, attributs, champs, mémoire)
 //   const bench = await startBench({ relay: true }); await bench.login(page);   // comme le téléphone par Tailscale :
@@ -143,24 +145,7 @@ export async function startBench({ relay = false } = {}) {
     },
     // libère les générations dont le prompt porte HOLD=<name> (HOLD seul : 'hold') ; voir tests/fake_sdcli.py
     release(name = 'hold') { fs.writeFileSync(path.join(hold, name), ''); },
-    // une fois le Mac au repos, garde (POST /api/keep) toutes les images de la pile publique, et avec page dans
-    // l'espace privé celles de la pile privée (par la page, qui a la session) : elles passent dans la galerie, pour les
-    // tests qui la regardent ; renvoie leurs noms (identifiants pour les privées)
-    async keepAll(page = null) {
-      await this.idle();
-      const names = (await (await fetch(direct + '/api/pile')).json()).map(it => it.name);
-      for (const name of names) {
-        const r = await fetch(direct + '/api/keep', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name }) });
-        if (!r.ok) throw new Error(`bench.keepAll : ${name} non gardée (${r.status})`);
-      }
-      const ids = page ? await page.eval(`(async () => { if (!inPrivate()) return [];
-        const ids = (await (await fetch('/api/private/pile')).json()).map(it => it.id);
-        for (const id of ids)
-          if (!(await postJson('/api/private/keep', { id })).ok) throw new Error('non gardée : ' + id);
-        return ids; })()`) : [];
-      return [...names, ...ids];
-    },
+    async api(route) { return (await fetch(direct + route)).json(); },
     async stop() { await relayed?.stop(); await server.stop(); },
   };
 }
@@ -259,6 +244,29 @@ async function connect(wsUrl) {
       for (const k of [0.25, 0.5, 0.75, 1])
         await page.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: at(k) });
       await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    },
+    // garde par ✓ toutes les images de la pile affichée (celle de l'espace où est la page) : elles passent dans ses
+    // Tirages ; chacune attendue hors de la pile du Mac avant la suivante. Une carte d'échec en tête l'empêche
+    // (erreur). Renvoie le nombre d'images gardées
+    keepPile() {
+      return page.eval(`(async () => {
+        const onMac = async k => (await (await fetch(pileApi('pile', inPrivate()))).json()).some(x => pileKey(x) === k);
+        await loadPile(); let n = 0;
+        for (let it; (it = pileView()[0]); n++) {
+          if (pileFails().length) throw new Error('carte d\\'échec en tête de la pile');
+          const k = pileKey(it); $('pileYes').click();
+          for (let t = 0; await onMac(k); t++) {
+            if (t > 400) throw new Error('image non gardée : ' + k);
+            await new Promise(r => setTimeout(r, 25)); }
+          await loadPile(); }
+        return n; })()`);
+    },
+    // visionneuse ouverte sur l'image de la pile affichée dont le prompt est prompt (attendue dans la pile)
+    async viewPile(prompt) {
+      const at = `pileView().findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
+      await page.waitFor(`${at} >= 0`, { what: `« ${prompt} » dans la pile`, timeout: 30000 });
+      await page.eval(`openViewer(${at}, pileView())`);
+      await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
     },
     // texte tapé dans le champ du Labo, comme au clavier (événement input : le brouillon est écrit)
     typePrompt(text) {

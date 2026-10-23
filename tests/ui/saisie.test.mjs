@@ -95,22 +95,19 @@ test('Saisie : un fichier illisible est annoncé et n\'arrête pas les images su
   page.assertNoErrors();
 });
 
-test('« Éditer » depuis la galerie : l\'image rejoint les images d\'entrée, Labo, 10 au plus', async () => {
+test('« Éditer » depuis la pile : l\'image rejoint les images d\'entrée, Labo, 10 au plus', async () => {
   await fresh();
   await page.typePrompt('un phare à éditer');
   await generate();
   await page.waitFor(`pageJobs.at(-1).result`, { what: 'image finie', timeout: 30000 });
-  await bench.keepAll();                          // images de la pile gardées : dans la galerie
-  await page.tab('tirages');
-  await page.waitFor(`histItems.length > 0`, { what: 'galerie' });
-  await page.eval(`openViewer(0, histItems); viewerAction('edit')`);
+  await page.waitFor(`pileView().length > 0`, { what: 'image dans la pile' });
+  await page.eval(`openViewer(0, pileView()); viewerAction('edit')`);
   await page.waitFor(`mode === 'labo' && inputImages.length === 1 && $('inThumbs').children.length === 1`,
     { what: 'image ajoutée, Labo' });
   assert.equal(await page.eval(`$('inThumbs').querySelector('span').textContent`), '1', 'numérotée');
   await page.setFiles('#inFiles', photos(9));
   await page.waitFor(`inputImages.length === 10`, { what: 'dix images' });
-  await page.tab('tirages');
-  await page.eval(`openViewer(0, histItems); viewerAction('edit')`);
+  await page.eval(`openViewer(0, pileView()); viewerAction('edit')`);
   await page.waitFor(`$('toastBox').textContent === '10 images d\\'entrée au maximum'`, { what: 'plafond annoncé' });
   assert.equal(await page.eval(`inputImages.length`), 10);
   page.assertNoErrors();
@@ -260,23 +257,20 @@ test('geste « Dessiner » : l\'image seule, dessin actif ; confirmation s\'il y
   await page.typePrompt('un phare à dessiner');
   await generate();
   await page.waitFor(`pageJobs.at(-1).result`, { what: 'image finie', timeout: 30000 });
-  await bench.keepAll();                          // images de la pile gardées : dans la galerie
-  await page.tab('tirages');
-  await page.waitFor(`histItems.length > 0`, { what: 'galerie' });
-  const name = await page.eval(`histItems[0].name`);
-  await page.eval(`openViewer(0, histItems); void viewerAction('mask')`);   // saisie sans image : pas de confirmation
+  await page.waitFor(`pileView().length > 0`, { what: 'image dans la pile' });
+  const name = await page.eval(`pileView()[0].name`);
+  await page.eval(`openViewer(0, pileView()); void viewerAction('mask')`);   // saisie sans image : pas de confirmation
   await page.waitFor(`mode === 'labo' && drawOn && inputImages.length === 1`, { what: 'dessin sur l\'image' });
   assert.equal(await page.eval(`inputImages[0].name`), name);
   await page.click('#drawBtn');
   await page.setFiles('#inFiles', photos(1));
   await page.waitFor(`inputImages.length === 2`, { what: 'deux images' });
-  await page.tab('tirages');
-  await page.eval(`openViewer(0, histItems); void viewerAction('mask')`);
+  await page.eval(`openViewer(0, pileView()); void viewerAction('mask')`);
   await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation' });
   assert.equal(await page.eval(`$('askText').textContent`), 'Remplacer les 2 images de la saisie par celle-ci ?');
   await page.eval(`answer(false)`);                 // refusée : rien ne change
   assert.equal(await page.eval(`inputImages.length`), 2);
-  await page.eval(`openViewer(0, histItems); void viewerAction('mask')`);
+  await page.eval(`openViewer(0, pileView()); void viewerAction('mask')`);
   await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation' });
   await page.eval(`answer(true)`);
   await page.waitFor(`mode === 'labo' && drawOn && inputImages.length === 1

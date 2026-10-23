@@ -239,14 +239,13 @@ test('cartes : un lot de la page sur une carte avec ses cases, réglages, heure 
   await page.waitFor(`!!$('queueList').querySelector('.qcard.own .qcase.done img')`,
     { what: 'case faite avec sa vignette',
     timeout: 30000 });
-  // le lot fini : sa carte quitte la file, ses deux images sont dans les terminées, en grille
+  // le lot fini : sa carte quitte la file, ses deux images sont dans la pile
   await page.waitFor(`!$('queueList').querySelector('.qcard.own')
-    && $('doneList').querySelectorAll('.dlot [data-open]').length === 2`,
+    && pileItems.filter(it => it.prompt === 'SLOW=0.4 zq9 trois essais').length === 2`,
     { what: 'lot terminé', timeout: 30000 });
   assert.equal((await post(`/api/job/${other.id}/cancel`)).status, 200);
   await bench.idle();
   assert.equal((await post(`/api/job/${held.id}/cancel`)).status, 200);   // déjà finie : rien ne change
-  await page.eval(`$('doneClear').click()`);
   page.assertNoErrors();
 });
 

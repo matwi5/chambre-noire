@@ -52,11 +52,11 @@ test('rechargement : un lot repris montre le prompt complet et « Reprendre » r
   assert.ok(excerpts.length > 0 && excerpts.every(p => p.length < LONG.length), 'la file n\'a qu\'un extrait');
   assert.deepEqual(await page.eval(`pageJobs.map(p => p.prompt)`), [LONG, LONG]);
   bench.release('lot');
-  await page.waitFor(`$('doneList').querySelectorAll('.dlot [data-open]').length === 2`,
-    { what: 'grille du lot terminé', timeout: 30000 });
-  assert.equal(await page.eval(`$('doneList').querySelector('.dlot .dprompt').textContent`), LONG, 'prompt du lot');
+  await page.waitFor(`pileView().filter(it => it.page && it.page.prompt === ${JSON.stringify(LONG)}).length === 2`,
+    { what: 'lot terminé dans la pile', timeout: 30000 });
+  assert.equal(await page.eval(`$('pile').querySelector('[data-k="0"] .pprompt').textContent`), LONG, 'prompt du lot');
 
-  await page.click('#doneList .dlot [data-open]'); // visionneuse depuis les terminées, puis « Reprendre »
+  await page.click('#pile [data-k="0"] [data-open]');   // visionneuse depuis la pile, puis « Reprendre »
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
   await page.eval(`$('prompt').value = ''`);
   await page.click('#vResume');
@@ -116,9 +116,9 @@ async function enterPrivate() {
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
 }
-// la galerie, puis la visionneuse sur l'image au prompt donné
+// les images de la pile gardées par ✓, puis la visionneuse des Tirages sur l'image au prompt donné
 async function view(prompt) {
-  await bench.keepAll(page);                      // piles gardées (privée comprise) : dans la galerie
+  await page.keepPile();
   await page.tab('tirages');
   const at = `histItems.findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
   await page.waitFor(`${at} >= 0`, { what: 'image dans la galerie' });
@@ -222,16 +222,13 @@ test('« Reprendre » un texte → image : le texte seul, sans images ; absent s
   page.assertNoErrors();
 });
 
-test('« Reprendre » une terminée de la page : images de la demande gardée, brouillon public écrit', async () => {
+test('« Reprendre » une image de la pile lancée ici : images de sa demande gardée, brouillon écrit', async () => {
   await fresh();
   await page.eval(`(async () => { inputImages.push(await toEntry('b.png', ${ref('#d08020')})); renderInputs(); })()`);
   await page.waitFor(`inputImages.length === 1`, { what: 'une image dans la saisie' });
   await page.typePrompt('zr5 terminee');
   await page.click('#go');
-  await page.waitFor(`mode === 'labo' && !!$('doneList').querySelector('[data-open]')`,
-    { what: 'image dans les terminées', timeout: 30000 });
-  await page.click('#doneList [data-open]');
-  await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
+  await page.viewPile('zr5 terminee');
   assert.equal(await resumable(), true);
   // la visionneuse charge en avance la première image d'entrée (par /api/input) : attendue avant de compter
   await page.waitFor(`ready.get(inputUrl(vList[vIndex], vList[vIndex].inputs[0]))?.im !== undefined`,
@@ -301,16 +298,15 @@ test('« Reprendre » : un texte tapé pendant la lecture n\'est pas remplacé s
   page.assertNoErrors();
 });
 
-test('« Éditer » une terminée : image ajoutée à la saisie, brouillon public gardé', async () => {
+test('« Éditer » une image de la pile : image ajoutée à la saisie, brouillon public gardé', async () => {
   await fresh();
   await page.typePrompt('zr11 normale');
   await page.click('#go');
-  await page.waitFor(`mode === 'labo' && !!$('doneList').querySelector('[data-act="edit"]')`,
-    { what: 'image dans les terminées', timeout: 30000 });
   await page.typePrompt('texte public');
-  await page.click('#doneList .dcard [data-act="edit"]');
+  await page.viewPile('zr11 normale');
+  await page.click('#viewer .v-acts .act');         // Éditer
   await page.waitFor(`mode === 'labo' && inputImages.length === 1`, { what: 'image ajoutée' });
-  // le champ de création, sous la file et les terminées, est amené à l'écran
+  // le champ de création, sous la pile, est amené à l'écran
   await page.waitFor(`(r => r.top >= 0 && r.top < innerHeight)($('refs').getBoundingClientRect())`,
     { what: 'images d\'entrée à l\'écran' });
   assert.deepEqual(await page.eval(`[$('toastBox').textContent, $('prompt').value]`),

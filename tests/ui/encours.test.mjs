@@ -1,7 +1,7 @@
 // Labo et génération en cours, dans la vue du téléphone : deux onglets, Labo et Tirages (ouverture sur le Labo, qui
 // réunit la génération en cours, la file, les images de la page et la saisie), la pastille du haut qui mène au Labo,
-// pastille de l'onglet (nombre de la file de l'espace), génération en cours en grand en haut du Labo (de la page, d'un
-// autre appareil, ou cachée dans l'autre espace : « En attente »), « Rien en cours », et rien qui dépasse à 367 px.
+// génération en cours en grand en haut du Labo (de la page, d'un autre appareil, ou cachée dans l'autre espace :
+// « En attente »), anneau de l'onglet, et rien qui dépasse à 367 px.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/encours.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -55,7 +55,7 @@ test('deux onglets, Labo et Tirages ; ouverture sur le Labo ; plus de page En co
   assert.deepEqual(await page.eval(`[...$('tabbar').querySelectorAll('svg.pix')]
     .map(s => s.getAttribute('shape-rendering'))`), ['crispEdges', 'crispEdges']);
   // la génération, la file, les images de la page et la saisie sont toutes dans le Labo
-  assert.deepEqual(await page.eval(`['stage', 'runNow', 'runQueue', 'runDone', 'composer', 'refs', 'prompt']
+  assert.deepEqual(await page.eval(`['stage', 'runNow', 'runQueue', 'pile', 'composer', 'refs', 'prompt']
     .filter(id => !$('pane-labo').contains($(id)))`), []);
   await page.tab('tirages');
   assert.equal(await page.eval(`$('pane-tirages').contains($('histGrid')) && document.body.className`), 'm-tirages');
@@ -77,37 +77,21 @@ test('glisser le doigt change d\'onglet hors du champ de création, jamais sur l
   page.assertNoErrors();
 });
 
-test('rien en cours : « Rien en cours » au-dessus de la saisie ; la pastille ouvre le panneau Moteur', async () => {
+test('rien en cours : la pastille du haut ouvre le panneau Moteur', async () => {
   await page.tab('labo');
-  assert.equal(await visible('#resultEmpty'), true);
-  assert.match(await page.eval(`$('resultEmpty').textContent`), /Rien en cours/);
   assert.equal(await visible('#composer'), true, 'saisie dans le Labo');
-  assert.equal(await page.eval(`$('runCount').hidden`), true, 'pastille de l\'onglet cachée à zéro');
   await page.click('#island');
   await page.waitFor(`$('engineSheet').classList.contains('on')`, { what: 'panneau Moteur' });
   await page.eval(`closeSheet()`);
   page.assertNoErrors();
 });
 
-test('file qui attend, rien qui tourne (rangement de la précédente) : pas « Rien en cours »', async () => {
-  await page.tab('labo');
-  // file reçue entre deux générations : une entrée en attente d'un autre appareil, rien en cours, rien de caché
-  assert.equal(await page.eval(`(() => { const was = queueState;
-    queueState = [{ status: 'queued', position: 1, ahead: 0, estimate: 30, elapsed: null, kind: 'normal',
-      id: 'zq5-rangement', prompt: 'zq5 en attente', mode: 't2i', lot: null }];
-    renderRun(); const hidden = $('resultEmpty').hidden; queueState = was; renderRun(); return hidden; })()`), true);
-  assert.equal(await visible('#resultEmpty'), true, 'file vide : « Rien en cours » de nouveau');
-  page.assertNoErrors();
-});
-
-test('« Générer » reste sur le Labo ; pastille de l\'onglet ; la pastille du haut mène au Labo', async () => {
+test('« Générer » reste sur le Labo ; génération d\'un autre appareil ; la pastille du haut mène au Labo', async () => {
   await page.launch('HOLD=encours zq5 d\'un autre appareil', { width: 768, height: 512 });
   await page.typePrompt('zq5 de cette page');
   await page.click('#go');
   await page.waitFor(`mode === 'labo' && pageJobs.some(isActive)`, { what: 'Labo après « Générer »' });
   await page.eval(`refreshStatus()`);
-  await page.waitFor(`!$('runCount').hidden && $('runCount').textContent === '2'`,
-    { what: 'pastille de l\'onglet : 2' });
   // la génération d'un autre appareil tourne : en grand, avec son texte et ses réglages, cadre aux proportions
   // demandées, annulable (génération normale) ; anneau de l'onglet en route
   await page.waitFor(`$('runZone').classList.contains('other')
@@ -159,8 +143,8 @@ test('une seconde génération de la page prend le haut du Labo quand elle déma
   await page.waitFor(`shown && shown.prompt.endsWith('seconde') && shown.j.status === 'running'
     && $('loader').style.display === 'flex'`, { what: 'la seconde en haut, avec sa progression' });
   bench.release('seconde');
-  await page.waitFor(`!shown && $('doneList').textContent.includes('zq5 seconde')`,
-    { what: 'la seconde dans les terminées' });
+  await page.waitFor(`!shown && pileItems.some(it => it.prompt.endsWith('zq5 seconde'))`,
+    { what: 'la seconde dans la pile' });
   page.assertNoErrors();
 });
 

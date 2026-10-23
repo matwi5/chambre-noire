@@ -1,11 +1,11 @@
-// Étanchéité de l'espace privé, dans la vue du téléphone : après un parcours privé complet (galerie, visionneuse,
-// images d'entrée, lot, Labo et sa file, prompts enregistrés, saisie, suppression), puis la sortie par
-// « Sortir » ou par la fermeture que décide le Mac, rien de privé ne reste dans la page : ni dans le HTML (attributs et
-// textes cachés compris), ni dans les champs, ni dans la mémoire de la page (toutes ses variables globales et leur
-// contenu : listes d'images, générations suivies, images prêtes, prompts, file…), ni dans localStorage (page.leaks du
-// pilote). La recherche porte sur des marqueurs : identifiants des images, des générations et des lots privés, mots
-// des prompts privés, routes /api/private/ et noms prive_….
-// Les deux tests se suivent : le second rouvre l'espace et la galerie que le premier a remplis.
+// Étanchéité de l'espace privé, dans la vue du téléphone : après un parcours privé complet (pile et son Jeter en
+// attente, Tirages, visionneuse, images d'entrée, lot, Labo et sa file, prompts enregistrés, saisie, suppression),
+// puis la sortie par « Sortir » ou par la fermeture que décide le Mac, rien de privé ne reste dans la page : ni dans
+// le HTML (attributs et textes cachés compris), ni dans les champs, ni dans la mémoire de la page (toutes ses
+// variables globales et leur contenu : listes d'images, générations suivies, images prêtes, prompts, file…), ni dans
+// localStorage (page.leaks du pilote). La recherche porte sur des marqueurs : identifiants des images, des générations
+// et des lots privés, mots des prompts privés, routes /api/private/ et noms prive_….
+// Les deux tests se suivent : le second rouvre l'espace et les Tirages que le premier a remplis.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/etancheite.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -35,8 +35,8 @@ const ref = `(() => { const c = document.createElement('canvas'); c.width = c.he
 const generate = extra => page.eval(`postJson('/api/generate', { width: 512, height: 512, steps: 2, cfg: 1, seed: -1,
   preview: false, ref_images: [], private: true, ...${extra} }).then(r => r.status)`);
 // mots des prompts privés : chacun n'apparaît que dans l'espace privé
-const WORDS = ['zqE1edition', 'zqE2lot', 'zqE3resultat', 'zqE4file', 'zqE5titre', 'zqE5texte', 'zqE6saisie',
-  'zqE7supprimee', 'zqE8vignette', 'zqE9saisie'];
+const WORDS = ['zqE0pile', 'zqE1edition', 'zqE2lot', 'zqE3resultat', 'zqE4file', 'zqE5titre', 'zqE5texte',
+  'zqE6saisie', 'zqE7supprimee', 'zqE8vignette', 'zqE9saisie'];
 
 async function enter() {
   const exists = await page.eval(`fetch('/api/status').then(r => r.json()).then(s => s.private.exists)`);
@@ -51,12 +51,19 @@ async function privateTour() {
   assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE2lot', count: 2 }`), 202);
   assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE7supprimee' }`), 202);
   await bench.idle();
-  // une génération de la page jusqu'aux terminées du Labo, puis une autre gardée en file
+  // une génération de la page jusqu'à la pile du Labo ; toutes gardées par ✓ (Tirages privés), sauf une dernière,
+  // ouverte en grand puis laissée dans la pile ; puis une autre gardée en file
   await page.typePrompt('zqE3resultat');
   await page.click('#go');
-  await page.waitFor(`(img => img && img.complete && img.naturalWidth > 0)($('doneList').querySelector('img'))`,
-    { what: 'image privée dans les terminées', timeout: 30000 });
-  await bench.keepAll(page);                      // piles gardées (privée comprise) : dans la galerie
+  await page.waitFor(`pileItems.length === 5 && (img => img && img.complete && img.naturalWidth > 0)
+    ($('pile').querySelector('[data-k="0"] img'))`, { what: 'images privées dans la pile', timeout: 30000 });
+  assert.equal(await page.keepPile(), 5);
+  assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE0pile' }`), 202);
+  await page.waitFor(`pileItems.length === 1 && (img => img && img.complete && img.naturalWidth > 0)
+    ($('pile').querySelector('[data-k="0"] img'))`, { what: 'image privée dans la pile', timeout: 30000 });
+  await page.click('#pile [data-k="0"] [data-open]');
+  await page.waitFor(`$('vImg').complete && $('vImg').naturalWidth > 0`, { what: 'image de la pile en grand' });
+  await page.eval(`closeViewer()`);
   assert.equal(await generate(`{ mode: 't2i', prompt: 'HOLD=etanche zqE4file' }`), 202);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`pageJobs.some(p => p.private && p.adopted)`, { what: 'génération privée suivie en file' });
@@ -87,11 +94,14 @@ async function privateTour() {
   await page.eval(`answer(true)`);
   await page.waitFor(`histItems.length === 4`, { what: 'image privée supprimée' });
   const markers = await page.eval(`[...histItems.map(it => it.id), ...pageJobs.filter(p => p.private).map(p => p.id),
-    ...histItems.filter(it => it.lot).map(it => it.lot.id)]`);
+    ...histItems.filter(it => it.lot).map(it => it.lot.id), ...pileItems.map(it => it.id)]`);
   await page.eval(`openViewer(histItems.findIndex(it => it.inputs.length), histItems); openInputs(0)`);
   await page.waitFor(`$('ivImg').complete && $('ivImg').naturalWidth > 0`, { what: 'image d\'entrée privée' });
   await page.eval(`closeInputs(); openViewer(histItems.findIndex(it => it.lot), histItems); openLot()`);
   await page.waitFor(`openedSheet === $('lotSheet')`, { what: 'feuille du lot privé' });
+  await page.tab('labo');                          // (visionneuse et feuille du lot toujours ouvertes)
+  await page.click('#pileNo');                     // un Jeter privé qui attend la fin de son bandeau à la sortie
+  await page.waitFor(`!!discarding && !$('undoBar').hidden`, { what: 'Jeter privé en attente' });
   return [...new Set([...markers, ...WORDS, '/api/private/', 'prive_', thumb.slice(-120, -40)])];
 }
 
@@ -105,6 +115,7 @@ test('« Sortir » : plus rien de l\'espace privé dans la page', async () => {
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.deepEqual(await scan(markers, true), [], 'données privées restées dans la page');
+  assert.equal(await page.eval(`$('undoBar').hidden`), true, 'bandeau du Jeter privé resté');
   page.assertNoErrors();
 });
 

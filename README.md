@@ -220,7 +220,7 @@ est dans `logs/service.log`. Le raccourci `Chambre noire.command` ouvre alors si
 ## Utilisation
 
 L'interface a deux onglets aux icônes en pixels, dans la barre du bas : **Labo** (en haut, la génération en cours, la
-file d'attente et les images terminées de la page ; dessous, le champ de création : texte → image, édition avec des
+file d'attente et la pile des images à trier ; dessous, le champ de création : texte → image, édition avec des
 images d'entrée, ou dessin guidé sur une image) et **Tirages** (les images gardées) ; elle s'ouvre sur le Labo. Sur un
 grand écran, le Labo est une colonne centrée et les Tirages prennent toute la largeur. Sur un écran tactile, glisser le
 doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le champ de création). Elle s'adapte au téléphone
@@ -263,8 +263,7 @@ aperçus, ni journal du moteur) ; une génération de la page qui attend affiche
 son image. Lancée par un autre appareil : son texte, un cadre aux proportions demandées, ses réglages et une progression
 estimée, sans aperçu, avec l'annulation là où l'appareil y a droit. Quand le Mac calcule une génération que l'espace où
 l'on est ne voit pas, le haut de la page dit « En attente » et le temps avant le début de la première génération de
-l'espace. Quand la file est vide et qu'il n'y a aucune terminée, il dit « Rien en cours », au-dessus du champ de
-création.
+l'espace.
 Sous la génération en cours, la **file d'attente** de l'espace, en cartes, dans l'ordre de calcul, sous un en-tête qui
 dit combien de générations attendent et à quelle heure la file sera vide (« 4 en attente · file vide vers 15 h 10 (≈ 60
 min) »). Une carte par demande : une génération seule, ou tout un lot (« 3 variantes », « Campagne · 6 photos ») avec
@@ -280,8 +279,8 @@ passer en tête seule. Une génération normale s'annule ou passe en tête depui
 pastille ne montrent que les générations de l'espace où l'on est (public, ou espace privé) : rang et « +N en attente »
 ne comptent qu'elles. La pastille d'état en haut suit la génération en cours depuis n'importe quel onglet et affiche
 « +N en attente » (« +N » seul quand l'écran est trop étroit pour tout contenir) ; un appui mène au Labo (au
-panneau Moteur quand rien de l'espace n'est en file). L'onglet **Labo** porte le nombre de générations de l'espace
-en cours et en attente (rien à zéro), et son icône un anneau qui suit la génération en cours. Une génération qui attend
+panneau Moteur quand rien de l'espace n'est en file). L'icône de l'onglet **Labo** a un
+anneau qui suit la génération en cours. Une génération qui attend
 derrière une génération de l'autre espace affiche « en attente » et un temps qui compte ce travail caché, sans ligne
 pour lui ; si rien de l'espace ne tourne, la pastille dit « En attente » et le temps avant le début de la première, et
 si l'espace n'a rien en file, elle reste éteinte même quand le Mac calcule pour l'autre espace. On peut recharger la
@@ -293,16 +292,23 @@ enregistrée en PNG dans la pile, **`outputs\.pile\`**, où elle attend d'être 
 `outputs\` (les Tirages) ; jetée, elle est effacée. Ses images d'entrée (références, image d'origine, zone peinte) sont
 dans `outputs\.inputs\`.
 
-Sous la file, les **terminées** : les générations finies de la page, la plus récente en premier. Une image a sa vignette
-(un appui l'ouvre en grand, avec ses images d'entrée), son texte, ses réglages et ses actions : **Télécharger**,
-**Partager** et **Copier** (dans le presse-papiers), **Éditer** et **Dessiner**, qui la réutilisent comme point de
-départ, **Relancer** et **Supprimer**. Un lot fini s'y montre en grille, une case par image en échec avec son message,
-et **Relancer** sur sa carte refait tout le lot ; une génération en échec garde son message et **Relancer** ; une
-génération annulée n'y laisse rien. Une carte de lot ou d'échec reprise après un rechargement n'a pas **Relancer** (la
-page n'a plus la demande). Le « × » d'une carte la retire de la liste sans la supprimer de la pile, **Tout retirer**
-vide la liste. La liste garde au plus 12 générations (les deux espaces comptent ensemble) : au-delà, la plus ancienne en
-sort d'elle-même, échecs compris. Elle repart vide après un rechargement de la page (les images sont dans la pile) ;
-les générations reprises y arrivent à leur fin. Quand une génération de la page finit pendant qu'on est sur les
+Sous la file, la **pile** : les images terminées de l'espace qui attendent d'être triées, la dernière arrivée sur le
+dessus, les deux suivantes devinées dessous ; ce sont les mêmes sur tous les appareils, et elles restent après un
+rechargement de la page ou un redémarrage du Mac. La carte du dessus montre l'image, son texte sur deux lignes, ses
+réglages (taille, étapes, durée) et, pour une image d'un lot (variantes ou campagne), son rang (« 2/3 ») : chaque
+image d'un lot a sa carte. Sous la pile, **✓** la **garde** (elle passe dans les Tirages) et **✕** la **jette** : elle
+quitte l'écran et un bandeau « Image jetée · Annuler » reste 5 secondes ; **Annuler** la remet sur le dessus, et
+l'image n'est effacée du Mac (image, vignette, images d'entrée, dossier de travail, ligne du journal) qu'à la fin du
+bandeau. Fermer ou recharger la page pendant ce temps la laisse dans la pile ; jeter une autre image envoie tout de
+suite l'effacement de la précédente (un seul bandeau à la fois). Si un autre appareil a déjà trié l'image, **✓** dit
+« Déjà triée » et la carte s'en va (un Jeter n'a rien à effacer). Un appui sur l'image l'ouvre en grand dans la
+visionneuse, qui parcourt la pile :
+**Garder** et **Jeter** y remplacent **Supprimer**, puis elle passe à l'image suivante ; **Télécharger**, **Partager**,
+**Copier**, **Éditer**, **Dessiner**, **Reprendre** et **Relancer** y servent comme pour un tirage. Une génération de
+la page en échec arrive en tête de pile, sur une carte qui dit le message du Mac, avec **Relancer** (si la page a encore
+la demande) ; **✕** la retire (**✓** est grisé) ; elle ne reste qu'en mémoire de la page. Une génération annulée n'y
+laisse rien. Pile vide : « Rien à trier », en pixels, au-dessus du champ de création. L'onglet **Labo** porte le nombre
+d'images à trier. Quand une génération de la page finit pendant qu'on est sur les
 Tirages, un message le dit (« Image prête », « Lot prêt · 3 images », avec « , 1 en échec » s'il y en a, « Échec de la
 génération », « Échec du lot ») et mène au Labo quand on le touche ; rien pour une génération annulée. Partager et
 Copier ne sont proposés que là où le navigateur les permet : sur l'ordinateur lui-même, ou sur le téléphone par
@@ -321,18 +327,17 @@ images » le rappelle sous le texte ; le choix est retenu). Une seule demande la
 génération par image, à la suite dans la file (jamais en même temps), chacune avec sa propre graine. Le bouton
 **Générer** affiche le temps de tout le lot. Pendant le calcul, l'image en cours porte « Image 2 sur 3 » et la file
 d'attente montre tout le lot sur une seule carte, une case par image, dont l'annulation arrête tout le lot (le bouton de
-l'image en cours n'annule que celle-ci, et une image en échec n'arrête pas les autres). À la fin, le lot entre dans les
-terminées en **grille** : un appui ouvre une image en grand, avec sa graine, et **Garder celle-ci** supprime les autres
-images du lot après confirmation. Sans choix, toutes les images restent dans les Tirages.
+l'image en cours n'annule que celle-ci, et une image en échec n'arrête pas les autres). À la fin, chaque image du lot
+arrive dans la pile sur sa carte (« 2/3 ») : on garde celles qu'on veut et on jette les autres.
 Les variantes marchent de la même façon avec des images d'entrée (hors campagne) et en dessin : plusieurs essais
-de la même édition, chacun avec sa graine, à départager par **Garder celle-ci**.
+de la même édition, chacun avec sa graine, à départager dans la pile.
 
 **Édition** : ajouter 1 à 10 images d'entrée par **Ajouter des images**, au-dessus du texte (elles sont numérotées 1,
 2, 3…, et un « × » retire une image ; PNG et JPEG partent tels quels, WebP, AVIF ou TIFF, que le moteur ne lit pas,
 sont convertis en PNG par le serveur), une à une ou plusieurs d'un coup dans le sélecteur (elles sont ajoutées dans
 l'ordre de sélection), en les déposant sur **Ajouter des images**, en collant une image copiée (Cmd+V sur le Mac,
 « Coller » sur le téléphone ; un texte collé dans le champ reste un texte), ou par **Éditer** sur une image de la
-Tirages, des terminées ou des images d'entrée, puis écrire une **instruction** :
+Tirages, de la pile ou des images d'entrée, puis écrire une **instruction** :
 
 - « Replace the sky with a dramatic orange sunset, keep everything else unchanged »
 - « The woman in image 1 wears the jacket from image 2 »
@@ -349,9 +354,9 @@ lieu d'une image qui les combine. Le compteur passe à « n photos », la pastil
 du format, et le choix du format disparaît des Réglages : chaque image prend la forme de sa photo (le format pris en
 charge le plus proche, à la résolution choisie, côtés multiples de 32 ; une photo en portrait reste en portrait). Le
 temps estimé additionne les photos une à une. La campagne est un lot comme les variantes : suivie image par image
-(« Photo 2 sur 6 »), annulable en entier depuis la file d'attente, une seule notification à la fin, une grille des
-images, et chaque image garde sa photo comme image d'entrée dans les Tirages ; elle n'a pas de variantes (le choix du
-nombre d'images disparaît) ni de **Garder celle-ci**, chaque image venant d'une photo différente. Interrupteur
+(« Photo 2 sur 6 »), annulable en entier depuis la file d'attente, une seule notification à la fin, une carte par
+image dans la pile, et chaque image garde sa photo comme image d'entrée ; elle n'a pas de variantes (le choix du
+nombre d'images disparaît). Interrupteur
 désactivé, l'édition reste celle d'avant (1 à 10 références combinées en une image).
 
 ### Dessiner (dessin guidé)
@@ -370,7 +375,7 @@ Le bouton **Dessiner**, sous les images d'entrée du Labo, transforme l'unique i
 Pendant le dessin, aucune image ne s'ajoute (choix, dépôt, collage ou **Éditer** : « Désactivez Dessiner pour
 ajouter d'autres images »), la campagne n'est pas proposée, et **Générer** refuse une demande sans zone peinte. Un
 nouvel appui sur **Dessiner** l'éteint sans perdre le tracé, retrouvé en le rallumant tant que l'image reste ;
-retirer l'image (« × ») éteint le dessin et efface le tracé. **Dessiner** sur une image des Tirages, des terminées ou
+retirer l'image (« × ») éteint le dessin et efface le tracé. **Dessiner** sur une image des Tirages, de la pile ou
 des images d'entrée la met seule dans la saisie, dessin actif et tracé vierge, après confirmation si la saisie
 contenait déjà des images (« Remplacer les 2 images de la saisie par celle-ci ? »).
 
@@ -394,14 +399,15 @@ elle n'est pas vide) : son texte, ses réglages (format, résolution, étapes) e
 Une édition revient avec ses références (Campagne éteinte : c'était une seule édition) ; un dessin en masque avec son
 image de départ, Dessiner actif en masque et le tracé vide (la zone peinte n'est pas gardée) ; une annotation revient
 en édition, avec sa référence où le trait rouge est déjà dessiné. Les images d'entrée se lisent dans les Tirages
-(publique ou privée), ou, pour une image des terminées, dans la demande que la page a gardée. Si l'on tape ou ajoute une
+(publique ou privée), ou, pour une image de la pile lancée par la page, dans la demande qu'elle a gardée. Si l'on tape
+ou ajoute une
 image pendant la lecture des images, la confirmation est redemandée. Le geste est absent pour une édition ou un dessin
 dont les Tirages n'ont pas gardé les images d'entrée (images anciennes).
 
 **Relancer** refait la même demande avec une nouvelle graine, sans toucher la saisie du Labo, puis mène en haut du
-**Labo**, comme **Générer** : dans l'espace où l'on est (dans l'espace privé, tout part en privé). Pour une image des
-terminées, c'est la demande que la page a gardée (une image d'un lot : cette image seule ; la carte du lot : tout le
-lot, mêmes variantes ou mêmes photos de campagne). Pour une image des Tirages, ou une image reprise après un
+**Labo**, comme **Générer** : dans l'espace où l'on est (dans l'espace privé, tout part en privé). Pour une image de la
+pile lancée par la page, c'est la demande qu'elle a gardée (une image d'un lot : cette image seule, sa photo pour une
+campagne), de même pour une carte d'échec. Pour une image des Tirages, ou une image reprise après un
 rechargement, la demande est refaite à partir de l'image : son texte, ses images d'entrée, ses dimensions, ses étapes
 et son usage (une annotation repart en annotation), pour une seule image ; le geste est absent pour un dessin en masque
 (le masque n'est pas gardé avec l'image) et pour une édition dont les images d'entrée ne sont pas connues.
@@ -417,7 +423,7 @@ Les images d'un même lot (variantes ou campagne) portent un repère « 2/4 » (
 au moins deux dans les Tirages. Dans la visionneuse, **Voir le lot** montre les images du lot côte à côte ; un appui en
 ouvre une en grand, et l'on passe de l'une à l'autre en glissant. **Tout télécharger** enchaîne le téléchargement de
 chaque image du lot (une par fichier, pas d'archive ; le navigateur peut demander d'autoriser plusieurs
-téléchargements), et **Garder celle-ci** (variantes seulement) supprime les autres images du lot après confirmation.
+téléchargements).
 
 Pour une édition ou un dessin guidé, le bouton **Image d'entrée** (ou **N images d'entrée**) ouvre les images de départ
 en grand, une par une, avec les mêmes gestes que la visionneuse : pincer pour zoomer (molette sur ordinateur), glisser à
@@ -480,8 +486,8 @@ images sont enregistrées. Pour la confidentialité, passez par l'espace privé.
   qui trahisse l'espace privé. Hors de l'espace privé, la file n'en montre rien ; dedans, chaque génération privée y a
   sa ligne complète (début du prompt, mode, rang dans son lot, temps restant), annulable, ainsi que son lot, quel que
   soit l'appareil qui l'a lancée.
-- Les **variantes** et les **campagnes** marchent aussi dans l'espace privé : chaque image du lot est chiffrée, la
-  grille et « Garder celle-ci » restent, et la notification est celle d'un lot normal (« N images prêtes »).
+- Les **variantes** et les **campagnes** marchent aussi dans l'espace privé : chaque image du lot est chiffrée, chacune
+  arrive dans la pile privée sur sa carte, et la notification est celle d'un lot normal (« N images prêtes »).
 - L'espace privé a sa propre **pile** : une image privée terminée y attend d'être triée (la marque « à trier » est
   dans sa fiche chiffrée, jamais en clair sur le disque) ; gardée, elle passe dans les
   Tirages privés ; jetée, ses fichiers chiffrés sont supprimés. Les images privées d'avant la pile sont dans les
@@ -958,9 +964,10 @@ nom correspond (échec immédiat si aucun ne correspond). Un test bloqué échou
 fichier), et Chrome et le banc sont arrêtés à la fin de chaque fichier. Les tests ouvrent l'interface servie par le
 banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du
 navigateur. Ils couvrent les écrans principaux, le Labo (deux onglets, pastilles, génération d'un autre appareil
-ou cachée, rien qui dépasse à la largeur du téléphone), les terminées (cartes, grille d'un lot, échecs, « × » et « Tout
-retirer », plafond, message
-« Image prête »), « Garder celle-ci » après un rechargement des Tirages, la saisie (unique, dans le Labo, Dessiner,
+ou cachée, rien qui dépasse à la largeur du téléphone), la pile (ordre, cartes de lot, ✓ et ✕, bandeau Annuler et
+rien d'envoyé avant sa fin ni au rechargement, deux Jeter de suite, « Déjà triée », visionneuse, carte d'échec, pile
+privée, message « Image prête »), Garder et Jeter par nom après une relecture de la pile, la saisie (unique, dans le
+Labo, Dessiner,
 collage, campagne à partir de 2 images, plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque
 espace), l'en-tête (cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés, la reprise d'une
 génération, le suivi d'une génération privée devenue inconnue (sans faux « Échec »), le brouillon unique (reprise des

@@ -1,0 +1,350 @@
+// Pile du Labo, dans la vue du téléphone : les images terminées de l'espace, lues du Mac (partagées entre
+// appareils, gardées au rechargement), la dernière sur le dessus et deux devinées dessous, une carte par image d'un
+// lot (« 2/3 ») ; ✓ garde (l'image passe dans les Tirages), ✕ jette après un bandeau « Annuler » de 5 s (rien n'est
+// envoyé avant, ni à la fermeture de la page ; un seul bandeau à la fois) ; « Déjà triée » quand une autre page a
+// trié l'image ; la visionneuse de la pile (Garder, Jeter, image suivante ; vrai mode et images d'entrée) ; carte
+// d'échec en tête (message, Relancer, ✕) ; état vide ; message « Image prête » sur les Tirages, qui mène au Labo ;
+// pile privée par ses routes.
+//   venv/bin/python tests/check.py --quick --ui tests/ui/pile.test.mjs
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { startBench, launchChrome, waitUntil } from './driver.mjs';
+
+let bench, chrome, page;
+
+before(async () => {
+  bench = await startBench();
+  chrome = await launchChrome();
+  page = await chrome.phonePage();
+  await page.goto(bench.url + '/');
+  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.eval(`opt.steps = 'low'; opt.res = 'low'; saveOpt(); refreshChoices()`);   // générations courtes
+  await watchSorts();
+});
+
+after(async () => {
+  bench?.release('pret');
+  await chrome?.close();
+  await bench?.stop();
+});
+
+const CODE = 'code-du-banc-1';
+const inPile = async prompt => (await bench.api('/api/pile')).some(it => it.prompt === prompt);
+const kept = async prompt => (await bench.api('/api/history')).some(it => it.prompt === prompt);
+// prompts des cartes dessinées, du dessus vers le dessous
+const cards = () => page.eval(`[...$('pile').querySelectorAll('.pcard')]
+  .map(c => c.querySelector('.pprompt').textContent)`);
+const TOP = `$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`;   // prompt de la carte du dessus
+const top = () => page.eval(TOP);
+// demandes de tri envoyées par la page (route et instant), notées au passage ; rechargée, la page ne les note plus
+const watchSorts = () => page.eval(`(() => { window.sorts = []; const f = window.fetch;
+  window.fetch = (u, o) => { if (/\\/(keep|discard)$/.test(String(u))) sorts.push({ url: String(u), at: Date.now() });
+    return f(u, o); }; })()`);
+const discards = () => page.eval(`sorts.filter(s => s.url.endsWith('/discard')).length`);
+const watchToasts = () => page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
+  window.toastWatch = new MutationObserver(() => seenToasts.push($('toastBox').textContent));
+  toastWatch.observe($('toastBox'), { childList: true, characterData: true, subtree: true }); })()`);
+const visible = sel => page.eval(`(() => { const el = document.querySelector(${JSON.stringify(sel)});
+  return !!el && !el.hidden && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0; })()`);
+// éléments visibles qui dépassent de la largeur de la vue, hors éléments rognés par un parent qui tient dans la vue
+const overflowing = () => page.eval(`(() => {
+  const out = r => r.left < -.5 || r.right > innerWidth + .5;
+  const clipped = el => { for (let a = el.parentElement; a; a = a.parentElement)
+    if (getComputedStyle(a).overflowX !== 'visible') return !out(a.getBoundingClientRect());
+    return false; };
+  return [...document.querySelectorAll('body *')]
+    .filter(el => el.getClientRects().length && !el.closest('.sheet, .viewer, .toast, .ambient'))
+    .filter(el => { const r = el.getBoundingClientRect(); return r.width && out(r) && !clipped(el); })
+    .map(el => el.id || el.className || el.tagName); })()`);
+// génération demandée par la page, finie : son image est dans la pile affichée
+async function made(prompt) {
+  await page.generate(prompt);
+  await page.waitFor(`pileItems.some(it => it.prompt === ${JSON.stringify(prompt)})`,
+    { what: `« ${prompt} » dans la pile`, timeout: 30000 });
+}
+// toutes les images de la pile affichée gardées, pour repartir d'une pile vide
+async function clear() {
+  await bench.idle({ page });
+  await page.keepPile();
+}
+
+test('pile vide : état vide en pixels, ni ✕ ni ✓', async () => {
+  await page.tab('labo');
+  assert.equal(await visible('#pileEmpty'), true);
+  assert.match(await page.eval(`$('pileEmpty').textContent`), /Rien à trier/);
+  assert.equal(await visible('#pileActs'), false);
+  assert.equal(await page.eval(`$('runCount').hidden`), true, 'pastille de l\'onglet cachée à zéro');
+  page.assertNoErrors();
+});
+
+test('la dernière sur le dessus, la suivante devinée dessous ; ✓ la garde dans les Tirages', async () => {
+  await made('zp1 premier');
+  await made('zp1 second');
+  assert.deepEqual(await cards(), ['zp1 second', 'zp1 premier']);
+  assert.equal(await visible('#pileEmpty'), false);
+  assert.equal(await page.eval(`$('pileCount').textContent`), '2 à trier');
+  assert.equal(await page.eval(`$('runCount').textContent`), '2', 'pastille de l\'onglet : le nombre de la pile');
+  assert.match(await page.eval(`$('pile').querySelector('[data-k="0"] .pset').textContent`), /^512×512 · 8 étapes/);
+  await page.waitFor(`(i => i.complete && i.naturalWidth > 0)($('pile').querySelector('[data-k="0"] img'))`,
+    { what: 'image de la carte du dessus' });
+  assert.deepEqual(await overflowing(), [], 'rien ne dépasse à 367 px');
+  if (process.env.SHOT_DIR) await page.screenshot(process.env.SHOT_DIR + '/pile.png');
+  await page.click('#pileYes');
+  await page.waitFor(`!pileItems.some(it => it.prompt === 'zp1 second') && $('runCount').textContent === '1'`,
+    { what: 'carte gardée' });
+  assert.equal(await top(), 'zp1 premier');
+  assert.equal(await kept('zp1 second'), true, 'dans les Tirages');
+  assert.equal(await inPile('zp1 second'), false, 'plus dans la pile');
+  await page.tab('tirages');
+  await page.waitFor(`histItems.some(it => it.prompt === 'zp1 second')`, { what: 'image gardée dans les Tirages' });
+  await page.tab('labo');
+  await clear();
+  page.assertNoErrors();
+});
+
+test('✕ : bandeau « Annuler » de 5 s, rien envoyé avant ; « Annuler » remet la carte', async () => {
+  await made('zp2 a jeter');
+  await page.eval(`sorts.length = 0`);
+  await page.click('#pileNo');
+  await page.waitFor(`!$('undoBar').hidden && !$('pile').querySelector('.pcard')`, { what: 'bandeau, carte partie' });
+  assert.equal(await page.eval(`$('undoBar').textContent`), 'Image jetéeAnnuler');
+  assert.equal(await page.eval(`$('runCount').hidden`), true, 'l\'image jetée ne compte plus');
+  await new Promise(r => setTimeout(r, 2500));      // au milieu du délai : rien n'est parti
+  assert.equal(await discards(), 0, 'Jeter envoyé avant la fin du bandeau');
+  await page.click('#undoBtn');
+  await page.waitFor(`$('undoBar').hidden && ${TOP} === 'zp2 a jeter'`,
+    { what: 'carte remise sur le dessus' });
+  await new Promise(r => setTimeout(r, 3500));      // au-delà des 5 s du premier geste : toujours rien
+  assert.equal(await discards(), 0, 'Jeter envoyé malgré « Annuler »');
+  assert.equal(await inPile('zp2 a jeter'), true);
+  // ✕ jusqu'au bout : la demande part à la fin du bandeau, pas avant
+  const at = Date.now();
+  await page.click('#pileNo');
+  await page.waitFor(`sorts.some(s => s.url.endsWith('/discard'))`, { what: 'Jeter envoyé', timeout: 10000 });
+  const sent = await page.eval(`sorts.find(s => s.url.endsWith('/discard')).at`);
+  assert.ok(sent - at >= 4900, `Jeter envoyé après ${sent - at} ms`);
+  await waitUntil(async () => !(await inPile('zp2 a jeter')), { what: 'image effacée de la pile' });
+  assert.equal(await kept('zp2 a jeter'), false, 'pas dans les Tirages');
+  await page.waitFor(`$('undoBar').hidden && !pileItems.length`, { what: 'bandeau parti, pile vide' });
+  page.assertNoErrors();
+});
+
+test('double appui sur ✕ : une seule image part, rien avant 5 s ; Annuler, visionneuse ouverte', async () => {
+  await made('zp2b dessous');
+  await made('zp2b double');
+  await page.eval(`sorts.length = 0; $('pileNo').click(); $('pileNo').click()`);   // deux appuis pendant l'envol
+  await page.waitFor(`!$('undoBar').hidden && ${TOP} === 'zp2b dessous'`, { what: 'bandeau, la suivante dessus' });
+  await new Promise(r => setTimeout(r, 1000));
+  assert.equal(await discards(), 0, 'Jeter envoyé par le second appui');
+  assert.equal(await page.eval(`pileView().some(it => it.prompt === 'zp2b dessous')`), true, 'la suivante reste');
+  await page.click('#undoBtn');
+  await page.waitFor(`${TOP} === 'zp2b double'`, { what: 'carte remise' });
+  // jetée depuis la visionneuse, qui passe à la suivante : le bandeau reste à portée du doigt, au-dessus d'elle
+  await page.click('#pile [data-k="0"] [data-open]');
+  await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse' });
+  await page.eval(`sortFromViewer('discard')`);
+  await page.waitFor(`!$('undoBar').hidden && $('viewer').classList.contains('on')`,
+    { what: 'bandeau, visionneuse ouverte' });
+  assert.equal(await page.eval(`(r => document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2))
+    ($('undoBtn').getBoundingClientRect()) === $('undoBtn')`), true, 'Annuler caché par la visionneuse');
+  await page.click('#undoBtn');
+  await page.eval(`closeViewer()`);
+  await page.waitFor(`${TOP} === 'zp2b double'`, { what: 'carte remise' });
+  assert.equal(await discards(), 0);
+  await clear();
+  page.assertNoErrors();
+});
+
+test('rechargement pendant le bandeau : rien n\'est envoyé, l\'image est encore dans la pile', async () => {
+  await made('zp3 doute');
+  await page.click('#pileNo');
+  await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
+  await page.goto(bench.url + '/');
+  await page.waitFor(`$('status').className === 'ok'`, { what: 'page rechargée' });
+  await page.waitFor(`pileItems.some(it => it.prompt === 'zp3 doute')`, { what: 'image dans la pile rechargée' });
+  await new Promise(r => setTimeout(r, 5500));      // au-delà du délai : rien n'est parti avant le rechargement
+  assert.equal(await inPile('zp3 doute'), true, 'image effacée malgré la fermeture de la page');
+  assert.equal(await page.eval(`$('undoBar').hidden`), true);
+  await watchSorts();
+  await page.eval(`opt.steps = 'low'; opt.res = 'low'; saveOpt(); refreshChoices()`);
+  await clear();
+  page.assertNoErrors();
+});
+
+test('deux ✕ de suite : le premier Jeter part tout de suite, un seul bandeau pour le second', async () => {
+  await made('zp4 un');
+  await made('zp4 deux');
+  await page.eval(`sorts.length = 0`);
+  await page.click('#pileNo');                      // zp4 deux
+  await page.waitFor(`!$('undoBar').hidden && ${TOP} === 'zp4 un'`,
+    { what: 'premier bandeau' });
+  await page.click('#pileNo');                      // zp4 un : le Jeter de zp4 deux part
+  await page.waitFor(`sorts.filter(s => s.url.endsWith('/discard')).length === 1`, { what: 'premier Jeter envoyé' });
+  await waitUntil(async () => !(await inPile('zp4 deux')), { what: 'zp4 deux effacée' });
+  assert.equal(await page.eval(`document.querySelectorAll('.undo:not([hidden])').length`), 1, 'un seul bandeau');
+  await page.click('#undoBtn');                     // le second est annulé
+  await page.waitFor(`${TOP} === 'zp4 un'`,
+    { what: 'zp4 un remise' });
+  assert.equal(await inPile('zp4 un'), true);
+  await clear();
+  page.assertNoErrors();
+});
+
+test('« Déjà triée » : l\'image gardée par une autre page quitte la pile', async () => {
+  await made('zp5 disputee');
+  // la page ne relit plus la pile d'elle-même : elle croit l'image encore là quand l'autre page l'a gardée
+  await page.eval(`clearTimeout(statusTimer); window.realStatus = refreshStatus;
+    window.refreshStatus = async () => {}`);
+  const other = await chrome.phonePage();
+  await other.goto(bench.url + '/');
+  await other.waitFor(`pileItems.some(it => it.prompt === 'zp5 disputee')`, { what: 'pile sur l\'autre page' });
+  await other.click('#pileYes');
+  await waitUntil(async () => !(await inPile('zp5 disputee')), { what: 'gardée par l\'autre page' });
+  other.assertNoErrors();
+  other.close();
+  await watchToasts();
+  await page.click('#pileYes');
+  await page.waitFor(`seenToasts.includes('Déjà triée') && !pileItems.length`,
+    { what: '« Déjà triée », pile vide' });
+  await page.eval(`window.refreshStatus = realStatus; refreshStatus()`);
+  // Chrome note dans sa console la réponse 404 du Garder refusé : seule erreur attendue ici
+  assert.deepEqual(page.errors.filter(e => !/status of 404 .*\/api\/keep/.test(e)), []);
+  page.errors.length = 0;
+});
+
+test('lot : une carte par image, marquée « rang/taille »', async () => {
+  await page.eval(`opt.count = 3; saveOpt(); refreshChoices()`);
+  await page.generate('zp6 lot');
+  await page.eval(`opt.count = 1; saveOpt(); refreshChoices()`);
+  await page.waitFor(`pileItems.filter(it => it.prompt === 'zp6 lot').length === 3`,
+    { what: 'trois images', timeout: 30000 });
+  assert.equal(await page.eval(`$('pile').querySelectorAll('.pcard').length`), 3);
+  const ranks = await page.eval(`[...$('pile').querySelectorAll('.plot')].map(b => b.textContent)`);
+  assert.deepEqual([...ranks].sort(), ['1/3', '2/3', '3/3']);
+  await clear();
+  page.assertNoErrors();
+});
+
+test('visionneuse de la pile : Garder, Jeter, image suivante ; ni Supprimer ni « Garder celle-ci »', async () => {
+  for (const p of ['zp7 a', 'zp7 b', 'zp7 c']) await made(p);
+  await page.click('#pile [data-k="0"] [data-open]');
+  await page.waitFor(`$('viewer').classList.contains('on') && vList.length === 3`, { what: 'visionneuse sur la pile' });
+  assert.deepEqual(await page.eval(`vList.map(it => it.prompt)`), ['zp7 c', 'zp7 b', 'zp7 a']);
+  assert.equal(await visible('#vSort'), true);
+  assert.equal(await visible('#vDelete'), false);
+  assert.equal(await page.eval(`!!$('vKeep')`), false);
+  await page.eval(`sortFromViewer('keep')`);
+  await page.waitFor(`vList.length === 2 && vList[vIndex].prompt === 'zp7 b'`,
+    { what: 'image suivante après Garder' });
+  await waitUntil(() => kept('zp7 c'), { what: 'zp7 c gardée' });
+  await page.eval(`sortFromViewer('discard')`);
+  await page.waitFor(`vList.length === 1 && vList[vIndex].prompt === 'zp7 a' && !$('undoBar').hidden`,
+    { what: 'image suivante après Jeter, bandeau' });
+  await page.eval(`closeViewer()`);
+  await page.click('#undoBtn');                     // la carte jetée revient sur le dessus de la pile
+  await page.waitFor(`${TOP} === 'zp7 b'`, { what: 'zp7 b remise' });
+  await clear();
+  page.assertNoErrors();
+});
+
+test('vrai mode et images d\'entrée : une édition à deux références les montre toutes', async () => {
+  await page.eval(`(async () => { for (const c of ['#a03070', '#30a070']) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 256; const x = cv.getContext('2d');
+    x.fillStyle = c; x.fillRect(0, 0, 256, 256);
+    inputImages.push(await toEntry(c + '.png', cv.toDataURL('image/png'))); }
+    renderInputs(); })()`);
+  await made('zp8 édition');
+  await page.click('#pile [data-k="0"] [data-open]');
+  await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse' });
+  assert.equal(await page.eval(`vList[0].mode`), 'edit');
+  assert.deepEqual(await page.eval(`vList[0].inputs`), ['ref_1.png', 'ref_2.png']);
+  assert.match(await page.eval(`$('vInputs').textContent`), /2 images d'entrée/);
+  await page.eval(`closeViewer()`);
+  await clear();
+  page.assertNoErrors();
+});
+
+test('échec : carte en tête avec le message du Mac et Relancer, ✓ grisé, ✕ la retire', async () => {
+  await made('zp9 reussie');
+  await page.generate('FAIL zp9 échec');
+  await page.waitFor(`!!$('pile').querySelector('[data-k="0"] .pfail')`, { what: 'carte de l\'échec en tête' });
+  assert.match(await page.eval(`$('pile').querySelector('.pfail .perr').textContent`), /^Échec : /);
+  assert.equal(await page.eval(`!!$('pile').querySelector('.pfail [data-again]')`), true, 'Relancer');
+  assert.equal(await page.eval(`$('pileYes').disabled`), true);
+  await page.eval(`sorts.length = 0`);
+  await page.click('#pileNo');
+  await page.waitFor(`!$('pile').querySelector('.pfail') && ${TOP} === 'zp9 reussie'`,
+    { what: 'échec retiré, image dessous' });
+  assert.equal(await page.eval(`$('undoBar').hidden && sorts.length === 0`), true,
+    'ni bandeau ni demande pour un échec');
+  await clear();
+  page.assertNoErrors();
+});
+
+test('sur les Tirages : « Image prête » mène au Labo', async () => {
+  await watchToasts();
+  await page.generate('HOLD=pret zp10 vue des Tirages');
+  await page.tab('tirages');
+  bench.release('pret');                           // elle finit pendant qu'on est sur les Tirages
+  await page.waitFor(`seenToasts.includes('Image prête')`, { what: 'message « Image prête »' });
+  await page.click('#toastBox');
+  await page.waitFor(`mode === 'labo' && pileItems.some(it => it.prompt === 'HOLD=pret zp10 vue des Tirages')`,
+    { what: 'Labo après le message, image dans la pile' });
+  await clear();
+  page.assertNoErrors();
+});
+
+test('espace privé : pile privée par ses routes ; un Jeter en attente à la sortie est abandonné', async () => {
+  await made('zp11 publique');
+  const exists = await page.eval(`privState.exists`);
+  assert.equal(await page.eval(`postJson(${JSON.stringify(exists ? '/api/private/unlock' : '/api/private/create')},
+    { code: ${JSON.stringify(CODE)} }).then(r => r.status)`), 200);
+  await page.eval(`refreshStatus()`);
+  await page.waitFor(`inPrivate() && !pileItems.length`, { what: 'dans l\'espace privé, pile privée vide' });
+  await made('zp11 secrete garde');
+  await made('zp11 secrete jete');
+  assert.deepEqual(await cards(), ['zp11 secrete jete', 'zp11 secrete garde'], 'aucune carte publique');
+  await page.eval(`sorts.length = 0`);
+  await page.click('#pileNo');
+  await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
+  await page.click('#privExit');                   // sortie pendant le bandeau
+  await page.waitFor(`!inPrivate() && pileItems.some(it => it.prompt === 'zp11 publique')`, { what: 'pile publique' });
+  assert.equal(await page.eval(`$('undoBar').hidden`), true, 'bandeau privé parti avec l\'espace');
+  assert.deepEqual(await cards(), ['zp11 publique']);
+  await new Promise(r => setTimeout(r, 5500));
+  assert.equal(await discards(), 0, 'Jeter privé envoyé après la sortie');
+  // de retour dans l'espace : l'image jetée avant la sortie y est encore ; ✓ la garde dans les Tirages privés
+  assert.equal(await page.eval(`postJson('/api/private/unlock', { code: ${JSON.stringify(CODE)} })
+    .then(r => r.status)`), 200);
+  await page.eval(`refreshStatus()`);
+  await page.waitFor(`inPrivate() && pileItems.length === 2`, { what: 'pile privée intacte' });
+  await page.click('#pileYes');
+  await page.waitFor(`sorts.some(s => s.url.endsWith('/api/private/keep')) && pileItems.length === 1`,
+    { what: 'gardée par la route privée' });
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+  assert.equal(await inPile('zp11 secrete garde'), false, 'rien de privé dans la pile publique');
+  await clear();
+  page.assertNoErrors();
+});
+
+test('espace privé : une pile privée lue pendant la sortie n\'arrive pas dans la pile publique', async () => {
+  assert.equal(await page.eval(`postJson('/api/private/unlock', { code: ${JSON.stringify(CODE)} })
+    .then(r => r.status)`), 200);
+  await page.eval(`refreshStatus()`);
+  await page.waitFor(`inPrivate() && pileItems.some(it => it.private)`, { what: 'pile privée' });
+  // la prochaine lecture de la pile privée part dans l'espace, mais sa réponse n'arrive qu'après la sortie
+  await page.eval(`(() => { window.heldPile = true; const f = window.fetch;
+    window.fetch = (u, ...a) => { if (String(u) !== '/api/private/pile' || !heldPile) return f(u, ...a);
+      const sent = f(u, ...a);
+      return new Promise(r => { const t = setInterval(() => { if (!heldPile){ clearInterval(t); r(sent); } }, 30); });
+    }; })()`);
+  await page.eval(`void (window.lateRead = loadPile())`);
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate() && !pileItems.some(it => it.private)`, { what: 'sorti, pile publique' });
+  await page.eval(`heldPile = false`);
+  await page.eval(`lateRead`);                     // la lecture et sa suite (json, rendu), finies
+  assert.equal(await page.eval(`pileItems.some(it => it.private)`), false, 'image privée dans la pile publique');
+  assert.deepEqual(await page.leaks(['zp11 secrete']), [], 'prompt privé resté dans la page');
+  page.assertNoErrors();
+});
