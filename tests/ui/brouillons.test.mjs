@@ -1,7 +1,7 @@
 // Brouillon du navigateur (localStorage, clé unique qwen-prompt), dans la vue du téléphone : une demande de l'espace
 // privé, même refusée par le Mac, ne laisse aucun texte de prompt dans le navigateur ; l'incognito retiré n'a plus ni
-// bouton ni thème, son ancien réglage est ignoré et une demande ne le porte plus ; les brouillons des anciens onglets
-// (qwen-<onglet>_prompt) sont repris une fois.
+// bouton ni thème, son ancien réglage est signalé une seule fois puis oublié, et une demande ne le porte plus ; les
+// brouillons des anciens onglets (qwen-<onglet>_prompt) sont repris une fois.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/brouillons.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -49,11 +49,21 @@ async function refusedGenerate() {
   await page.send('Fetch.disable');
 }
 
-test('incognito retiré : réglage d\'avant ignoré, brouillon retenu, demande sans incognito ni jeton', async () => {
+const INCOG_GONE = 'L\'incognito n\'existe plus : vos images sont enregistrées. Pour la confidentialité, passez par '
+  + 'l\'espace privé.';
+
+test('incognito retiré : ancien réglage signalé une fois, brouillon retenu, demande sans incognito', async () => {
   await fresh();
-  await page.eval(`localStorage.setItem('qwen-opt', JSON.stringify({ v: 2, incognito: true }))`);
+  await page.eval(`localStorage.setItem('qwen-opt', JSON.stringify({ v: 2, ratio: '16:9', incognito: true }))`);
   await page.goto(bench.url + '/');
   await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('toast').textContent === ${JSON.stringify(INCOG_GONE)}`, { what: 'ancien réglage signalé' });
+  await page.waitFor(`!('incognito' in JSON.parse(localStorage.getItem('qwen-opt')))`,
+    { what: 'ancien réglage oublié une fois le message affiché jusqu\'au bout' });
+  assert.equal(await page.eval(`JSON.parse(localStorage.getItem('qwen-opt')).ratio`), '16:9', 'autres réglages gardés');
+  await page.goto(bench.url + '/');
+  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  assert.notEqual(await page.eval(`$('toast').textContent`), INCOG_GONE, 'signalé une seule fois');
   assert.deepEqual(await page.eval(`[!!document.getElementById('incog'),
     document.documentElement.classList.contains('incog')]`), [false, false], 'ni bouton ni thème incognito');
   await page.typePrompt('un phare au crépuscule');
@@ -63,6 +73,17 @@ test('incognito retiré : réglage d\'avant ignoré, brouillon retenu, demande s
   assert.equal(sentBody.prompt, 'un phare au crépuscule');
   assert.deepEqual(['incognito', 'page'].filter(k => k in sentBody), [], 'ni incognito ni jeton de page envoyés');
   assert.deepEqual(await drafts(), ['qwen-prompt'], 'brouillon gardé après le refus');
+  assertNoOtherErrors();
+});
+
+test('incognito retiré : message remplacé avant la fin, réglage gardé pour le chargement suivant', async () => {
+  await fresh();
+  await page.eval(`localStorage.setItem('qwen-opt', JSON.stringify({ v: 2, incognito: true }))`);
+  await page.goto(bench.url + '/');
+  await page.waitFor(`$('toast').textContent === ${JSON.stringify(INCOG_GONE)}`, { what: 'ancien réglage signalé' });
+  await page.eval(`toast('Image prête')`);           // un autre message le remplace avant la fin
+  await new Promise(r => setTimeout(r, 7000));       // au-delà de LONG_TOAST
+  assert.equal(await page.eval(`JSON.parse(localStorage.getItem('qwen-opt')).incognito`), true, 'réglage gardé');
   assertNoOtherErrors();
 });
 

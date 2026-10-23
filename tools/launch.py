@@ -10,7 +10,8 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   lit sa progression (étape k/N, secondes par étape), expose des aperçus intermédiaires optionnels et enregistre
   le PNG final dans outputs/.
 - Espace privé ({"private": true} dans /api/generate, session de l'espace exigée) : pendant le calcul, fichiers de
-  travail dans jobs/private_<id>/, supprimé dès la fin du job (ni journal, ni calibration, ni logs/), puis l'image, sa
+  travail dans jobs/private_<id>/, supprimé dès la fin du job (ni journal, ni calibration ; dans logs/, rien que la
+  ligne commune « [job] génération terminée »), puis l'image, sa
   miniature, ses entrées et ses réglages sont chiffrés avec la clé publique de l'espace dans
   private/items/<id au hasard>/ ; voir DECISIONS.md. Une demande {"incognito": true} (mode retiré) est refusée
   (400).
@@ -81,6 +82,9 @@ CALIB = P("tools", "calibration.json")
 MAX_VARIANTS = 4                          # images d'un lot de variantes (tous les modes, hors campagne)
 MAX_CAMPAIGN = 10                         # photos d'une campagne (mode Éditer), comme les références d'une édition
 PRIVATE_JOB_TTL = 24 * 3600               # génération privée finie, jamais oubliée par sa page : oubliée après ce délai
+# ligne de fin de toute génération réussie, normale ou privée, sans chemin ni durée : une seule source, pour que rien
+# dans logs/ ne distingue une génération privée (décision du 23/10/2026)
+DONE_LINE = "[job] génération terminée"
 # Répartition par backend. CUDA : tout sur la carte (l'encodeur int8 convrot a un chemin CUDA natif, RTX 20xx+) ;
 # --offload-to-cpu garde les poids en RAM et les copie à la demande, ce qui s'adapte à toute taille de VRAM.
 # --mmap : rechargement quasi instantané du modèle d'une génération à l'autre grâce au cache disque.
@@ -102,11 +106,21 @@ BACKENDS = {
 
 
 def record_calib(job):
-    """Ajoute la mesure de la génération aux données de calibration (voir tools/estimate.py)."""
-    sample = estimate.make_sample(job, S.engine)
-    if not sample:
+    """Ajoute la mesure de la génération aux données de calibration (voir tools/estimate.py). Seules les générations de
+    tools/calibrate.py en parlent : dans logs/, une ligne de calibration ne suivrait que les générations normales et les
+    distinguerait des privées (décision du 23/10/2026)."""
+    talk = job.get("calibration")
+    try:
+        sample = estimate.make_sample(job, S.engine)
+        if not sample:
+            return
+        S.store.add(S.backend, S.model, sample)
+    except Exception as e:
+        if talk:
+            print(f"[calibration] ignorée : {e}", flush=True)
         return
-    S.store.add(S.backend, S.model, sample)
+    if not talk:
+        return
     c = S.store.coefficients(S.backend, S.model, S.engine)
     print(f"[calibration] {S.backend}/{S.model} : étape {sample['step']:.2f} s ({sample['w']}×{sample['h']}"
           f"{', ' + str(len(job.get('ref_px') or [])) + ' réf.' if job.get('ref_px') else ''}), "
@@ -1225,6 +1239,7 @@ def run_job(job):
             job["item"] = keep_private(job)
             job["status"] = "done"
             job["phase"] = "terminé"
+            print(DONE_LINE, flush=True)
             return
         job["status"] = "done"
         job["phase"] = "terminé"
@@ -1237,13 +1252,10 @@ def run_job(job):
             append_journal(meta)
             try:
                 save_inputs(job["dir"], job["out"])
-            except OSError as e:
-                print(f"[job] images d'entrée non conservées : {e}", flush=True)
-            print(f"[job] PNG enregistré : {job['out']} ({job['size']} octets, {job['seconds']} s)", flush=True)
-        try:
-            record_calib(job)
-        except Exception as e:
-            print(f"[calibration] ignorée : {e}", flush=True)
+            except OSError:
+                print("[job] images d'entrée non conservées", flush=True)   # sans détail : chemin de l'image
+        print(DONE_LINE, flush=True)
+        record_calib(job)
     else:
         job["status"] = "failed"
         job["error"] = "sd-cli code " + str(rc) + " — " + " | ".join((job.get("error_lines") or tail)[-4:])
@@ -1636,9 +1648,9 @@ def public(job):
 
 
 def quiet_request(msg):
-    """Requêtes tues dans le journal du serveur : interrogations répétées (état, suivi des générations) et tout ce qui
-    peut toucher à l'espace privé (rien n'en va dans logs/), annulation et passage en tête d'une génération ou d'un lot
-    compris (leur identifiant)."""
+    """Requêtes tues dans le journal du serveur même en erreur (les réussies n'y vont jamais : H.log_request) : suivi de
+    l'état et des générations, et tout ce qui peut toucher à l'espace privé (rien n'en va dans logs/), annulation et
+    passage en tête d'une génération ou d'un lot compris (leur identifiant)."""
     return "/api/status" in msg or "/api/job/" in msg or "/api/private/" in msg or "/api/lot/" in msg
 
 
@@ -1650,6 +1662,13 @@ class Server(ThreadingHTTPServer):
 
 
 class H(BaseHTTPRequestHandler):
+    def log_request(self, code="-", size="-"):
+        # seules les requêtes en erreur vont au journal : la suite des requêtes réussies (image et miniature lues après
+        # une génération normale seulement) trahirait les générations privées (décision du 23/10/2026)
+        if isinstance(code, int) and code < 400:   # int ou HTTPStatus
+            return
+        super().log_request(code, size)
+
     def log_message(self, fmt, *args):
         msg = fmt % args
         if not quiet_request(msg):

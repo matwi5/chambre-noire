@@ -10,6 +10,12 @@ from bench import call, gen_body, generate, wait_job
 CODE = "Mot2passe!"
 
 
+def logged():
+    """Lignes du journal du serveur, sans celles des notifications : un envoi d'un test précédent (thread à part) peut
+    arriver après LOG.clear(), et elles sont les mêmes pour toute génération."""
+    return [line for line in bench.LOG if not line.startswith("[push]")]
+
+
 class NeutralFailureLineTest(bench.BenchCase):
     """Journal du serveur (logs/ sur le Mac, bench.LOG au banc) : la même ligne pour un échec normal et un échec privé,
     sans détail (le détail, qui peut citer le prompt ou un fichier, reste en mémoire pour l'interface)."""
@@ -68,6 +74,44 @@ class NeutralFailureLineTest(bench.BenchCase):
             bench.wait_idle()
         self.assertIn("[push] notification du lot impossible", bench.LOG)
         self.assertFalse([line for line in bench.LOG if "zq7" in line])
+
+
+class QuietSuccessTest(bench.BenchCase):
+    """Une réussite écrit la même ligne pour une génération normale et une privée, sans chemin ni durée ni mesure de
+    calibration, et seules les requêtes en erreur vont au journal : la suite des requêtes réussies (lectures de l'image
+    et de sa miniature après une génération normale seulement) trahirait sinon les générations privées (décision du
+    23/10/2026)."""
+
+    def setUp(self):
+        super().setUp()
+        self.session = bench.create_private(CODE)
+
+    def success_lines(self, prompt, **kw):
+        """Lignes écrites par une génération réussie (privée : kw private=True)."""
+        bench.LOG.clear()
+        session = self.session if kw.get("private") else None
+        code, job = call("POST", "/api/generate", gen_body(prompt, **kw), private=session)
+        self.assertEqual(code, 202, job)
+        self.assertEqual(wait_job(job["id"], private=session)["status"], "done")
+        bench.wait_idle()
+        self.assertFalse([line for line in bench.LOG if "zq7" in line], "le prompt dans le journal")
+        return logged()
+
+    def test_a_success_writes_the_same_neutral_line(self):
+        normal = self.success_lines("zq7 normale")
+        self.assertEqual(normal, ["[job] génération terminée"])
+        self.assertEqual(self.success_lines("zq7 privee", private=True), normal)
+
+    def test_only_failed_requests_reach_the_log(self):
+        name = wait_job(generate("visible")["id"])["name"]
+        bench.wait_idle()
+        bench.LOG.clear()
+        for path in ("/api/history", "/api/result?name=" + name, "/api/thumb?name=" + name, "/"):
+            self.assertEqual(call("GET", path)[0], 200, path)
+        self.assertEqual(logged(), [], "requêtes réussies écrites au journal")
+        self.assertEqual(call("GET", "/api/result?name=absente.png")[0], 404)
+        self.assertEqual(len(logged()), 1, bench.LOG)
+        self.assertIn(" 404 ", logged()[0])
 
 
 if __name__ == "__main__":

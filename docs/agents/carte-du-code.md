@@ -20,7 +20,8 @@ Dans l'ordre du fichier :
 - **Constantes et moteur** (en tête) : `ROOT`, `P()` (chemin sous la racine, relu à chaque appel : le banc repointe
   `ROOT`), `MODELS` et `DIFFUSION` (noms des fichiers de modèles, à garder égaux à ceux de `setup.py`), `BACKENDS`
   (options de sd-cli par moteur, réglages Metal justifiés en commentaire), `PLATFORM_BACKENDS`, `PROGRESS_RE` et
-  `TAKING_RE` (lecture de la sortie de sd-cli), `MAX_VARIANTS`, `MAX_CAMPAIGN`, `PRIVATE_JOB_TTL`.
+  `TAKING_RE` (lecture de la sortie de sd-cli), `MAX_VARIANTS`, `MAX_CAMPAIGN`, `PRIVATE_JOB_TTL`,
+  `DONE_LINE` (ligne de fin commune à toutes les générations réussies).
   `record_calib`, `load_config`, `code_version` (commit, date et branche du dossier servi, empreinte `server`
   de `launch.py` et `estimate.py`, relus toutes les `VERSION_TTL` s ; git seulement s'il y a un `.git`, jamais après un
   échec, sauf un délai dépassé ; `S.started` : la même chose au lancement, posé par `main()`), `engine_tag`,
@@ -77,14 +78,14 @@ Dans l'ordre du fichier :
   (ligne de `queue` dans `/api/status`), `queue_view` (file vue depuis un espace, `ahead` : travail caché de l'autre
   espace devant chaque entrée), `new_job` (`input_names` : noms des images d'entrée gardées), `public(job)` (ce que
   `/api/job/<id>` et `/api/generate` montrent, `mode` et `inputs` compris), `quiet_request`.
-- **HTTP** : `class Server` (file de 128 connexions : la galerie en ouvre une par miniature), `class H` : `log_message`
-  (tait `/api/private/`), `_send` ; contrôles dans l'ordre `_host_ok` (liste blanche de `Host`), `_post_refused`
-  (POST : `Sec-Fetch-Site`, `Origin`, `Content-Type: application/json`), `_allowed` (le Mac passe, les autres
-  présentent le cookie d'accès) ; `_proxied`, `_local`, `_secure` (espace privé : adresse source locale et `Host` local
-  ou nom HTTPS de `tailscale serve`) ; sessions privées : `_private_token`, `_private_session`, `_in_private` (l'appareil est dans
-  l'espace privé : session et requête sûre ; espace de `/api/status`), `_send_private`,
-  `_open_session` ; routes privées : `_private_get`, `_private_post` ; toutes les autres routes : `do_GET`, `do_POST`
-  (une suite de `if path == …`).
+- **HTTP** : `class Server` (file de 128 connexions : la galerie en ouvre une par miniature), `class H` : `log_request`
+  (n'écrit que les requêtes en erreur), `log_message` (tait `/api/private/`), `_send` ; contrôles dans l'ordre
+  `_host_ok` (liste blanche de `Host`), `_post_refused` (POST : `Sec-Fetch-Site`, `Origin`,
+  `Content-Type: application/json`), `_allowed` (le Mac passe, les autres présentent le cookie d'accès) ; `_proxied`,
+  `_local`, `_secure` (espace privé : adresse source locale et `Host` local ou nom HTTPS de `tailscale serve`) ;
+  sessions privées : `_private_token`, `_private_session`, `_in_private` (l'appareil est dans l'espace privé : session
+  et requête sûre ; espace de `/api/status`), `_send_private`, `_open_session` ; routes privées : `_private_get`,
+  `_private_post` ; toutes les autres routes : `do_GET`, `do_POST` (une suite de `if path == …`).
 - **Démarrage** : `exclude_from_backup` (Mac : `jobs/` hors de Time Machine), `setup_state`, `main()` (options,
   `--lan`, Tailscale, ménage de `jobs/`, threads). Le banc n'exécute pas `main()`.
 
@@ -276,11 +277,13 @@ invariants ».
   porteur.
 - **Génération privée** (`"private": true`, session exigée) : pendant le calcul, dossier `jobs/private_<id>/`
   supprimé en fin de job (et au démarrage), `sd-cli.log` vers `os.devnull`, identifiant de 128 bits (comme celui de
-  son lot), rien dans les journaux ; dans `queue`, une entrée complète vue depuis l'espace privé seulement,
+  son lot), dans les journaux rien que les lignes communes à toutes les générations (`DONE_LINE`, échecs neutres) ;
+  dans `queue`, une entrée complète vue depuis l'espace privé seulement,
   puis `keep_private` chiffre image, miniature (en mémoire), entrées et réglages avec la clé publique notée au
   lancement (`store_private`). Une génération privée ne s'arrête pas à la fermeture de la page ; finie, elle est
   oubliée par `/api/job/<id>/forget` (envoyé par sa page), sinon par `sweep()`, `PRIVATE_JOB_TTL` (24 h) après sa
-  fin. Une demande `"incognito": true` (mode retiré, d'une page d'avant) est refusée (400) sans rien écrire. Au
+  fin. Une demande `"incognito": true` (mode retiré, d'une page d'avant) est refusée (400) sans rien écrire hors du
+  journal du serveur (la requête en erreur). Au
   lancement sur Mac, `exclude_from_backup` exclut `jobs/` de Time Machine.
 - **Estimation des durées** : `tools/estimate.py` (`predict`, priors par moteur, mesures par `"<moteur>/<modèle>"`
   dans `tools/calibration.json`, filtrées sur la release de sd.cpp installée lue dans `sdcpp/<moteur>/.installed`). Les

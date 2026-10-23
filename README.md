@@ -445,7 +445,9 @@ privés, chiffrés avec l'espace (voir [Espace privé](#espace-privé)) ; les pr
 
 Une galerie à part, chiffrée sur le Mac, qui ne s'ouvre qu'avec un **code privé**. Ce code est distinct du code
 d'accès du téléphone et demandé sur chaque appareil, le Mac compris : connaître le code d'accès, ou ouvrir les dossiers
-du Mac, ne suffit pas pour voir les images privées.
+du Mac, ne suffit pas pour voir les images privées. C'est le seul mode de confidentialité : l'ancien mode incognito
+est retiré, et un appareil qui l'avait allumé voit une seule fois, au chargement, « L'incognito n'existe plus : vos
+images sont enregistrées. Pour la confidentialité, passez par l'espace privé. »
 
 - Rien ne le signale à l'arrivée sur l'application. Son entrée est le **cadenas** de l'en-tête de la **Galerie**,
   à côté du bouton Rafraîchir et aussi visible que lui : la première fois, il crée l'espace (code de 8 caractères au moins, lettres, chiffres, signes ;
@@ -526,8 +528,9 @@ Ce que cela garantit, et ses limites :
   écrit nulle part ; la clé privée déchiffrée ne reste qu'en mémoire du serveur, le temps de la session de l'appareil. Le Mac
   chiffre une image privée sans le code, avec la seule clé publique : c'est ce qui permet de la ranger même espace
   verrouillé ;
-- rien d'une image privée ne va dans `outputs\`, dans le journal des générations, dans les mesures de calibration ni
-  dans `logs\` (le journal du moteur part à la poubelle) ;
+- rien d'une image privée ne va dans `outputs\`, dans le journal des générations ni dans les mesures de calibration,
+  et dans `logs\` rien d'autre que la ligne commune à toutes les générations (« [job] génération terminée », ou celle
+  d'un échec ; le journal du moteur part à la poubelle) ;
 - sd-cli ne travaille que sur des fichiers : pendant le calcul, les images d'entrée, les aperçus et le PNG final passent
   **en clair** par `jobs/private_<identifiant>/`, supprimé dès la fin de la génération (et au lancement suivant après un
   arrêt brutal). Sur un SSD, un fichier supprimé n'est pas effacé de façon sûre. Sur Mac, le dossier `jobs/` est exclu
@@ -818,14 +821,20 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `campaign` hors du mode `edit`, de plus de 10 photos, ou dont une photo n'a pas d'image ou de dimensions valides ;
   les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Elle refuse aussi
   (400 « L'incognito n'existe plus : passez par l'espace privé. ») une demande `"incognito": true`, qu'enverrait une
-  page d'avant le retrait de l'incognito restée ouverte : rien n'est écrit sur l'ordinateur ; le champ `page` d'une
+  page d'avant le retrait de l'incognito restée ouverte : ni image, ni dossier de travail, ni ligne du journal des
+  images (seule la requête refusée figure au journal du serveur, comme toute requête en erreur) ; le champ `page` d'une
   telle page est ignoré. Une génération qui ne peut pas se préparer (image d'entrée illisible, par exemple) échoue
   seule, avec un message, et la file passe à la suivante.
 - Le journal du serveur (`logs/service.log` pour le service Mac) écrit la même ligne pour tout échec, génération
   privée ou non : « [job] échec : génération, sd-cli code N » ou « [job] échec : génération, erreur de préparation » ;
   le détail, qui peut citer le prompt ou un fichier, reste en mémoire pour l'interface (`error` de `/api/job/<id>`).
-  « [job] fin de génération incomplète » (image produite, journal ou calibration en échec), « [job] erreur du thread
-  de calcul » et « [push] notification du lot impossible » n'ont pas non plus de détail.
+  « [job] fin de génération incomplète » (image produite, journal des images en échec), « [job] images d'entrée non
+  conservées », « [job] erreur du thread de calcul » et « [push] notification du lot impossible » n'ont pas non plus
+  de détail. Toute réussite écrit la même ligne, « [job] génération terminée », sans chemin ni durée, et aucune mesure
+  de calibration n'y figure, ni son échec (seul `tools/calibrate.py` affiche les siennes) ; seules les requêtes en
+  erreur (4xx, 5xx) y sont écrites : la suite des
+  requêtes réussies (image et miniature lues après une génération normale seulement) trahirait sinon les générations
+  privées.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés
   sous Windows (ROCm Windows ne couvre que les cartes RDNA3/RDNA4, DirectML est limité à d'anciennes versions) :
   il tournerait en CPU pur. Si vous avez une carte NVIDIA, les workflows officiels Comfy-Org
@@ -914,8 +923,8 @@ retirer », plafond, message
 collage, campagne à partir de 2 images, plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque
 espace), l'en-tête (cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés, la reprise d'une
 génération, le suivi d'une génération privée devenue inconnue (sans faux « Échec »), le brouillon unique (reprise des
-anciens, aucun brouillon privé dans le navigateur, ancien réglage incognito ignoré) et le pilote lui-même (recherche de
-données restées dans la page, fichiers écrits par le banc, délais).
+anciens, aucun brouillon privé dans le navigateur, ancien réglage incognito signalé une fois puis oublié) et le pilote
+lui-même (recherche de données restées dans la page, fichiers écrits par le banc, délais).
 
 Tests de bout en bout, interface lancée :
 

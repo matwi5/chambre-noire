@@ -173,8 +173,8 @@ class CancelAtStartTest(bench.BenchCase):
         self.assertEqual(entry["status"], "running")
         self.assert_never_computed(reply["id"], session)
         self.assertEqual((bench.files("outputs", "*"), bench.files("jobs", "*"), bench.journal()), ([], [], []))
-        self.assertTrue(bench.LOG)                 # la demande est bien passée par le journal du serveur
-        self.assertFalse([line for line in bench.LOG if "zq9secret" in line or reply["id"] in line])
+        # requêtes réussies tues, annulation sans ligne : rien au journal (hors notifications d'un test précédent)
+        self.assertEqual([line for line in bench.LOG if not line.startswith("[push]")], [])
 
 
 class RankWhileFinishingTest(bench.BenchCase):

@@ -863,7 +863,7 @@ const savedOpt = (()=>{ try{ const o=JSON.parse(localStorage.getItem('qwen-opt')
   return o; }catch(e){ return {}; } })();
 ['ratio','res','steps'].forEach(k=>{ if(savedOpt[k]) opt[k]=savedOpt[k]; });
 if(Number.isInteger(savedOpt.count) && savedOpt.count>=1 && savedOpt.count<=MAX_VARIANTS) opt.count=savedOpt.count;
-// (un ancien champ incognito est ignoré, l'incognito ayant été retiré, puis oublié au premier réglage changé)
+// (un ancien champ incognito, l'incognito ayant été retiré, est signalé une fois au chargement puis oublié : init)
 let notifyOn = savedOpt.notify!==false, campaignOn = !!savedOpt.campaign;
 function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt, v:2, preview:$('previewChk').checked, notify:notifyOn, campaign:campaignOn})); }catch(e){} }
 const resSel = () => RES.find(p=>p.k===opt.res) || RES[1];
@@ -941,6 +941,14 @@ function refreshChoices(){
   $('pills').addEventListener('click', e=>{ if(e.target.closest('[data-open]')) openSheet('setSheet'); });
   ['previewChk','mask_mode'].forEach(id=>$(id).addEventListener('change', ()=>{ saveOpt(); refreshChoices(); }));
   renderInputs(); refreshChoices();
+  // ancien réglage incognito (mode retiré le 22/10/2026) : l'appareil génère désormais en clair, il en est prévenu ;
+  // le réglage n'est oublié (saveOpt ne l'écrit plus) qu'une fois le message resté affiché jusqu'au bout, page visible,
+  // sinon il revient au chargement suivant. Message après le chargement du script (variables lues plus bas)
+  if(savedOpt.incognito) setTimeout(()=>{
+    const note='L\'incognito n\'existe plus : vos images sont enregistrées. Pour la confidentialité, passez par '
+      + 'l\'espace privé.';
+    toast(note, 'long');
+    setTimeout(()=>{ if($('toast').textContent===note && document.visibilityState==='visible') saveOpt(); }, LONG_TOAST); });
   // brouillon du texte de l'espace public (qwen-prompt), retenu par ce navigateur ; la saisie de l'espace privé n'y
   // est jamais écrite, et n'y touche pas. Sans lui, les brouillons des anciens onglets sont repris une fois (Créer,
   // sinon le premier non vide d'Éditer puis de Dessiner), puis oubliés
@@ -1193,8 +1201,9 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 // ------------------------------------------------------------ messages et confirmations intégrés
 let toastTimer=null, askResolve=null;
 // go : le message mène à la page En cours quand on le touche
+const LONG_TOAST = 6500;                         // ms : message d'erreur, ou long à lire (kind 'long')
 function toast(msg, kind, go){ const t=$('toast'); t.textContent=msg; t.className='toast glass on'+(kind?' '+kind:'')+(go?' go':'');
-  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('on'), kind==='err' ? 6500 : 3000); }
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('on'), kind==='err' || kind==='long' ? LONG_TOAST : 3000); }
 $('toast').onclick=()=>{ const t=$('toast'); if(!t.classList.contains('go')) return; t.classList.remove('on', 'go');
   if(ivIndex>=0) closeInputs(); if(vIndex>=0) closeViewer(); closeSheet(); goTab('run'); };   // la page, pas sous une vue
 function ask(title, text, yes, danger){
