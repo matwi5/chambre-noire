@@ -100,7 +100,8 @@ Le fichier se lit par ses commentaires d'en-tête `/* ---…` (CSS) et `// ---�
 `<script>` dans `<head>` pose `html.lite` (téléphone : effets allégés) ; tout le reste du JavaScript est dans le
 dernier bloc, après le HTML.
 
-- **CSS** : sections « jetons », « fond », « verre liquide », « barre du haut », « barre d'onglets », « panneaux du
+- **CSS** : sections « jetons » (lumière inactinique ; `html.priv` : lumière verte), « fond »,
+  « surfaces mates » (classe `mat`), « barre du haut », « barre d'onglets », « panneaux du
   bas », « compositeur », « panneau Réglages », « images d'entrée (Créer) et Dessiner », « visionneuse plein écran »,
   « résultat », « île », « liste de la file (page En cours) » (cartes de la file), « prompts enregistrés », « espace
   privé », « messages et confirmations », « téléphone (html.lite) ».
@@ -319,6 +320,9 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
 - `PREVIEW_EVERY = 5` côté interface égale le défaut `preview_interval` de `build_cmd`.
 - La longueur minimale du code privé (`MIN_PRIVATE_CODE`, 8) est aussi vérifiée dans `index.html` (feuilles
   privées).
+- Palette de la lumière inactinique (fond, surface, filets, texte papier, accent ambre, halo, erreur, grain, icône
+  d'erreur `--ico-err`) : jetons du `:root` de `index.html`, recopiés dans `LOGIN_PAGE` de `launch.py` et dans la page
+  hors ligne `OFFLINE` de `tools/ui/sw.js` (et le fond dans `manifest.webmanifest`).
 - Pas une copie : l'estimation de chaque génération de la file (`job_estimate`, pour `queue_entry` et le travail caché
   `ahead`) appelle `estimate.predict` ; l'estimation de « Relancer » (`relaunch`) est approchée (chaque référence
   comptée à la taille de la sortie, pas de `refPx`).

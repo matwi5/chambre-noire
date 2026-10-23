@@ -76,7 +76,7 @@ test('Créer : sur douze photos choisies, dix sont ajoutées et le surplus est a
   await fresh();
   const files = photos(12);
   await page.setFiles('#inFiles', files);
-  await page.waitFor(`$('toast').classList.contains('on') && $('toast').textContent.includes('2 non ajoutées')`,
+  await page.waitFor(`$('toastBox').classList.contains('on') && $('toastBox').textContent.includes('2 non ajoutées')`,
     { what: 'message du surplus', timeout: 5000 });
   assert.deepEqual(await page.eval(`inputImages.map(x => x.name)`), files.slice(0, 10).map(f => path.basename(f)));
   assert.equal(await page.eval(`$('inThumbs').children.length`), 10);
@@ -89,7 +89,7 @@ test('Créer : un fichier illisible est annoncé et n\'arrête pas les images su
   fs.writeFileSync(bad, 'pas une image');
   const [a, b] = photos(2);
   await page.setFiles('#inFiles', [a, bad, b]);
-  await page.waitFor(`$('toast').classList.contains('on') && $('toast').textContent.includes('illisible')`,
+  await page.waitFor(`$('toastBox').classList.contains('on') && $('toastBox').textContent.includes('illisible')`,
     { what: 'message du fichier illisible', timeout: 5000 });
   assert.deepEqual(await page.eval(`inputImages.map(x => x.name)`), ['photo-01.png', 'photo-02.png']);
   assert.equal(await page.eval(`$('inThumbs').children.length`), 2, 'chaque image ajoutée est visible');
@@ -111,7 +111,7 @@ test('« Éditer » depuis la galerie : l\'image rejoint les images d\'entrée, 
   await page.waitFor(`inputImages.length === 10`, { what: 'dix images' });
   await page.click('#tabbar [data-pane="hist"]');
   await page.eval(`openViewer(0, histItems); viewerAction('edit')`);
-  await page.waitFor(`$('toast').textContent === '10 images d\\'entrée au maximum'`, { what: 'plafond annoncé' });
+  await page.waitFor(`$('toastBox').textContent === '10 images d\\'entrée au maximum'`, { what: 'plafond annoncé' });
   assert.equal(await page.eval(`inputImages.length`), 10);
   page.assertNoErrors();
 });
@@ -139,7 +139,7 @@ async function generate({ refuse = null } = {}) {
   await page.click('#go');
   if (refuse) {
     const shown = refuse === 'unreachable' ? 'Serveur injoignable' : 'Erreur : moteur non prêt';
-    await page.waitFor(`$('toast').textContent.startsWith(${JSON.stringify(shown)})`, { what: 'refus affiché' });
+    await page.waitFor(`$('toastBox').textContent.startsWith(${JSON.stringify(shown)})`, { what: 'refus affiché' });
     await page.send('Fetch.disable');
     assert.equal(await page.eval(`mode`), tab, 'demande refusée : la page reste sur l\'onglet');
   } else {
@@ -161,8 +161,8 @@ async function drawOne() {
   await page.click('#drawBtn');
   await page.waitFor(`drawOn && ${SHOWN}`, { what: 'dessin actif' });
 }
-const toastSays = text => page.waitFor(`$('toast').classList.contains('on')
-  && $('toast').textContent === ${JSON.stringify(text)}`, { what: `message « ${text} »` });
+const toastSays = text => page.waitFor(`$('toastBox').classList.contains('on')
+  && $('toastBox').textContent === ${JSON.stringify(text)}`, { what: `message « ${text} »` });
 const REFUSED = 'Désactivez Dessiner pour ajouter d\'autres images';
 
 test('Dessiner : sans image, choix d\'une image puis dessin ; à plusieurs images, grisé et expliqué', async () => {
@@ -194,7 +194,7 @@ test('Dessiner : ajout refusé pendant le dessin ; tracé gardé en désactivant
   await paint();
   await page.setFiles('#inFiles', photos(1));      // choix de fichiers, puis appui sur la tuile d'ajout
   await toastSays(REFUSED);
-  await page.eval(`$('toast').classList.remove('on')`);
+  await page.eval(`$('toastBox').classList.remove('on')`);
   await page.click('#inDrop');
   await toastSays(REFUSED);
   assert.equal(await page.eval(`inputImages.length`), 1);
@@ -625,10 +625,10 @@ test('espaces : fermée par le Mac, la saisie privée attend le retour dans la p
   page.assertNoErrors();
 });
 
-// messages affichés depuis l'appel (chaque texte posé dans #toast, même remplacé aussitôt par un autre)
+// messages affichés depuis l'appel (chaque texte posé dans #toastBox, même remplacé aussitôt par un autre)
 const watchToasts = () => page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
-  window.toastWatch = new MutationObserver(() => seenToasts.push($('toast').textContent));
-  toastWatch.observe($('toast'), { childList: true, characterData: true, subtree: true }); })()`);
+  window.toastWatch = new MutationObserver(() => seenToasts.push($('toastBox').textContent));
+  toastWatch.observe($('toastBox'), { childList: true, characterData: true, subtree: true }); })()`);
 const CLOSED = 'Espace privé fermé : retour dans l\'espace public';
 
 test('espaces : fermé sans « Sortir », le champ perd le curseur et un message dit le retour dans l\'espace public', async () => {
@@ -640,7 +640,7 @@ test('espaces : fermé sans « Sortir », le champ perd le curseur et un message
   await closedByMac();                             // 15 minutes sans requête privée
   assert.equal(await page.eval(`document.activeElement === $('prompt')`), false, 'le champ a perdu le curseur');
   assert.deepEqual(await page.eval(`seenToasts`), [CLOSED]);
-  assert.equal(await page.eval(`$('toast').classList.contains('on')`), true);
+  assert.equal(await page.eval(`$('toastBox').classList.contains('on')`), true);
 
   await enterPrivate();                            // espace supprimé depuis le Mac pendant qu'on tape
   await page.eval(`$('prompt').focus()`);

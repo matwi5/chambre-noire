@@ -300,7 +300,7 @@ test('« Passer en tête » d\'une image du lot d\'un autre appareil, carte dép
       { what: 'carte du lot en premier' });
     // bouton périmé : l'image 1 annulée ailleurs, son « Passer en tête » encore affiché répond 409, sans message ; la
     // file rafraîchie montre sa case « sortie » (issue inconnue pour cet appareil)
-    await page.eval(`clearTimeout(statusTimer); $('toast').textContent = ''`);
+    await page.eval(`clearTimeout(statusTimer); $('toastBox').textContent = ''`);
     assert.equal((await post(`/api/job/${lot.jobs[0].id}/cancel`)).status, 200);
     const stale = `${lotCard}.querySelector('.qsub [data-post="/api/job/${lot.jobs[0].id}/first"]')`;
     assert.equal(await page.eval(`!!${stale}`), true, 'bouton encore affiché');
@@ -308,7 +308,7 @@ test('« Passer en tête » d\'une image du lot d\'un autre appareil, carte dép
     await page.waitFor(`${lotCard}.querySelectorAll('.qsub').length === 2
       && ${lotCard}.querySelectorAll('.qcase.out').length === 1`,
       { what: 'file rafraîchie, image 1 sortie' });
-    assert.equal(await page.eval(`$('toast').textContent`), '', 'aucun message');
+    assert.equal(await page.eval(`$('toastBox').textContent`), '', 'aucun message');
     // Chrome note la réponse 409 comme une ressource en échec : seule erreur admise
     assert.deepEqual(page.errors.filter(e => !/409 \(Conflict\)/.test(e)), []);
     page.errors.length = 0;

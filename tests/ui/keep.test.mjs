@@ -45,7 +45,7 @@ test('garder l\'image 2 d\'un lot de variantes après un rechargement de la gale
   await page.click('#vKeep');
   await page.waitFor(`$('askSheet').classList.contains('on')`, { what: 'confirmation demandée' });
   await page.click('#askYes');
-  await page.waitFor(`$('toast').textContent.startsWith('Image gardée') || $('toast').textContent.startsWith('Suppression')`,
+  await page.waitFor(`(t => t.startsWith('Image gardée') || t.startsWith('Suppression'))($('toastBox').textContent)`,
     { what: 'suppression terminée' });
 
   assert.deepEqual(await lotNames(lot), [names[1]], 'seule l\'image gardée reste');
