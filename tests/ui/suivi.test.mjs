@@ -27,7 +27,10 @@ const post = (page, url, body = {}) =>
 const watchToasts = page => page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
   window.toastWatch = new MutationObserver(() => seenToasts.push($('toastBox').textContent));
   toastWatch.observe($('toastBox'), { childList: true, characterData: true, subtree: true }); })()`);
-const failures = async page => (await page.eval(`seenToasts`)).filter(t => t.startsWith('Échec'));
+// faux échec : un message « Échec… » (sur les Tirages), ou une génération gardée en échec par la page (sur le Labo, qui
+// ne montre pas de message)
+const failures = page => page.eval(`[...seenToasts.filter(t => t.startsWith('Échec')),
+  ...pageJobs.filter(p => p.j.status === 'failed').map(p => 'Échec : ' + p.j.error)]`);
 // la console note le 404 du suivi comme une ressource en échec : c'est la réponse attendue, pas une erreur de la page
 const assertNoOtherErrors = page => assert.deepEqual(page.errors.filter(e => !/status of 404/.test(e)), []);
 
@@ -68,7 +71,7 @@ test('deux pages : celle qui a repris la génération la voit oubliée par l\'au
         if (!heldFollow) { clearInterval(t); r(f(u, ...a)); } }, 50); })
       : f(u, ...a); })()`);
   bench.release('deux');
-  await first.waitFor(`!pageJobs.some(p => p.private && p.j.status !== 'done') && $('doneList').children.length > 0`,
+  await first.waitFor(`!pageJobs.some(p => p.private && p.j.status !== 'done') && pileItems.length > 0`,
     { what: 'génération finie sur la première page', timeout: 30000 });
   await first.waitFor(`fetch('/api/job/${id}').then(r => r.status === 404)`, { what: 'génération oubliée par le Mac' });
   await second.eval(`heldFollow = false`);

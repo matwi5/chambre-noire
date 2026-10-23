@@ -1,7 +1,7 @@
-// « Relancer », dans la vue du téléphone : la même demande avec une nouvelle graine, sans toucher la saisie, depuis une
-// terminée (demande gardée par la page : une image, ou tout le lot depuis sa carte, variantes ou campagne), un échec ou
-// la visionneuse (galerie : demande reconstruite de l'image, absente pour un masque), dans l'espace affiché, puis la
-// page En cours.
+// « Relancer », dans la vue du téléphone : la même demande avec une nouvelle graine, sans toucher la saisie, depuis la
+// visionneuse d'une image de la pile (demande gardée par la page : l'image seule, une image de variantes ou la photo
+// d'une campagne), la carte d'un échec, ou la visionneuse des Tirages (demande reconstruite de l'image, absente pour
+// un masque), dans l'espace affiché, la génération en haut du Labo.
 // La demande envoyée est lue au passage (fetch enveloppé).
 //   venv/bin/python tests/check.py --quick --ui tests/ui/relance.test.mjs
 import { test, before, after } from 'node:test';
@@ -35,13 +35,13 @@ async function fresh() {
     window.sentBodies = []; const f = window.fetch; window.fetch = (u, o) => {
       if (String(u).endsWith('/api/generate')) sentBodies.push(JSON.parse(o.body)); return f(u, o); }`);
 }
-// « Relancer » (sélecteur) : la demande suivante part, la page est sur En cours ; rend cette demande, images réduites à
+// « Relancer » (sélecteur) : la demande suivante part, la page est sur le Labo ; rend cette demande, images réduites à
 // leur nombre (les dimensions seules pour une campagne)
 async function again(selector) {
   const [n, jobs] = await page.eval(`[sentBodies.length, pageJobs.length]`);
   await page.click(selector);
-  await page.waitFor(`sentBodies.length > ${n} && pageJobs.length > ${jobs} && mode === 'run'`,
-    { what: 'demande relancée, suivie, page En cours' });
+  await page.waitFor(`sentBodies.length > ${n} && pageJobs.length > ${jobs} && mode === 'labo'`,
+    { what: 'demande relancée, suivie, Labo' });
   return sent(-1);
 }
 const sent = k => page.eval(`(b => ({ ...b, ref_images: b.ref_images.length,
@@ -54,9 +54,10 @@ const addImage = color => page.eval(`(async () => { inputImages.push(await toEnt
 // génération envoyée hors de l'interface (comme d'un autre appareil), 512×512 en 8 étapes
 const send = body => page.eval(`postJson('/api/generate', { width: 512, height: 512, steps: 8, cfg: 1, seed: -1,
   preview: false, ref_images: [], ...${body} }).then(r => r.status)`);
+// les images de la pile gardées par ✓, puis la visionneuse des Tirages sur l'image au prompt donné
 async function view(prompt) {
-  await bench.keepAll(page);                      // piles gardées (privée comprise) : dans la galerie
-  await page.click('#tabbar [data-pane="hist"]');
+  await page.keepPile();
+  await page.tab('tirages');
   const at = `histItems.findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
   await page.waitFor(`${at} >= 0`, { what: 'image dans la galerie' });
   await page.eval(`openViewer(${at}, histItems)`);
@@ -65,37 +66,28 @@ async function view(prompt) {
 const shown = sel => page.eval(`(el => !!el && !el.hidden && el.getClientRects().length > 0)
   (document.querySelector(${JSON.stringify(sel)}))`);
 
-test('terminée : la même demande, nouvelle graine, saisie intacte, page En cours', async () => {
+test('pile : la même demande, nouvelle graine, saisie intacte, Labo', async () => {
   await fresh();
   await page.generate('zl1 phare');
   await bench.idle({ page });
-  await page.click('#tabbar [data-pane="create"]');
   await page.typePrompt('texte suivant');
-  await page.click('#tabbar [data-pane="run"]');
-  await page.waitFor(`!!$('doneList').querySelector('.dcard [data-again]')`, { what: 'Relancer sur la terminée' });
-  const b = await again('#doneList .dcard [data-again]');
+  await page.viewPile('zl1 phare');
+  const b = await again('#vAgain');
   assert.deepEqual(b, { ...await sent(0) }, 'la même demande');
   assert.equal(b.seed, -1, 'nouvelle graine (tirée par le Mac)');
   assert.equal(await page.eval(`pageJobs.length`), 2, 'suivie par la page');
-  await page.click('#tabbar [data-pane="create"]');
   assert.equal(await page.eval(`$('prompt').value`), 'texte suivant', 'saisie intacte');
   await bench.idle({ page });
   page.assertNoErrors();
 });
 
-test('lot de variantes : la carte relance tout le lot, une image du lot (visionneuse) une seule image', async () => {
+test('lot de variantes : une image du lot (visionneuse de la pile) relance une seule image', async () => {
   await fresh();
   await page.eval(`opt.count = 2; saveOpt(); refreshChoices()`);
   await page.generate('zl2 variantes');
   await bench.idle({ page });
   await page.eval(`opt.count = 1; saveOpt(); refreshChoices()`);   // le réglage du moment ne compte pas
-  await page.waitFor(`!!$('doneList').querySelector('.dlot [data-again]')`, { what: 'Relancer sur la carte du lot' });
-  const lot = await again('#doneList .dlot [data-again]');
-  assert.equal(lot.count, 2, 'tout le lot');
-  assert.equal(lot.prompt, 'zl2 variantes');
-  await bench.idle({ page });
-  await page.click('#doneList .dlot [data-open]');
-  await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
+  await page.viewPile('zl2 variantes');
   const one = await again('#vAgain');
   assert.equal(one.count, undefined, 'une seule image');
   assert.equal(one.prompt, 'zl2 variantes');
@@ -104,23 +96,18 @@ test('lot de variantes : la carte relance tout le lot, une image du lot (visionn
   page.assertNoErrors();
 });
 
-test('campagne : la carte relance les mêmes photos, une image du lot sa seule photo, à ses dimensions', async () => {
+test('campagne : une image du lot relance sa seule photo, à ses dimensions', async () => {
   await fresh();
-  await page.click('#tabbar [data-pane="create"]');
+  await page.tab('labo');
   await addImage('#c02020');
   await addImage('#2060c0');
   await page.eval(`$('campChk').click()`);
   await page.generate('zl3 campagne');
   await page.eval(`$('campChk').click()`);
   await bench.idle({ page });
-  await page.waitFor(`!!$('doneList').querySelector('.dlot [data-again]')`, { what: 'Relancer sur la carte du lot' });
-  const lot = await again('#doneList .dlot [data-again]');
-  assert.deepEqual(lot.campaign, (await sent(0)).campaign, 'les mêmes photos');
-  assert.equal(await page.eval(`sentBodies[1].campaign.length === 2
-    && sentBodies[1].campaign.every((c, k) => c.image === sentBodies[0].campaign[k].image)`), true);
-  await bench.idle({ page });
-  await page.eval(`openViewer(doneView.findIndex(it => it.lot && it.lot.rank === 2 && it.page.req === pageJobs[0].req),
-    doneView)`);
+  await page.waitFor(`pileView().filter(it => it.lot && it.page).length === 2`,
+    { what: 'les deux photos dans la pile' });
+  await page.eval(`openViewer(pileView().findIndex(it => it.lot && it.lot.rank === 2), pileView())`);
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
   const one = await again('#vAgain');
   assert.equal(one.campaign, undefined, 'une seule photo');
@@ -135,14 +122,14 @@ test('échec : « Relancer » sur la carte de l\'échec', async () => {
   await fresh();
   await page.generate('zl4 FAIL');
   await bench.idle({ page });
-  await page.waitFor(`!!$('doneList').querySelector('.dcard.fail [data-again]')`, { what: 'Relancer sur l\'échec' });
-  const b = await again('#doneList .dcard.fail [data-again]');
+  await page.waitFor(`!!$('pile').querySelector('.pfail [data-again]')`, { what: 'Relancer sur l\'échec' });
+  const b = await again('#pile .pfail [data-again]');
   assert.equal(b.prompt, 'zl4 FAIL');
   await bench.idle({ page });
   page.assertNoErrors();
 });
 
-test('galerie : demande reconstruite de l\'image (édition, annotation) ; absent pour un masque', async () => {
+test('Tirages : demande reconstruite de l\'image (édition, annotation) ; absent pour un masque', async () => {
   await fresh();
   assert.equal(await send(`{ mode: 'edit', prompt: 'zl5 edition',
     ref_images: [${ref('#c02020')}, ${ref('#2060c0')}] }`), 202);
@@ -161,7 +148,7 @@ test('galerie : demande reconstruite de l\'image (édition, annotation) ; absent
   assert.deepEqual([annot.mode, annot.ref_images, annot.seed], ['annot', 1, -1], 'graine 1234 de l\'image : nouvelle');
   await bench.idle({ page });
   await view('zl7 masque');
-  assert.equal(await shown('#vAgain'), false, 'pas de Relancer pour un masque de la galerie');
+  assert.equal(await shown('#vAgain'), false, 'pas de Relancer pour un masque des Tirages');
   await page.eval(`closeViewer()`);
   page.assertNoErrors();
 });
@@ -190,9 +177,9 @@ test('espace du moment : dans l\'espace public, puis dans l\'espace privé', asy
   page.assertNoErrors();
 });
 
-test('« Générer » avec une image : le format choisi reste pour la demande suivante', async () => {
+test('« Révéler » avec une image : le format choisi reste pour la demande suivante', async () => {
   await fresh();
-  await page.click('#tabbar [data-pane="create"]');
+  await page.tab('labo');
   await addImage('#c02020');
   await page.eval(`opt.ratio = '16:9'; saveOpt(); refreshChoices()`);
   await page.generate('zl10 format');
@@ -201,12 +188,12 @@ test('« Générer » avec une image : le format choisi reste pour la demande su
   page.assertNoErrors();
 });
 
-test('double appui sur « Relancer » d\'une terminée : une seule relance', async () => {
+test('double appui sur « Relancer » d\'un échec : une seule relance', async () => {
   await fresh();
-  await page.generate('zl11 double');
+  await page.generate('zl11 double FAIL');
   await bench.idle({ page });
-  await page.waitFor(`!!$('doneList').querySelector('.dcard [data-again]')`, { what: 'Relancer sur la terminée' });
-  await page.eval(`(b => { b.click(); b.click(); })($('doneList').querySelector('.dcard [data-again]'))`);
+  await page.waitFor(`!!$('pile').querySelector('.pfail [data-again]')`, { what: 'Relancer sur l\'échec' });
+  await page.eval(`(b => { b.click(); b.click(); })($('pile').querySelector('.pfail [data-again]'))`);
   await page.waitFor(`pageJobs.length === 2`, { what: 'relance suivie' });
   await bench.idle({ page });
   assert.equal(await page.eval(`sentBodies.length`), 2, 'une seule demande en plus');

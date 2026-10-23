@@ -1,10 +1,11 @@
-// Régression « Garder celle-ci » (corrigée en 8ce12d4) : la galerie rechargée pendant que la visionneuse est ouverte
-// (une génération de la page qui se termine) ne doit pas faire supprimer l'image gardée avec les autres du lot.
-// La comparaison se fait par nom ; par identité d'objet, l'image gardée ne correspondait plus et partait aussi.
-// « Garder celle-ci » est offert pour des variantes de tout mode (édition comprise), jamais pour une campagne.
+// Garder et Jeter visent une image par son nom, jamais par l'objet affiché (règle née de la régression « Garder
+// celle-ci », corrigée en 8ce12d4) : la pile rechargée pendant que la visionneuse est ouverte (une autre image qui
+// arrive, un tri sur un autre appareil) donne de nouveaux objets, et c'est toujours l'image vue qui est gardée ou
+// jetée, les autres restant dans la pile.
+//   venv/bin/python tests/check.py --quick --ui tests/ui/keep.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome } from './driver.mjs';
+import { startBench, launchChrome, waitUntil } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -21,66 +22,46 @@ after(async () => {
   await bench?.stop();
 });
 
-const lotNames = async id => (await (await fetch(bench.url + '/api/history')).json())
-  .filter(it => it.lot && it.lot.id === id).sort((a, b) => a.lot.rank - b.lot.rank).map(it => it.name);
-
-test('garder l\'image 2 d\'un lot de variantes après un rechargement de la galerie', async () => {
-  const body = { mode: 't2i', prompt: 'variantes à départager', width: 512, height: 512, steps: 2, cfg: 1, seed: -1,
-    preview: false, preview_interval: 5, ref_images: [], init_image: null, mask_image: null, strength: 1, count: 3 };
-  const reply = await page.eval(`fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: ${JSON.stringify(JSON.stringify(body))} }).then(r => r.json())`);
+// noms des images du lot, par rang, dans la pile ou dans les Tirages
+const lotNames = async (path, id) => (await bench.api(path)).filter(it => it.lot && it.lot.id === id)
+  .sort((a, b) => a.lot.rank - b.lot.rank).map(it => it.name);
+// lot de 3 variantes lancé hors de l'interface, terminé, dans la pile affichée ; visionneuse ouverte sur l'image 2,
+// puis la pile relue (nouveaux objets) ; renvoie l'identifiant du lot et les noms
+async function viewSecond(prompt) {
+  const reply = await page.eval(`postJson('/api/generate', { mode: 't2i', prompt: ${JSON.stringify(prompt)}, width: 512,
+    height: 512, steps: 2, cfg: 1, seed: -1, preview: false, ref_images: [], count: 3 }).then(r => r.json())`);
   const lot = reply.lot.id;
-  await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)`, { what: 'lot terminé' });
-  await bench.keepAll();                          // images de la pile gardées : dans la galerie
-  const names = await lotNames(lot);
+  await bench.idle();
+  const names = await lotNames('/api/pile', lot);
   assert.equal(names.length, 3);
+  await page.waitFor(`pileItems.filter(it => it.lot && it.lot.id === ${JSON.stringify(lot)}).length === 3`,
+    { what: 'lot dans la pile' });
+  await page.eval(`openViewer(pileView().findIndex(it => it.name === ${JSON.stringify(names[1])}), pileView())`);
+  await page.waitFor(`$('viewer').classList.contains('on') && !$('vSort').hidden`,
+    { what: 'visionneuse sur l\'image 2' });
+  assert.equal(await page.eval(`(async () => { const before = pileItems; await loadPile();
+    return pileItems !== before; })()`), true, 'pile relue (nouveaux objets)');
+  return { lot, names };
+}
 
-  await page.click('#tabbar [data-pane="hist"]');
-  await page.waitFor(`!!$('histGrid').querySelector('button[data-name="${names[1]}"]')`, { what: 'image 2 dans la galerie' });
-  await page.click(`#histGrid button[data-name="${names[1]}"]`);
-  await page.waitFor(`$('viewer').classList.contains('on') && !$('vKeep').hidden`, { what: 'visionneuse ouverte, « Garder celle-ci » visible' });
-
-  await page.eval(`(async () => { const before = histItems; await loadHistory(); return histItems !== before; })()`)
-    .then(reloaded => assert.equal(reloaded, true, 'la galerie a été rechargée (nouveaux objets)'));
-
-  await page.click('#vKeep');
-  await page.waitFor(`$('askSheet').classList.contains('on')`, { what: 'confirmation demandée' });
-  await page.click('#askYes');
-  await page.waitFor(`(t => t.startsWith('Image gardée') || t.startsWith('Suppression'))($('toastBox').textContent)`,
-    { what: 'suppression terminée' });
-
-  assert.deepEqual(await lotNames(lot), [names[1]], 'seule l\'image gardée reste');
+test('Garder depuis la visionneuse, la pile relue : seule l\'image vue part dans les Tirages', async () => {
+  const { lot, names } = await viewSecond('variantes à départager');
+  await page.click('#vSort .btn:not(.secondary)');            // Garder
+  await waitUntil(async () => (await lotNames('/api/history', lot)).length === 1, { what: 'image gardée' });
+  assert.deepEqual(await lotNames('/api/history', lot), [names[1]], 'l\'image vue, et elle seule, gardée');
+  assert.deepEqual(await lotNames('/api/pile', lot), [names[0], names[2]], 'les autres restent dans la pile');
+  await page.eval(`closeViewer()`);
+  await page.keepPile();
   page.assertNoErrors();
 });
 
-// lot lancé hors de l'interface (comme depuis un autre appareil), terminé ; renvoie l'identifiant du lot
-async function launchLot(extra) {
-  const image = await page.eval(`(() => { const c = document.createElement('canvas'); c.width = c.height = 64;
-    return c.toDataURL('image/png'); })()`);
-  const body = { prompt: 'à départager', width: 512, height: 512, steps: 2, cfg: 1, seed: -1, preview: false,
-    preview_interval: 5, init_image: null, mask_image: null, strength: 1, ...extra(image) };
-  const reply = await page.eval(`postJson('/api/generate', ${JSON.stringify(body)}).then(r => r.json())`);
-  await bench.keepAll();                           // lot terminé, ses images gardées : dans la galerie
-  return reply.lot.id;
-}
-// « Garder celle-ci » offert sur la première image du lot, ouverte depuis la galerie
-async function keepOffered(lot) {
-  const [name] = await lotNames(lot);
-  await page.eval(`goTab('create'); goTab('hist')`);
-  await page.waitFor(`!!$('histGrid').querySelector('button[data-name="${name}"]')`, { what: 'image dans la galerie' });
-  await page.click(`#histGrid button[data-name="${name}"]`);
-  await page.waitFor(`$('viewer').classList.contains('on') && vList[vIndex].name === '${name}'`,
-    { what: 'visionneuse ouverte' });
-  const offered = await page.eval(`!$('vKeep').hidden`);
+test('Jeter depuis la visionneuse après une relecture de la pile : seule l\'image vue est effacée', async () => {
+  const { lot, names } = await viewSecond('variantes à jeter');
+  await page.click('#vSort .btn.secondary');                  // Jeter
+  await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau Annuler' });
+  await waitUntil(async () => (await lotNames('/api/pile', lot)).length === 2, { what: 'image jetée', timeout: 10000 });
+  assert.deepEqual(await lotNames('/api/pile', lot), [names[0], names[2]], 'les autres restent dans la pile');
+  assert.deepEqual(await lotNames('/api/history', lot), [], 'rien dans les Tirages');
   await page.eval(`closeViewer()`);
-  return offered;
-}
-
-test('« Garder celle-ci » sur des variantes d\'édition, pas sur une campagne', async () => {
-  const variants = await launchLot(image => ({ mode: 'edit', ref_images: [image], count: 2 }));
-  assert.equal(await keepOffered(variants), true, 'variantes d\'édition : garder la meilleure');
-  const campaign = await launchLot(image => ({ mode: 'edit', ref_images: [],
-    campaign: [{ image, width: 512, height: 512 }, { image, width: 512, height: 512 }] }));
-  assert.equal(await keepOffered(campaign), false, 'campagne : une image par photo, rien à départager');
   page.assertNoErrors();
 });

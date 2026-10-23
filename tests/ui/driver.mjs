@@ -9,10 +9,25 @@
 //   bench.release('nom')                         // libère les générations HOLD=nom du faux moteur
 //   bench.dir                                    // dossier temporaire du banc (outputs/, jobs/…) : ce qu'il écrit
 //   await bench.idle()                           // rien en cours ni en file (avant un rechargement de la page)
-//   await bench.keepAll(page)                    // au repos, toutes les images des piles gardées (dans la galerie)
 //   const disk = bench.disk(); …; disk.written() // fichiers écrits ou changés par le serveur depuis l'instantané
-//   await page.typePrompt('texte')               // texte tapé dans le champ de Créer (événement input)
-//   await page.generate('texte')                 // tapé dans Créer puis « Générer » : demande acceptée, page En cours
+//   await page.tab('tirages')                    // appui sur l'onglet Labo ou Tirages : la page affichée a changé
+//   await page.swipe('#pileEmpty', -150)         // doigt glissé de dx px (dy) depuis le centre d'un élément
+//   await page.swipe('#pile .pimg', 200, 0, { mouse: true, hold: true })   // à la souris ; hold : sans relâcher ;
+//                                                // pause : ms immobile avant de relâcher (geste lent)
+//   await page.release(300)                      // relâche le geste tenu (après 300 ms immobile : geste lent)
+//   await page.typePrompt('texte')               // texte tapé dans le champ du Labo (événement input)
+//   await page.generate('texte')                 // tapé dans le Labo puis « Révéler » : demande acceptée
+//   await page.overflowing()                     // éléments visibles qui dépassent de la largeur de la vue
+//   await page.visible('#prompt')                // élément affiché (ni absent, ni masqué, ni sans boîte)
+//   await page.pasteImage()                      // une image de 64×64 collée dans le champ du Labo (Cmd+V)
+//   await page.made('texte')                     // « Révéler » puis l'image attendue dans la pile affichée
+//   await page.holdFetch(`u => u === '/api/status'`); …; await page.releaseFetch()   // réponses retenues
+//   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
+//   await page.viewPile('texte')                 // visionneuse ouverte sur l'image de la pile à ce prompt
+//   await page.openQueue()                       // feuille de la file ouverte par la pastille « +N en attente »
+//   await page.cancelRun()                       // « Annuler » de la carte en cours, confirmé
+//   await page.canvasInk('#revealCanvas')        // { width, height, ink } : pixels non transparents d'un canevas
+//   await bench.api('/api/pile')                 // réponse JSON d'une route du banc (sans cookie : le Mac)
 //   await page.launch('texte', { private: true })   // génération demandée hors de l'interface (autre appareil)
 //   await page.leaks(['mot', 'id'])              // marqueurs restés dans la page (texte, attributs, champs, mémoire)
 //   const bench = await startBench({ relay: true }); await bench.login(page);   // comme le téléphone par Tailscale :
@@ -141,24 +156,7 @@ export async function startBench({ relay = false } = {}) {
     },
     // libère les générations dont le prompt porte HOLD=<name> (HOLD seul : 'hold') ; voir tests/fake_sdcli.py
     release(name = 'hold') { fs.writeFileSync(path.join(hold, name), ''); },
-    // une fois le Mac au repos, garde (POST /api/keep) toutes les images de la pile publique, et avec page dans
-    // l'espace privé celles de la pile privée (par la page, qui a la session) : elles passent dans la galerie, pour les
-    // tests qui la regardent ; renvoie leurs noms (identifiants pour les privées)
-    async keepAll(page = null) {
-      await this.idle();
-      const names = (await (await fetch(direct + '/api/pile')).json()).map(it => it.name);
-      for (const name of names) {
-        const r = await fetch(direct + '/api/keep', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name }) });
-        if (!r.ok) throw new Error(`bench.keepAll : ${name} non gardée (${r.status})`);
-      }
-      const ids = page ? await page.eval(`(async () => { if (!inPrivate()) return [];
-        const ids = (await (await fetch('/api/private/pile')).json()).map(it => it.id);
-        for (const id of ids)
-          if (!(await postJson('/api/private/keep', { id })).ok) throw new Error('non gardée : ' + id);
-        return ids; })()`) : [];
-      return [...names, ...ids];
-    },
+    async api(route) { return (await fetch(direct + route)).json(); },
     async stop() { await relayed?.stop(); await server.stop(); },
   };
 }
@@ -222,6 +220,7 @@ async function connect(wsUrl) {
   on('Log.entryAdded', p => { if (p.entry.level === 'error') errors.push(`${p.entry.source} : ${p.entry.text}${p.entry.url ? ' (' + p.entry.url + ')' : ''}`); });
   await Promise.all([send('Runtime.enable'), send('Log.enable'), send('Page.enable')]);
 
+  let held = null;                                   // fin du balayage tenu (page.release)
   const page = {
     send, on, errors,
     // évalue une expression dans la page (promesse attendue) et renvoie sa valeur (JSON) ; échoue après timeout ms
@@ -239,20 +238,142 @@ async function connect(wsUrl) {
     },
     // attend qu'une expression de la page soit vraie
     waitFor(expression, opts = {}) { return waitUntil(() => page.eval(expression), { what: expression, ...opts }); },
-    // texte tapé dans le champ de Créer, comme au clavier (événement input : le brouillon est écrit)
+    // appui sur l'onglet de la page name (labo, tirages), comme au doigt ; attend la page affichée
+    async tab(name) {
+      await page.click(`#tabbar [data-pane="${name}"]`);
+      await page.waitFor(`mode === ${JSON.stringify(name)} && $('pane-' + mode).classList.contains('active')`,
+        { what: `onglet ${name} affiché` });
+    },
+    // doigt posé au centre de l'élément selector (amené à l'écran), glissé de dx, dy px en quelques pas, puis relevé
+    // (événements tactiles de Chrome : touch et pointer) ; mouse : la souris, bouton gauche enfoncé ; pause : le doigt
+    // reste immobile pause ms avant d'être relevé (un geste lent) ; hold : il reste posé à la fin (page.release() le
+    // relève). Un geste tenu d'avant est d'abord relevé
+    async swipe(selector, dx, dy = 0, { mouse = false, hold = false, pause = 0 } = {}) {
+      await page.release();
+      const c = await page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return null; el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+      if (!c) throw new Error(`élément absent : ${selector}`);
+      const x = k => c.x + dx * k, y = k => c.y + dy * k;
+      const input = mouse
+        ? { down: 'mousePressed', move: 'mouseMoved', up: 'mouseReleased',
+          send: (type, k) => page.send('Input.dispatchMouseEvent', { type, x: x(k), y: y(k), button: 'left',
+            buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 }) }
+        : { down: 'touchStart', move: 'touchMove', up: 'touchEnd',
+          send: (type, k) => page.send('Input.dispatchTouchEvent', { type,
+            touchPoints: type === 'touchEnd' ? [] : [{ x: x(k), y: y(k), id: 1 }] }) };
+      await input.send(input.down, 0);
+      for (const k of [0.25, 0.5, 0.75, 1]) await input.send(input.move, k);
+      held = () => input.send(input.up, 1);
+      if (!hold) await page.release(pause);
+    },
+    // relève le doigt ou la souris d'un balayage tenu (swipe … { hold: true }), après pause ms immobile (geste lent)
+    async release(pause = 0) { const up = held; held = null; if (!up) return;
+      if (pause) await new Promise(r => setTimeout(r, pause));
+      await up(); },
+    // garde par ✓ toutes les images de la pile affichée (celle de l'espace où est la page) : elles passent dans ses
+    // Tirages ; chacune attendue hors de la pile du Mac avant la suivante. Une carte d'échec en tête l'empêche
+    // (erreur). Renvoie le nombre d'images gardées
+    keepPile() {
+      return page.eval(`(async () => {
+        const onMac = async k => (await (await fetch(pileApi('pile', inPrivate()))).json()).some(x => pileKey(x) === k);
+        await loadPile(); let n = 0;
+        for (let it; (it = pileView()[0]); n++) {
+          if (pileFails().length) throw new Error('carte d\\'échec en tête de la pile');
+          const k = pileKey(it); $('pileYes').click();
+          for (let t = 0; await onMac(k); t++) {
+            if (t > 400) throw new Error('image non gardée : ' + k);
+            await new Promise(r => setTimeout(r, 25)); }
+          await loadPile(); }
+        return n; })()`);
+    },
+    // visionneuse ouverte sur l'image de la pile affichée dont le prompt est prompt (attendue dans la pile)
+    async viewPile(prompt) {
+      const at = `pileView().findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
+      await page.waitFor(`${at} >= 0`, { what: `« ${prompt} » dans la pile`, timeout: 30000 });
+      await page.eval(`openViewer(${at}, pileView())`);
+      await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
+    },
+    // feuille de la file de l'espace, ouverte par la pastille « +N en attente » du Labo (attendue)
+    async openQueue() {
+      if (await page.eval(`mode`) !== 'labo') await page.tab('labo');
+      await page.eval(`refreshStatus()`);
+      await page.waitFor(`!$('queueChip').hidden`, { what: 'pastille « +N en attente »' });
+      await page.click('#queueChip');
+      await page.waitFor(`openedSheet === $('fileSheet')`, { what: 'feuille de la file' });
+    },
+    // « Annuler » de la carte en cours, puis la confirmation acceptée (yes = false : refusée)
+    async cancelRun(yes = true) {
+      await page.click('#runCancel');
+      await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation de l\'annulation' });
+      await page.eval(`answer(${yes})`);
+    },
+    // élément affiché : présent, ni masqué (hidden, display:none) ni sans boîte
+    visible(selector) {
+      return page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
+        return !!el && !el.hidden && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0; })()`);
+    },
+    // une image de 64×64 pixels collée dans le champ du Labo (Cmd+V : événement paste avec un fichier image)
+    pasteImage() {
+      return page.eval(`(async () => { const dt = new DataTransfer(), c = document.createElement('canvas');
+        c.width = c.height = 64; const b = await new Promise(r => c.toBlob(r, 'image/png'));
+        dt.items.add(new File([b], 'image.png', { type: 'image/png' }));
+        const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+        $('prompt').dispatchEvent(ev); })()`);
+    },
+    // génération demandée par la page (page.generate), finie : son image est dans la pile affichée
+    async made(prompt) {
+      await page.generate(prompt);
+      await page.waitFor(`pileItems.some(it => it.prompt === ${JSON.stringify(prompt)})`,
+        { what: `« ${prompt} » dans la pile`, timeout: 30000 });
+    },
+    // réponses de fetch retenues dans la page : celles dont l'adresse vérifie match (source d'une fonction
+    // (adresse) => booléen, évaluée dans la page) n'arrivent qu'à page.releaseFetch() ; la requête, elle, part tout de
+    // suite (le Mac la traite). Une seule enveloppe de fetch, posée au premier appel
+    holdFetch(match) {
+      return page.eval(`(() => { if (!window.fetchHold) { const f = window.fetch; window.fetchHold = { match: null };
+        window.fetch = (u, ...a) => { const m = fetchHold.match; if (!m || !m(String(u))) return f(u, ...a);
+          const sent = f(u, ...a);
+          return new Promise(r => { const t = setInterval(() => { if (fetchHold.match !== m) { clearInterval(t);
+            r(sent); } }, 30); }); }; }
+        fetchHold.match = ${match}; })()`);
+    },
+    releaseFetch() { return page.eval(`window.fetchHold && (fetchHold.match = null)`); },
+    // éléments visibles qui dépassent de la largeur de la vue (boîtes mesurées), hors feuilles, visionneuses et
+    // messages ; un élément rogné par un parent qui tient dans la vue (overflow hidden ou défilant : reflets animés,
+    // rangées qui défilent) ne dépasse pas. Renvoie l'identifiant (ou la classe) de chacun
+    overflowing() {
+      return page.eval(`(() => {
+        const out = r => r.left < -.5 || r.right > innerWidth + .5;
+        const clipped = el => { for (let a = el.parentElement; a; a = a.parentElement)
+          if (getComputedStyle(a).overflowX !== 'visible') return !out(a.getBoundingClientRect());
+          return false; };
+        return [...document.querySelectorAll('body *')]
+          .filter(el => el.getClientRects().length && !el.closest('.sheet, .viewer, .toast, .ambient'))
+          .filter(el => { const r = el.getBoundingClientRect(); return r.width && out(r) && !clipped(el); })
+          .map(el => el.id || el.className || el.tagName); })()`);
+    },
+    // taille d'un canevas et nombre de ses pixels non transparents (ce qui y est dessiné)
+    canvasInk(selector) {
+      return page.eval(`(c => { const out = { width: c.width, height: c.height, ink: 0 }; if (!c.width) return out;
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        for (let i = 3; i < d.length; i += 4) if (d[i]) out.ink++;
+        return out; })(document.querySelector(${JSON.stringify(selector)}))`);
+    },
+    // texte tapé dans le champ du Labo, comme au clavier (événement input : le brouillon est écrit)
     typePrompt(text) {
       return page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
         t.dispatchEvent(new Event('input')); })()`);
     },
-    // texte tapé dans Créer puis « Générer » : attend la demande acceptée (une génération de plus suivie par la page)
-    // et la page En cours
+    // texte tapé dans le Labo puis « Révéler » : attend la demande acceptée (une génération de plus suivie par la
+    // page), le Labo affiché
     async generate(text) {
-      if (await page.eval(`mode`) !== 'create') await page.click('#tabbar [data-pane="create"]');
+      if (await page.eval(`mode`) !== 'labo') await page.tab('labo');
       await page.typePrompt(text);
       const before = await page.eval(`pageJobs.length`);
       await page.click('#go');
-      await page.waitFor(`mode === 'run' && pageJobs.length > ${before}`,
-        { what: `« ${text} » acceptée, page En cours` });
+      await page.waitFor(`mode === 'labo' && pageJobs.length > ${before}`,
+        { what: `« ${text} » acceptée, Labo affiché` });
     },
     // génération demandée hors de l'interface, comme depuis un autre appareil (texte → image 512×512, 20 étapes ;
     // extra : champs changés ou ajoutés, private: true pour une génération privée) ; échoue si le Mac la refuse,
@@ -272,9 +393,11 @@ async function connect(wsUrl) {
       const { names } = await send('Runtime.globalLexicalScopeNames');
       return page.eval(`(${scanPage})(${JSON.stringify(markers)}, ${JSON.stringify(names)}, ${JSON.stringify(skip)})`);
     },
-    // appui sur un élément (événement click du DOM, comme un toucher) ; échoue s'il est absent ou masqué
+    // appui sur un élément (événement click du DOM, comme un toucher) ; échoue s'il est absent ou masqué. Dans le
+    // champ de création replié, un toucher sur sa ligne le déplie d'abord, comme au doigt
     async click(selector) {
       const ok = await page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
+        if (el && el.closest('#composer.folded') && el.id !== 'composerLine') $('composerLine').click();
         if (!el || el.hidden || el.disabled || !el.getClientRects().length) return false; el.click(); return true; })()`);
       if (!ok) throw new Error(`élément absent, masqué ou désactivé : ${selector}`);
     },
