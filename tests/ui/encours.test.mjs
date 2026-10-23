@@ -1,13 +1,14 @@
 // Labo et carte en cours, dans la vue du téléphone : deux onglets, Labo et Tirages (ouverture sur le Labo, qui réunit
 // la génération en cours, la pile et la saisie) ; la carte en cours (de la page, d'un autre appareil sans aperçu, ou
 // cachée dans l'autre espace : « En attente ») sur le dessus quand la pile est vide, juste derrière sinon, non
-// balayable, « Annuler » confirmé ; révélation en pixels (carrés au hasard, puis mosaïque des aperçus, immobile si le
+// balayable, « Annuler » confirmé (« Déjà terminée » pour une génération finie pendant la question, « Mac
+// injoignable » sans réponse) ; révélation en pixels (carrés au hasard, puis mosaïque des aperçus, immobile si le
 // système réduit les animations, canevas vidé à la sortie de l'espace) ; « +N en attente » ; anneau de l'onglet ; rien
 // qui dépasse à 367 px.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/encours.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, PHONE } from './driver.mjs';
+import { startBench, launchChrome, PHONE, waitUntil } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -20,7 +21,7 @@ before(async () => {
 });
 
 after(async () => {
-  for (const name of ['dessus', 'balaye', 'derriere']) bench?.release(name);
+  for (const name of ['dessus', 'balaye', 'derriere', 'fin', 'sansmac']) bench?.release(name);
   await chrome?.close();
   await bench?.stop();
 });
@@ -120,6 +121,44 @@ test('carte en cours : non balayable ; « Annuler » demande confirmation', asyn
   await page.cancelRun();
   await page.waitFor(`!pageJobs.some(isActive) && $('runCard').hidden`, { what: 'génération annulée, carte partie' });
   bench.release('balaye');
+  await bench.idle({ page });
+  page.assertNoErrors();
+});
+
+test('« Annuler » d\'une génération finie pendant la question : « Déjà terminée », rien d\'annulé', async () => {
+  await page.generate('HOLD=fin zq5 finie pendant la question');
+  await page.waitFor(`shown && shown.j.status === 'running' && !$('runCard').hidden`, { what: 'carte en cours' });
+  const id = await page.eval(`$('runCancel').dataset.id`);
+  // le suivi de la page est retenu : la carte montre encore la génération quand la réponse part
+  await page.holdFetch(`u => u === '/api/status' || u.startsWith('/api/job/') && !u.endsWith('/cancel')`);
+  try {
+    await page.click('#runCancel');
+    await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation' });
+    bench.release('fin');
+    await waitUntil(async () => (await bench.api('/api/job/' + id)).status === 'done', { what: 'finie sur le Mac' });
+    assert.equal(await page.eval(`$('runCancel').dataset.id`), id, 'la carte a changé : le test ne vérifie rien');
+    await page.eval(`$('toastBox').textContent = ''; answer(true)`);
+    await page.waitFor(`$('toastBox').textContent === 'Déjà terminée'`, { what: 'message « Déjà terminée »' });
+  } finally { bench.release('fin'); await page.releaseFetch(); }
+  await bench.idle({ page });
+  assert.equal((await bench.api('/api/job/' + id)).status, 'done', 'annulée après coup');
+  await page.keepPile();
+  page.assertNoErrors();
+});
+
+test('« Annuler » sans réponse du Mac : « Mac injoignable », la génération continue', async () => {
+  await page.generate('HOLD=sansmac zq5 à annuler sans Mac');
+  await page.waitFor(`shown && shown.j.status === 'running' && !$('runCard').hidden`, { what: 'carte en cours' });
+  const id = await page.eval(`$('runCancel').dataset.id`);
+  await page.eval(`(() => { const f = window.fetch; window.fetch = (u, ...a) => String(u).endsWith('/cancel')
+    ? (window.fetch = f, Promise.reject(new TypeError('Failed to fetch'))) : f(u, ...a); })()`);
+  await page.eval(`$('toastBox').textContent = ''`);
+  await page.cancelRun();
+  await page.waitFor(`$('toastBox').textContent === 'Mac injoignable'`, { what: 'message « Mac injoignable »' });
+  assert.equal((await bench.api('/api/job/' + id)).status, 'running', 'annulée sans réponse');
+  await page.cancelRun();                          // le Mac répond de nouveau : annulée
+  await page.waitFor(`!pageJobs.some(isActive)`, { what: 'annulée' });
+  bench.release('sansmac');
   await bench.idle({ page });
   page.assertNoErrors();
 });

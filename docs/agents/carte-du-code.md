@@ -175,8 +175,10 @@ dernier bloc, après le HTML.
     `preload` et `ready` (les 10 dernières images décodées : miniatures des voisines de la visionneuse, image complète
     de la suivante dans le sens du parcours `vStep`, première image d'entrée),
     `clearImage`, `abortPrivateLoads` (chargements privés en route abandonnés, aussi avant la fermeture de la session
-    par « Sortir »), `forgetPrivateImages` (sortie de l'espace privé : images privées et aperçus affichés, attendus ou
-    chargés en avance, chargements en cours abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne
+    par « Sortir » : `secretLoads`, même évincés de `ready`, marqués `gone` : une image qui en attendait un, même
+    détachée, ne reçoit rien), `forgetPrivateImages` (sortie de
+    l'espace privé : images privées et aperçus affichés, attendus ou chargés en avance, chargements en cours
+    abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne
     jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
     de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
   - « générations de la page, carte en cours et file » : `pageJobs` (générations lancées par cette page), `ownIds` et
@@ -187,7 +189,9 @@ dernier bloc, après le HTML.
     cours : `runNow` (ce qu'elle montre : génération de la page qui tourne, sinon d'un autre appareil, sinon la
     prochaine de la page, sinon l'attente d'une génération cachée de l'autre espace), `renderRunCard` (sur le dessus
     pile vide, sinon `behind` ; `shown` : la génération de la page montrée ; `lotRankLabel` ; annulation confirmée par
-    `ask`), `openQueue` (feuille de la file, pastille `#queueChip`), révélation en pixels sur le canevas : `reveal`
+    `ask`, de la génération de la question, rien pendant « Sortir » ; « Déjà terminée » selon le statut que rend le
+    Mac, « Mac injoignable » ou l'erreur sinon), `openQueue` (feuille
+    de la file, pastille `#queueChip`), révélation en pixels sur le canevas : `reveal`
     (génération révélée, couleurs des carrés lues par `cssRgb`, dernier aperçu ; `blankReveal`), `startReveal` et
     `drawNoise` (carrés au hasard avant le premier aperçu,
     allégés en `html.lite`, immobiles en `prefers-reduced-motion`), `revealPreview` (aperçu décodé par `preload`,
@@ -218,9 +222,9 @@ dernier bloc, après le HTML.
     `renderPile` (carte du dessus et deux devinées dessous : `pileCard`, `failCard`, chacune marquée par `pileTag` ;
     état vide, compte, pastille de l'onglet ; redessinée seulement si elle change, `pileShown`), `topEntry` (ce que
     montre la carte du dessus, retrouvé par son nom), `sortTop` (✓, ✕ et balayage ; `flyOut`, un départ à la fois :
-    `flying`), `pileSwipe` (balayage de
+    `flying`, vrai jusqu'au tri, même si la pile est redessinée entre-temps), `pileSwipe` (balayage de
     la carte du dessus par Pointer Events, doigt et souris : seuil au tiers de la largeur ou geste vif ; `swiped` :
-    la fin d'un balayage n'ouvre pas la visionneuse),
+    la fin d'un balayage n'ouvre pas la visionneuse, oublié au prochain appui dans la zone de la pile),
     `sendSort` (envoi de Garder ou Jeter, « Déjà triée » sur un 404 de Garder), `keepItem`, `discardItem` (Jeter :
     bandeau `#undoBar`, `discarding`), `commitDiscard` (à la fin du bandeau, `DISCARD_MS`, ou au Jeter suivant ;
     abandonné si l'espace où il a commencé est fermé), `undoDiscard`, `sortFromViewer` (Garder et Jeter de la

@@ -95,7 +95,7 @@
   .lens { position:absolute; z-index:0; top:5px; bottom:5px; left:5px; width:calc((100% - 10px) / 2); border-radius:var(--r-s);
     background:var(--surf-hi); box-shadow:inset 0 0 0 1px var(--line); transition:transform .55s var(--spring); }
   .tabbar button svg.pix { width:22px; height:22px; }
-  /* onglet Labo : anneau de progression de la génération en cours de l'espace autour de l'icône, nombre de la file */
+  /* onglet Labo : anneau de progression de la génération en cours de l'espace autour de l'icône, nombre de la pile */
   .runico { position:relative; display:grid; place-items:center; }
   .runico .ring { position:absolute; left:-6px; top:-6px; width:34px; height:34px; pointer-events:none; }
   .tabbar button.active .runico .ring { transform:none; }
@@ -1150,7 +1150,9 @@ $('composer').addEventListener('drop', e=>{ if(e.target.closest('#inDrop')) retu
   grab.addEventListener('pointerup', ()=>{ y0=null; }); grab.addEventListener('pointercancel', ()=>{ y0=null; });
   grab.onclick=foldComposer; })();
 // un toucher sur la pile (ses cartes et leur image, la carte en cours, l'état vide ; pas ✓, ✕ ni les autres boutons)
-// replie le champ ; pas la fin d'un balayage à la souris (swiped : son clic tombe sur la pile quand la carte est partie)
+// replie le champ ; pas la fin d'un balayage à la souris (swiped : son clic tombe sur la pile quand la carte est
+// partie). Tout appui dans la zone oublie le balayage d'avant (au doigt, aucun clic ne le suit)
+document.querySelector('.pilezone').addEventListener('pointerdown', ()=>{ swiped=false; });
 document.querySelector('.pilezone').addEventListener('click', e=>{
   if(swiped){ swiped=false; return; }
   if(!e.target.closest('button:not(.pimg)')) foldComposer(); });
@@ -1252,12 +1254,16 @@ function answer(v){ const r=askResolve; askResolve=null; closeSheet(); if(r) r(v
 // visionneuse y charge en avance les images voisines. À la sortie de l'espace privé, forgetPrivateImages retire de la
 // page toute image privée, même cachée, et abandonne celles qui chargeaient encore.
 const ready=new Map(), READY_MAX=10;              // adresse → { el : Image, im : image décodée (null : illisible), p : promesse }
+// secretLoads : chargements d'images privées (et d'aperçus) encore en route, même évincés de ready ; abandonnés à la
+// sortie de l'espace (abortPrivateLoads : gone, rien n'est plus montré d'eux)
+const secretLoads=new Set();
 const FADE_MS=350;                                // fondu de fermeture de .viewer (CSS, 0,3 s)
 function preload(url){ let e=ready.get(url);
   if(e) ready.delete(url);                        // la plus récente en dernier : les plus anciennes partent d'abord
   else { const im=new Image(); im.decoding='async'; im.src=url;
-    e={ el:im, im:undefined, p:im.decode().then(()=>im, ()=>null) };
-    e.p.then(x=>{ e.im=x; if(!x && ready.get(url)===e) ready.delete(url); }); }   // illisible : redemandée la fois suivante
+    e={ el:im, url, im:undefined, p:im.decode().then(()=>im, ()=>null) };
+    if(secretUrl(url)) secretLoads.add(e);
+    e.p.then(x=>{ e.im=x; secretLoads.delete(e); if(!x && ready.get(url)===e) ready.delete(url); }); }   // illisible : redemandée la fois suivante
   ready.set(url, e); while(ready.size>READY_MAX) ready.delete(ready.keys().next().value);
   return e; }
 // keep : laisser l'image d'avant jusqu'à la nouvelle (aperçu suivant de la même génération), même si la nouvelle est
@@ -1272,11 +1278,12 @@ function showImage(img, url, {thumb, keep, then, once, fit, dims, decoded}={}){
   if(img.want===url && img.getAttribute('src')===url && img.complete && img.naturalWidth){ if(then) then(true); return; }   // déjà là
   img.want=url;                                    // adresse attendue : une image chargée trop tard pour un autre choix est ignorée
   const put=e=>{ if(once && ready.get(url)===e) ready.delete(url);
-    if(img.want!==url) return; if((e.im || !keep) && img.getAttribute('src')!==url){ img.src=url; unfit(img); }
+    if(img.want!==url || e.gone) return;           // gone : abandonné à la sortie de l'espace (image détachée comprise)
+    if((e.im || !keep) && img.getAttribute('src')!==url){ img.src=url; unfit(img); }
     if(then) then(!!e.im); };
   const e=decoded ? {im:decoded} : preload(url); if(e.im!==undefined) return put(e);   // déjà prête : tout de suite, sans image vide entre les deux
   if(!keep) img.removeAttribute('src');
-  if(thumb){ const t=preload(thumb), side=()=>{ if(img.want!==url || !t.im || img.getAttribute('src')) return;
+  if(thumb){ const t=preload(thumb), side=()=>{ if(img.want!==url || t.gone || !t.im || img.getAttribute('src')) return;
       if(fit){ const tw=t.im.naturalWidth, th=t.im.naturalHeight;   // dimensions inconnues : celles que dit la miniature
         fitThumb(img, dims || (Math.max(tw, th)<THUMB_SIDE ? [tw, th] : [tw*1e3, th*1e3])); }   // plus petite : l'image
       img.src=thumb; };
@@ -1294,8 +1301,10 @@ const dropLink = a => { a.removeAttribute('href'); a.removeAttribute('download')
 // aperçus (/api/job/) compris : dans l'espace privé, la page ne montre que ceux des générations privées
 const secretUrl = u => !!u && (u.startsWith('/api/private/') || u.startsWith('/api/job/'));
 // chargements en cours d'images de l'espace privé (et d'aperçus) abandonnés : rien n'arrive après la sortie, et rien
-// n'est encore demandé quand la session se ferme (privLock)
-function abortPrivateLoads(){ for(const [u, e] of [...ready]) if(secretUrl(u) && e.im===undefined){ ready.delete(u); e.el.src=''; } }
+// n'est encore demandé quand la session se ferme (privLock). Marqués gone : une image qui en attendait un, même
+// détachée de la page par un nouveau dessin de la pile, ne reçoit rien ni ne redemande l'adresse à son échec
+function abortPrivateLoads(){ for(const e of [...secretLoads]){ e.gone=true; secretLoads.delete(e); e.el.src='';
+  if(ready.get(e.url)===e) ready.delete(e.url); } }
 function forgetPrivateImages(){ if(reveal.img) clearReveal();   // canevas de la carte en cours (aperçus : /api/job/)
   abortPrivateLoads(); for(const u of [...ready.keys()]) if(secretUrl(u)) ready.delete(u);
   document.querySelectorAll('img').forEach(i=>{   // affichée, ou attendue (chargement en cours : ignorée à son arrivée)
@@ -1427,7 +1436,9 @@ function renderPile(){
   $('pileCount').textContent=items.length ? items.length+' à trier' : '';
   renderRunTab(); renderRunCard();
   const shownNow=list.slice(0, 3), key=JSON.stringify(shownNow.map(e=>e.fail ? 'f'+e.fail.id : pileTag(e.it)));
-  if(key===pileShown) return; pileShown=key; flying=false;   // (une carte qui partait a quitté l'écran)
+  // (flying reste vrai jusqu'au tri de la carte qui partait, même redessinée entre-temps : sinon un second appui
+  // viserait une carte que le premier n'a pas encore retirée)
+  if(key===pileShown) return; pileShown=key;
   dropSwipe();                                     // un geste ne trie jamais une carte qu'il ne tient pas
   $('pile').innerHTML=shownNow.map((e, k)=>e.fail ? failCard(e.fail, k) : pileCard(e.it, k)).join('');
   // images par showImage (jamais l'image d'avant), la miniature d'abord ; dessous, la miniature seule
@@ -1504,7 +1515,7 @@ let swiped=false, dropSwipe=()=>{};
   const abandon = () => { if(!gest) return; const c=gest.c; gest=null; c.classList.remove('drag'); place(c, 0); };
   dropSwipe=abandon;
   $('pile').addEventListener('pointerdown', e=>{ if(!e.isPrimary) return;   // un second doigt ne prend pas le geste
-    abandon(); swiped=false;                       // (un geste laissé en route, souris lâchée hors de la pile)
+    abandon();                                     // (un geste laissé en route, souris lâchée hors de la pile)
     const c=e.target.closest('.pcard');
     if(!c || c.dataset.k!=='0' || flying || e.button>0 || e.target.closest('[data-again]')) return;
     gest={c, id:e.pointerId, x0:e.clientX, y0:e.clientY, dx:0, moving:false, fail:c.dataset.key[0]==='f',
@@ -1571,9 +1582,10 @@ function renderRunCard(){
   const now=runNow(), card=$('runCard'); shown=now && now.p || null;
   const waiting=queueState.filter(e=>e.status==='queued').length;   // « +N en attente » : la file de l'espace
   $('queueChip').hidden=!waiting; $('queueChip').textContent=waiting ? `+${waiting} en attente` : '';
-  card.hidden=!now; card.classList.toggle('behind', !!now && (pileFails().length>0 || pileSize()>0));
-  $('pileEmpty').hidden=!!now || pileFails().length>0 || pileSize()>0 || !pileRead;   // rien à trier ni en cours
-  if(pileRead) followLabIdle(!now && !pileFails().length && !pileSize());
+  const sortable=pileFails().length>0 || pileSize()>0;   // la pile a une carte (échec de la page compris)
+  card.hidden=!now; card.classList.toggle('behind', !!now && sortable);
+  $('pileEmpty').hidden=!!now || sortable || !pileRead;   // rien à trier ni en cours
+  if(pileRead) followLabIdle(!now && !sortable);
   if(!now){ if(reveal.key) clearReveal();
     ['runStep', 'runPhase', 'runEta', 'runPrompt'].forEach(id=>$(id).textContent=''); $('runCancel').dataset.id='';
     $('lotBadge').hidden=true; return; }
@@ -1598,11 +1610,18 @@ function renderRunCard(){
   if(p && p.j.preview_version && (!p.private || inPrivate())) revealPreview(p); }
 $('runCancel').onclick=async ()=>{ const id=$('runCancel').dataset.id, priv=inPrivate(); if(!id) return;
   if(!await ask('Annuler cette génération ?', 'Le calcul en cours ou en attente sera perdu.', 'Annuler la génération', true)) return;
-  if(priv!==inPrivate()) return;                   // espace changé pendant la question : rien ne part
-  // finie pendant la question (la carte montre une autre génération), ou refusée : rien n'est annulé, on le dit
-  const r=$('runCancel').dataset.id===id ? await postJson('/api/job/'+id+'/cancel', {}).catch(()=>null) : null;
+  // espace changé pendant la question, ou « Sortir » en attente du Mac : rien ne part
+  if(priv!==inPrivate() || priv && leavingPrivate) return;
+  // la génération de la question, même si la carte en montre une autre depuis ; finie entre-temps (le Mac répond son
+  // statut, une génération finie le garde) ou inconnue (404) : rien n'est annulé, on le dit ; Mac injoignable ou en
+  // erreur : la génération continue peut-être, on le dit aussi
+  const r=await postJson('/api/job/'+id+'/cancel', {}).catch(()=>null);
+  const j=r && r.ok ? await r.json().catch(()=>null) : null;
   if(priv!==inPrivate()) return;
-  if(r && r.ok) log('annulation demandée', priv); else toast('Déjà terminée');
+  if(j && j.status==='cancelled') log('annulation demandée', priv);
+  else if(!r) toast('Mac injoignable', 'err');
+  else if(!r.ok && r.status!==404) toast('Annuler impossible : erreur '+r.status, 'err');
+  else toast('Déjà terminée');
   refreshStatus(); };
 // la file de l'espace en cartes, dans sa feuille
 function openQueue(){ openSheet('fileSheet'); queueHtml=''; renderQueue(); }
@@ -2373,7 +2392,8 @@ async function privUnlock(){ if(!$('puCode').value) return;
 let leavingPrivate=false;
 async function privLock(){ erasePrivate=true; leavingPrivate=true; abortPrivateLoads();
   const r=await postJson('/api/private/lock', {}).catch(()=>null); leavingPrivate=false;
-  if(!r || !r.ok){ erasePrivate=false; pileShown=''; renderPile();   // rien n'est effacé ; images abandonnées redemandées
+  if(!r || !r.ok){ erasePrivate=false; pileShown=''; reveal.pv=0; renderPile();   // rien n'est effacé ; images de la
+    // pile et aperçu redemandés (la visionneuse, elle, attend l'image suivante)
     return toast('Sortie impossible : '+(r ? 'erreur '+r.status : 'Mac injoignable'), 'err'); }
   // sortie appliquée dès la réponse, sans attendre /api/status : la page ne demande plus rien de l'espace (une carte de
   // la pile redessinée entre-temps réclamerait sa miniature privée à une session fermée)

@@ -1,6 +1,9 @@
 // Champ de création du Labo, dans la vue du téléphone : déplié quand la pile et la carte en cours sont vides, replié
 // sinon en une ligne « Décrire une image… » (avec le nombre d'images d'entrée) qu'un toucher déplie ; replié par sa
-// poignée (glissement vers le bas), par un toucher sur la pile et après « Révéler », sans rien perdre de la saisie ;
+// poignée (glissement vers le bas), par un toucher sur la pile (image comprise ; pas la fin d'un balayage à la souris,
+// et dès le premier toucher après un balayage au doigt) et après « Révéler », sans rien perdre de la saisie ; déplié
+// d'office sans y toucher, il se replie quand le Labo a de nouveau quelque chose ; image glissée sur la ligne ; ✓ et ✕
+// jamais sous la ligne ;
 // dessin en pleine hauteur ; réglages en grille de quatre cases qui ouvrent la feuille des réglages (Images masquée
 // en campagne) ; bouton « Révéler » et son estimation ; rien ne dépasse de la vue à 367 px.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/champ.test.mjs
@@ -113,6 +116,26 @@ test('champ : un toucher sur l\'image de la pile le replie et ouvre la visionneu
     assert.equal(await folded(), false, 'fin du balayage prise pour un toucher sur la pile');
     page.assertNoErrors();
   });
+
+// toucher du doigt au centre d'un élément (geste de Chrome : pointerdown, pointerup puis click)
+async function tap(selector) {
+  const c = await page.eval(`(r => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 }))
+    (document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`);
+  await page.send('Input.synthesizeTapGesture', { x: c.x, y: c.y, gestureSourceType: 'touch' });
+}
+
+test('champ : après un balayage au doigt, le premier toucher sur la pile le replie', async () => {
+  await page.made('zqC3 encore');                  // (replié après « Révéler »)
+  await page.click('#composerLine');
+  await page.eval(`scrollTo({ top: 0, behavior: 'instant' })`);
+  const size = await page.eval(`pileSize()`);
+  await page.swipe('#pile .pcard[data-k="0"] .pimg', 200);   // au doigt : aucun clic ne suit le geste
+  await page.waitFor(`pileSize() === ${size - 1} && !flying`, { what: 'carte balayée' });
+  assert.equal(await folded(), false);
+  await tap('#pileCount');
+  await page.waitFor(FOLDED, { what: 'replié au premier toucher', timeout: 3000 });
+  page.assertNoErrors();
+});
 
 // ✓ et ✕ touchables partout (haut, milieu, bas) : rien, ligne repliée comprise, ne les recouvre
 const reachable = () => page.eval(`['pileYes', 'pileNo'].filter(id => { const r = $(id).getBoundingClientRect(),

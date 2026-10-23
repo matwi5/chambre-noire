@@ -265,9 +265,10 @@ le liseré de son avancement). L'image s'y **révèle en pixels** : avant le pre
 hasard ; puis chaque aperçu (toutes les 5 étapes) s'affiche en mosaïque de gros carrés, de plus en plus fins à mesure
 que la génération avance, jusqu'à l'image nette qui arrive sur la pile. Sur un téléphone, l'animation est allégée ;
 elle s'arrête si le système demande de réduire les animations. Lancée par la page : l'étape, la phase et l'heure de
-fin prévue (chiffres en chasse fixe), et un bouton d'annulation qui demande confirmation (une génération annulée ne
-laisse aucun fichier : ni image, ni images d'entrée, ni aperçus, ni journal du moteur) ; une génération de la page qui
-attend affiche sa place dans la file. Lancée par un autre appareil : son texte, ses réglages et une progression
+fin prévue (chiffres en chasse fixe), et un bouton d'annulation qui demande confirmation, puis annule la génération
+de la question, ou dit « Déjà terminée » si elle a fini entre-temps (une génération annulée ne laisse aucun fichier :
+ni image, ni images d'entrée, ni aperçus, ni journal du moteur) ; une génération de la page qui attend affiche sa
+place dans la file. Lancée par un autre appareil : son texte, ses réglages et une progression
 estimée, sans aperçu, avec l'annulation là où l'appareil y a droit. Quand le Mac calcule une génération que l'espace
 où l'on est ne voit pas, la carte dit « En attente » et l'heure du début de la première génération de l'espace. La
 carte en cours ne se balaie pas.
@@ -980,24 +981,24 @@ ajoutées, en moins d'une seconde ; le hook avant commit du dépôt (`.githooks/
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps que
 le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier, et `--name <motif>` pour les seuls tests dont le
 nom correspond (échec immédiat si aucun ne correspond). Un test bloqué échoue au bout de 3 minutes (20 pour un
-fichier), et Chrome et le banc sont arrêtés à la fin de chaque fichier. Les tests ouvrent l'interface servie par le
-banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du
-navigateur. Ils couvrent les écrans principaux, le Labo (deux onglets, carte en cours sur ou derrière la pile,
-non balayable, annulation confirmée, révélation en pixels, génération d'un autre appareil sans aperçu ou cachée, « +N
-en attente », rien qui dépasse à la largeur du téléphone), la pile (ordre, cartes de lot, ✓ et ✕, balayage au doigt et à
-la souris, bandeau Annuler et
-rien d'envoyé avant sa fin ni au rechargement, deux Jeter de suite, « Déjà triée », visionneuse, carte d'échec, pile
-privée, message « Image prête »), Garder et Jeter par nom après une relecture de la pile, la saisie (unique, dans le
-Labo, Dessiner,
-collage, campagne à partir de 2 images, plusieurs photos d'un coup, vidage après « Révéler », saisie propre à chaque
-espace), le champ de création (replié avec une pile, déplié pile vide, replié après « Révéler », par sa poignée ou un
-toucher sur la pile sans rien perdre de la saisie, déplié d'office puis replié quand la carte revient, touché il reste
-déplié, pas replié par la fin d'un balayage, image glissée sur la ligne, ✓ et ✕ jamais sous la ligne, dessin en pleine
-hauteur, grille de réglages qui ouvre le panneau, rien qui dépasse), l'en-tête (cadenas, état du moteur), la file
-cloisonnée par espace, les prompts enregistrés privés, la reprise d'une génération, le suivi d'une génération privée
-devenue inconnue (sans faux « Échec »), le brouillon unique (reprise des anciens, aucun brouillon privé dans le
-navigateur, ancien réglage incognito signalé une fois puis oublié) et le pilote lui-même (recherche de données restées
-dans la page, fichiers écrits par le banc, délais).
+fichier), et Chrome et le banc sont arrêtés à la fin de chaque fichier. Les tests ouvrent l'interface servie par le banc
+dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du navigateur. Ils
+couvrent les écrans principaux, le Labo (deux onglets, carte en cours sur ou derrière la pile, non balayable, annulation
+confirmée, « Déjà terminée » pour une génération finie pendant la question, « Mac injoignable », révélation en pixels,
+génération d'un autre appareil sans aperçu ou cachée, « +N en attente », rien qui dépasse à la largeur du téléphone), la
+pile (ordre, cartes de lot, ✓ et ✕, balayage au doigt et à la souris, bandeau Annuler et rien d'envoyé avant sa fin ni
+au rechargement, deux Jeter de suite, un second ✓ pendant le départ d'une carte, « Sortir » pendant le chargement d'une
+image privée, « Déjà triée », visionneuse, carte d'échec, pile privée, message « Image prête »), Garder et Jeter par nom
+après une relecture de la pile, la saisie (unique, dans le Labo, Dessiner, collage, campagne à partir de 2 images,
+plusieurs photos d'un coup, vidage après « Révéler », saisie propre à chaque espace), le champ de création (replié avec
+une pile, déplié pile vide, replié après « Révéler », par sa poignée ou un toucher sur la pile sans rien perdre de la
+saisie, déplié d'office puis replié quand la carte revient, touché il reste déplié, pas replié par la fin d'un balayage,
+replié dès le premier toucher après un balayage au doigt, image glissée sur la ligne, ✓ et ✕ jamais sous la ligne,
+dessin en pleine hauteur, grille de réglages qui ouvre le panneau, rien qui dépasse), l'en-tête (cadenas, état du
+moteur), la file cloisonnée par espace, les prompts enregistrés privés, la reprise d'une génération, le suivi d'une
+génération privée devenue inconnue (sans faux « Échec »), le brouillon unique (reprise des anciens, aucun brouillon
+privé dans le navigateur, ancien réglage incognito signalé une fois puis oublié) et le pilote lui-même (recherche de
+données restées dans la page, fichiers écrits par le banc, délais).
 
 Tests de bout en bout, interface lancée :
 

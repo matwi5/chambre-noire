@@ -21,6 +21,7 @@
 //   await page.visible('#prompt')                // élément affiché (ni absent, ni masqué, ni sans boîte)
 //   await page.pasteImage()                      // une image de 64×64 collée dans le champ du Labo (Cmd+V)
 //   await page.made('texte')                     // « Révéler » puis l'image attendue dans la pile affichée
+//   await page.holdFetch(`u => u === '/api/status'`); …; await page.releaseFetch()   // réponses retenues
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
 //   await page.viewPile('texte')                 // visionneuse ouverte sur l'image de la pile à ce prompt
 //   await page.openQueue()                       // feuille de la file ouverte par la pastille « +N en attente »
@@ -326,6 +327,18 @@ async function connect(wsUrl) {
       await page.waitFor(`pileItems.some(it => it.prompt === ${JSON.stringify(prompt)})`,
         { what: `« ${prompt} » dans la pile`, timeout: 30000 });
     },
+    // réponses de fetch retenues dans la page : celles dont l'adresse vérifie match (source d'une fonction
+    // (adresse) => booléen, évaluée dans la page) n'arrivent qu'à page.releaseFetch() ; la requête, elle, part tout de
+    // suite (le Mac la traite). Une seule enveloppe de fetch, posée au premier appel
+    holdFetch(match) {
+      return page.eval(`(() => { if (!window.fetchHold) { const f = window.fetch; window.fetchHold = { match: null };
+        window.fetch = (u, ...a) => { const m = fetchHold.match; if (!m || !m(String(u))) return f(u, ...a);
+          const sent = f(u, ...a);
+          return new Promise(r => { const t = setInterval(() => { if (fetchHold.match !== m) { clearInterval(t);
+            r(sent); } }, 30); }); }; }
+        fetchHold.match = ${match}; })()`);
+    },
+    releaseFetch() { return page.eval(`window.fetchHold && (fetchHold.match = null)`); },
     // éléments visibles qui dépassent de la largeur de la vue (boîtes mesurées), hors feuilles, visionneuses et
     // messages ; un élément rogné par un parent qui tient dans la vue (overflow hidden ou défilant : reflets animés,
     // rangées qui défilent) ne dépasse pas. Renvoie l'identifiant (ou la classe) de chacun

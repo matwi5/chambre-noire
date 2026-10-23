@@ -1,22 +1,28 @@
-// Pile du Labo, dans la vue du téléphone : les images terminées de l'espace, lues du Mac (partagées entre
-// appareils, gardées au rechargement), la dernière sur le dessus et deux devinées dessous, une carte par image d'un
-// lot (« 2/3 ») ; ✓ garde (l'image passe dans les Tirages), ✕ jette après un bandeau « Annuler » de 5 s (rien n'est
-// envoyé avant, ni à la fermeture de la page ; un seul bandeau à la fois) ; « Déjà triée » quand une autre page a
-// trié l'image ; la visionneuse de la pile (Garder, Jeter, image suivante ; vrai mode et images d'entrée) ; carte
-// d'échec en tête (message, Relancer, ✕) ; état vide ; message « Image prête » sur les Tirages, qui mène au Labo ;
-// pile privée par ses routes ; balayage de la carte du dessus au doigt et à la souris (seuil, geste vif, tampons,
-// échec qui ne part qu'à gauche, pile redessinée sous le doigt, clic qui ouvre la visionneuse).
+// Pile du Labo, dans la vue du téléphone : les images terminées de l'espace, lues du Mac (partagées entre appareils,
+// gardées au rechargement), la dernière sur le dessus et deux devinées dessous, une carte par image d'un lot
+// (« 2/3 ») ; ✓ garde (l'image passe dans les Tirages), ✕ jette après un bandeau « Annuler » de 5 s (rien n'est envoyé
+// avant, ni à la fermeture de la page ; un seul bandeau à la fois) ; « Déjà triée » quand une autre page a trié
+// l'image ; la visionneuse de la pile (Garder, Jeter, image suivante ; vrai mode et images d'entrée) ; carte d'échec en
+// tête (message, Relancer, ✕) ; un second ✓ pendant le départ d'une carte ne trie rien de plus ; état vide ; message
+// « Image prête » sur les Tirages, qui mène au Labo ; pile privée par ses routes (« Sortir » pendant le chargement
+// d'une image : rien de privé demandé ensuite) ; balayage de la carte du dessus au doigt et à la souris (seuil, geste
+// vif, tampons, échec qui ne part qu'à gauche, pile redessinée sous le doigt, clic qui ouvre la visionneuse).
 //   venv/bin/python tests/check.py --quick --ui tests/ui/pile.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome, waitUntil } from './driver.mjs';
 
 let bench, chrome, page;
+// requêtes retenues par Fetch.enable (test de la sortie pendant un chargement) : paused les note, held les garde
+let paused = null;
+const held = [];
 
 before(async () => {
   bench = await startBench();
   chrome = await launchChrome();
   page = await chrome.phonePage();
+  page.on('Fetch.requestPaused', p => paused ? paused(p)
+    : page.send('Fetch.continueRequest', { requestId: p.requestId }).catch(() => {}));
   await page.goto(bench.url + '/');
   await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
   await page.eval(`opt.steps = 'low'; opt.res = 'low'; saveOpt(); refreshChoices()`);   // générations courtes
@@ -309,6 +315,22 @@ test('« Déjà triée » : l\'image gardée par une autre page quitte la pile',
   page.errors.length = 0;
 });
 
+test('✓ puis une autre carte sur le dessus avant le départ : un second ✓ ne trie rien de plus', async () => {
+  await page.made('zp14 premiere');
+  await page.made('zp14 seconde');
+  await page.eval(`sorts.length = 0`);
+  // ✓ sur la carte du dessus, puis la pile redessinée (une autre image arrive dessus) et ✓ de nouveau, avant 220 ms
+  await page.eval(`$('pileYes').click(); pileItems = [pileItems[1], pileItems[0], ...pileItems.slice(2)];
+    pileShown = ''; renderPile(); $('pileYes').click()`);
+  await page.waitFor(`sorts.length > 0 && !flying`, { what: 'Garder envoyé' });
+  await new Promise(r => setTimeout(r, 600));
+  assert.equal(await page.eval(`sorts.length`), 1, 'deux tris pour un départ');
+  assert.deepEqual([await kept('zp14 seconde'), await inPile('zp14 premiere')], [true, true],
+    'pas l\'image du premier appui qui est gardée');
+  await clear();
+  page.assertNoErrors();
+});
+
 test('lot : une carte par image, marquée « rang/taille »', async () => {
   await page.eval(`opt.count = 3; saveOpt(); refreshChoices()`);
   await page.generate('zp6 lot');
@@ -431,17 +453,57 @@ test('espace privé : une pile privée lue pendant la sortie n\'arrive pas dans 
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate() && pileItems.some(it => it.private)`, { what: 'pile privée' });
   // la prochaine lecture de la pile privée part dans l'espace, mais sa réponse n'arrive qu'après la sortie
-  await page.eval(`(() => { window.heldPile = true; const f = window.fetch;
-    window.fetch = (u, ...a) => { if (String(u) !== '/api/private/pile' || !heldPile) return f(u, ...a);
-      const sent = f(u, ...a);
-      return new Promise(r => { const t = setInterval(() => { if (!heldPile){ clearInterval(t); r(sent); } }, 30); });
-    }; })()`);
+  await page.holdFetch(`u => u === '/api/private/pile'`);
   await page.eval(`void (window.lateRead = loadPile())`);
   await page.click('#privExit');
   await page.waitFor(`!inPrivate() && !pileItems.some(it => it.private)`, { what: 'sorti, pile publique' });
-  await page.eval(`heldPile = false`);
+  await page.releaseFetch();
   await page.eval(`lateRead`);                     // la lecture et sa suite (json, rendu), finies
   assert.equal(await page.eval(`pileItems.some(it => it.private)`), false, 'image privée dans la pile publique');
   assert.deepEqual(await page.leaks(['zp11 secrete']), [], 'prompt privé resté dans la page');
   page.assertNoErrors();
 });
+
+test('espace privé : « Sortir » pendant le chargement d\'une image de la pile : rien de privé demandé ensuite',
+  async () => {
+    assert.equal(await page.eval(`postJson('/api/private/unlock', { code: ${JSON.stringify(CODE)} })
+      .then(r => r.status)`), 200);
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
+    // images privées retenues en route (miniature et image) ; notées avant ou après l'appui sur « Sortir »
+    const seen = [];
+    let out = false;
+    paused = p => { seen.push({ url: p.request.url, out }); held.push(p.requestId); };
+    await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/private/thumb*' },
+      { urlPattern: '*/api/private/image*' }] });
+    try {
+      await page.made('zp15 secrete en route');
+      await waitUntil(() => seen.length > 0, { what: 'image privée demandée' });
+      // la pile redessinée pendant le chargement : l'image de l'ancienne carte, détachée, l'attend encore
+      await page.eval(`pileShown = ''; renderPile()`);
+      out = true;
+      // toute adresse privée donnée à une image après l'appui (attachée ou non : Chrome charge une image détachée)
+      await page.eval(`(() => { window.srcAfter = [];
+        const d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+        Object.defineProperty(HTMLImageElement.prototype, 'src', { configurable: true, get: d.get,
+          set(v) { if (String(v).includes('/api/private/')) srcAfter.push(String(v)); d.set.call(this, v); } }); })()`);
+      await page.click('#privExit');
+      await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+      // les chargements retenus échouent (abandonnés par la page) : une image qui les attendait ne redemande rien
+      for (let k = 0; k < 2; k++) {
+        await new Promise(r => setTimeout(r, 400));
+        for (const id of held.splice(0)) await page.send('Fetch.failRequest', { requestId: id, errorReason: 'Aborted' })
+          .catch(() => {});
+      }
+    } finally {
+      paused = null;
+      for (const id of held.splice(0)) await page.send('Fetch.failRequest', { requestId: id, errorReason: 'Aborted' })
+        .catch(() => {});
+      await page.send('Fetch.disable');
+    }
+    assert.deepEqual(seen.filter(r => r.out).map(r => r.url), [], 'image privée demandée après « Sortir »');
+    assert.deepEqual(await page.eval(`srcAfter`), [], 'adresse privée donnée à une image après « Sortir »');
+    assert.deepEqual(await page.leaks(['zp15 secrete']), [], 'prompt privé resté dans la page');
+    page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/ERR_ABORTED|ERR_FAILED/.test(e)));
+    page.assertNoErrors();
+  });

@@ -153,19 +153,16 @@ test('« Sortir » pendant la révélation d\'une génération privée : son can
   assert.ok((await page.canvasInk('#revealCanvas')).ink > 0, 'mosaïque dessinée');
   // /api/status retenu : une réponse demandée dans l'espace (qui le dit encore ouvert) n'arrive qu'après « Sortir »,
   // et les suivantes pas avant la fin des vérifications : la page ne montre que ce qu'elle sait de l'espace public
-  await page.eval(`(() => { window.heldStatus = true; const f = window.fetch;
-    window.fetch = (u, ...a) => { if (String(u) !== '/api/status' || !heldStatus) return f(u, ...a);
-      const sent = f(u, ...a);
-      return new Promise(r=>{ const t = setInterval(() => { if (!heldStatus){ clearInterval(t); r(sent); } }, 30); });
-    };
-    window.lateStatus = refreshStatus(); })()`);
+  await page.holdFetch(`u => u === '/api/status'`);
+  await page.eval(`void (window.lateStatus = refreshStatus())`);
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.deepEqual(await page.canvasInk('#revealCanvas'), { width: 0, height: 0, ink: 0 }, 'aperçu privé resté');
   assert.deepEqual(await page.eval(`[reveal.img, $('runCard').hidden, $('queueChip').hidden, queueState.length]`),
     [null, true, true, 0], 'génération ou file privée à l\'écran');
   assert.deepEqual(await scan(['zqE10revelee'], true), [], 'données privées restées dans la page');
-  await page.eval(`heldStatus = false; lateStatus`);   // la réponse d'avant la sortie, puis une nouvelle
+  await page.releaseFetch();
+  await page.eval(`lateStatus`);   // la réponse d'avant la sortie, puis une nouvelle
   assert.equal(await page.eval(`inPrivate()`), false, 'réponse d\'avant la sortie : l\'espace rouvert dans la page');
   assert.deepEqual(await scan(['zqE10revelee'], true), [], 'données privées revenues dans la page');
   await bench.idle();
