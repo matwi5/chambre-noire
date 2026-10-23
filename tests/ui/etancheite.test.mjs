@@ -96,9 +96,8 @@ async function privateTour() {
   return [...new Set([...markers, ...WORDS, '/api/private/', 'prive_', thumb.slice(-120, -40)])];
 }
 
-// marqueurs trouvés dans la page (aside : la saisie privée mise de côté, asideInput, compte ; known : variables d'une
-// fuite connue, écartées en attendant leur correction)
-const scan = (markers, aside, known = []) => page.leaks(markers, { skip: [...aside ? [] : ['asideInput'], ...known] });
+// marqueurs trouvés dans la page (aside : la saisie privée mise de côté, asideInput, compte)
+const scan = (markers, aside) => page.leaks(markers, { skip: aside ? [] : ['asideInput'] });
 
 test('« Sortir » : plus rien de l\'espace privé dans la page', async () => {
   await enter();
@@ -121,10 +120,9 @@ test('fermeture par le Mac : plus rien de l\'espace privé dans la page (hors sa
   assert.equal(await post('/api/private/lock', {}), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`!inPrivate()`, { what: 'espace fermé' });
-  // fuite connue (trouvée par page.leaks le 22/10/2026, pas encore corrigée) : après la fermeture par le Mac, le cache
-  // tints de syncThemeColor garde l'adresse de la vignette d'une image privée (cause à confirmer : la visionneuse,
-  // encore ouverte sur elle, calcule la teinte de la barre d'état une fois l'espace fermé)
-  assert.deepEqual(await scan(markers, false, ['tints']), [], 'données privées restées dans la page');
+  // visionneuse et images d'entrée ouvertes sur une image privée : fermer les images d'entrée recalcule la barre d'état
+  // pendant que la visionneuse montre encore l'image privée ; le cache tints ne doit pas garder son adresse
+  assert.deepEqual(await scan(markers, false), [], 'données privées restées dans la page');
   bench.release('etanche');
   await bench.idle();
   page.assertNoErrors();

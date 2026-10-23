@@ -303,7 +303,9 @@ invariants ».
   (`saveOwn` n'écrit que des identifiants).
 - **Visionneuse et images affichées** : la visionneuse parcourt `vList`, jamais `histItems` directement (la galerie
   peut être rechargée pendant qu'elle est ouverte). `#paintImg` (image du dessin) passe aussi par `showImage`, avec
-  l'image décodée par `toEntry` (`decoded`) ; `tests/check.py` la surveille (`IMAGE_IDS`).
+  l'image décodée par `toEntry` (`decoded`) ; `tests/check.py` la surveille (`IMAGE_IDS`). La couleur de la barre
+  d'état tirée de l'image de la visionneuse (`syncThemeColor`, cache `tints`) : `tintOf` refuse toute adresse privée
+  (`secretUrl`), que le cache garderait après la sortie de l'espace (`tests/ui/etancheite.test.mjs`).
 - **Saisie par espace** : la saisie de Créer (texte, images d'entrée, dessin et son tracé) est propre à chaque
   espace, et non plus à chaque onglet. Tout ajout à la saisie qui attend (lecture d'image, sélecteur de fichiers,
   collage, « Éditer », « Dessiner », « Reprendre », envoi d'une demande) note sa liste et son espace avant la

@@ -936,9 +936,12 @@ function refreshChoices(){
 // barre d'état de l'application installée : Chrome la peint de la couleur theme-color (il ne laisse pas encore une
 // application installée dessiner dessous). Pour que l'application semble continuer jusqu'en haut, on lui donne la
 // couleur du fond de l'espace affiché (--void, normal ou privé), et dans la visionneuse la couleur du haut de son
-// image floutée et assombrie (.v-bg img), recalculée à chaque changement de vue ou d'image.
+// image floutée et assombrie (.v-bg img), recalculée à chaque changement de vue ou d'image. Jamais pour une image privée
+// ou d'une génération (secretUrl) : son adresse resterait dans tints après la sortie de l'espace (la sortie ferme les
+// images d'entrée, qui rappellent ce calcul, avant la visionneuse encore ouverte sur l'image privée)
 const tints={};
-function tintOf(src){ return tints[src] || (tints[src]=new Promise(res=>{ const im=new Image();
+function tintOf(src){ if(secretUrl(src)) return Promise.resolve(null);
+  return tints[src] || (tints[src]=new Promise(res=>{ const im=new Image();
   im.onload=()=>{ const c=document.createElement('canvas'); c.width=c.height=12; const x=c.getContext('2d'); x.drawImage(im, 0, 0, 12, 12);
     const d=x.getImageData(0, 0, 12, 4).data, t=[0, 0, 0]; for(let i=0; i<d.length; i+=4){ t[0]+=d[i]; t[1]+=d[i+1]; t[2]+=d[i+2]; }
     res(t.map(v=>v/(d.length/4))); };
