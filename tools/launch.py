@@ -918,7 +918,8 @@ def save_inputs(job_dir, out_png):
         dst = os.path.join(INPUTS, os.path.basename(out_png)[:-4])
         os.makedirs(dst, exist_ok=True)
         for n in names:
-            shutil.copy2(os.path.join(job_dir, n), os.path.join(dst, n))
+            # copyfile, pas copy2 : la copie prend les droits du masque (restrict_new_files), pas ceux de la source
+            shutil.copyfile(os.path.join(job_dir, n), os.path.join(dst, n))
 
 
 def image_in(folder, name):
@@ -1933,6 +1934,8 @@ def new_job(req, inputs, lot=None):
     mode = re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
     d = P("jobs", ("private_" if private else "") + jid)
     os.makedirs(d, exist_ok=True)
+    if private:                                 # PNG en clair et prompt dans ses métadonnées : pour le seul compte,
+        os.chmod(d, 0o700)                      # même sans le masque de restrict_new_files
     # le PNG s'écrit dans le dossier de travail : une génération normale le fait passer dans la pile une fois fini
     # (to_pile), la pile ne voit jamais une image à moitié écrite ; une privée le chiffre (keep_private)
     out = os.path.join(d, f"{jid}_{mode}.png")
@@ -2554,7 +2557,16 @@ def setup_state(cfg, backend, model):
     S.store = estimate.Store(CALIB)
 
 
+def restrict_new_files():
+    """Tout ce que le processus crée ensuite, et sd-cli avec lui (PNG privé en clair, qui porte le prompt ; vignettes ;
+    copies d'images d'entrée ; tirages ; dossiers de travail), n'est lisible que par le compte qui le fait tourner
+    (masque 0o077 : fichiers en 0o600, dossiers en 0o700 ; décision du 23/10/2026). Les fichiers déjà créés gardent
+    leurs droits. Appelée en tête de main() et de tools/calibrate.py ; sans effet sous Windows."""
+    os.umask(0o077)
+
+
 def main():
+    restrict_new_files()
     cfg = load_config()
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=cfg["ui_port"])

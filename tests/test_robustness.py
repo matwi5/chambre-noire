@@ -202,13 +202,15 @@ class CalibrationTest(bench.BenchCase):
         S, launch = bench.S, bench.launch
         saved = (S.cfg, S.backend, S.model, S.engine, S.store, dict(launch.MODELS))
         argv = ["calibrate.py", "--backend", S.backend, "--model", "q4", "--steps", "2"]
-        out = io.StringIO()
+        out, umask = io.StringIO(), os.umask(0o022)
+        os.umask(umask)
         try:
             with mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(out):
                 calibrate.main()                   # échec : sys.exit, qui fait échouer le test avec son message
         finally:
             S.cfg, S.backend, S.model, S.engine, S.store, models = saved
             launch.MODELS.update(models)
+            os.umask(umask)                        # masque de restrict_new_files : pas pour la suite du banc
         self.assertIn("[calibration] terminée", out.getvalue())
 
 

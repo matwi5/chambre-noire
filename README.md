@@ -541,8 +541,9 @@ Ce que cela garantit, et ses limites :
   et dans `logs\` rien d'autre que la ligne commune à toutes les générations (« [job] génération terminée », ou celle
   d'un échec ; le journal du moteur part à la poubelle) ;
 - sd-cli ne travaille que sur des fichiers : pendant le calcul, les images d'entrée, les aperçus et le PNG final passent
-  **en clair** par `jobs/private_<identifiant>/`, supprimé dès la fin de la génération (et au lancement suivant après un
-  arrêt brutal). Sur un SSD, un fichier supprimé n'est pas effacé de façon sûre. Sur Mac, le dossier `jobs/` est exclu
+  **en clair** par `jobs/private_<identifiant>/`, lisible par le seul compte qui fait tourner le serveur (0o700) et
+  supprimé dès la fin de la génération (et au lancement suivant après un arrêt brutal). Sur un SSD, un fichier supprimé
+  n'est pas effacé de façon sûre. Sur Mac, le dossier `jobs/` est exclu
   de Time Machine au lancement de l'interface (`tmutil addexclusion`, sans droits administrateur ; un échec est noté
   dans le journal sans bloquer) ;
 - une image **téléchargée** ou partagée sort de l'espace privé : elle est alors en clair là où elle est enregistrée.
@@ -787,8 +788,11 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   les images de `outputs/`, dont toutes celles d'avant la pile ; `GET /api/pile` et `GET /api/history` (une entrée par
   image, la plus récente d'abord, avec `name`, `time`, `size`, `mode`, `prompt`, `width`, `height`, `steps`,
   `seconds`, `model`, `seed`, `inputs` et `lot` : `id`, `rank`, `size`, `campaign`, ou `null` pour une image seule ;
-  le journal des images et les PNG de la pile ne sont lisibles que par le compte qui fait tourner le serveur, droits
-  0o600, sans effet sur les droits d'accès de Windows),
+  le journal des images, les PNG de la pile et tout ce que le serveur, `tools/calibrate.py` et sd-cli créent depuis
+  leur lancement ne sont lisibles que par le compte qui les fait tourner (fichiers en 0o600, dossiers en 0o700 ; les
+  fichiers et dossiers plus anciens gardent leurs droits, dont `outputs/`, `jobs/` et `logs/` créés par `setup.py` :
+  un autre compte du Mac peut y lister les noms, pas ouvrir les fichiers ; sans effet sur les droits d'accès de
+  Windows),
   `POST /api/keep {"name"}` (Garder : l'image passe de la pile aux tirages, d'un seul `os.replace` ; vignettes et
   images d'entrée restent où elles sont, rangées par nom d'image ; 409 si un tirage du même nom existe), `POST
   /api/discard {"name"}` (Jeter : seulement une image de la pile ; efface ses vignettes, ses images d'entrée, son
