@@ -4,6 +4,29 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-24 · Code d'accès demandé aussi au Mac, entrée par un jeton à usage unique
+
+- **Contexte** : le porteur a répondu « b » à la question reposée sur l'accès local (entrée du 23/10 ci-dessous) : le
+  Mac demandera lui aussi le code d'accès. Trois choix de mise en œuvre lui ont été posés.
+- **Décision** (porteur, 24/10/2026, réponse « ok pour tes reco ») :
+  - « Un code même sans l'option Wi-Fi (`--lan`) ? Aujourd'hui, sans `--lan`, il n'y a aucun code, et le serveur
+    n'écoute que l'adresse `127.0.0.1`. Mais les autres comptes du Mac y ont justement accès. » → recommandation
+    acceptée : un code toujours, créé au premier lancement dans `tools/access_code.txt` ;
+  - « Comment tu entres depuis le Mac ? (a) Sans rien taper. Le raccourci `Chambre noire.command` (et l'ouverture
+    automatique du navigateur au lancement) ouvre une adresse de connexion à usage unique : un jeton valable une
+    minute, utilisable une seule fois, jamais le code lui-même. Il ne sert donc à rien s'il reste dans l'historique du
+    navigateur. Seul ton compte peut le créer, puisqu'il faut lire un fichier qui t'est réservé. Ensuite, le navigateur
+    garde la connexion un an, comme sur le téléphone. (b) Taper le code, lu dans `tools/access_code.txt`, une fois par
+    navigateur. » → « (a) » ;
+  - « Quand le faire ? Il faut adapter le banc et une bonne part des tests d'interface, que le groupe D est en train de
+    réécrire, et la page du code d'accès, que le groupe E modifie aussi. (a) Un groupe G à part, après le groupe E, en
+    session liée (effort high), avec une revue de sécurité obligatoire. Je rédige d'abord la section de la spec et je
+    te propose le ou les tickets. (b) Tout de suite, en parallèle du groupe D, au prix de conflits dans les tests. » →
+    « (a) ».
+- **Écarté** : garder le Mac sans code ; un code seulement avec `--lan` ; taper le code sur le Mac ; le faire en
+  parallèle du groupe D.
+- **Conséquences** : spec, section 14 ; groupe G après le groupe E.
+
 ## 2026-10-23 · Journal du service et dossiers d'avant fermés aux autres comptes, accès local sans code noté
 
 - **Contexte** : passe « bogues » du ticket des droits des fichiers (`41dab97`) ; trois traces antérieures à la refonte
