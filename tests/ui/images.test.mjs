@@ -45,7 +45,7 @@ test('espace privé : après la sortie, ni visionneuse ni images d\'entrée ne m
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
   assert.equal(await edit('zq3 privée', '#c02020', true), 202);
-  await bench.idle();
+  await bench.keepAll(page);                      // piles gardées (privée comprise) : dans la galerie
 
   // dans l'espace privé : la galerie, la visionneuse et l'image d'entrée de l'image privée, chargées
   await page.click('#tabbar [data-pane="hist"]');
@@ -187,7 +187,7 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
   assert.equal(await page.eval(`postJson('/api/generate', { mode: 't2i', prompt: 'zq7 lot privé', width: 512,
     height: 512, steps: 2, cfg: 1, seed: -1, preview: false, ref_images: [], private: true, count: 2 })
     .then(r => r.status)`), 202);
-  await bench.idle();
+  await bench.keepAll(page);                      // piles gardées (privée comprise) : dans la galerie
   await page.eval(`goTab('create'); goTab('hist')`);   // galerie rechargée, lot compris
   await page.waitFor(`histItems.filter(it => it.lot).length === 2`, { what: 'lot privé dans la galerie' });
   await page.eval(`openViewer(histItems.findIndex(it => it.lot), histItems); openLot()`);

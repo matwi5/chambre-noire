@@ -47,7 +47,7 @@ class ChangeCodeTest(bench.PrivateFilesCheck, bench.BenchCase):
     def contents(self, session):
         """Ce que l'espace privé montre avec cette session, par prompt : réglages, image, miniature, entrées."""
         out = {}
-        code, items = call("GET", "/api/private/history", private=session)
+        code, items = call("GET", "/api/private/pile", private=session)
         self.assertEqual(code, 200, items)
         for it in items:
             read = lambda path: call("GET", path, private=session)
@@ -84,13 +84,13 @@ class ChangeCodeTest(bench.PrivateFilesCheck, bench.BenchCase):
         space = bench.launch.P("private", "space.json")
         backup = open(space, "rb").read()                  # sauvegarde (Time Machine, copie du disque) d'avant le changement
         self.assertEqual(self.change()[0], 200)
-        ids = [it["id"] for it in call("GET", "/api/private/history", private=self.opens(NEW))[1]]
+        ids = [it["id"] for it in call("GET", "/api/private/pile", private=self.opens(NEW))[1]]
         self.assertEqual(json.loads(backup)["public"] == json.load(open(space))["public"], False)
         with open(space, "wb") as f:
             f.write(backup)
         session = self.opens(OLD)                          # l'ancienne clé privée se déchiffre encore avec l'ancien code…
         self.assertIsNotNone(session)
-        self.assertEqual(call("GET", "/api/private/history", private=session)[1], [])   # … mais n'ouvre plus aucune image
+        self.assertEqual(call("GET", "/api/private/pile", private=session)[1], [])   # … mais n'ouvre plus aucune image
         for item in ids:
             for kind in ("image", "thumb"):
                 self.assertNotEqual(call("GET", f"/api/private/{kind}?id={item}", private=session)[0], 200)

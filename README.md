@@ -475,6 +475,9 @@ images sont enregistrées. Pour la confidentialité, passez par l'espace privé.
   soit l'appareil qui l'a lancée.
 - Les **variantes** et les **campagnes** marchent aussi dans l'espace privé : chaque image du lot est chiffrée, la
   grille et « Garder celle-ci » restent, et la notification est celle d'un lot normal (« N images prêtes »).
+- L'espace privé a sa propre **pile** : une image privée terminée y attend d'être triée (la marque « à trier » est
+  dans sa fiche chiffrée, jamais en clair sur le disque) ; gardée, elle passe dans la
+  galerie privée, jetée, ses fichiers chiffrés sont supprimés. Les images privées d'avant la pile sont dans la galerie.
 - La **Galerie** de l'espace privé ne montre que les images privées, avec la même visionneuse : télécharger,
   partager, copier, images d'entrée, Éditer, Dessiner, Reprendre, Supprimer. En sortant, elles quittent l'écran.
 - **Chaque espace a sa propre saisie** : texte, images d'entrée, dessin (actif ou non, masque ou annotation) et son
@@ -822,8 +825,16 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   génération privée, et `POST /api/lot/<id>/cancel` et `…/first` d'un lot privé : requête sûre et session exigées, sinon
   404 (« job inconnu », « lot inconnu »), comme un identifiant inconnu, avant tout test d'état ; l'annulation et le
   passage en tête prolongent la session, ni le suivi ni l'oubli ; la fermeture de la page ne l'arrête pas.
-  Galerie privée, session exigée (403 sinon), chaque requête prolongeant la session : `GET /api/private/history`
-  (réglages déchiffrés de chaque image, avec `id`), `GET /api/private/image?id=…[&download=1]`, `GET
+  Pile et galerie privées, session exigée (403 sinon), chaque requête prolongeant la session : une génération privée
+  terminée arrive dans la pile privée, marquée `"pile": true` dans sa fiche chiffrée (`meta`) ; `GET
+  /api/private/pile` (la pile) et `GET /api/private/history` (les tirages privés, fiches sans la marque, dont toutes
+  les images privées d'avant la pile ; réglages déchiffrés de chaque image, avec `id`, sans la marque), `POST
+  /api/private/keep {"id"}` (Garder : la fiche déchiffrée, sans la marque, rescellée avec la clé publique de l'espace
+  et remplacée d'un coup, image, miniature et entrées intactes), `POST /api/private/discard {"id"}` (Jeter : seulement
+  une image de la pile ; son dossier est supprimé) : 404 « déjà triée » pour une image qui n'est pas (ou plus) dans la
+  pile, le premier geste arrivé l'emporte ; dans l'espace privé, `rev` de `/api/status` est le compteur de la pile et
+  des tirages privés (arrivée, Garder, Jeter, Supprimer), jamais visible ailleurs ;
+  `GET /api/private/image?id=…[&download=1]`, `GET
   /api/private/thumb?id=…`, `GET /api/private/input?id=…&file=init.png|ref_N.png[&thumb=1][&download=1]`, `POST
   /api/private/delete {"id"}` ; prompts enregistrés de l'espace privé, session exigée (403 sinon) et prolongée, mêmes
   champs, mêmes limites et mêmes réponses que `/api/prompts` : `GET /api/private/prompts` (avec les mêmes `types`),

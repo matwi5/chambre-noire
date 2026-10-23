@@ -39,14 +39,19 @@ Dans l'ordre du fichier :
   erreur et n'est jamais écrasé), `prompt_error` (400), `change_prompt` (sur `saved_prompts` ou, passée en `store`,
   la liste de l'espace privé `private_prompts`) ; `prompt_types()` relit `tools/prompt_types.json` à chaque appel, sans
   jamais l'écrire (ids `type-…`, que les routes d'écriture ne trouvent pas : 404).
-- **Espace privé** (`private/`) : constantes `PRIVATE`, `PRIVATE_COOKIE`, `PRIVATE_IDLE`, `PRIVATE_LOCK` (un
-  `RLock`), `REKEY`, `SCRYPT_N`, `HAVE_CRYPTO` ; clés : `read_space`, `code_key`, `write_space`, `open_space` ; mise
+- **Espace privé** (`private/`) : constantes `PRIVATE`, `PRIVATE_COOKIE`, `PRIVATE_IDLE`, `PRIVATE_LOCK` (un `RLock`),
+  `REKEY`, `META_TMP`, `SCRYPT_N`, `HAVE_CRYPTO` ; clés : `read_space`, `code_key`, `write_space`, `open_space` ; mise
   sur disque : `sync_fd`, `write_synced`, `sync_dir`, avec les droits 600 et 700 de `open_private` et `private_dir` ;
-  chiffrement par fichier : `file_key`, `seal`, `unseal` ; images : `store_private`, `read_private`,
-  `private_history` ; prompts privés : `private_prompts` (`private/prompts`, scellé à l'étiquette `prompts`) ;
-  changement de code : `rekey_space` (tout dans `private/.rekey/`, bascule par `os.replace` de `space.json`) et
-  `finish_rekey` (termine ou abandonne un changement interrompu, au démarrage et sous `PRIVATE_LOCK` avant toute
-  ouverture ou écriture) ; `private_code_error`.
+  chiffrement par fichier : `file_key`, `seal`, `unseal` ; images : `store_private`, `read_private`, `private_items`
+  (fiches déchiffrées de la pile ou des tirages privés, séparés par la marque « pile » de la fiche, la plus récente
+  d'abord), `space_public` (clé de la session encore celle de l'espace, sinon `StaleKey`), `replace_synced` (fichier
+  temporaire mis sur le disque puis `os.replace`), `sort_private` (Garder : fiche rescellée sans la marque par
+  `META_TMP` puis `os.replace` ; Jeter : dossier renommé en dossier caché, puis supprimé ; sous `PRIVATE_LOCK` après
+  `finish_rekey()`) ; prompts privés : `private_prompts` (`private/prompts`, scellé à l'étiquette `prompts`) ;
+  changement de code : `rekey_space` (tout dans `private/.rekey/`, bascule par `os.replace` de `space.json` ; restes
+  `prompts.tmp` et `META_TMP` d'une panne supprimés d'abord, scellés avec l'ancienne clé) et `finish_rekey` (termine ou
+  abandonne un changement interrompu, au démarrage et sous `PRIVATE_LOCK` avant toute ouverture ou écriture) ;
+  `private_code_error`.
 - **Galerie, pile et journal** : `input_files`, `save_inputs` (entrées copiées vers `outputs/.inputs/<image>/`),
   `PILE` (`outputs/.pile/`, images à trier), `JOB_ID_RE`, `image_in` (nom validé dans un dossier), `output_path` (un
   tirage), `pile_path` (une image de la pile), `image_path` (l'un ou l'autre : image, vignette et entrées servies),
@@ -295,7 +300,8 @@ invariants ».
   son lot), dans les journaux rien que les lignes communes à toutes les générations (`DONE_LINE`, échecs neutres) ;
   dans `queue`, une entrée complète vue depuis l'espace privé seulement,
   puis `keep_private` chiffre image, miniature (en mémoire), entrées et réglages avec la clé publique notée au
-  lancement (`store_private`). Une génération privée ne s'arrête pas à la fermeture de la page ; finie, elle est
+  lancement (`store_private`), dans la pile privée : marque « pile » dans la fiche chiffrée, `S.rev` de l'espace
+  privé augmenté. Une génération privée ne s'arrête pas à la fermeture de la page ; finie, elle est
   oubliée par `/api/job/<id>/forget` (envoyé par sa page), sinon par `sweep()`, `PRIVATE_JOB_TTL` (24 h) après sa
   fin. Une demande `"incognito": true` (mode retiré, d'une page d'avant) est refusée (400) sans rien écrire, journal
   du serveur compris (`/api/generate` est tue). Au lancement sur Mac, `exclude_from_backup` exclut `jobs/` de Time

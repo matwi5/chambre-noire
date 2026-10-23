@@ -42,12 +42,12 @@ class PrivateOverHttpsOnlyTest(bench.BenchCase):
         self.assertEqual(code, 403, job)
         code, job = call("POST", "/api/generate", bench.gen_body("zq9 on the mac", private=True), private=session)
         wait_job(job["id"], private=session)
-        [item] = call("GET", "/api/private/history", private=session)[1]
-        for path in ("/api/private/history", f"/api/private/image?id={item['id']}", f"/api/private/thumb?id={item['id']}",
-                     f"/api/private/input?id={item['id']}&file=init.png"):
+        [item] = call("GET", "/api/private/pile", private=session)[1]
+        for path in ("/api/private/history", "/api/private/pile", f"/api/private/image?id={item['id']}",
+                     f"/api/private/thumb?id={item['id']}", f"/api/private/input?id={item['id']}&file=init.png"):
             self.assert_refused("GET", path, private=session, wifi=True)
         self.assert_refused("POST", "/api/private/delete", {"id": item["id"]}, private=session, wifi=True)
-        self.assertEqual(len(call("GET", "/api/private/history", private=session)[1]), 1)
+        self.assertEqual(len(call("GET", "/api/private/pile", private=session)[1]), 1)
         self.assertEqual(call("POST", "/api/private/lock", {}, private=session, wifi=True)[0], 200)   # verrouiller : toujours
         self.assertFalse(private_status(session)["unlocked"])
 

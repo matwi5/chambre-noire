@@ -24,7 +24,8 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
 - API : POST /api/generate, GET /api/job/<id>, GET /api/job/<id>/preview, POST /api/job/<id>/cancel, POST /api/lot/<id>/cancel,
         POST /api/job/<id>/first et POST /api/lot/<id>/first (« Passer en tête »),
         POST /api/job/<id>/forget (génération privée),
-        espace privé : POST /api/private/create|unlock|lock|code|reset|delete, GET /api/private/history,
+        espace privé : POST /api/private/create|unlock|lock|code|reset|delete|keep|discard,
+        GET /api/private/history|pile,
         GET /api/private/image|thumb?id=<id>, GET /api/private/input?id=<id>&file=<init.png|ref_N.png>,
         prompts enregistrés de l'espace privé (private/prompts, chiffré) : GET /api/private/prompts,
         POST /api/private/prompts, POST /api/private/prompts/delete, POST /api/private/prompts/used,
@@ -429,6 +430,7 @@ PRIVATE_COOKIE = "qwen_private"                # session de l'espace privé, pro
 PRIVATE_IDLE = 15 * 60                         # session fermée après 15 min sans requête privée
 PRIVATE_LOCK = threading.RLock()               # dérivations du code privé, écritures des clés et des images : une à la fois
 REKEY = ".rekey"                               # dossier de travail d'un changement de code, dans private/
+META_TMP = "meta.tmp"                          # fiche réécrite par Garder, dans private/, avant de remplacer l'ancienne
 MIN_PRIVATE_CODE, MAX_PRIVATE_CODE = 8, 256
 SCRYPT_N = 2 ** 18                             # 256 Mio et ≈ 0,3 s par essai sur le Mac ; gardé dans space.json
 KEY_AAD = b"qwen-image-local private key v1"   # données associées du chiffrement de la clé privée
@@ -577,7 +579,8 @@ def unseal(blob, private_key, label):
 def store_private(public, meta, image, inputs):
     """Range une image dans l'espace privé : private/items/<128 bits au hasard>/ avec meta (réglages, en JSON), image,
     thumb (miniature fabriquée en mémoire) et input_<k> (images d'entrée), chacun scellé à part. Écrit dans un dossier
-    caché puis renommé : la galerie privée ne voit jamais une image à moitié rangée. Renvoie son identifiant.
+    caché puis renommé : ni la pile ni les tirages privés ne voient une image à moitié rangée. Renvoie son
+    identifiant.
     public : la clé publique notée au lancement de la génération ; si le code a changé
     depuis, l'image est scellée avec la clé qui l'a remplacée ; si l'espace a été supprimé ou recréé entre-temps, elle
     est abandonnée (RuntimeError) plutôt que rangée avec une clé disparue. Jamais pendant un changement de code."""
@@ -629,10 +632,12 @@ def rekey_space(old_key, code):
     try:
         # reste d'un enregistrement des prompts privés coupé par une panne : scellé avec l'ancienne clé, il partirait
         # lisible par l'ancien code
-        try:
-            os.remove(os.path.join(PRIVATE, "prompts.tmp"))
-        except FileNotFoundError:
-            pass
+        # de même pour une fiche réécrite par Garder (sort_private)
+        for leftover in ("prompts.tmp", META_TMP):
+            try:
+                os.remove(os.path.join(PRIVATE, leftover))
+            except FileNotFoundError:
+                pass
         private_dir(os.path.join(staging, "items"))
         # fichiers et dossiers copiés : fsync seul ; le F_FULLFSYNC de write_space, avant la bascule, les met tous sur
         # le disque d'un coup (un F_FULLFSYNC par fichier viderait le cache du disque autant de fois)
@@ -700,9 +705,10 @@ def read_private(private_key, item, role):
     return unseal(blob, private_key, f"{item}/{role}")
 
 
-def private_history(private_key):
+def private_items(private_key, pile):
     """Images de l'espace privé, la plus récente d'abord : réglages déchiffrés et identifiant (une image illisible avec
-    cette clé est ignorée)."""
+    cette clé est ignorée) ; pile : celles de la pile (fiche marquée « pile », toujours chiffrée), sinon les tirages
+    (les images d'avant la pile en sont). La marque ne part pas vers l'interface."""
     items = []
     for d in glob.glob(os.path.join(PRIVATE, "items", "*")):
         item = os.path.basename(d)
@@ -710,9 +716,65 @@ def private_history(private_key):
             meta = json.loads(read_private(private_key, item, "meta") or b"null")
         except (InvalidTag, ValueError):
             continue
-        if isinstance(meta, dict):
-            items.append({**meta, "id": item, "private": True})
-    return sorted(items, key=lambda x: x.get("time") or 0, reverse=True)
+        if isinstance(meta, dict) and bool(meta.pop("pile", False)) == pile:
+            # time est à la seconde : deux images d'un lot finies la même seconde se départagent par leur dossier
+            items.append(((meta.get("time") or 0, os.stat(d).st_mtime_ns), {**meta, "id": item, "private": True}))
+    return [it for _, it in sorted(items, key=lambda x: x[0], reverse=True)]
+
+
+def space_public(private_key):
+    """Clé publique de space.json, si private_key est encore la clé de l'espace ; sinon StaleKey (code changé ou
+    espace supprimé pendant la requête). Sous PRIVATE_LOCK, après finish_rekey()."""
+    public = (read_space() or {}).get("public")
+    if public != b64e(private_key.public_key().public_bytes_raw()):
+        raise StaleKey("espace privé verrouillé")
+    return public
+
+
+def replace_synced(tmp, fp, data, full=True):
+    """Remplace fp par data d'un coup : écrit dans tmp, mis sur le disque (droits 600), puis os.replace ; tmp ne reste
+    pas après un échec."""
+    try:
+        write_synced(tmp, data, full)
+        os.replace(tmp, fp)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def sort_private(action, private_key, item):
+    """Garder (keep) ou Jeter (discard) une image de la pile privée avec la clé d'une session : (code, réponse). Sous
+    PRIVATE_LOCK, après finish_rekey() ; 404 « déjà triée » si l'image n'est pas (ou plus) dans la pile : le premier
+    geste arrivé l'emporte. Garder déchiffre la fiche (meta), en retire la marque « pile » et la rescelle avec la clé
+    publique de space.json (fichier temporaire private/meta.tmp mis sur le disque, puis remplacement atomique) ; image,
+    vignette et entrées restent telles quelles. Jeter supprime le dossier de l'image, comme /api/private/delete.
+    StaleKey si la clé n'est plus celle de l'espace ; une fiche illisible lève InvalidTag ou ValueError."""
+    with PRIVATE_LOCK:
+        finish_rekey()
+        public = space_public(private_key)
+        raw = read_private(private_key, item, "meta") if isinstance(item, str) else None
+        meta = json.loads(raw) if raw else None
+        if not (isinstance(meta, dict) and meta.get("pile")):
+            return 404, {"error": "déjà triée"}
+        d = os.path.join(PRIVATE, "items", item)
+        if action == "discard":
+            # renommé d'abord en dossier caché (purgé au démarrage) : un effacement coupé ne laisse pas une image
+            # sans fiche, que ni la pile ni les tirages ne montreraient plus
+            hidden = os.path.join(PRIVATE, "items", "." + item)
+            os.rename(d, hidden)
+            S.rev["private"] += 1
+            shutil.rmtree(hidden)
+            return 200, {"ok": True}
+        del meta["pile"]
+        # fsync seul : le F_FULLFSYNC de sync_dir(d) met aussi le fichier temporaire sur le disque
+        replace_synced(os.path.join(PRIVATE, META_TMP), os.path.join(d, "meta"),
+                       seal(json.dumps(meta, ensure_ascii=False).encode(), public, f"{item}/meta"), full=False)
+        sync_dir(d)
+        S.rev["private"] += 1                   # après le changement : une page qui relit la pile le voit
+        return 200, {"ok": True}
 
 
 class StaleKey(Exception):
@@ -728,9 +790,7 @@ def private_prompts(private_key, update=None):
     fp = os.path.join(PRIVATE, "prompts")
     with PRIVATE_LOCK:
         finish_rekey()
-        public = (read_space() or {}).get("public")
-        if public != b64e(private_key.public_key().public_bytes_raw()):
-            raise StaleKey("espace privé verrouillé")
+        public = space_public(private_key)
         try:
             with open(fp, "rb") as f:
                 prompts = prompt_list(json.loads(unseal(f.read(), private_key, "prompts")))
@@ -739,15 +799,7 @@ def private_prompts(private_key, update=None):
         changed = update(prompts) if update else None
         if changed is None:
             return prompts
-        try:
-            write_synced(fp + ".tmp", seal(json.dumps(changed, ensure_ascii=False).encode(), public, "prompts"))
-            os.replace(fp + ".tmp", fp)
-        except BaseException:
-            try:
-                os.remove(fp + ".tmp")
-            except OSError:
-                pass
-            raise
+        replace_synced(fp + ".tmp", fp, seal(json.dumps(changed, ensure_ascii=False).encode(), public, "prompts"))
         sync_dir(PRIVATE)
         return changed
 
@@ -1400,6 +1452,8 @@ def run_job(job):
             job["item"] = keep_private(job)
             job["status"] = "done"
             job["phase"] = "terminé"
+            with PRIVATE_LOCK:                   # dans la pile privée : après « done », comme to_pile
+                S.rev["private"] += 1
             print(DONE_LINE, flush=True)
             return
         if job.get("calibration"):                # les générations de tools/calibrate.py restent hors du journal
@@ -1436,7 +1490,7 @@ def keep_private(job):
     r = job["req"]
     meta = {"mode": job["mode"], "prompt": r["prompt"], "width": r["width"], "height": r["height"], "steps": r["steps"],
             "seed": r.get("seed"), "seconds": job["seconds"], "model": S.model, "lot": job.get("lot"), "time": int(job["finished"]),
-            "dims": job.get("dims")}
+            "dims": job.get("dims"), "pile": True}   # à trier : la marque reste dans la fiche chiffrée
     with open(job["out"], "rb") as f:
         image = f.read()
     return store_private(job["public"], meta, image, read_inputs(job["dir"]))
@@ -1797,7 +1851,7 @@ def public(job):
     d["queue_position"] = queue_position(job)
     d["elapsed"] = round(time.time() - job["started"], 1) if job.get("started") and not job.get("finished") else job.get("seconds")
     d["private"] = bool(job.get("private"))
-    d["item"] = job.get("item")                   # image privée rangée : identifiant dans la galerie privée
+    d["item"] = job.get("item")                   # image privée rangée : identifiant dans la pile privée
     d["lot"], d["seed"] = job.get("lot"), job.get("seed")
     d["mode"], d["inputs"] = job.get("mode"), job.get("input_names") or []   # vrai mode, images d'entrée gardées
     # prompt complet, pour la page qui reprend une génération (la file n'en montre que le début) : tant que la demande
@@ -1969,7 +2023,7 @@ class H(BaseHTTPRequestHandler):
         return token
 
     def _private_get(self, path, q):
-        """Lectures de l'espace privé, session exigée (elles la prolongent) : history, thumb, image, input."""
+        """Lectures de l'espace privé, session exigée (elles la prolongent) : history, pile, thumb, image, input."""
         if not HAVE_CRYPTO:
             return self._send(503, {"error": "espace privé indisponible : bibliothèque cryptography non installée"})
         if not self._secure():
@@ -1978,8 +2032,8 @@ class H(BaseHTTPRequestHandler):
         if not session:
             return self._send(403, {"error": "espace privé verrouillé"})
         key, item, action = session["key"], q.get("id"), path[len("/api/private/"):]
-        if action == "history":
-            return self._send(200, private_history(key))
+        if action in ("history", "pile"):        # tirages ou pile de l'espace
+            return self._send(200, private_items(key, pile=action == "pile"))
         if action == "prompts":                   # prompts enregistrés de l'espace, le dernier utilisé d'abord
             try:
                 saved = sorted(private_prompts(key), key=lambda p: -p["used"])
@@ -2010,7 +2064,8 @@ class H(BaseHTTPRequestHandler):
         return self._send(200, raw, ctype, extra)
 
     def _private_post(self, path, raw):
-        """Routes POST de l'espace privé : create, unlock, lock, code, reset, delete. Rien n'en va dans les journaux."""
+        """Routes POST de l'espace privé : create, unlock, lock, code, reset, delete, keep, discard. Rien n'en va dans
+        les journaux."""
         if not HAVE_CRYPTO:
             return self._send(503, {"error": "espace privé indisponible : bibliothèque cryptography non installée"})
         try:
@@ -2030,7 +2085,20 @@ class H(BaseHTTPRequestHandler):
                 if not (isinstance(item, str) and ITEM_RE.fullmatch(item) and os.path.isdir(os.path.join(PRIVATE, "items", item))):
                     return self._send(404, {"error": "image privée inconnue"})
                 shutil.rmtree(os.path.join(PRIVATE, "items", item))
+                S.rev["private"] += 1
             return self._send(200, {"ok": True})
+        if action in ("keep", "discard"):       # Garder, Jeter une image de la pile privée, session exigée
+            session = self._private_session(touch=True)
+            if not session:
+                return self._send(403, {"error": "espace privé verrouillé"})
+            try:
+                return self._send(*sort_private(action, session["key"], body.get("id")))
+            except StaleKey:
+                return self._send(403, {"error": "espace privé verrouillé"})
+            except (InvalidTag, ValueError):
+                return self._send(500, {"error": "image privée illisible"})
+            except OSError:                     # changement de code en cours de réparation, disque
+                return self._send(500, {"error": "image privée non triée : réessayez dans un instant"})
         m = re.fullmatch(r"prompts(?:/(delete|used))?", action)
         if m:                                   # prompts enregistrés de l'espace, session exigée
             session = self._private_session(touch=True)
@@ -2137,7 +2205,8 @@ class H(BaseHTTPRequestHandler):
                                     "current_job": current_id if current and in_space(current, inside) else None,
                                     "last_job": public(last) if last else None,
                                     "estimates": coefs,
-                                    "rev": S.rev["public"],   # pile et tirages de l'espace de l'appareil
+                                    # pile et tirages de l'espace de l'appareil (hors de l'espace privé : le public)
+                                    "rev": S.rev["private" if inside else "public"],
                                     # code servi (git) : l'interface maintenant, le serveur à son lancement
                                     "version": code_version(), "server_version": S.started,
                                     # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
@@ -2407,11 +2476,15 @@ def main():
         finish_rekey()                                 # (rien n'est écrit au journal sur l'espace privé)
     except (OSError, ValueError):                      # ValueError : space.json illisible ; le serveur démarre quand même
         pass
-    # restes d'un job privé interrompu par un arrêt brutal, d'une image privée à moitié rangée, et d'un job incognito
-    # d'avant son retrait (images en clair : porteur, 22/10/2026)
+    # restes d'un job privé interrompu par un arrêt brutal, d'une image privée à moitié rangée ou jetée, et d'un job
+    # incognito d'avant son retrait (images en clair : porteur, 22/10/2026)
     for old in (glob.glob(P("jobs", "private_*")) + glob.glob(os.path.join(PRIVATE, "items", ".*"))
                 + glob.glob(P("jobs", "incognito_*"))):
         shutil.rmtree(old, ignore_errors=True)
+    try:                                               # fiche à moitié réécrite par Garder (sort_private)
+        os.remove(os.path.join(PRIVATE, META_TMP))
+    except FileNotFoundError:
+        pass
     if sys.platform == "darwin":
         exclude_from_backup(P("jobs"))
     for fp in glob.glob(P("outputs", "*.png")):        # images antérieures à la conservation des entrées : reprises

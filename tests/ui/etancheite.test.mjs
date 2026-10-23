@@ -57,6 +57,7 @@ async function privateTour() {
   await page.click('#go');
   await page.waitFor(`(img => img && img.complete && img.naturalWidth > 0)($('doneList').querySelector('img'))`,
     { what: 'image privée dans les terminées', timeout: 30000 });
+  await bench.keepAll(page);                      // piles gardées (privée comprise) : dans la galerie
   assert.equal(await generate(`{ mode: 't2i', prompt: 'HOLD=etanche zqE4file' }`), 202);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`pageJobs.some(p => p.private && p.adopted)`, { what: 'génération privée suivie en file' });
