@@ -201,7 +201,8 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
 - **Barre d'état** : dans l'application installée, Chrome peint la barre d'état (heure, notifications) d'une couleur
   unie ; il ne laisse pas encore une application installée dessiner dessous. L'interface lui donne la couleur du fond de
   l'espace affiché (noir chaud, ou vert-noir dans l'espace privé), et dans la visionneuse celle du haut de l'image
-  floutée, pour que l'application semble continuer jusqu'en haut.
+  floutée, pour que l'application semble continuer jusqu'en haut ; jamais dans l'espace privé, où la visionneuse
+  garde la couleur du fond, pour qu'aucune image privée ne soit lue pour la calculer.
 - **Veille** : sur Mac, l'ordinateur ne se met pas en veille tant que l'interface tourne avec `--lan` (l'écran peut
   s'éteindre).
 - **Toujours disponible (Mac)** : pour que l'interface démarre seule à l'ouverture de session, sans fenêtre,

@@ -41,7 +41,9 @@
     --line:rgba(214,240,220,.13); --line-hi:rgba(214,240,220,.24);
     --ink:#e2f0e3; --ink2:rgba(214,240,220,.68); --ink3:rgba(214,240,220,.42);
     --accent:#5fe08a; --accent2:#93f0b0; --on-accent:#03150a; --on-accent-warn:#0b4a22;
-    --halo:rgba(28,170,74,.20); --scrim:rgba(1,4,2,.62); --shade:rgba(2,4,3,.8); --badge:rgba(7,13,9,.72); }
+    --halo:rgba(28,170,74,.20); --scrim:rgba(1,4,2,.62); --shade:rgba(2,4,3,.8); --badge:rgba(7,13,9,.72);
+    /* grain du même bruit, teinté de vert pâle au lieu du papier chaud */
+    --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .84 0 0 0 0 .95 0 0 0 0 .86 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"); }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { margin:0; }
   body { font:16px/1.45 var(--sans); color:var(--ink);
@@ -949,11 +951,13 @@ function tintOf(src){ if(secretUrl(src)) return Promise.resolve(null);
 const saturate=(c, k)=>{ const g=.2126*c[0]+.7152*c[1]+.0722*c[2]; return c.map(v=>Math.max(0, Math.min(255, g+(v-g)*k))); };
 let tintSeq=0;
 async function syncThemeColor(){
-  const seq=++tintSeq, m=getComputedStyle(document.documentElement).getPropertyValue('--void').trim().match(/^#(..)(..)(..)$/);
-  let c=m ? m.slice(1).map(h=>parseInt(h, 16)) : [13, 10, 8];   // repli : --void de :root
-  if(!inPrivate() && ivIndex<0 && vIndex>=0){       // visionneuse : image floutée assombrie (.v-bg img)
+  const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const seq=++tintSeq, m=css('--void').match(/^#(..)(..)(..)$/);
+  let c=m ? m.slice(1).map(h=>parseInt(h, 16)) : [0, 0, 0];      // repli (jeton illisible) : noir
+  // visionneuse : image floutée assombrie (.v-bg img), jamais dans l'espace privé, pour ne lire aucune image privée
+  if(!inPrivate() && ivIndex<0 && vIndex>=0){
     const it=vList[vIndex], t=it && await tintOf(thumbOf(it));
-    c=t ? saturate(t, 1.6).map(v=>v*.5) : [4, 3, 2]; }   // sans image : le voile de la visionneuse (--shade)
+    c=t ? saturate(t, 1.6).map(v=>v*.5) : (css('--shade').match(/\d+/g) || [0, 0, 0]).slice(0, 3).map(Number); }   // sans image : le voile
   if(seq!==tintSeq) return;
   const hex='#'+c.map(v=>Math.round(v).toString(16).padStart(2, '0')).join('');
   document.querySelectorAll('meta[name=theme-color]').forEach(el=>el.content=hex); }

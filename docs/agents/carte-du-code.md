@@ -326,8 +326,10 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
 - La longueur minimale du code privé (`MIN_PRIVATE_CODE`, 8) est aussi vérifiée dans `index.html` (feuilles
   privées).
 - Palette de la lumière inactinique (fond, surface, filets, texte papier, accent ambre, halo, erreur, grain, icône
-  d'erreur `--ico-err`) : jetons du `:root` de `index.html`, recopiés dans `LOGIN_PAGE` de `launch.py` et dans la page
-  hors ligne `OFFLINE` de `tools/ui/sw.js` (et le fond dans `manifest.webmanifest`) ; la déclaration `@font-face` de
+  d'erreur `--ico-err`) : jetons du `:root` de `index.html`, recopiés dans `LOGIN_PAGE` de `launch.py` ; la page hors
+  ligne `OFFLINE` de `tools/ui/sw.js` n'en reprend que le fond, le texte, le texte atténué, le halo, l'accent et le
+  texte sur l'accent, et `manifest.webmanifest` le fond ; le grain de l'espace privé (`html.priv`) est le même bruit
+  teinté de vert ; la déclaration `@font-face` de
   la police pixel est dans `index.html` et dans `LOGIN_PAGE`.
 - Pas une copie : l'estimation de chaque génération de la file (`job_estimate`, pour `queue_entry` et le travail caché
   `ahead`) appelle `estimate.predict` ; l'estimation de « Relancer » (`relaunch`) est approchée (chaque référence

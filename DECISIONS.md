@@ -619,7 +619,8 @@ Labo et Tirages, pile à trier » (incognito retiré)._
 _Révisée le 23/10/2026 (couleur hors de la visionneuse) par « Refonte « Chambre noire » : lumière inactinique, pixel,
 Labo et Tirages, pile à trier » (spec, section 4) : même but, mais hors de la visionneuse la couleur est celle, fixe,
 du fond de l'espace (normal ou privé), puisque le fond ne montre plus d'image floutée ; la visionneuse garde son
-calcul à partir de l'image. Hors de la visionneuse, une couleur fixe évite aussi le bug Chromium 559396686 cité plus
+calcul à partir de l'image, sauf dans l'espace privé (couleur du fond : aucune image privée n'est lue pour la
+calculer). Hors de la visionneuse, une couleur fixe évite aussi le bug Chromium 559396686 cité plus
 bas._
 
 - **Contexte** : le porteur veut que l'application installée « continue » sous la barre d'état d'Android, sans bande

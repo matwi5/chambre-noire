@@ -74,8 +74,14 @@ test('interface, téléphone en mode clair : noir chaud, sans verre ; espace pri
   l = await looks();
   assert.ok(dark(l.bg) && l.bg[1] > l.bg[0] && l.bg[1] > l.bg[2], `fond vert-noir : ${l.bg}`);
   assert.deepEqual(l.themes, [l.bg], 'barre d\'état du fond de l\'espace privé');
+  const halo = await page.eval(`(${RGB})(getComputedStyle(document.documentElement).getPropertyValue('--halo'))`);
+  assert.ok(halo[1] > halo[0], `halo vert dans l'espace privé : ${halo}`);
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  await page.waitFor(barOfVoid, { what: 'barre d\'état revenue au fond public' });
+  l = await looks();
+  assert.ok(l.themes.length === 1 && l.themes[0][0] > l.themes[0][1],
+    `barre d'état noir chaud après la sortie : ${l.themes}`);
   page.assertNoErrors();
 });
 
