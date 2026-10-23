@@ -24,8 +24,9 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
         """Suivi d'une génération (privée : avec la session de l'espace)."""
         return wait_job(jid, *args, private=self.session, **kw)
 
-    def history(self, session=None):
-        code, items = call("GET", "/api/private/history", private=session or self.session)
+    def pile(self, session=None):
+        """Pile de l'espace privé : où arrive une génération privée terminée."""
+        code, items = call("GET", "/api/private/pile", private=session or self.session)
         self.assertEqual(code, 200, items)
         return items
 
@@ -42,7 +43,7 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
         self.assertEqual(done["status"], "done")
         self.assertIsNone(done["path"])
         bench.wait_idle()
-        [item] = self.history()
+        [item] = self.pile()
         code, png = call("GET", f"/api/private/image?id={item['id']}", private=self.session)
         self.assertEqual((code, png[:4]), (200, b"\x89PNG"))
         code, thumb = call("GET", f"/api/private/thumb?id={item['id']}", private=self.session)
@@ -68,27 +69,28 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
         done = self.wait_job(job["id"])
         self.assertEqual(done["status"], "done", done.get("error"))
         bench.wait_idle()
-        [item] = self.history()
+        [item] = self.pile()
         code, inp = call("GET", f"/api/private/input?id={item['id']}&file=ref_1.png", private=self.session)
         self.assertEqual((code, inp[:8]), (200, b"\x89PNG\r\n\x1a\n"))
 
-    def test_history_lists_settings_and_reads_need_the_session(self):
+    def test_pile_lists_settings_and_reads_need_the_session(self):
         job = self.generate("zq9 a fox", seed=1234, steps=6)
         self.wait_job(job["id"])
-        [item] = self.history()
+        [item] = self.pile()
         self.assertEqual((item["prompt"], item["mode"], item["width"], item["height"], item["steps"], item["seed"]),
                          ("zq9 a fox", "t2i", 512, 512, 6, 1234))
         self.assertEqual(item["inputs"], [])
         self.assertEqual(self.wait_job(job["id"])["item"], item["id"])
-        for path in ("/api/private/history", f"/api/private/image?id={item['id']}", f"/api/private/thumb?id={item['id']}"):
+        for path in ("/api/private/history", "/api/private/pile", f"/api/private/image?id={item['id']}",
+                     f"/api/private/thumb?id={item['id']}"):
             self.assertEqual(call("GET", path)[0], 403, path)
             self.assertEqual(call("GET", path, remote=True)[0], 403, path)
         other = bench.unlock_private(CODE, remote=True)          # un autre appareil, avec son propre code
-        self.assertEqual(len(self.history(other)), 1)
+        self.assertEqual(len(self.pile(other)), 1)
 
     def test_download_gives_an_attachment(self):
         self.wait_job(self.generate()["id"])
-        [item] = self.history()
+        [item] = self.pile()
         code, _, headers = bench.call_full("GET", f"/api/private/image?id={item['id']}&download=1", private=self.session)
         self.assertEqual(code, 200)
         self.assertIn("attachment", headers.get("Content-Disposition", ""))
@@ -100,17 +102,17 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
         # hors de l'espace, la page ne la suit plus ; elle continue sur le Mac
         self.assertEqual(call("GET", f"/api/job/{job['id']}", private=self.session)[0], 404)
         bench.wait_idle()
-        self.assertEqual(call("GET", "/api/private/history", private=self.session)[0], 403)
+        self.assertEqual(call("GET", "/api/private/pile", private=self.session)[0], 403)
         again = bench.unlock_private(CODE)
         self.assertEqual(wait_job(job["id"], private=again)["status"], "done")
-        self.assertEqual([i["prompt"] for i in self.history(again)], ["SLOW=0.05 zq9 long one"])
+        self.assertEqual([i["prompt"] for i in self.pile(again)], ["SLOW=0.05 zq9 long one"])
 
     def test_delete_removes_the_image(self):
         self.wait_job(self.generate()["id"])
-        [item] = self.history()
+        [item] = self.pile()
         self.assertEqual(call("POST", "/api/private/delete", {"id": item["id"]})[0], 403)
         self.assertEqual(call("POST", "/api/private/delete", {"id": item["id"]}, private=self.session)[0], 200)
-        self.assertEqual(self.history(), [])
+        self.assertEqual(self.pile(), [])
         self.assertEqual(call("GET", f"/api/private/image?id={item['id']}", private=self.session)[0], 404)
         self.assertEqual(files("private", "items", "*"), [])
 
@@ -137,7 +139,7 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
         self.assertEqual(self.wait_job(job["id"])["status"], "failed")
         bench.wait_idle()
         self.assertEqual(files("jobs", "*"), [])
-        self.assertEqual(self.history(), [])
+        self.assertEqual(self.pile(), [])
         self.assertFalse([line for line in bench.LOG if "zq9private" in line])
 
     def test_notification_is_the_same_as_for_a_normal_image(self):
@@ -158,7 +160,7 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
         self.wait_job(job["id"])
         self.assertEqual(call("POST", f"/api/job/{job['id']}/forget", {}, private=self.session)[0], 200)
         self.assertEqual(call("GET", f"/api/job/{job['id']}", private=self.session)[0], 404)
-        self.assertEqual(len(self.history()), 1)              # l'image reste dans l'espace privé
+        self.assertEqual(len(self.pile()), 1)              # l'image reste dans l'espace privé
 
     def test_a_finished_private_generation_its_page_never_forgot_is_forgotten_after_the_delay(self):
         with mock.patch("launch.PRIVATE_JOB_TTL", 0.4):
@@ -170,7 +172,7 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
             bench.wait_until(lambda: all(call("GET", f"/api/job/{jid}", private=self.session)[0] == 404
                                          for jid in (done, failed)), what="générations privées oubliées")
             self.assertNotIn(done, bench.S.jobs)
-        self.assertEqual(len(self.history()), 1)              # l'image reste dans l'espace privé
+        self.assertEqual(len(self.pile()), 1)              # l'image reste dans l'espace privé
 
     def test_a_running_or_waiting_private_generation_is_not_expired(self):
         with mock.patch("launch.PRIVATE_JOB_TTL", 0.1):

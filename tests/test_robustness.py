@@ -97,7 +97,7 @@ class CancelDuringPreparationTest(bench.BenchCase):
         done = bench.job(jid)
         self.assertEqual((done["status"], done["seconds"]), ("cancelled", None))   # seconds : posé après le moteur
         self.assertIsNotNone(done["finished"])
-        self.assertEqual(bench.files("outputs", "*.png"), [])
+        self.assertEqual(bench.files("outputs", ".pile", "*.png"), [])
         self.assertEqual(bench.files("jobs", jid), [])
 
     def test_cancel_as_the_engine_starts_stops_it_at_once(self):
@@ -119,7 +119,7 @@ class CancelDuringPreparationTest(bench.BenchCase):
             bench.wait_idle()                      # HOLD : sans l'arrêt du moteur, il ne finirait jamais
         self.assertEqual(started, [jid])
         self.assertEqual(bench.job(jid)["status"], "cancelled")
-        self.assertEqual((bench.files("outputs", "*.png"), bench.files("jobs", jid)), ([], []))
+        self.assertEqual((bench.files("outputs", ".pile", "*.png"), bench.files("jobs", jid)), ([], []))
 
 
 class CancelAtStartTest(bench.BenchCase):
@@ -162,7 +162,7 @@ class CancelAtStartTest(bench.BenchCase):
             self.assert_never_computed(first["id"])
             self.assertEqual(bench.job(second["id"])["status"], "done")
             self.assertEqual(len(sent.decided), 1, sent.decided)
-        self.assertEqual(len(bench.files("outputs", "*.png")), 1)
+        self.assertEqual(len(bench.files("outputs", ".pile", "*.png")), 1)
         self.assertEqual(bench.files("jobs", first["id"]), [])
         self.assertEqual([e.get("seed") for e in bench.journal()], [bench.job(second["id"])["seed"]])
 

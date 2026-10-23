@@ -119,6 +119,7 @@ async function enterPrivate() {
 }
 // la galerie, puis la visionneuse sur l'image au prompt donné
 async function view(prompt) {
+  await bench.keepAll(page);                      // piles gardées (privée comprise) : dans la galerie
   await page.eval(`goTab('hist')`);
   const at = `histItems.findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
   await page.waitFor(`${at} >= 0`, { what: 'image dans la galerie' });

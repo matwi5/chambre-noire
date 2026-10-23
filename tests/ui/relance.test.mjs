@@ -55,6 +55,7 @@ const addImage = color => page.eval(`(async () => { inputImages.push(await toEnt
 const send = body => page.eval(`postJson('/api/generate', { width: 512, height: 512, steps: 8, cfg: 1, seed: -1,
   preview: false, ref_images: [], ...${body} }).then(r => r.status)`);
 async function view(prompt) {
+  await bench.keepAll(page);                      // piles gardées (privée comprise) : dans la galerie
   await page.click('#tabbar [data-pane="hist"]');
   const at = `histItems.findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
   await page.waitFor(`${at} >= 0`, { what: 'image dans la galerie' });

@@ -9,6 +9,7 @@
 //   bench.release('nom')                         // libère les générations HOLD=nom du faux moteur
 //   bench.dir                                    // dossier temporaire du banc (outputs/, jobs/…) : ce qu'il écrit
 //   await bench.idle()                           // rien en cours ni en file (avant un rechargement de la page)
+//   await bench.keepAll(page)                    // au repos, toutes les images des piles gardées (dans la galerie)
 //   const disk = bench.disk(); …; disk.written() // fichiers écrits ou changés par le serveur depuis l'instantané
 //   await page.typePrompt('texte')               // texte tapé dans le champ de Créer (événement input)
 //   await page.generate('texte')                 // tapé dans Créer puis « Générer » : demande acceptée, page En cours
@@ -140,6 +141,24 @@ export async function startBench({ relay = false } = {}) {
     },
     // libère les générations dont le prompt porte HOLD=<name> (HOLD seul : 'hold') ; voir tests/fake_sdcli.py
     release(name = 'hold') { fs.writeFileSync(path.join(hold, name), ''); },
+    // une fois le Mac au repos, garde (POST /api/keep) toutes les images de la pile publique, et avec page dans
+    // l'espace privé celles de la pile privée (par la page, qui a la session) : elles passent dans la galerie, pour les
+    // tests qui la regardent ; renvoie leurs noms (identifiants pour les privées)
+    async keepAll(page = null) {
+      await this.idle();
+      const names = (await (await fetch(direct + '/api/pile')).json()).map(it => it.name);
+      for (const name of names) {
+        const r = await fetch(direct + '/api/keep', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }) });
+        if (!r.ok) throw new Error(`bench.keepAll : ${name} non gardée (${r.status})`);
+      }
+      const ids = page ? await page.eval(`(async () => { if (!inPrivate()) return [];
+        const ids = (await (await fetch('/api/private/pile')).json()).map(it => it.id);
+        for (const id of ids)
+          if (!(await postJson('/api/private/keep', { id })).ok) throw new Error('non gardée : ' + id);
+        return ids; })()`) : [];
+      return [...names, ...ids];
+    },
     async stop() { await relayed?.stop(); await server.stop(); },
   };
 }

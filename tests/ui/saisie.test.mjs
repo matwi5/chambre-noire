@@ -101,6 +101,7 @@ test('« Éditer » depuis la galerie : l\'image rejoint les images d\'entrée, 
   await page.typePrompt('un phare à éditer');
   await generate();
   await page.waitFor(`pageJobs.at(-1).result`, { what: 'image finie', timeout: 30000 });
+  await bench.keepAll();                          // images de la pile gardées : dans la galerie
   await page.click('#tabbar [data-pane="hist"]');
   await page.waitFor(`histItems.length > 0`, { what: 'galerie' });
   await page.eval(`openViewer(0, histItems); viewerAction('edit')`);
@@ -260,6 +261,7 @@ test('geste « Dessiner » : l\'image seule, dessin actif ; confirmation s\'il y
   await page.typePrompt('un phare à dessiner');
   await generate();
   await page.waitFor(`pageJobs.at(-1).result`, { what: 'image finie', timeout: 30000 });
+  await bench.keepAll();                          // images de la pile gardées : dans la galerie
   await page.click('#tabbar [data-pane="hist"]');
   await page.waitFor(`histItems.length > 0`, { what: 'galerie' });
   const name = await page.eval(`histItems[0].name`);

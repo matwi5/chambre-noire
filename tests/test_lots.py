@@ -25,7 +25,7 @@ class VariantsTest(bench.BenchCase):
         done = [wait_job(j["id"]) for j in jobs]
         self.assertEqual([j["status"] for j in done], ["done"] * 3)
         self.assertTrue(all(a["finished"] <= b["started"] for a, b in zip(done, done[1:])))   # à la suite, dans l'ordre
-        self.assertEqual(len(files("outputs", "*.png")), 3)
+        self.assertEqual(len(files("outputs", ".pile", "*.png")), 3)
 
     def test_server_draws_distinct_seeds_written_to_the_journal(self):
         jobs = generate_lot(count=4)["jobs"]
@@ -95,7 +95,7 @@ class LotCancelTest(bench.BenchCase):
             self.assertEqual((code, reply["cancelled"]), (200, 3))
             self.assertEqual([wait_job(j["id"])["status"] for j in jobs], ["cancelled"] * 3)
             bench.wait_idle()
-            self.assertEqual(files("outputs", "*.png"), [])
+            self.assertEqual(files("outputs", ".pile", "*.png"), [])
             self.assertEqual(files("jobs", "*"), [])
             self.assertEqual((sent.decided, list(sent)), ([], []))   # tout le lot annulé : aucune notification
 
@@ -104,7 +104,7 @@ class LotCancelTest(bench.BenchCase):
         wait_job(jobs[0]["id"])
         call("POST", f"/api/lot/{jobs[0]['lot']['id']}/cancel")
         self.assertEqual([wait_job(j["id"])["status"] for j in jobs], ["done", "cancelled", "cancelled"])
-        self.assertEqual(len(files("outputs", "*.png")), 1)
+        self.assertEqual(len(files("outputs", ".pile", "*.png")), 1)
 
     def test_unknown_or_finished_lot(self):
         self.assertEqual(call("POST", "/api/lot/inconnu/cancel")[0], 404)
@@ -164,13 +164,13 @@ class LotNotificationTest(bench.BenchCase):
             self.assertEqual(self.only(sent)["title"], "2 images prêtes")
 
 
-class HistoryLotTest(bench.BenchCase):
-    def test_history_gives_the_lot_of_each_image_and_nothing_for_a_single_one(self):
+class PileLotTest(bench.BenchCase):
+    def test_pile_gives_the_lot_of_each_image_and_nothing_for_a_single_one(self):
         jobs = generate_lot(count=2)["jobs"]
         single = bench.generate("alone")
         for j in jobs + [single]:
             wait_job(j["id"])
-        items = {it["name"]: it for it in call("GET", "/api/history")[1]}
+        items = {it["name"]: it for it in call("GET", "/api/pile")[1]}
         self.assertEqual(len(items), 3)
         self.assertEqual([items[j["name"]]["lot"] for j in jobs], [j["lot"] for j in jobs])
         self.assertEqual([items[j["name"]]["lot"]["campaign"] for j in jobs], [False, False])

@@ -35,9 +35,9 @@ class CampaignTest(bench.BenchCase):
         done = [wait_job(j["id"]) for j in jobs]
         self.assertEqual([j["status"] for j in done], ["done"] * 3)
         self.assertEqual([tuple(j["dims"]) for j in done], sizes)
-        history = {it["name"]: it for it in call("GET", "/api/history")[1]}
+        pile = {it["name"]: it for it in call("GET", "/api/pile")[1]}
         for j, raw in zip(jobs, photos):
-            item = history[j["name"]]
+            item = pile[j["name"]]
             self.assertEqual(item["inputs"], ["ref_1.png"])            # sa seule photo, gardée comme image d'entrée
             self.assertEqual(item["mode"], "edit")
             self.assertEqual(item["prompt"], "make the car blue")

@@ -2,7 +2,7 @@ r"""Tests de bout en bout via l'API du lanceur (127.0.0.1:7860, tools/launch.py 
 
   venv\Scripts\python.exe tests\run_tests.py [--base http://127.0.0.1:7860] [--only t2i|edit|mask|annot] [--steps 12] [--cfg 1]
 
-Chaque test enregistre un PNG dans outputs/ et affiche chemin, dimensions, taille et durée.
+Chaque test enregistre un PNG dans la pile (outputs/.pile/) et affiche chemin, dimensions, taille et durée.
 - t2i   : texte vers image 512x512
 - edit  : édition image + texte (référence = résultat t2i)
 - mask  : édition guidée par masque (masque circulaire généré par tools/make_mask.py = équivalent d'un dessin)

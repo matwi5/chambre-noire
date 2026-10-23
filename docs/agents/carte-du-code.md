@@ -39,27 +39,43 @@ Dans l'ordre du fichier :
   erreur et n'est jamais écrasé), `prompt_error` (400), `change_prompt` (sur `saved_prompts` ou, passée en `store`,
   la liste de l'espace privé `private_prompts`) ; `prompt_types()` relit `tools/prompt_types.json` à chaque appel, sans
   jamais l'écrire (ids `type-…`, que les routes d'écriture ne trouvent pas : 404).
-- **Espace privé** (`private/`) : constantes `PRIVATE`, `PRIVATE_COOKIE`, `PRIVATE_IDLE`, `PRIVATE_LOCK` (un
-  `RLock`), `REKEY`, `SCRYPT_N`, `HAVE_CRYPTO` ; clés : `read_space`, `code_key`, `write_space`, `open_space` ; mise
+- **Espace privé** (`private/`) : constantes `PRIVATE`, `PRIVATE_COOKIE`, `PRIVATE_IDLE`, `PRIVATE_LOCK` (un `RLock`),
+  `REKEY`, `META_TMP`, `SCRYPT_N`, `HAVE_CRYPTO` ; clés : `read_space`, `code_key`, `write_space`, `open_space` ; mise
   sur disque : `sync_fd`, `write_synced`, `sync_dir`, avec les droits 600 et 700 de `open_private` et `private_dir` ;
-  chiffrement par fichier : `file_key`, `seal`, `unseal` ; images : `store_private`, `read_private`,
-  `private_history` ; prompts privés : `private_prompts` (`private/prompts`, scellé à l'étiquette `prompts`) ;
-  changement de code : `rekey_space` (tout dans `private/.rekey/`, bascule par `os.replace` de `space.json`) et
-  `finish_rekey` (termine ou abandonne un changement interrompu, au démarrage et sous `PRIVATE_LOCK` avant toute
-  ouverture ou écriture) ; `private_code_error`.
-- **Galerie et journal** : `input_files`, `save_inputs` (entrées copiées vers `outputs/.inputs/<image>/`),
-  `output_path`, `JOURNAL_LOCK`, `journal_entries`, `append_journal` (fin de génération), `delete_output` et
-  `delete_extras` (image et tout ce qui s'y rattache), `read_inputs`, `history()` (PNG de `outputs/` croisés avec le
-  journal), `thumb_jpeg`, `thumbnail` (`outputs/.thumbs/`).
+  chiffrement par fichier : `file_key`, `seal`, `unseal` ; images : `store_private`, `read_private`, `private_items`
+  (fiches déchiffrées de la pile ou des tirages privés, séparés par la marque « pile » de la fiche, la plus récente
+  d'abord), `space_public` (clé de la session encore celle de l'espace, sinon `StaleKey`), `replace_synced` (fichier
+  temporaire mis sur le disque puis `os.replace`), `sort_private` (Garder : fiche rescellée sans la marque par
+  `META_TMP` puis `os.replace` ; Jeter : `remove_private_item`, dossier renommé en dossier caché, puis supprimé, comme
+  `/api/private/delete` ; sous `PRIVATE_LOCK` après `finish_rekey()`) ; prompts privés : `private_prompts`
+  (`private/prompts`, scellé à l'étiquette `prompts`) ;
+  changement de code : `rekey_space` (tout dans `private/.rekey/`, bascule par `os.replace` de `space.json` ; restes
+  `prompts.tmp` et `META_TMP` d'une panne supprimés d'abord, scellés avec l'ancienne clé) et `finish_rekey` (termine ou
+  abandonne un changement interrompu, au démarrage et sous `PRIVATE_LOCK` avant toute ouverture ou écriture) ;
+  `private_code_error`.
+- **Galerie, pile et journal** : `input_files`, `save_inputs` (entrées copiées vers `outputs/.inputs/<image>/`),
+  `PILE` (`outputs/.pile/`, images à trier), `JOB_ID_RE`, `image_in` (nom validé dans un dossier), `output_path` (un
+  tirage), `pile_path` (une image de la pile), `image_path` (l'un ou l'autre : image, vignette et entrées servies),
+  `on_image` (lecture d'une image par `image_path`, cherchée une seconde fois si elle vient d'être gardée),
+  `JOURNAL_LOCK` (un `RLock` : journal, tri, lecture des tirages et de la pile), `journal_line` (une ligne lue, ou
+  illisible : même jugement à la lecture et à la réécriture), `journal_entries`, `append_journal`, `to_pile` (fin
+  d'une génération normale : PNG du dossier de travail vers la pile, sous `S.turn` contre une annulation, puis ligne
+  du journal et entrées, d'un bloc sous `JOURNAL_LOCK`), `delete_output` (effacement complet : PNG, puis
+  `delete_extras` (miniatures et entrées), dossier de travail et lignes du journal par `drop_from_journal`, réécrit
+  dans un fichier temporaire puis remplacé ; une pièce qui résiste n'arrête pas les suivantes), `SORTS` et
+  `sort_image` (Garder, Jeter, Supprimer, d'un bloc sous `JOURNAL_LOCK` : le premier geste arrivé l'emporte),
+  `read_inputs`, `images_in` (PNG d'un dossier croisés avec le journal), `history()` (les tirages), `pile()`,
+  `thumb_jpeg`, `thumbnail` (`outputs/.thumbs/` ; mise en place sous `JOURNAL_LOCK`, jamais pour une image déjà
+  jetée).
 - **État** : `class State`, instance `S` (moteur, modèle, générations en mémoire `S.jobs`, file `S.pending` (liste des
   générations en attente dans l'ordre de calcul, seule source de l'ordre) protégée avec `S.current` par la condition
   `S.turn`, lots `S.lots`, génération en cours `S.current`, sessions privées `S.private_sessions`, noms `S.lan_hosts`
-  et `S.https_hosts`).
+  et `S.https_hosts`, compteurs `S.rev` de la pile et des tirages de chaque espace, `rev` de `/api/status`).
 - **Préparer et lancer une génération** : `data_url_bytes`, `write_data_url` (PNG ou JPEG écrit tel quel, autre
   format converti en PNG : sd-cli ne le lirait pas), `image_size`, `build_cmd` (ligne de commande de sd-cli ; aperçu
   tous les `preview_interval` pas), `latest_preview`, `start_job` (passage « en cours » : par `worker()` sous `S.turn`,
   et par `tools/calibrate.py`, qui appelle `run_job` hors de la file), `run_job` (lit
-  la sortie ligne à ligne : étape, phase, durées pour la calibration ; écrit l'image, le journal, les entrées),
+  la sortie ligne à ligne : étape, phase, durées pour la calibration ; range l'image dans la pile par `to_pile`),
   `secret(job)` (génération privée : rien en clair), `keep_private` (chiffre une génération privée),
   `discard_cancelled`, `forget_files`, `fail_job` (tout échec écrit la même ligne neutre dans `logs/`).
 - **File** : `ACTIVE`, `cancel_job` (statut changé sous `S.turn`), `forget_job`, `sweep()` (appelé en tête de chaque
@@ -227,14 +243,18 @@ invariants ».
   (`build_cmd`), lit la sortie de sd-cli ligne à ligne et en tire l'étape, la phase et les durées (`PROGRESS_RE`,
   lignes « … completed, taking x s ») qui alimentent la calibration. Les jobs vivent en mémoire (`S.jobs`) et ne
   survivent pas à un redémarrage.
-- **Fichiers** : dossier de travail `jobs/<id>/` (images d'entrée, aperçus, `sd-cli.log` ; les 20 derniers gardés au
-  lancement), image finale `outputs/<id>_<mode>.png`, une ligne par image dans `outputs/journal.jsonl`. La galerie
-  (`/api/history`) est la liste des PNG de `outputs/` croisée avec le journal ; miniatures dans `outputs/.thumbs/`. Les
-  images d'entrée (`init.png`, `ref_N.png`) sont copiées du dossier de travail vers `outputs/.inputs/<image>/` en fin de
-  job (`save_inputs`, et au démarrage pour les dossiers encore présents) ; `/api/delete` les supprime avec l'image
-  (`delete_output`). Toute écriture du journal passe sous `JOURNAL_LOCK` (`append_journal`, en fin de génération). Une
-  génération annulée (en cours ou en file) ne laisse rien : `discard_cancelled` supprime son dossier de travail et une
-  image finale déjà écrite. Le statut `cancelled` est posé avant que le moteur soit arrêté.
+- **Fichiers** : dossier de travail `jobs/<id>/` (images d'entrée, aperçus, `sd-cli.log`, et l'image tant qu'elle se
+  calcule ; les 20 derniers gardés au lancement), image finale `outputs/.pile/<id>_<mode>.png` (la pile, à trier),
+  une ligne par image dans `outputs/journal.jsonl`. Garder (`/api/keep`) déplace le seul PNG vers `outputs/` (les
+  tirages, dont toutes les images d'avant la pile) ; miniatures (`outputs/.thumbs/`) et images d'entrée
+  (`outputs/.inputs/<image>/`) sont rangées par nom d'image et ne bougent pas. Les tirages (`/api/history`) et la pile
+  (`/api/pile`) sont les PNG de leur dossier croisés avec le journal (`images_in`). Les images d'entrée (`init.png`,
+  `ref_N.png`) sont copiées du dossier de travail en fin de job (`save_inputs`, et au démarrage pour les dossiers
+  encore présents). Jeter (`/api/discard`, une image de la pile) et Supprimer (`/api/delete`, un tirage) effacent tout
+  (`delete_output`), ligne du journal comprise. Toute écriture du journal et tout tri passent sous `JOURNAL_LOCK`
+  (`to_pile`, `sort_image`), et chacun augmente `S.rev`. Une génération annulée (en cours ou en file) ne laisse
+  rien : `discard_cancelled` supprime son dossier de travail, image commencée comprise. Le statut `cancelled` est posé
+  avant que le moteur soit arrêté.
 - **Lots** (variantes : `count` de 2 à 4, tous les modes, jamais avec une campagne ; campagne : `campaign`, 2 à 10
   photos avec leurs dimensions, en `edit`) : `expand_request` en tire une demande par image, `/api/generate` une
   génération par demande (`new_job`), reliées par `job["lot"]` (`id`, `rank`, `size`, et `campaign`, le marqueur qui
@@ -286,7 +306,8 @@ invariants ».
   son lot), dans les journaux rien que les lignes communes à toutes les générations (`DONE_LINE`, échecs neutres) ;
   dans `queue`, une entrée complète vue depuis l'espace privé seulement,
   puis `keep_private` chiffre image, miniature (en mémoire), entrées et réglages avec la clé publique notée au
-  lancement (`store_private`). Une génération privée ne s'arrête pas à la fermeture de la page ; finie, elle est
+  lancement (`store_private`), dans la pile privée : marque « pile » dans la fiche chiffrée, `S.rev` de l'espace
+  privé augmenté. Une génération privée ne s'arrête pas à la fermeture de la page ; finie, elle est
   oubliée par `/api/job/<id>/forget` (envoyé par sa page), sinon par `sweep()`, `PRIVATE_JOB_TTL` (24 h) après sa
   fin. Une demande `"incognito": true` (mode retiré, d'une page d'avant) est refusée (400) sans rien écrire, journal
   du serveur compris (`/api/generate` est tue). Au lancement sur Mac, `exclude_from_backup` exclut `jobs/` de Time
