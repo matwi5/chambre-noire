@@ -26,9 +26,9 @@ Dans l'ordre du fichier :
   de `launch.py` et `estimate.py`, relus toutes les `VERSION_TTL` s ; git seulement s'il y a un `.git`, jamais après un
   échec, sauf un délai dépassé ; `S.started` : la même chose au lancement, posé par `main()`), `engine_tag`,
   `default_backend`.
-- **Accès** : `ACCESS_FILE`, `ACCESS_COOKIE`, `LOCAL_CLIENTS`, `PUBLIC_FILES` (manifeste, icônes, service worker,
-  servis sans cookie), `LOGIN_PAGE`. Plus bas : `normalize_code`, `access_token`, `load_access_code`, `lan_address`,
-  `tailscale_hosts`, `tailscale_serve_url`.
+- **Accès** : `ACCESS_FILE`, `ACCESS_COOKIE`, `LOCAL_CLIENTS`, `PUBLIC_FILES` (manifeste, icônes, logo, police pixel,
+  service worker, servis sans cookie), `LOGIN_PAGE`. Plus bas : `normalize_code`, `access_token`, `load_access_code`,
+  `lan_address`, `tailscale_hosts`, `tailscale_serve_url`.
 - **Notifications** (Web Push, `pywebpush`) : `push_vapid` (clé `tools/push_vapid.pem` créée au premier usage),
   `push_subscriptions` (`tools/push_subscriptions.json`, sous `PUSH_LOCK`), puis `notify_job` (génération hors lot,
   terminée ou en échec), `notify_lot` (une seule par lot) et `push_notify` (envoi dans un thread, à chaque abonnement ;
@@ -210,10 +210,12 @@ rapprocher une génération de la file par son identifiant, et traiter un 404 qu
 l'espace (voir `CODING_STANDARDS.md`).
 
 Fichiers voisins : `tools/ui/sw.js` (service worker : navigation seulement, jamais `/api/*`),
-`tools/ui/manifest.webmanifest` et les icônes (installation sur le téléphone) ; `tools/ui/logo.svg` (logo de la barre
-du haut, de la page du code d'accès et de l'onglet) est la source des icônes PNG, à régénérer depuis lui s'il change,
-par Chrome sans écran : `icon-192.png` et `icon-512.png` tels quels (coins transparents), `icon-maskable-512.png` et
-`apple-touch-icon.png` (180 px) plein cadre, sans le `clip-path` arrondi ni le liseré du bord, sans transparence.
+`tools/ui/manifest.webmanifest` et les icônes (installation sur le téléphone) ; `tools/ui/PixelifySans.woff2` (police
+pixel du nom et des titres, licence `tools/ui/OFL.txt`), servie sans code d'accès par `PUBLIC_FILES` comme eux ;
+`tools/ui/logo.svg` (logo de la barre du haut, de la page du code d'accès et de l'onglet) est la source des icônes PNG,
+à régénérer depuis lui s'il change, par Chrome sans écran : `icon-192.png` et `icon-512.png` tels quels (coins
+transparents), `icon-maskable-512.png` et `apple-touch-icon.png` (180 px) plein cadre, sans le `clip-path` arrondi ni le
+liseré du bord, sans transparence.
 
 ## Mécanismes
 
@@ -322,7 +324,8 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
   privées).
 - Palette de la lumière inactinique (fond, surface, filets, texte papier, accent ambre, halo, erreur, grain, icône
   d'erreur `--ico-err`) : jetons du `:root` de `index.html`, recopiés dans `LOGIN_PAGE` de `launch.py` et dans la page
-  hors ligne `OFFLINE` de `tools/ui/sw.js` (et le fond dans `manifest.webmanifest`).
+  hors ligne `OFFLINE` de `tools/ui/sw.js` (et le fond dans `manifest.webmanifest`) ; la déclaration `@font-face` de
+  la police pixel est dans `index.html` et dans `LOGIN_PAGE`.
 - Pas une copie : l'estimation de chaque génération de la file (`job_estimate`, pour `queue_entry` et le travail caché
   `ahead`) appelle `estimate.predict` ; l'estimation de « Relancer » (`relaunch`) est approchée (chaque référence
   comptée à la taille de la sortie, pas de `refPx`).

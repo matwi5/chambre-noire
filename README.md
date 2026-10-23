@@ -858,6 +858,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── calibrate.py      générations de calibration (lancées par setup.py)
 │   ├── ui/index.html     l'interface
 │   ├── ui/manifest.webmanifest, sw.js, icon-*.png   installation sur le téléphone (application)
+│   ├── ui/PixelifySans.woff2, OFL.txt   police pixel du nom et des titres, et sa licence (servie sans code d'accès)
 │   ├── fix_int8_te.py    correctif de l'encodeur texte int8 (Windows)
 │   ├── make_shortcut.py  crée Chambre noire.lnk (Windows) ou Chambre noire.command (Mac)
 │   ├── make_service.py   Mac : démarrage automatique de l'interface, accessible depuis le Wi-Fi
@@ -949,6 +950,9 @@ Sur Mac : `venv/bin/python tests/run_tests.py --steps 8`.
 - **Encodeur GGUF (Mac)** : Alibaba Qwen, [Qwen/Qwen3-VL-8B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF),
   sous licence Apache 2.0.
 - **Moteur** : [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (licence MIT).
+- **Police pixel** : [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans), © 2021 The Pixelify Sans Project
+  Authors, sous **SIL Open Font License 1.1** ([tools/ui/OFL.txt](tools/ui/OFL.txt)) ; sous-ensemble latin en woff2
+  tiré de Google Fonts, pour le nom de l'application et les titres.
 
 Le code de ce dépôt (interface, lanceur, scripts) est sous **licence MIT**, voir [LICENSE](LICENSE). Les poids du modèle restent soumis à leur
 propre licence et sont téléchargés directement depuis leurs dépôts d'origine.

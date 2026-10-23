@@ -12,6 +12,12 @@ class AccessTest(bench.BenchCase):
         self.assertEqual(call("POST", "/api/generate", gen_body(), remote=True, cookie=False)[0], 401)
         self.assertEqual(call("GET", "/api/status", remote=True)[0], 200)
 
+    def test_pixel_font_is_served_without_the_access_cookie(self):
+        # demandée aussi par la page du code d'accès, avant toute saisie du code
+        code, raw, hdrs = bench.call_full("GET", "/PixelifySans.woff2", remote=True, cookie=False)
+        self.assertEqual((code, hdrs["Content-Type"], raw[:4]), (200, "font/woff2", b"wOF2"))
+        self.assertEqual(hdrs["Cache-Control"], "no-store")
+
     def test_post_without_json_content_type_is_refused(self):
         self.assertEqual(call("POST", "/api/generate", gen_body(), headers={"Content-Type": "text/plain"})[0], 415)
 

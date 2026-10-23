@@ -2,7 +2,8 @@
 // téléphone est en mode clair (noir chaud, aucune surface en verre flouté), l'espace privé passe en lumière verte, la
 // barre d'état prend la couleur du fond de l'espace, et la page du code d'accès et la page « Ordinateur injoignable »
 // ont les mêmes couleurs que l'application. Les teintes exactes se règlent sur captures : les tests vérifient le
-// caractère des couleurs (sombre, chaud, vert), pas leurs valeurs.
+// caractère des couleurs (sombre, chaud, vert), pas leurs valeurs. Le nom et les titres sont en police pixel (Pixelify
+// Sans, servie par le Mac), qui a tous les signes du français ; le texte courant reste en police du téléphone.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/identite.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -36,6 +37,11 @@ const dark = c => Math.max(...c) < 40;
 // barre d'état demandée (theme-color) : celle du fond de l'espace affiché (jeton --void)
 const barOfVoid = `[...document.querySelectorAll('meta[name=theme-color]')].map(m => m.content).join()
   === getComputedStyle(document.documentElement).getPropertyValue('--void').trim()`;
+// police de chaque élément désigné : true s'il est en police pixel (Pixelify Sans chargée et demandée en premier)
+const pixel = selectors => page.eval(`document.fonts.ready.then(() => Object.fromEntries(${JSON.stringify(selectors)}
+  .map(s => [s, getComputedStyle(document.querySelector(s)).fontFamily.startsWith('"Pixelify Sans"')
+    && document.fonts.check('16px "Pixelify Sans"')])))`);
+const allAs = (selectors, value) => Object.fromEntries(selectors.map(s => [s, value]));
 
 test('page du code d\'accès, téléphone en mode clair : noir chaud, sans verre, barre d\'état du fond', async () => {
   await page.goto(bench.url + '/');               // sans le cookie : le relais montre la page du code
@@ -44,6 +50,7 @@ test('page du code d\'accès, téléphone en mode clair : noir chaud, sans verre
   assert.ok(dark(l.bg) && l.bg[0] > l.bg[2], `fond noir chaud : ${l.bg}`);
   assert.deepEqual(l.themes, [l.bg], 'une seule couleur de barre d\'état, celle du fond');
   assert.deepEqual(l.glass, [], 'aucune surface en verre flouté');
+  assert.deepEqual(await pixel(['h1', 'p', 'input']), { h1: true, p: false, input: false }, 'nom en police pixel');
   page.assertNoErrors();
 });
 
@@ -55,6 +62,10 @@ test('interface, téléphone en mode clair : noir chaud, sans verre ; espace pri
   await page.waitFor(barOfVoid, { what: 'barre d\'état du fond' });
   assert.equal(l.themes.length, 1, 'une seule couleur de barre d\'état');
   assert.deepEqual(l.glass, [], 'aucune surface en verre flouté');
+  const titles = ['.topbar h1', '.hist-head h2', '#setTitle', '#engineTitle', '#tabbar button span:last-child',
+    '#resultEmpty p'], text = ['#prompt', '#go', '.note', '#status', 'label', '#stepBig'];
+  assert.deepEqual(await pixel([...titles, ...text]), { ...allAs(titles, true), ...allAs(text, false) },
+    'nom, titres, onglets et états vides en police pixel, le reste en police du téléphone');
   const created = `postJson('/api/private/create', { code: 'code-identite-1' }).then(r => r.status)`;
   assert.equal(await page.eval(created), 200);
   await page.eval(`refreshStatus()`);
@@ -65,6 +76,18 @@ test('interface, téléphone en mode clair : noir chaud, sans verre ; espace pri
   assert.deepEqual(l.themes, [l.bg], 'barre d\'état du fond de l\'espace privé');
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  page.assertNoErrors();
+});
+
+test('police pixel : tous les signes du français, dessinés par elle', async () => {
+  const signs = 'éèêàâçôûùïëœ«»’ÉÈÀÇŒ';
+  // un signe absent de la police serait dessiné par la police de repli : sa largeur changerait avec elle
+  const missing = await page.eval(`document.fonts.load('32px "Pixelify Sans"', ${JSON.stringify(signs)}).then(() => {
+    const x = document.createElement('canvas').getContext('2d');
+    const width = (c, f) => { x.font = '32px ' + f; return x.measureText(c).width; };
+    return [...${JSON.stringify(signs)}].filter(c => width(c, '"Pixelify Sans", monospace')
+      !== width(c, '"Pixelify Sans", serif') || width(c, '"Pixelify Sans", serif') === width(c, 'serif')); })`);
+  assert.deepEqual(missing, [], 'signes que la police pixel ne dessine pas');
   page.assertNoErrors();
 });
 

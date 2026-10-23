@@ -28,6 +28,8 @@
     --shadow:0 18px 40px -22px rgba(0,0,0,.9);
     --spring:cubic-bezier(.34,1.45,.5,1); --ease:cubic-bezier(.2,.9,.25,1);
     --r-m:6px; --r-s:4px;
+    --sans:system-ui, -apple-system, "SF Pro Text", "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+    --pixel:"Pixelify Sans", var(--sans); --mono:ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     --ico-err:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' shape-rendering='crispEdges'%3E%3Cpath fill-rule='evenodd' d='M1 0h7v1h1v7h-1v1h-7v-1h-1v-7h1zM4 2h1v3h-1zM4 6h1v1h-1z'/%3E%3C/svg%3E");
     /* grain argentique : petite texture de bruit répétée, statique */
     --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .9 0 0 0 0 .82 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
@@ -42,7 +44,7 @@
     --halo:rgba(28,170,74,.20); --scrim:rgba(1,4,2,.62); --shade:rgba(2,4,3,.8); --badge:rgba(7,13,9,.72); }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { margin:0; }
-  body { font:16px/1.45 system-ui, -apple-system, "SF Pro Text", "Segoe UI Variable", "Segoe UI", Roboto, sans-serif; color:var(--ink);
+  body { font:16px/1.45 var(--sans); color:var(--ink);
     background:var(--void); min-height:100dvh; -webkit-font-smoothing:antialiased; font-feature-settings:"tnum" 0; }
   button, input, select, textarea { font:inherit; color:inherit; }
 
@@ -513,8 +515,18 @@
   .ask-text { color:var(--ink2); margin:8px 2px 20px; overflow-wrap:anywhere; }
   .ask-acts { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .btn.danger-fill { color:var(--on-err); background:var(--err); box-shadow:0 10px 26px -14px color-mix(in srgb, var(--err) 70%, transparent); }
-  .log { font:12px/1.5 ui-monospace, Menlo, Consolas, monospace; color:var(--ink2); background:var(--field); border-radius:var(--r-m); padding:12px; min-height:60px; max-height:34svh; overflow:auto; white-space:pre-wrap; }
+  .log { font:12px/1.5 var(--mono); color:var(--ink2); background:var(--field); border-radius:var(--r-m); padding:12px; min-height:60px; max-height:34svh; overflow:auto; white-space:pre-wrap; }
   .log:empty::before { content:"Rien pour l'instant."; }
+  /* ------------------------------------------------------------ typographie : nom, titres, onglets et états vides en
+     police pixel (Pixelify Sans, servie par le Mac, licence OFL : tools/ui/OFL.txt) ; en chasse fixe, les éléments
+     faits seulement de chiffres techniques (durées estimées et restantes, rang dans un lot, code) ; tout le reste,
+     mots et chiffres mêlés compris, dans la police du téléphone */
+  @font-face { font-family:"Pixelify Sans"; src:url(/PixelifySans.woff2) format("woff2"); font-weight:400 700; font-display:swap; }
+  :is(.topbar h1, .sheet h2, .hist-head h2, .tabbar button > span:last-child, .empty p, .hempty) { font-family:var(--pixel);
+    font-weight:500; letter-spacing:0; }
+  .hempty .btn { font-family:var(--sans); }
+  :is(#go small, .estimate b, .opt small, .hud .eta, #islEta, #vCount, .facts .code, .tabcount, .cell > span, .lotbadge) {
+    font-family:var(--mono); }
   /* ------------------------------------------------------------ téléphone (html.lite) : effets allégés pour le GPU
      Rien de flou ni d'animé en fond : le halo et le grain sont fixes, et gardés. Les animations d'interface restent
      courtes. ?lite=1 ou ?lite=0 dans l'adresse force le choix. */

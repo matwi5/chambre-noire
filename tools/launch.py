@@ -202,6 +202,8 @@ PUBLIC_FILES = {
     "/icon-maskable-512.png": ("icon-maskable-512.png", "image/png"),
     "/apple-touch-icon.png": ("apple-touch-icon.png", "image/png"),
     "/logo.svg": ("logo.svg", "image/svg+xml"),
+    # police pixel du nom et des titres (Pixelify Sans, licence OFL : tools/ui/OFL.txt), aussi pour la page du code
+    "/PixelifySans.woff2": ("PixelifySans.woff2", "font/woff2"),
 }
 LOGIN_PAGE = """<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Chambre noire</title>
@@ -224,7 +226,9 @@ background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/sv
 form{width:100%;max-width:360px;padding:28px 22px 22px;border-radius:var(--r-m);text-align:center;
 border:1px solid var(--line);background:var(--surf);box-shadow:0 18px 40px -22px rgba(0,0,0,.9)}
 .logo{display:block;width:52px;height:52px;margin:0 auto 14px;border-radius:23%;box-shadow:0 0 0 1px var(--line)}
-h1{font-size:22px;letter-spacing:-.02em;margin:0 0 6px}
+@font-face{font-family:"Pixelify Sans";src:url(/PixelifySans.woff2) format("woff2");font-weight:400 700;
+font-display:swap}
+h1{font:500 24px/1.3 "Pixelify Sans",system-ui,sans-serif;margin:0 0 6px}
 p{color:var(--ink2);margin:0 0 20px;font-size:14.5px}
 input{width:100%;font:inherit;font-size:24px;font-weight:650;letter-spacing:.16em;text-align:center;padding:14px;
 border-radius:var(--r-m);border:1px solid var(--line);background:var(--field);color:var(--ink);outline:none}
