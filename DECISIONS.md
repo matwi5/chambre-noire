@@ -26,6 +26,11 @@ les messages de commit.
 - **Réserve** : la question sur l'accès local sous-estimait l'exposition (relevé de la passe « bogues ») : un autre
   compte du Mac peut aussi lire le code d'accès du téléphone, lancer des générations, jeter ou supprimer des images et
   modifier les prompts enregistrés. Question reposée au porteur avec l'exposition réelle ; le README la décrit déjà.
+- **Remplacée en partie le 24/10/2026** (accès local) : question reposée, « Y a-t-il, ou y aura-t-il, d'autres comptes
+  que le tien sur ce Mac ? (a) Non, il est à moi seul. On garde l'accès sans code depuis le Mac, et la limite reste
+  écrite. (b) Oui. Le Mac demanderait lui aussi le code d'accès, une seule fois par navigateur. Le code est dans
+  `tools/access_code.txt`, que les autres comptes ne peuvent pas lire. Un autre compte devrait alors le connaître
+  pour entrer. » → « b ». La mise en œuvre (code sans `--lan`, entrée du Mac) est à cadrer avec le porteur.
 
 ## 2026-10-23 · PNG renommé avant l'effacement, fichiers du serveur pour le seul porteur
 
