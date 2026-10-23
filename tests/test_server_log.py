@@ -1,6 +1,8 @@
 """Journal du serveur (logs/ sur le Mac, bench.LOG au banc) : la même ligne neutre pour tout échec, génération privée ou
 non, sans détail (le détail, qui peut citer le prompt ou un fichier, reste en mémoire pour l'interface) ; rien n'y
 distingue une génération privée d'une normale."""
+import errno
+import io
 import unittest
 from unittest import mock
 
@@ -112,6 +114,73 @@ class QuietSuccessTest(bench.BenchCase):
         self.assertEqual(call("GET", "/api/result?name=absente.png")[0], 404)
         self.assertEqual(len(logged()), 1, bench.LOG)
         self.assertIn(" 404 ", logged()[0])
+
+
+class NoPrivateTraceTest(bench.BenchCase):
+    """Rien d'autre dans le journal qui laisse deviner l'espace privé (décision du 23/10/2026) : une connexion coupée
+    par l'appareil donne une ligne neutre au lieu de la pile d'appels de Python (qui nommerait une route privée,
+    l'adresse de l'appareil et des chemins du Mac) ; /api/generate n'y va jamais, même refusée (ses refus 403 et 503 ne
+    viennent que de l'espace privé) ; une suppression n'y écrit rien."""
+
+    def test_a_cut_connection_writes_one_neutral_line(self):
+        def cut(handler):
+            raise BrokenPipeError(32, "Broken pipe")
+        err = io.StringIO()
+        bench.LOG.clear()
+        with mock.patch.object(bench.launch.H, "do_GET", cut), mock.patch("sys.stderr", err):
+            with self.assertRaises(OSError):              # connexion fermée sans réponse
+                call("GET", "/api/private/history")
+            bench.wait_until(lambda: "[ui] connexion interrompue" in bench.LOG, what="ligne neutre")
+        self.assertEqual(logged(), ["[ui] connexion interrompue"])
+        self.assertEqual(err.getvalue(), "", "pile d'appels écrite sur la sortie d'erreur")
+
+    def test_a_thumbnail_cut_while_sent_writes_only_the_neutral_line(self):
+        name = wait_job(generate("visible")["id"])["name"]
+        bench.wait_idle()
+        real = bench.launch.H._send
+
+        def cut_on_success(handler, code, *a, **kw):       # l'appareil a fermé la page pendant l'envoi
+            if code == 200 and handler.path.startswith("/api/thumb"):
+                raise BrokenPipeError(32, "Broken pipe")
+            return real(handler, code, *a, **kw)
+        bench.LOG.clear()
+        with mock.patch.object(bench.launch.H, "_send", cut_on_success), mock.patch("sys.stderr", io.StringIO()):
+            with self.assertRaises(OSError):
+                call("GET", "/api/thumb?name=" + name)
+            bench.wait_until(lambda: "[ui] connexion interrompue" in bench.LOG, what="ligne neutre")
+        self.assertEqual(logged(), ["[ui] connexion interrompue"], "fausse erreur 500 écrite en plus")
+
+    def test_a_cut_reported_as_a_plain_os_error_is_neutral_too(self):
+        def cut(handler):                                   # macOS : EPROTOTYPE au lieu de EPIPE
+            raise OSError(errno.EPROTOTYPE, "Protocol wrong type for socket")
+        err = io.StringIO()
+        bench.LOG.clear()
+        with mock.patch.object(bench.launch.H, "do_GET", cut), mock.patch("sys.stderr", err):
+            with self.assertRaises(OSError):
+                call("GET", "/api/private/history")
+            bench.wait_until(lambda: "[ui] connexion interrompue" in bench.LOG, what="ligne neutre")
+        self.assertEqual(err.getvalue(), "", "pile d'appels écrite sur la sortie d'erreur")
+
+    def test_a_query_string_hides_no_request(self):
+        quiet = bench.launch.quiet_request
+        self.assertTrue(quiet('"POST /api/generate HTTP/1.1" 400 -'))
+        self.assertTrue(quiet('"GET /api/job/abc/preview?v=2 HTTP/1.1" 404 -'))
+        self.assertFalse(quiet('"POST /api/login?/api/generate HTTP/1.1" 403 -'), "chemin pris dans la requête")
+        self.assertFalse(quiet('"GET /api/result?name=/api/private/x HTTP/1.1" 404 -'))
+
+    def test_generate_requests_stay_out_of_the_log(self):
+        bench.LOG.clear()
+        self.assertEqual(call("POST", "/api/generate", gen_body("zq7", width=10))[0], 400)
+        self.assertEqual(call("POST", "/api/generate", gen_body("zq7", private=True), private="session-inconnue")[0],
+                         403)
+        self.assertEqual(logged(), [])
+
+    def test_a_deletion_writes_nothing(self):
+        name = wait_job(generate("visible")["id"])["name"]
+        bench.wait_idle()
+        bench.LOG.clear()
+        self.assertEqual(call("POST", "/api/delete", {"name": name})[0], 200)
+        self.assertEqual(logged(), [])
 
 
 if __name__ == "__main__":

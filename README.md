@@ -821,8 +821,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `campaign` hors du mode `edit`, de plus de 10 photos, ou dont une photo n'a pas d'image ou de dimensions valides ;
   les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Elle refuse aussi
   (400 « L'incognito n'existe plus : passez par l'espace privé. ») une demande `"incognito": true`, qu'enverrait une
-  page d'avant le retrait de l'incognito restée ouverte : ni image, ni dossier de travail, ni ligne du journal des
-  images (seule la requête refusée figure au journal du serveur, comme toute requête en erreur) ; le champ `page` d'une
+  page d'avant le retrait de l'incognito restée ouverte : rien n'est écrit sur l'ordinateur, pas même au journal du
+  serveur (les requêtes `/api/generate` n'y vont jamais) ; le champ `page` d'une
   telle page est ignoré. Une génération qui ne peut pas se préparer (image d'entrée illisible, par exemple) échoue
   seule, avec un message, et la file passe à la suivante.
 - Le journal du serveur (`logs/service.log` pour le service Mac) écrit la même ligne pour tout échec, génération
@@ -832,9 +832,11 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   conservées », « [job] erreur du thread de calcul » et « [push] notification du lot impossible » n'ont pas non plus
   de détail. Toute réussite écrit la même ligne, « [job] génération terminée », sans chemin ni durée, et aucune mesure
   de calibration n'y figure, ni son échec (seul `tools/calibrate.py` affiche les siennes) ; seules les requêtes en
-  erreur (4xx, 5xx) y sont écrites : la suite des
-  requêtes réussies (image et miniature lues après une génération normale seulement) trahirait sinon les générations
-  privées.
+  erreur (4xx, 5xx) y sont écrites, d'après leur seul chemin, hors des routes du suivi, de l'espace privé et de
+  `/api/generate` (ses refus propres, 403 et 503, ne viennent que de l'espace privé ; ses refus d'accès, 401, 403 et
+  415, n'y sont donc pas non plus) : la suite des requêtes réussies (image et miniature lues après une génération
+  normale seulement) trahirait sinon les générations privées. Une connexion coupée par l'appareil (page quittée pendant
+  un chargement) donne la seule ligne « [ui] connexion interrompue », et une suppression réussie n'écrit rien.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés
   sous Windows (ROCm Windows ne couvre que les cartes RDNA3/RDNA4, DirectML est limité à d'anciennes versions) :
   il tournerait en CPU pur. Si vous avez une carte NVIDIA, les workflows officiels Comfy-Org

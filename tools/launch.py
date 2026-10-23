@@ -40,8 +40,8 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   tools/push_vapid.pem, appareils abonnés dans tools/push_subscriptions.json (non versionnés). Jamais le prompt.
 Aucun droit administrateur, aucune modification système : tout reste dans ce dossier.
 """
-import argparse, base64, datetime, glob, hashlib, hmac, io, json, math, os, re, secrets, shutil, socket, subprocess, sys
-import threading, time, uuid, webbrowser
+import argparse, base64, datetime, errno, glob, hashlib, hmac, io, json, math, os, re, secrets, shutil, socket
+import subprocess, sys, threading, time, uuid, webbrowser
 from http.cookies import SimpleCookie
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlsplit
@@ -1647,11 +1647,32 @@ def public(job):
     return d
 
 
+QUIET_ROUTES = ("/api/status", "/api/job/", "/api/private/", "/api/lot/", "/api/generate")
+REQUEST_PATH_RE = re.compile(r'"[A-Z]+ ([^ ?#]*)')   # chemin de la ligne de requête, sans ce qui suit « ? »
+
+
 def quiet_request(msg):
-    """Requêtes tues dans le journal du serveur même en erreur (les réussies n'y vont jamais : H.log_request) : suivi de
-    l'état et des générations, et tout ce qui peut toucher à l'espace privé (rien n'en va dans logs/), annulation et
-    passage en tête d'une génération ou d'un lot compris (leur identifiant)."""
-    return "/api/status" in msg or "/api/job/" in msg or "/api/private/" in msg or "/api/lot/" in msg
+    """Requêtes tues dans le journal du serveur même en erreur (les réussies n'y vont jamais : H.log_request), d'après
+    leur chemin seul (une chaîne de requête ne fait rien taire) : suivi de l'état et des générations, et tout ce qui
+    peut toucher à l'espace privé (rien n'en va dans logs/), annulation et passage en tête d'une génération ou d'un lot
+    compris (leur identifiant), et toute demande de génération, ses refus propres (403, 503) ne venant que de l'espace
+    privé (décision du 23/10/2026). Ainsi tus, les refus d'accès d'une demande de génération (401, 403, 415) ne sont
+    plus suivis non plus."""
+    m = REQUEST_PATH_RE.match(msg)
+    if m:
+        return m.group(1).startswith(QUIET_ROUTES)
+    return any(route in msg for route in QUIET_ROUTES)
+
+
+# erreurs d'écriture d'une connexion que l'appareil a fermée : macOS donne parfois EPROTOTYPE ou ENOTCONN, un simple
+# OSError, au lieu de EPIPE
+CUT_ERRNOS = {getattr(errno, n) for n in ("EPIPE", "ECONNRESET", "ECONNABORTED", "ESHUTDOWN", "EPROTOTYPE", "ENOTCONN")
+              if hasattr(errno, n)}
+
+
+def cut_connection(e):
+    """L'erreur vient-elle d'une connexion fermée par l'appareil ?"""
+    return isinstance(e, ConnectionError) or isinstance(e, OSError) and e.errno in CUT_ERRNOS
 
 
 class Server(ThreadingHTTPServer):
@@ -1659,6 +1680,14 @@ class Server(ThreadingHTTPServer):
     # Python n'en garde que 5 par défaut : la galerie ouvre une connexion par miniature et, pendant que le processeur les
     # fabrique, les suivantes étaient refusées (« Connection reset by peer », miniature cassée sur le téléphone)
     request_queue_size = 128
+
+    def handle_error(self, request, client_address):
+        # connexion coupée par l'appareil (page quittée pendant un chargement) : une ligne neutre au lieu de la pile
+        # d'appels de Python, qui nommerait une route privée, l'adresse de l'appareil et des chemins du Mac
+        if cut_connection(sys.exc_info()[1]):
+            print("[ui] connexion interrompue", flush=True)
+            return
+        super().handle_error(request, client_address)
 
 
 class H(BaseHTTPRequestHandler):
@@ -1995,21 +2024,23 @@ class H(BaseHTTPRequestHandler):
             if not fp or not os.path.isfile(fp):
                 return self._send(404, {"error": "image d'entrée inconnue"})
             if q.get("thumb"):
-                try:
+                try:   # l'envoi reste hors du try : une connexion coupée n'est pas une miniature impossible
                     th = thumbnail(fp, os.path.join(THUMBS, f"{os.path.basename(out)[:-4]}__{f[:-4]}.jpg"))
-                    return self._send(200, open(th, "rb").read(), "image/jpeg")
+                    data = open(th, "rb").read()
                 except Exception as e:
                     return self._send(500, {"error": f"miniature impossible : {e}"})
+                return self._send(200, data, "image/jpeg")
             extra = {"Content-Disposition": f'attachment; filename="{os.path.basename(out)[:-4]}_{f}"'} if q.get("download") else None
             return self._send(200, open(fp, "rb").read(), "image/png", extra)
         if path == "/api/thumb":
             fp = output_path(q.get("name"))
             if not fp:
                 return self._send(404, {"error": "fichier inconnu"})
-            try:
-                return self._send(200, open(thumbnail(fp), "rb").read(), "image/jpeg")
+            try:       # l'envoi reste hors du try : une connexion coupée n'est pas une miniature impossible
+                data = open(thumbnail(fp), "rb").read()
             except Exception as e:
                 return self._send(500, {"error": f"miniature impossible : {e}"})
+            return self._send(200, data, "image/jpeg")
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -2053,8 +2084,7 @@ class H(BaseHTTPRequestHandler):
                 fp = None
             if not fp:
                 return self._send(404, {"error": "fichier inconnu"})
-            delete_output(fp)
-            print(f"[historique] supprimé : {os.path.basename(fp)}", flush=True)
+            delete_output(fp)       # sans ligne au journal : une suppression privée n'en écrit pas
             return self._send(200, {"ok": True})
         if path in ("/api/push/subscribe", "/api/push/unsubscribe"):
             try:
@@ -2086,10 +2116,11 @@ class H(BaseHTTPRequestHandler):
             error = prompt_error(action, body)
             if error:
                 return self._send(400, {"error": error})
-            try:
-                return self._send(*change_prompt(action, body))
+            try:       # l'envoi reste hors du try : une connexion coupée n'est pas un enregistrement manqué
+                reply = change_prompt(action, body)
             except (OSError, ValueError) as e:
                 return self._send(500, {"error": f"prompts enregistrés non modifiés : {e}"})
+            return self._send(*reply)
         if path == "/api/generate":
             try:
                 req = json.loads(raw)

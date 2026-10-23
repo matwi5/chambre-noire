@@ -4,6 +4,22 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-23 · Journal du serveur : connexions coupées, refus de génération et suppressions sans trace propre
+
+- **Contexte** : la passe « bogues » des suites du groupe A relève trois traces antérieures à la refonte, dans le
+  journal du serveur (`logs/service.log`), qui laissent encore deviner l'espace privé.
+- **Décision** (porteur, 23/10/2026, réponse « ok pour tes reco » aux recommandations) :
+  - « Erreurs de connexion coupée » (traceback de Python qui nomme `_private_get`, l'adresse du téléphone et un chemin
+    `/Users/…`) → recommandation acceptée : toutes remplacées par une ligne neutre, « [ui] connexion interrompue » ;
+  - « Refus que seul l'espace privé déclenche » (`POST /api/generate` refusé en 403 ou 503) → « (a) » : taire toutes
+    les requêtes `/api/generate` dans le journal, même en erreur (ses 400 compris) ;
+  - « La ligne [historique] supprimé : <nom> » (écrite pour la seule suppression d'une image normale) →
+    recommandation acceptée : ligne supprimée.
+- **Écarté** : ne taire que les refus propres au privé ; garder le détail des erreurs de connexion.
+- **Conséquences** : les refus d'accès d'une demande de génération (401, 403, 415) ne sont plus suivis dans `logs/` ;
+  une requête est tue d'après son chemin seul (une chaîne de requête ne fait rien taire) ; une erreur d'écriture que
+  macOS rend en simple `OSError` (EPROTOTYPE, ENOTCONN) compte comme une connexion coupée.
+
 ## 2026-10-23 · Suites du groupe A : journal muet sur les réussites, ancien réglage incognito, page hors ligne
 
 - **Contexte** : après la fusion du groupe A (retrait de l'incognito), sa session relève que le journal du serveur
