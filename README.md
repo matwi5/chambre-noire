@@ -160,7 +160,11 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
 - **Code d'accès** : au premier lancement avec `--lan`, un code est créé dans `tools/access_code.txt`. Sur
   l'ordinateur, le bouton **Téléphone** en haut de l'interface l'affiche avec l'adresse à taper sur le téléphone
   (par exemple `http://Nom-du-Mac.local:7860`). Le téléphone le demande une fois, puis le retient un an. Tout appareil
-  autre que l'ordinateur lui-même doit le saisir. Pour en changer, supprimez le fichier et relancez.
+  autre que l'ordinateur lui-même doit le saisir. Pour en changer, supprimez le fichier et relancez. Limite connue :
+  l'ordinateur passe sans code, donc un autre compte ouvert sur le même Mac peut, par l'adresse `127.0.0.1`, tout faire
+  dans l'espace public : lire les prompts, les tirages et les images d'entrée, lancer des générations, jeter ou
+  supprimer des images, modifier les prompts enregistrés, et lire le code d'accès du téléphone ; l'espace privé demande
+  toujours son code.
 - **Adresses acceptées** : l'interface ne répond qu'aux adresses `127.0.0.1`, `localhost` et à celles affichées par le
   bouton **Téléphone** (nom `.local` et adresse IP de l'ordinateur au démarrage) ; tout autre nom est refusé, même
   sans `--lan`. Si l'adresse IP de l'ordinateur change, l'ancienne est refusée jusqu'au redémarrage de l'interface :
@@ -214,7 +218,10 @@ venv/bin/python tools/make_service.py
 
 `venv/bin/python tools/make_service.py --remove` retire ce démarrage automatique. Les deux commandes retirent aussi
 le service de l'ancien nom de l'application (`com.matwi5.qwen-image-local`), s'il est installé. Le journal du service
-est dans `logs/service.log`. Le raccourci `Chambre noire.command` ouvre alors simplement l'interface déjà lancée.
+est dans `logs/service.log`, lisible par votre seul compte (relancer `make_service.py` l'applique à un service déjà
+installé, journal existant compris) ; au lancement, l'interface ferme aussi aux autres comptes ses dossiers
+`outputs/`, `jobs/` et `logs/`. Le
+raccourci `Chambre noire.command` ouvre alors simplement l'interface déjà lancée.
 
 ## Utilisation
 
@@ -790,9 +797,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `seconds`, `model`, `seed`, `inputs` et `lot` : `id`, `rank`, `size`, `campaign`, ou `null` pour une image seule ;
   le journal des images, les PNG de la pile et tout ce que le serveur, `tools/calibrate.py` et sd-cli créent depuis
   leur lancement ne sont lisibles que par le compte qui les fait tourner (fichiers en 0o600, dossiers en 0o700 ; les
-  fichiers et dossiers plus anciens gardent leurs droits, dont `outputs/`, `jobs/` et `logs/` créés par `setup.py` :
-  un autre compte du Mac peut y lister les noms, pas ouvrir les fichiers ; sans effet sur les droits d'accès de
-  Windows),
+  fichiers plus anciens gardent leurs droits, mais `outputs/`, `jobs/` et `logs/` sont fermés aux autres comptes à
+  chaque lancement ; sans effet sur les droits d'accès de Windows),
   `POST /api/keep {"name"}` (Garder : l'image passe de la pile aux tirages, d'un seul `os.replace` ; vignettes et
   images d'entrée restent où elles sont, rangées par nom d'image ; 409 si un tirage du même nom existe), `POST
   /api/discard {"name"}` (Jeter : seulement une image de la pile ; efface ses vignettes, ses images d'entrée, son

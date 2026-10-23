@@ -2,7 +2,7 @@
 création 0o077, pour que tout ce qu'ils créent, et sd-cli avec eux (PNG privé en clair, qui porte le prompt ;
 vignettes ; copies d'images d'entrée ; tirages), ne soit lisible que par le compte qui les fait tourner ; le dossier de
 travail d'une génération privée est en 0o700 même sans ce masque."""
-import ast, inspect, os, shutil, tempfile, unittest
+import ast, inspect, os, shutil, sys, tempfile, unittest
 from unittest import mock
 
 import bench
@@ -44,6 +44,52 @@ class RestrictNewFilesTest(unittest.TestCase):
         finally:
             os.umask(old)
             shutil.rmtree(d)
+
+
+def calls_in(function):
+    """Noms des fonctions appelées par function, lus dans son arbre de syntaxe."""
+    return {ast.unparse(node.func) for node in ast.walk(ast.parse(inspect.getsource(function)))
+            if isinstance(node, ast.Call)}
+
+
+class ClosedFoldersTest(bench.BenchCase):
+    """Au lancement, le serveur ferme ses dossiers aux autres comptes (0o700) : ils ne peuvent plus y lister les noms
+    des images, ni voir apparaître les dossiers de travail privés (décision du 23/10/2026)."""
+
+    def test_main_closes_the_folders(self):
+        self.assertIn("close_folders", calls_in(bench.launch.main))
+
+    @unittest.skipIf(os.name == "nt", "droits Unix")
+    def test_folders_from_before_are_closed(self):
+        folders = [bench.launch.P(*p) for p in (("outputs",), ("outputs", ".pile"), ("outputs", ".thumbs"),
+                                                ("outputs", ".inputs"), ("jobs",), ("logs",))]
+        for d in folders:
+            os.makedirs(d, exist_ok=True)
+            os.chmod(d, 0o755)
+        bench.launch.close_folders()
+        self.assertEqual([os.stat(d).st_mode & 0o777 for d in folders], [0o700] * len(folders))
+
+    @unittest.skipIf(os.name == "nt", "droits Unix")
+    def test_a_folder_that_refuses_does_not_stop_the_start(self):
+        real_chmod, bench.LOG[:] = os.chmod, []
+
+        def chmod(path, mode):
+            if path == bench.launch.P("jobs"):
+                raise PermissionError("autre propriétaire")
+            real_chmod(path, mode)
+        with mock.patch.object(bench.launch.os, "chmod", chmod):
+            bench.launch.close_folders()
+        self.assertEqual(os.stat(bench.launch.P("logs")).st_mode & 0o777, 0o700)
+        self.assertEqual(bench.LOG, ["[launch] dossiers non fermés aux autres comptes"])
+
+
+@unittest.skipIf(sys.platform != "darwin", "LaunchAgent macOS")
+class ServiceMaskTest(unittest.TestCase):
+    def test_the_service_creates_its_log_for_the_owner_only(self):
+        import make_service
+        spec = make_service.service_spec()
+        self.assertEqual(spec["Umask"], 0o077)          # 63 : launchd le pose avant d'ouvrir logs/service.log
+        self.assertEqual(spec["StandardOutPath"], spec["StandardErrorPath"])
 
 
 @unittest.skipIf(os.name == "nt", "droits Unix")

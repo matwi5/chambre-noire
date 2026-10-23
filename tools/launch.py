@@ -2561,12 +2561,31 @@ def restrict_new_files():
     """Tout ce que le processus crée ensuite, et sd-cli avec lui (PNG privé en clair, qui porte le prompt ; vignettes ;
     copies d'images d'entrée ; tirages ; dossiers de travail), n'est lisible que par le compte qui le fait tourner
     (masque 0o077 : fichiers en 0o600, dossiers en 0o700 ; décision du 23/10/2026). Les fichiers déjà créés gardent
-    leurs droits. Appelée en tête de main() et de tools/calibrate.py ; sans effet sous Windows."""
+    leurs droits ; les dossiers du serveur créés avant sont fermés par close_folders. Appelée en tête de main() et de
+    tools/calibrate.py ; sans effet sous Windows."""
     os.umask(0o077)
+
+
+def close_folders():
+    """Ferme aux autres comptes (0o700) les dossiers du serveur créés avant le masque de restrict_new_files (par
+    setup.py ou un serveur d'avant) : ils ne peuvent plus y lister les noms des images ni voir apparaître les dossiers
+    de travail privés (décision du 23/10/2026). Un dossier absent est sauté ; un dossier qui refuse (autre propriétaire,
+    volume sans droits Unix) est noté sans bloquer le démarrage ; sans effet sous Windows."""
+    refused = False
+    for d in (P("outputs"), PILE, THUMBS, INPUTS, P("jobs"), P("logs")):
+        try:
+            os.chmod(d, 0o700)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            refused = True
+    if refused:                                  # sans chemin : logs/ ne cite pas les dossiers du Mac
+        print("[launch] dossiers non fermés aux autres comptes", flush=True)
 
 
 def main():
     restrict_new_files()
+    close_folders()                              # avant toute sortie précoce : logs/ fermé même si le lancement échoue
     cfg = load_config()
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=cfg["ui_port"])

@@ -4,6 +4,29 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-23 · Journal du service et dossiers d'avant fermés aux autres comptes, accès local sans code noté
+
+- **Contexte** : passe « bogues » du ticket des droits des fichiers (`41dab97`) ; trois traces antérieures à la refonte
+  qui concernent un autre compte du Mac.
+- **Décision** (porteur, 23/10/2026, réponse « ok pour tes reco ») :
+  - « Journal du service (`logs/service.log`). Il est créé par le système de lancement de macOS, avant le serveur,
+    donc sans le masque : il est lisible par les autres comptes. Il contient le nom réseau du Mac et ses adresses
+    Tailscale, mais aucun prompt. On ajoute le masque dans la définition du service (`make_service.py`) ? Il faudrait
+    réinstaller le service. » → oui ;
+  - « Dossiers déjà créés. `outputs/`, `jobs/` et `logs/` restent lisibles par les autres comptes : ils peuvent y
+    lister les noms des images, et voir apparaître les dossiers `jobs/private_<id>`, donc quand tu génères en privé. Ils
+    ne peuvent pas ouvrir les fichiers. On ferme une fois ces dossiers au lancement du serveur ? » → oui ;
+  - « Accès par l'adresse locale du Mac. Le Mac lui-même n'a pas besoin du code d'accès. Un autre compte du Mac peut
+    donc lire l'espace public par l'interface : prompts, tirages, images d'entrée. L'espace privé, lui, demande
+    toujours son code. (a) Le noter dans la doc comme limite connue : ton Mac est mono-compte. (b) Demander le code
+    d'accès aussi depuis le Mac. Ce serait plus contraignant pour toi. » → recommandation (a) acceptée.
+- **Écarté** : laisser le journal du service et les dossiers d'avant lisibles ; demander le code d'accès sur le Mac.
+- **Conséquences** : le service porte `Umask` 63 (0o077) et se réinstalle par `tools/make_service.py` ; au lancement,
+  le serveur ferme ses dossiers (0o700) ; l'accès local sans code reste une limite écrite dans le README.
+- **Réserve** : la question sur l'accès local sous-estimait l'exposition (relevé de la passe « bogues ») : un autre
+  compte du Mac peut aussi lire le code d'accès du téléphone, lancer des générations, jeter ou supprimer des images et
+  modifier les prompts enregistrés. Question reposée au porteur avec l'exposition réelle ; le README la décrit déjà.
+
 ## 2026-10-23 · PNG renommé avant l'effacement, fichiers du serveur pour le seul porteur
 
 - **Contexte** : passe « bogues » du durcissement de la pile (`e1f05d9`).

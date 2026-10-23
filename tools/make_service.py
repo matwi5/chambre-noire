@@ -4,7 +4,8 @@ r"""macOS : lance l'interface à l'ouverture de session, sans fenêtre, accessib
   venv/bin/python tools/make_service.py --remove   # l'arrête et le retire
 
 Le service est un LaunchAgent (~/Library/LaunchAgents/com.matwi5.chambre-noire.plist) : macOS le démarre à chaque
-ouverture de session et le relance s'il s'arrête sur une erreur. Journal : logs/service.log. Le Mac reste éveillé tant
+ouverture de session et le relance s'il s'arrête sur une erreur. Journal : logs/service.log, lisible par le seul
+compte (masque Umask du service, et droits remis à un journal déjà là). Le Mac reste éveillé tant
 qu'il tourne (caffeinate, voir launch.py) ; le code d'accès du téléphone est dans tools/access_code.txt et s'affiche
 en haut de l'interface ouverte sur le Mac.
 """
@@ -40,11 +41,10 @@ def remove():
     print("service retiré : l'interface ne démarre plus avec la session")
 
 
-def install():
-    os.makedirs(os.path.join(ROOT, "logs"), exist_ok=True)
-    os.makedirs(os.path.dirname(PLIST), exist_ok=True)
+def service_spec():
+    """Définition du LaunchAgent."""
     log = os.path.join(ROOT, "logs", "service.log")
-    spec = {
+    return {
         "Label": LABEL,
         "ProgramArguments": [os.path.join(ROOT, "venv", "bin", "python"), os.path.join(ROOT, "tools", "launch.py"),
                              "--no-browser", "--lan"],
@@ -55,7 +55,18 @@ def install():
         "EnvironmentVariables": {"PYTHONUNBUFFERED": "1"},
         "StandardOutPath": log,
         "StandardErrorPath": log,
+        # masque de création posé par launchd avant d'ouvrir le journal (nom réseau et adresses du Mac) : lisible par le
+        # seul compte (63 = 0o077 ; un plist n'écrit pas l'octal ; décision du 23/10/2026)
+        "Umask": 0o077,
     }
+
+
+def install():
+    os.makedirs(os.path.join(ROOT, "logs"), exist_ok=True)
+    os.makedirs(os.path.dirname(PLIST), exist_ok=True)
+    spec = service_spec()
+    if os.path.exists(spec["StandardOutPath"]):          # Umask ne vaut qu'à la création : journal d'avant fermé
+        os.chmod(spec["StandardOutPath"], 0o600)
     unload(OLD_LABEL)
     launchctl("bootout", f"{DOMAIN}/{LABEL}")               # remplace une version déjà installée
     with open(PLIST, "wb") as f:

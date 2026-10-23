@@ -350,8 +350,10 @@ def files(*pattern):
 
 
 def journal():
+    """Lignes du journal des images, lues sous JOURNAL_LOCK : une génération passe « done » dans le même bloc que sa
+    ligne (to_pile), qui est donc écrite quand le suivi le dit."""
     try:
-        with open(launch.P("outputs", "journal.jsonl"), encoding="utf-8") as f:
+        with launch.JOURNAL_LOCK, open(launch.P("outputs", "journal.jsonl"), encoding="utf-8") as f:
             return [json.loads(line) for line in f if line.strip()]
     except OSError:
         return []

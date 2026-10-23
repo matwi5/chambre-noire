@@ -107,7 +107,8 @@ Dans l'ordre du fichier :
   `if path == …`).
 - **Démarrage** : `exclude_from_backup` (Mac : `jobs/` hors de Time Machine), `setup_state`, `restrict_new_files`
   (masque 0o077 posé en tête de `main()` et de `tools/calibrate.py` : tout fichier créé ensuite, sd-cli compris, pour
-  le seul compte du serveur), `main()` (options, `--lan`, Tailscale, ménage de `jobs/`, PNG cachés rendus par
+  le seul compte du serveur), `close_folders` (dossiers du serveur créés avant le masque, fermés en 0o700 au
+  lancement), `main()` (options, `--lan`, Tailscale, ménage de `jobs/`, PNG cachés rendus par
   `restore_hidden_images`, threads). Le banc n'exécute pas `main()`.
 
 `tools/estimate.py` : modèle de coût des durées (`predict`, `ref_px`, `prefix_cache`, `make_sample`, `class Store`
