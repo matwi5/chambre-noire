@@ -83,7 +83,7 @@
 
   /* ------------------------------------------------------------ barre d'onglets flottante, repère qui glisse */
   .tabbar { position:fixed; z-index:30; left:50%; bottom:calc(12px + env(safe-area-inset-bottom)); transform:translateX(-50%);
-    width:min(480px, calc(100% - 24px)); height:66px; padding:5px; border-radius:var(--r-m); display:grid; grid-template-columns:repeat(3, 1fr); }
+    width:min(480px, calc(100% - 24px)); height:66px; padding:5px; border-radius:var(--r-m); display:grid; grid-template-columns:repeat(2, 1fr); }
   .tabbar button { position:relative; z-index:1; border:0; background:none; cursor:pointer; color:var(--ink2); border-radius:var(--r-s);
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:11.5px; font-weight:650; letter-spacing:.01em;
     transition:color .3s; }
@@ -91,11 +91,14 @@
   .tabbar button.active { color:var(--ink); }
   .tabbar button.active svg { transform:translateY(-1px) scale(1.08); color:var(--accent); }
   .tabbar button:focus-visible { outline:2px solid var(--accent); outline-offset:-4px; }
-  .lens { position:absolute; z-index:0; top:5px; bottom:5px; left:5px; width:calc((100% - 10px) / 3); border-radius:var(--r-s);
+  .lens { position:absolute; z-index:0; top:5px; bottom:5px; left:5px; width:calc((100% - 10px) / 2); border-radius:var(--r-s);
     background:var(--surf-hi); box-shadow:inset 0 0 0 1px var(--line); transition:transform .55s var(--spring); }
-  /* onglet En cours : anneau de progression de la génération en cours de l'espace, nombre de la file de l'espace */
-  .runico { position:relative; display:grid; }
-  .runico .rarc { stroke:var(--accent); stroke-width:2.2; stroke-dasharray:100; stroke-dashoffset:100; transform:rotate(-90deg);
+  .tabbar button svg.pix { width:22px; height:22px; }
+  /* onglet Labo : anneau de progression de la génération en cours de l'espace autour de l'icône, nombre de la file */
+  .runico { position:relative; display:grid; place-items:center; }
+  .runico .ring { position:absolute; left:-6px; top:-6px; width:34px; height:34px; pointer-events:none; }
+  .tabbar button.active .runico .ring { transform:none; }
+  .runico .rarc { stroke:var(--accent); stroke-width:1.6; stroke-dasharray:100; stroke-dashoffset:100; transform:rotate(-90deg);
     transform-box:fill-box; transform-origin:center; transition:stroke-dashoffset .9s linear; }
   .tabcount { position:absolute; left:calc(100% - 7px); top:-5px; min-width:17px; height:17px; padding:0 5px; border-radius:var(--r-s);
     background:var(--accent); color:var(--on-accent); font-size:10.5px; font-weight:750; line-height:17px; text-align:center;
@@ -123,12 +126,14 @@
   .facts dt { color:var(--ink2); } .facts dd { margin:0; text-align:right; overflow-wrap:anywhere; }
   .facts .code { font-weight:700; letter-spacing:.08em; font-variant-numeric:tabular-nums; }
   .note { font-size:13px; color:var(--ink2); margin:8px 2px 0; }
-  /* chaque page est une colonne centrée (la galerie prend toute la largeur) */
+  /* chaque page est une colonne centrée (les Tirages prennent toute la largeur) */
   main { width:min(100%, 640px); margin-inline:auto; padding:6px 12px calc(110px + env(safe-area-inset-bottom)); }
-  body.m-hist main { width:100%; }
-  @media (min-width: 700px) { body.m-hist main { padding-inline:20px; } }
+  body.m-tirages main { width:100%; }
+  @media (min-width: 700px) { body.m-tirages main { padding-inline:20px; } }
   .card { position:relative; border-radius:var(--r-m); padding:16px; background:var(--surf); border:1px solid var(--line); box-shadow:var(--shadow); }
   .pane { display:none; } .pane.active { display:block; }
+  /* Labo : la génération, la file et les images de la page en haut, le champ de création dessous */
+  #pane-labo.active { display:flex; flex-direction:column; gap:14px; }
   .pane.active.in-l { animation:pane-l .28s var(--ease); } .pane.active.in-r { animation:pane-r .28s var(--ease); }
   @keyframes pane-l { from { opacity:0; transform:translateX(32px); } } @keyframes pane-r { from { opacity:0; transform:translateX(-32px); } }
   .act[hidden], .btn-icon[hidden], .v-inputs[hidden], .switch[hidden] { display:none !important; }
@@ -141,10 +146,11 @@
     background-position:calc(100% - 18px) 55%, calc(100% - 13px) 55%; background-size:5px 5px, 5px 5px; background-repeat:no-repeat; }
   select option { background:var(--sheet); color:var(--ink); }
   textarea:focus, select:focus, input.field:focus { outline:2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset:1px; }
-  .col { display:flex; flex-direction:column; gap:14px; min-width:0; }
 
   /* ------------------------------------------------------------ compositeur : texte, pastilles de réglages, bouton */
   .composer { padding:6px 6px 6px; }
+  .composer .intake { padding:10px 8px 4px; }
+  #composer { scroll-margin-top:calc(64px + env(safe-area-inset-top)); }   /* sous la barre du haut (showLabo) */
   .prompt { display:block; width:100%; min-height:118px; max-height:44svh; border:0; background:transparent; resize:none; padding:12px 14px 10px;
     font-size:17px; line-height:1.45; letter-spacing:-.005em; field-sizing:content; }
   .prompt:focus { outline:none; }
@@ -203,7 +209,7 @@
   .estimate { margin-top:18px; padding:12px 16px; border-radius:var(--r-m); background:var(--field); font-size:14px; display:flex; justify-content:space-between; gap:12px; align-items:center; color:var(--ink2); }
   .estimate b { font-size:16px; white-space:nowrap; color:var(--ink); }
   .estimate.warn { outline:1px solid color-mix(in srgb, var(--warn) 60%, transparent); }
-  /* ------------------------------------------------------------ images d'entrée (Créer) et Dessiner : outils */
+  /* ------------------------------------------------------------ images d'entrée (Labo) et Dessiner : outils */
   .pane-head { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin:2px 4px 10px; font-size:13px; font-weight:650; color:var(--ink2); }
   .pane-head span { font-weight:500; font-variant-numeric:tabular-nums; }
   .drop { display:grid; place-items:center; align-content:center; gap:4px; min-height:150px; padding:18px; border-radius:var(--r-m); cursor:pointer; text-align:center;
@@ -221,11 +227,11 @@
   .refs:has(.thumb) .drop svg { margin:0; }
   .refs:has(.thumb) .drop :is(b, small) { display:none; }
   .refs.full .drop { display:none; }
-  /* Créer sans image d'entrée : une rangée basse « Ajouter des images » au-dessus du texte, sans titre */
-  #pane-create:not(:has(.thumb)) .pane-head { display:none; }
-  #pane-create .refs:not(:has(.thumb)) .drop { min-height:0; padding:12px 16px; grid-template-columns:auto 1fr; justify-items:start;
+  /* saisie sans image d'entrée : une rangée basse « Ajouter des images » au-dessus du texte, sans titre */
+  #composer:not(:has(.thumb)) .pane-head { display:none; }
+  #composer .refs:not(:has(.thumb)) .drop { min-height:0; padding:12px 16px; grid-template-columns:auto 1fr; justify-items:start;
     column-gap:12px; row-gap:1px; text-align:left; border-radius:var(--r-m); }
-  #pane-create .refs:not(:has(.thumb)) .drop svg { grid-row:span 2; width:26px; height:26px; margin:0; }
+  #composer .refs:not(:has(.thumb)) .drop svg { grid-row:span 2; width:26px; height:26px; margin:0; }
   .thumbs { display:flex; gap:8px; }
   .thumb { position:relative; flex:none; width:96px; height:96px; border-radius:var(--r-m); overflow:hidden; background:var(--field); box-shadow:0 0 0 1px var(--line); }
   .thumb img { width:100%; height:100%; object-fit:cover; }
@@ -245,8 +251,8 @@
   #drawBtn.on { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 22%, var(--field)); }
   #drawBtn:disabled { opacity:.45; cursor:default; }
   #drawHint { font-size:13px; color:var(--ink2); }
-  #pane-create:not(.drawing) :is(.paint-area, .tools, .mm) { display:none; }
-  #pane-create.drawing .paint-area { margin-top:12px; }
+  #composer:not(.drawing) :is(.paint-area, .tools, .mm) { display:none; }
+  #composer.drawing .paint-area { margin-top:12px; }
   .tools { display:flex; gap:10px; align-items:center; margin-top:12px; font-size:13px; color:var(--ink2); font-variant-numeric:tabular-nums; }
   .tools .btn-icon { width:40px; height:40px; } .tools .btn-icon svg { width:19px; height:19px; }
   #brushVal { min-width:42px; text-align:right; }
@@ -273,8 +279,6 @@
   .mm .seg { width:100%; }
   .mm p { margin:8px 6px 0; font-size:13px; color:var(--ink2); }
   .mm:has([value=annotation]:checked) .mm-mask, .mm:not(:has([value=annotation]:checked)) .mm-annot { display:none; }
-  body:is(.m-hist, .m-run) #composer { display:none !important; }
-  body:is(.m-hist, .m-run) #panes { background:none; border:0; box-shadow:none; padding:0; }
   .hist-head { display:flex; align-items:center; gap:10px; margin:2px 4px 12px; }
   .hist-head h2 { font-size:26px; letter-spacing:-.025em; margin:0; }
   .hist-head span { color:var(--ink2); font-size:14px; margin-top:4px; font-variant-numeric:tabular-nums; }
@@ -353,11 +357,11 @@
   .viewer.iv.single .v-nav { display:none; }
   .v-stage img { touch-action:none; }
   /* ------------------------------------------------------------ résultat : l'image est posée telle quelle, sur la plaque mate */
-  .result.active, #ownZone, #runNow, .runq { display:flex; flex-direction:column; gap:12px; min-width:0; }
-  /* haut de la page En cours : la génération de la page (#ownZone), ou celle d'un autre appareil de l'espace, ou
-     l'attente d'une génération cachée de l'autre espace (#runNow, classe other) */
-  #runNow, #pane-run.other #ownZone, .runq[hidden] { display:none; }
-  #pane-run.other #runNow { display:flex; }
+  #runZone, #ownZone, #runNow, .runq { display:flex; flex-direction:column; gap:12px; min-width:0; }
+  /* haut du Labo : la génération de la page (#ownZone), ou celle d'un autre appareil de l'espace, ou l'attente d'une
+     génération cachée de l'autre espace (#runNow, classe other) */
+  #runNow, #runZone.other #ownZone, .runq[hidden] { display:none; }
+  #runZone.other #runNow { display:flex; }
   .nowframe { position:relative; width:min(100%, calc(60svh * var(--ar, 1))); margin-inline:auto; aspect-ratio:var(--ar, 1);
     border-radius:var(--r-m); overflow:hidden; background:var(--field); box-shadow:0 30px 70px -30px rgba(0,0,0,.85), 0 0 0 1px var(--line); }
   .nowframe .qicon { position:absolute; left:50%; top:42%; transform:translate(-50%, -50%); width:64px; height:64px; border-radius:var(--r-m); }
@@ -454,7 +458,7 @@
   .isl .isl-more { padding:1px 8px; border-radius:var(--r-s); background:var(--field); color:var(--ink); font-size:12.5px; font-weight:650; }
   .isl .isl-more:empty { display:none; }
 
-  /* ------------------------------------------------------------ liste de la file (page En cours) */
+  /* ------------------------------------------------------------ liste de la file (Labo) */
   .qlist { display:grid; grid-template-columns:minmax(0, 1fr); gap:8px; margin-top:12px; }
   .qrow { display:flex; align-items:center; gap:12px; padding:8px; border-radius:var(--r-m); background:var(--field); border:1px solid var(--line); }
   .qicon { flex:none; width:44px; height:44px; border-radius:var(--r-s); object-fit:cover; }
@@ -507,7 +511,7 @@
     width:max-content; max-width:calc(100% - 32px); padding:12px 18px; border-radius:var(--r-m); font-size:15px; font-weight:600; text-align:center;
     background:var(--surf-hi); transition:transform .5s var(--spring), opacity .25s; }
   .toast.on { opacity:1; transform:translate(-50%, 0); }
-  .toast.on.go { pointer-events:auto; cursor:pointer; }   /* message qui mène à la page En cours */
+  .toast.on.go { pointer-events:auto; cursor:pointer; }   /* message qui mène au Labo */
   .toast.err { color:var(--on-err); background:var(--err); border-color:var(--err); }
   /* une erreur a toujours son icône (carré pixel percé d'un « ! ») : on ne la confond ni avec l'accent ni avec le halo ;
      la carte d'un échec a déjà la sienne (dicon) */
@@ -547,11 +551,10 @@
 </header>
 
 <main>
-<div class="col">
-<section class="card" id="panes">
-  <div class="pane result" id="pane-run">
+  <div class="pane active" id="pane-labo">
+  <div id="runZone">
     <div id="ownZone">
-      <div id="resultEmpty" class="empty mat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="m3.5 16.5 4.5-4.5 4 4 2.5-2.5 6 6"/><circle cx="15.5" cy="8.5" r="1.8"/></svg><p>Rien en cours</p><button class="btn" onclick="goTab('create')">Créer une image</button></div>
+      <div id="resultEmpty" class="empty mat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="m3.5 16.5 4.5-4.5 4 4 2.5-2.5 6 6"/><circle cx="15.5" cy="8.5" r="1.8"/></svg><p>Rien en cours</p></div>
       <div class="stage" id="stage">
         <div class="shimmer" id="shimmer"></div>
         <img id="stageImg" alt="Image générée">
@@ -586,7 +589,8 @@
     <div class="runq" id="runDone" hidden><div class="done-head"><h2 class="runq-head">Terminées</h2><button class="btn secondary small" id="doneClear">Tout retirer</button></div><div class="qlist" id="doneList"></div></div>
   </div>
 
-  <div class="pane active" id="pane-create">
+  <section class="card composer gen" id="composer">
+  <div class="intake">
     <div class="pane-head"><b id="refTitle">Images d'entrée</b><span id="refCount"></span></div>
     <div class="refs" id="refs">
       <div class="thumbs" id="inThumbs"></div>
@@ -612,14 +616,6 @@
     <p class="hint" id="refHint" hidden>Désignez-les par leur numéro : « the woman in image 1 wears the jacket from image 2 ».</p>
     <label class="switch" id="campSwitch" hidden><input type="checkbox" id="campChk"><span class="track"></span><span>Campagne <small>le même texte appliqué à chaque photo séparément, une image par photo</small></span></label>
   </div>
-
-  <div class="pane" id="pane-hist">
-    <div class="hist-head"><h2>Galerie</h2><span id="histCount"></span><button class="btn-icon mat" id="privEntry" hidden aria-label="Espace privé"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg></button><button class="btn-icon mat" onclick="loadHistory()" aria-label="Actualiser la galerie"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg></button></div>
-    <div class="hgrid" id="histGrid"></div>
-  </div>
-</section>
-
-<section class="card composer gen" id="composer">
   <textarea id="prompt" class="prompt" rows="4" aria-label="Texte du prompt"></textarea>
   <div class="optrow">
     <button class="pill" id="promptsBtn" onclick="openPrompts(true)" aria-label="Prompts enregistrés"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h10A1.5 1.5 0 0 1 18.5 5v15.5L12 16.5l-6.5 4V5A1.5 1.5 0 0 1 7 3.5Z"/></svg>Prompts</button>
@@ -628,19 +624,25 @@
   <div class="go-row">
     <button class="btn" id="go"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 3.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7Z"/><path d="M18.5 15c.35 1.8 1.2 2.65 3 3-1.8.35-2.65 1.2-3 3-.35-1.8-1.2-2.65-3-3 1.8-.35 2.65-1.2 3-3Z"/></svg><span id="goLabel">Générer</span><small id="goEta"></small></button>
   </div>
-</section>
-</div>
+  </section>
+  </div>
+
+  <div class="pane" id="pane-tirages">
+    <div class="hist-head"><h2>Tirages</h2><span id="histCount"></span><button class="btn-icon mat" id="privEntry" hidden aria-label="Espace privé"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg></button><button class="btn-icon mat" onclick="loadHistory()" aria-label="Actualiser les tirages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg></button></div>
+    <div class="hgrid" id="histGrid"></div>
+  </div>
 
 </main>
 
 <nav class="tabbar mat" id="tabbar" aria-label="Modes">
   <i class="lens" id="lens" aria-hidden="true"></i>
-  <button data-pane="run"><span class="runico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle class="rarc" id="runRing" cx="12" cy="12" r="8.5" pathLength="100"/><path d="M12 8v4.2l2.6 1.6"/></svg><b class="tabcount" id="runCount" hidden></b></span><span>En cours</span></button>
-  <button data-pane="create" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M11 3.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7Z"/><path d="M18.5 15c.35 1.8 1.2 2.65 3 3-1.8.35-2.65 1.2-3 3-.35-1.8-1.2-2.65-3-3 1.8-.35 2.65-1.2 3-3Z"/></svg><span>Créer</span></button>
-  <button data-pane="hist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7.5" height="7.5" rx="2.2"/><rect x="13" y="3.5" width="7.5" height="7.5" rx="2.2"/><rect x="3.5" y="13" width="7.5" height="7.5" rx="2.2"/><rect x="13" y="13" width="7.5" height="7.5" rx="2.2"/></svg><span>Galerie</span></button>
+  <!-- icônes en pixels (grille de 16) : Labo, un tirage qui trempe dans la cuve ; Tirages, deux tirages posés l'un
+       sur l'autre. L'anneau du Labo suit la génération en cours -->
+  <button data-pane="labo" class="active"><span class="runico"><svg class="pix" viewBox="0 0 16 16" fill="currentColor" fill-rule="evenodd" shape-rendering="crispEdges" aria-hidden="true"><path d="M4 1h8v8h-1V2H5v7H4z"/><path d="M9 3h1v1H9z"/><path d="M5 9V8h1V7h1V6h1v1h1v1h1v1z"/><path d="M1 8h1v5h12V8h1v6H1z"/><path d="M2 9h3v1H2zM11 9h3v1h-3z"/><path d="M3 11h2v1H3zM7 11h3v1H7z"/></svg><svg class="ring" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="rarc" id="runRing" cx="12" cy="12" r="11" pathLength="100"/></svg><b class="tabcount" id="runCount" hidden></b></span><span>Labo</span></button>
+  <button data-pane="tirages"><svg class="pix" viewBox="0 0 16 16" fill="currentColor" fill-rule="evenodd" shape-rendering="crispEdges" aria-hidden="true"><path d="M5 1h10v10h-4v-1h3V2H6v2H5z"/><path d="M1 4h10v11H1zM2 5v9h8V5z"/><path d="M3 13v-1h1v-1h1v-1h1v1h1v1h1v1h1v1z"/><path d="M7 6h1v1H7z"/></svg><span>Tirages</span></button>
 </nav>
 
-<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-label="Image de la galerie">
+<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-label="Image en grand">
   <div class="v-bg"><img id="vBg" alt=""></div>
   <div class="v-top">
     <button class="btn-icon mat" onclick="closeViewer()" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
@@ -801,10 +803,10 @@ function applyEstimates(est){
 }
 
 const $ = id => document.getElementById(id);
-// mode : page affichée ; inputImages : images d'entrée de la saisie (Créer) ; drawOn : dessin actif (sur la seule
+// mode : page affichée (labo, tirages) ; inputImages : images d'entrée de la saisie ; drawOn : dessin actif (sur la seule
 // image d'entrée) ; drawFor : image à laquelle appartient le tracé du canevas (gardé quand on éteint Dessiner) ;
 // paintShown : image affichée sous le canevas (renderDrawing)
-let mode='create', inputImages=[], drawOn=false, drawFor=null, paintShown=null, paintMode='paint', estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
+let mode='labo', inputImages=[], drawOn=false, drawFor=null, paintShown=null, paintMode='paint', estSeconds=0, estOne=0, campaignEst=[], stepSeconds=0, vaeSeconds=0, forceImageRatio=false;
 let privState={available:false, exists:false, unlocked:false};   // espace privé vu par cet appareil (/api/status)
 
 // journal du panneau Moteur ; une ligne de l'espace privé (nom prive_…, taille d'une photo) en sort avec lui. priv :
@@ -969,15 +971,18 @@ function placeLens(){ const i=TABS.findIndex(b=>b.dataset.pane===mode); $('lens'
 TABS.forEach(b=>b.addEventListener('click',()=>{
   if(b.dataset.pane===mode) return window.scrollTo({top:0, behavior:'smooth'});
   TABS.forEach(x=>x.classList.toggle('active', x===b));
-  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active')); mode=b.dataset.pane; $('pane-'+mode).classList.add('active');
-  document.body.className='m-'+mode; placeLens(); if(mode==='hist') loadHistory(); suggestRatio();
+  // (glissement d'onglet : l'animation d'arrivée est reposée après ; sinon elle rejouerait à chaque retour)
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active', 'in-l', 'in-r')); mode=b.dataset.pane; $('pane-'+mode).classList.add('active');
+  document.body.className='m-'+mode; placeLens(); if(mode==='tirages') loadHistory(); suggestRatio();
   renderQueue(); renderRun(); }));
-document.body.className='m-'+mode; placeLens();     // ouverture sur Créer, deuxième onglet
-(function tabSwipe(){          // glisser horizontalement sur la page : onglet voisin (sauf sur le dessin, les rangées qui défilent, un texte en cours de saisie)
-  const main=document.querySelector('main'), SKIP='#paintWrap, .opts, .ratios, .chips5, .thumbs, input, select, button.pill';
+document.body.className='m-'+mode; placeLens();     // ouverture sur le Labo
+// glisser horizontalement sur la page : onglet voisin, sauf sur le champ de création (dessin, rangées qui défilent,
+// texte en cours de saisie compris)
+(function tabSwipe(){
+  const main=document.querySelector('main'), SKIP='#composer';
   let t0=null;
-  main.addEventListener('touchstart', e=>{ const t=e.target;
-    t0 = e.touches.length===1 && !openedSheet && !t.closest(SKIP) && !(t.closest('textarea') && document.activeElement===t.closest('textarea'))
+  main.addEventListener('touchstart', e=>{
+    t0 = e.touches.length===1 && !openedSheet && !e.target.closest(SKIP)
       ? {x:e.touches[0].clientX, y:e.touches[0].clientY, at:Date.now()} : null; }, {passive:true});
   main.addEventListener('touchmove', e=>{ if(e.touches.length>1) t0=null; }, {passive:true});
   main.addEventListener('touchend', e=>{ if(!t0) return; const c=e.changedTouches[0], dx=c.clientX-t0.x, dy=c.clientY-t0.y, quick=Date.now()-t0.at<700; t0=null;
@@ -1058,10 +1063,10 @@ async function addInputFiles(files, {list, priv}=noteInput()){ if(refuseWhileDra
   else if(skipped) toast(`${MAX_REFS} ${inCampaign() ? 'photos' : 'images'} au maximum : ${skipped} non ajoutée${skipped>1?'s':''}`, 'err'); }
 wireDrop('inDrop','inFiles', addInputFiles);
 $('inDrop').addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); $('inDrop').click(); } });
-// coller une image (Cmd+V, « Coller ») sur la page Créer : elle rejoint les images d'entrée comme un dépôt ; un collage
+// coller une image (Cmd+V, « Coller ») sur le Labo : elle rejoint les images d'entrée comme un dépôt ; un collage
 // de texte reste un collage de texte, aussi quand une image l'accompagne (Word, Keynote) dans un champ de texte, et rien
-// dans une feuille ouverte
-addEventListener('paste', e=>{ const cd=e.clipboardData; if(mode!=='create' || openedSheet || !cd) return;
+// dans une feuille, la visionneuse ou les images d'entrée ouvertes (la saisie est derrière elles)
+addEventListener('paste', e=>{ const cd=e.clipboardData; if(mode!=='labo' || openedSheet || vIndex>=0 || ivIndex>=0 || !cd) return;
   if(e.target.closest && e.target.closest('textarea, input') && [...cd.types].includes('text/plain')) return;
   const files=[...cd.files].filter(f=>f.type.startsWith('image/'));
   if(files.length){ e.preventDefault(); addInputFiles(files); } });
@@ -1072,7 +1077,7 @@ function refuseWhileDrawing(list=inputImages){
   if(drawOn) toast('Désactivez Dessiner pour ajouter d\'autres images', 'err'); return drawOn; }
 const maskMode = () => document.querySelector('input[name=mask_mode]:checked').value;
 const setMaskMode = k => { document.querySelector(`input[name=mask_mode][value=${k}]`).checked=true; };
-// images d'entrée de Créer : vignettes numérotées, interrupteur Campagne à partir de 2 images, bouton et zone de dessin
+// images d'entrée de la saisie : vignettes numérotées, interrupteur Campagne à partir de 2 images, bouton et zone de dessin
 function renderInputs(){ const t=$('inThumbs'); t.innerHTML='';
   if(inputImages.length!==1) drawOn=false;         // dessin : sur une image seule (en-tête et campagne en dépendent)
   const k=inputImages.length, camp=inCampaign();   // campagne : des photos éditées une à une
@@ -1107,7 +1112,7 @@ function renderDrawing(){
   // n'en sortirait pas avec l'espace)
   const show=drawOn ? im : null;
   if(show!==paintShown){ paintShown=show; if(show) showImage($('paintImg'), show.dataUrl, {decoded:show.img}); else clearImage($('paintImg')); }
-  $('pane-create').classList.toggle('drawing', drawOn);
+  $('composer').classList.toggle('drawing', drawOn);
   $('drawBtn').classList.toggle('on', drawOn); $('drawBtn').setAttribute('aria-pressed', drawOn); $('drawBtn').disabled=n>1;
   $('drawHint').textContent = n>1 ? 'Dessiner se fait sur une seule image' : ''; }
 // Dessiner (grisé à plusieurs images) : sans image, choix d'une image puis dessin, la saisie visée notée à l'ouverture du
@@ -1118,19 +1123,19 @@ $('drawBtn').onclick=()=>{ if(inputImages.length){ drawOn=!drawOn; renderDrawing
 $('drawFile').addEventListener('change', e=>{ const f=e.target.files[0], from=drawPick || noteInput(); drawPick=null; e.target.value='';
   if(f) drawFrom(f.name, ()=>readFile(f), from); });
 $('drawFile').addEventListener('cancel', ()=>{ drawPick=null; });
-// l'image seule dans la saisie de list (prise avant toute attente), dessin actif, tracé vierge ; mène à Créer. Espace
+// l'image seule dans la saisie de list (prise avant toute attente), dessin actif, tracé vierge ; mène au Labo. Espace
 // changé entre-temps : dans sa saisie mise de côté
 function drawWith(list, entry){ list.splice(0, list.length, entry);
-  if(list===inputImages){ drawOn=true; drawCanvasFor(entry); renderInputs(); suggestRatio(); if(mode!=='create') goTab('create'); return; }
+  if(list===inputImages){ drawOn=true; drawCanvasFor(entry); renderInputs(); suggestRatio(); showLabo('composer'); return; }
   if(asideInput && asideInput.images===list) asideInput.drawing={...asideInput.drawing, on:true, image:entry, pixels:null}; }
 function clearMask(){ ctx.clearRect(0,0,canvas.width,canvas.height); }
-let stroking=false, last=null, rect=null;     // rect : position du canevas, mesurée une fois par trait
+let stroking=false, last=null, rect=null;     // rect : position du canevas, remesurée à chaque point (la page bouge)
 function pos(ev){ const r=rect; return [(ev.clientX-r.left)*canvas.width/r.width, (ev.clientY-r.top)*canvas.height/r.height]; }
 function dab(p){ const size=Number($('brush').value)*canvas.width/rect.width;
   ctx.globalCompositeOperation = paintMode==='erase' ? 'destination-out' : 'source-over'; ctx.strokeStyle='rgba(255,0,0,0.5)'; ctx.fillStyle='rgba(255,0,0,0.5)'; ctx.lineWidth=size; ctx.lineCap='round'; ctx.lineJoin='round';
   if(last){ ctx.beginPath(); ctx.moveTo(last[0],last[1]); ctx.lineTo(p[0],p[1]); ctx.stroke(); } else { ctx.beginPath(); ctx.arc(p[0],p[1],size/2,0,Math.PI*2); ctx.fill(); } last=p; }
 canvas.addEventListener('pointerdown',ev=>{ if(!drawOn) return; stroking=true; last=null; rect=canvas.getBoundingClientRect(); canvas.setPointerCapture(ev.pointerId); dab(pos(ev)); });
-canvas.addEventListener('pointermove',ev=>{ if(stroking) dab(pos(ev)); });
+canvas.addEventListener('pointermove',ev=>{ if(stroking){ rect=canvas.getBoundingClientRect(); dab(pos(ev)); } });
 ['pointerup','pointercancel','pointerleave'].forEach(t=>canvas.addEventListener(t,()=>{ stroking=false; last=null; }));
 function paintedPixels(){ const d=ctx.getImageData(0,0,canvas.width,canvas.height); let n=0; for(let i=3;i<d.data.length;i+=4) if(d.data[i]>0) n++; return n; }
 function exportMask(w,h){ const d=ctx.getImageData(0,0,canvas.width,canvas.height); const m=document.createElement('canvas'); m.width=canvas.width; m.height=canvas.height; const mc=m.getContext('2d'); const out=mc.createImageData(m.width,m.height);
@@ -1165,12 +1170,12 @@ function buildRequest(){
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 // ------------------------------------------------------------ messages et confirmations intégrés
 let toastTimer=null, askResolve=null;
-// go : le message mène à la page En cours quand on le touche
+// go : le message mène au Labo quand on le touche
 const LONG_TOAST = 6500;                         // ms : message d'erreur, ou long à lire (kind 'long')
 function toast(msg, kind, go){ const t=$('toastBox'); t.textContent=msg; t.className='toast mat on'+(kind?' '+kind:'')+(go?' go':'');
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('on'), kind==='err' || kind==='long' ? LONG_TOAST : 3000); }
 $('toastBox').onclick=()=>{ const t=$('toastBox'); if(!t.classList.contains('go')) return; t.classList.remove('on', 'go');
-  if(ivIndex>=0) closeInputs(); if(vIndex>=0) closeViewer(); closeSheet(); goTab('run'); };   // la page, pas sous une vue
+  if(ivIndex>=0) closeInputs(); if(vIndex>=0) closeViewer(); closeSheet(); showLabo('top'); };   // la page, pas sous une vue
 function ask(title, text, yes, danger){
   $('askTitle').textContent=title; $('askText').textContent=text; $('askYes').textContent=yes; $('askYes').classList.toggle('danger-fill', !!danger);
   openSheet('askSheet'); return new Promise(res=>{ askResolve=res; }); }
@@ -1231,16 +1236,16 @@ function forgetPrivateImages(){
   document.querySelectorAll('[href]').forEach(a=>{   // liens de téléchargement, et leur nom de fichier (prive_<id>)
     if(secretUrl(a.getAttribute('href'))) dropLink(a); }); }
 
-// ------------------------------------------------------------ générations de la page, page En cours, île et file
-// La page suit les générations qu'elle a lancées (ou reprises après un rechargement), dans l'ordre : pageJobs. La page
-// En cours en montre une en haut (shown) : celle qui tourne, sinon la prochaine ; finie, elle passe dans les terminées ;
+// ------------------------------------------------------------ générations de la page, haut du Labo, île et file
+// La page suit les générations qu'elle a lancées (ou reprises après un rechargement), dans l'ordre : pageJobs. Le Labo
+// en montre une en haut (shown) : celle qui tourne, sinon la prochaine ; finie, elle passe dans les terminées ;
 // une génération d'un autre appareil de l'espace qui tourne y prend sa place (renderRun), et la file de l'espace suit.
-// L'île et l'onglet En cours résument la file de l'espace où l'on est, tous appareils confondus (queue de /api/status) ;
+// L'île et l'onglet Labo résument la file de l'espace où l'on est, tous appareils confondus (queue de /api/status) ;
 // un appui sur l'île mène à la page. Chaque génération garde les réglages de son lancement.
 const pageJobs=[];
 let shown=null, polling=false;
 // générations normales lancées depuis ce navigateur (identifiants retenus) : seules reprises après un rechargement ;
-// celles des autres appareils restent dans la file de la page En cours sans être suivies ici
+// celles des autres appareils restent dans la file du Labo sans être suivies ici
 function ownIds(){ try{ const l=JSON.parse(localStorage.getItem('qwen-own')||'[]'); return Array.isArray(l) ? l : []; }catch(e){ return []; } }
 function saveOwn(){ const inQueue=new Set(queueState.map(e=>e.id).filter(Boolean));   // ceux d'un autre onglet encore en file restent
   // (dans l'espace privé, la file ne montre pas les générations normales : aucune n'est retirée)
@@ -1250,7 +1255,7 @@ const isActive = p => ['queued','running'].includes(p.j.status);
 // lot d'une campagne (une image par photo) ou de variantes : son marqueur campaign ; un lot d'avant le marqueur (journal
 // ancien, serveur pas encore relancé) : campagne s'il est du mode Éditer
 const isCampaignLot = (lot, lotMode) => !!lot && (lot.campaign ?? lotMode==='edit');
-// génération de l'espace affiché (privée dans l'espace privé, normale hors de lui) : la page En cours, la
+// génération de l'espace affiché (privée dans l'espace privé, normale hors de lui) : le haut du Labo, la
 // file et l'île ne parlent que de celles-là, comme /api/status. Dans l'espace privé, les générations
 // publiques de la page restent suivies en mémoire, hors de l'écran ; les privées quittent la page à la sortie.
 const ofSpace = p => !!p.private===inPrivate();
@@ -1286,7 +1291,7 @@ function ownOf(e){ return e.id ? pageJobs.find(p=>p.id===e.id) : undefined; }
 function entryLeft(e){ const p=ownOf(e); if(p && p.j.status==='running') return progress(p).remaining;
   return e.status==='running' ? Math.max(0, e.estimate-(e.elapsed||0)-(Date.now()-queueAt)/1000) : e.estimate; }
 function waitBefore(n){ return queueState.filter(e=>e.position<n).reduce((t, e)=>t+entryLeft(e), 0); }
-// met une génération active de la page en haut de la page En cours (ou rien), puis le haut de la page suit (renderRun)
+// met une génération active de la page en haut du Labo (ou rien), puis le haut de la page suit (renderRun)
 function show(p){ showOwn(p); renderRun(); }
 function showOwn(p){                               // étape, temps restant, aperçus et annulation ; une terminée n'y va pas
   shown=p && isActive(p) ? p : null; if(!shown) return hideStage();
@@ -1303,7 +1308,7 @@ function pageItem(p){ const r=p.result;
   return { name:r.name, time:Math.round(p.j.finished||Date.now()/1000), mode:p.j.mode||'t2i', prompt:p.prompt, width:r.dims&&r.dims[0], height:r.dims&&r.dims[1],
     steps:p.j.total, seconds:p.j.seconds, seed:p.j.seed, lot:p.lot, page:p,
     private:!!r.item, id:r.item, inputs:p.j.inputs||[] }; }
-function renderProgress(){                         // image en cours sur la page En cours : étape, temps restant, aperçu
+function renderProgress(){                         // image en cours en haut du Labo : étape, temps restant, aperçu
   const p=shown; if(!p || !isActive(p)) return;
   const j=p.j, pr=progress(p), pct=Math.max(pr.frac, 0.02)*100;
   $('stepBig').textContent=pr.title; $('phaseTxt').textContent=pr.sub; $('etaTxt').textContent='≈ '+fmt(pr.remaining);
@@ -1394,15 +1399,15 @@ function evictDone(){
     const old=done.filter(p=>!(p.lot && lotOf(p).some(isActive))).sort((a, b)=>(a.doneAt||0)-(b.doneAt||0))[0];
     if(!old) return; drop(old, true); } }
 // fin d'une génération de la page (ou d'un lot, une fois plus rien d'actif dans le lot), quand la page affichée n'est pas
-// En cours : un message qui y mène quand on le touche ; rien pour une annulée, ni pour une génération de l'autre espace
+// le Labo : un message qui y mène quand on le touche ; rien pour une annulée, ni pour une génération de l'autre espace
 function notifyDone(p){
-  if(mode==='run' || !ofSpace(p)) return;
+  if(mode==='labo' || !ofSpace(p)) return;
   if(!p.lot){ if(p.result) toast('Image prête', '', true); else if(p.j.status==='failed') toast('Échec de la génération', 'err', true); return; }
   const l=lotOf(p); if(l.some(isActive)) return;
   const ok=l.filter(q=>q.result).length, ko=l.filter(q=>q.j.status==='failed').length;
   if(ok) toast(`Lot prêt · ${ok} image${ok>1 ? 's' : ''}${ko ? `, ${ko} en échec` : ''}`, '', true);
   else if(ko) toast('Échec du lot', 'err', true); }
-// état de l'espace pour l'île et l'onglet En cours : génération en cours de l'espace (de cette page : ses étapes ; d'un
+// état de l'espace pour l'île et l'onglet Labo : génération en cours de l'espace (de cette page : ses étapes ; d'un
 // autre appareil : estimation), sinon « En attente » et la durée jusqu'au début de la première (travail caché compris)
 const entryFrac = e => Math.min(.97, 1-entryLeft(e)/Math.max(e.estimate, 1));   // progression estimée d'une entrée
 const firstWait = next => waitBefore(next.position)+(next.ahead||0);   // attente avant le début d'une entrée
@@ -1413,12 +1418,13 @@ function spaceNow(){
   if(own){ const pr=progress(own); frac=pr.frac; label=own.j.step && own.j.phase!=='décodage VAE' ? `${own.j.step}/${own.j.total}` : pr.title; eta='≈ '+fmt(pr.remaining); }
   else if(run){ frac=entryFrac(run); label='En cours'; eta='≈ '+fmt(entryLeft(run)); }
   return { on:queueState.length>0 || spaceActive(), running:!!(own || run), frac, label, eta }; }
-// onglet En cours : nombre de générations de la file de l'espace (en cours et en attente), anneau de celle qui tourne
+// onglet Labo : nombre de générations de la file de l'espace (en cours et en attente), anneau de celle qui tourne
 function renderRunTab(now){
   const count=Math.max(queueState.length, pageJobs.filter(p=>ofSpace(p) && isActive(p)).length);
   $('runCount').hidden=!count; $('runCount').textContent=count || '';
-  $('runRing').style.strokeDashoffset=now.running ? ringOffset(now.frac) : '100'; }
-// île : l'état de l'espace et « +N en attente » ; rien dans l'espace : éteinte (l'onglet En cours suit le même état)
+  $('runRing').style.strokeDashoffset=now.running ? ringOffset(now.frac) : '100';
+  $('runRing').style.visibility=now.running ? '' : 'hidden'; }   // vide : pas même le bout du trait
+// île : l'état de l'espace et « +N en attente » ; rien dans l'espace : éteinte (l'onglet Labo suit le même état)
 function renderIsland(){
   const now=spaceNow(); renderRunTab(now);
   $('island').classList.toggle('run', now.on); if(!now.on) return;
@@ -1427,10 +1433,10 @@ function renderIsland(){
   $('islMore').textContent = waiting ? `+${waiting} en attente` : '';
   const isl=$('island'), step=$('islStep');      // trop étroit (étape tronquée ou contenu qui dépasse) : « +N » seul
   if(waiting && (step.scrollWidth>step.clientWidth+1 || isl.scrollWidth>isl.clientWidth+1)) $('islMore').textContent=`+${waiting}`; }
-function onIsland(){                               // file non vide : la page En cours ; sinon : panneau Moteur
+function onIsland(){                               // file non vide : le Labo ; sinon : panneau Moteur
   if(!queueState.length && !spaceActive()) return openSheet('engineSheet');
-  goTab('run'); refreshStatus(); }
-// haut de la page En cours. La génération de la page qui tourne (elle remplace dans la zone de la page #ownZone une
+  showLabo('top'); refreshStatus(); }
+// haut du Labo. La génération de la page qui tourne (elle remplace dans la zone de la page #ownZone une
 // génération qui attend ; une génération finie n'y reste pas, elle passe dans les terminées), ou à défaut ce que
 // montre cette zone (show). Sinon, une génération d'un autre appareil de l'espace qui tourne : son texte, un cadre
 // aux proportions demandées avec l'icône de sa nature, une progression
@@ -1443,7 +1449,7 @@ function renderRun(){
   if(ownRun && shown!==ownRun && !(shown && shown.j.status==='running')) return show(ownRun);   // show rappelle renderRun
   const run=queueState.find(e=>e.status==='running'), next=queueState.find(e=>e.status==='queued');
   const other=!ownRun && (run ? !ownOf(run) : !!(next && next.ahead));
-  $('pane-run').classList.toggle('other', other);
+  $('runZone').classList.toggle('other', other);
   // « Rien en cours » : ni génération, ni carte de file (entre deux générations, pendant le rangement de la
   // précédente, la file attend sans rien qui tourne), ni terminée
   $('resultEmpty').hidden=!!shown || other || queueState.length>0 || doneEntries().length>0;
@@ -1544,20 +1550,23 @@ function renderQueue(){
   [...lotCancels.keys()].forEach(k=>{ if(!keys.has(k) && !pageJobs.some(p=>p.lot && p.lot.id===k && isActive(p))) lotCancels.delete(k); });
   $('runQueue').hidden=!cards.length;
   $('queueNote').textContent = n ? `${n} en attente · file vide vers ${hhmm(total)} (≈ ${fmt(total)})` : '';
-  // cartes dessinées sur la page En cours seulement (rendue à son ouverture) : ailleurs, rien à refaire toutes les 2 s
-  // (vignettes d'entrée en data URL), et rien de l'espace quitté ne reste dans la liste cachée
-  $('queueList').innerHTML = mode==='run' ? cards.map(c=>queueCard(c, own)).join('') : ''; }
+  // cartes dessinées sur le Labo seulement (rendu à son ouverture) : ailleurs, rien à refaire toutes les 2 s
+  // (vignettes d'entrée en data URL), et rien de l'espace quitté ne reste dans la liste cachée ; sur le Labo, redessinées
+  // seulement quand elles changent (la page où l'on tape)
+  const html = mode==='labo' ? cards.map(c=>queueCard(c, own)).join('') : '';
+  if(html!==queueHtml){ queueHtml=html; $('queueList').innerHTML=html; } }
+let queueHtml='';                                  // cartes de la file affichées (renderQueue)
 $('queueList').addEventListener('click', async ev=>{
   const t=ev.target.closest('[data-toggle]');
   if(t){ const k=t.dataset.toggle; if(openLots.has(k)) openLots.delete(k); else openLots.add(k); return renderQueue(); }
   const b=ev.target.closest('[data-post]'); if(!b) return;
   b.disabled=true; log(b.dataset.kind==='first' ? 'passage en tête demandé' : 'annulation demandée');
   // 404 ou 409 (la file a pu avancer) : la file rafraîchie suffit, sans message
-  await postJson(b.dataset.post, {}).catch(()=>{}); refreshStatus(); });
+  await postJson(b.dataset.post, {}).catch(()=>{}); queueHtml=''; refreshStatus(); });   // bouton réactivé
 // suivi des générations de la page : une interrogation par seconde de chacune tant qu'elle n'est pas terminée
 function track(j, info){
   // déjà suivie (génération privée reprise de la file pendant l'envoi de sa demande) : complétée par info, et lancée
-  // ici si info le dit (elle passe alors en haut de la page En cours comme une génération qui vient d'être lancée)
+  // ici si info le dit (elle passe alors en haut du Labo comme une génération qui vient d'être lancée)
   let p=pageJobs.find(q=>q.id===j.id);
   if(p){ ['prompt','w','h','steps','thumb','est','req'].forEach(k=>{ if(info[k]) p[k]=info[k]; }); p.adopted=p.adopted && !!info.adopted; }
   // req : la demande envoyée par cette page (images en data URL), un seul objet pour tout un lot, gardé en mémoire de la
@@ -1597,7 +1606,7 @@ function finish(p){                                // génération terminée : e
     if(j.status==='done'){ const secs=j.seconds||0;
       p.result={...(p.result||{}), name:j.private ? privName(j.item) : j.name, dims:j.dims};
       log('terminé en '+Math.round(secs)+' s → '+(j.private ? 'image privée' : j.path), !!j.private);
-      if(mode==='hist' && ofSpace(p)) loadHistory(); }
+      if(mode==='tirages' && ofSpace(p)) loadHistory(); }
     else log('ERREUR '+(j.error||j.status), !!j.private); }
   if(shown===p) showOwn(nextActive());
   notifyDone(p); evictDone(); renderDone(); }
@@ -1616,13 +1625,13 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   if(estSeconds>3600 && !await ask('Génération longue', 'Temps estimé : '+fmt(estSeconds)+'. La lancer quand même ?', 'Lancer')) return;
   log(`${body.mode} ${body.width}x${body.height} ${body.steps} étapes refs=${body.ref_images.length}${body.campaign ? ' campagne='+body.campaign.length : ''} mask=${body.mask_image?'oui':'non'} aperçus=${body.preview?'oui':'non'} estimation=${fmt(estSeconds)}`, priv);
   const camp=body.campaign;                         // campagne : chaque génération a sa photo, ses dimensions et son estimation
-  // demande acceptée : la saisie est prête pour la suivante (refus : rien n'est vidé), avant le passage sur En cours
+  // demande acceptée : la saisie est prête pour la suivante (refus : rien n'est vidé), avant le retour en haut du Labo
   await launch(body, priv, k=>({w:camp ? camp[k].width : body.width, h:camp ? camp[k].height : body.height,
     thumb:camp ? camp[k].image : thumb, est:camp ? campaignEst[k]||estOne : estOne, stepSec:stepSeconds, vaeSec:vaeSeconds}),
     ()=>emptyInput(priv, sent));
 };
 // envoie une demande (Générer, Relancer) partie de l'espace priv ; acceptée, ses générations sont suivies avec la
-// demande (req) et ce que infoOf(k) dit de la k-ième, accepted() est appelée, puis la page En cours
+// demande (req) et ce que infoOf(k) dit de la k-ième, accepted() est appelée, puis le haut du Labo
 async function launch(body, priv, infoOf, accepted){
   let r, j; try{ r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=await r.json(); }
   catch(e){ toast('Serveur injoignable', 'err'); return; }
@@ -1635,10 +1644,10 @@ async function launch(body, priv, infoOf, accepted){
   if(!(priv && !inPrivate())) jobs.forEach((x, k)=>track(x, {prompt:body.prompt, steps:body.steps, req:body, ...infoOf(k)}));
   if(accepted) accepted();
   if(priv===inPrivate() && jobs[0].queue_position) toast((!j.lot ? 'Ajoutée' : camp ? `Campagne de ${jobs.length} photos ajoutée` : `Lot de ${jobs.length} images ajouté`)+' à la file · '+ordinal(jobs[0].queue_position)+' en attente');
-  document.activeElement.blur(); if(priv===inPrivate()) goTab('run');   // la demande part : on la voit sur En cours
+  document.activeElement.blur(); if(priv===inPrivate()) showLabo('top');   // la demande part : on la voit en haut du Labo
   refreshStatus(); }
 // « Relancer » : la même demande avec une graine tirée au hasard, sans toucher la saisie, dans l'espace affiché, comme
-// « Générer » ; mène à En cours. Une génération de la page qui a gardé sa demande la refait (keptRequest) ; sinon
+// « Générer » ; mène au Labo. Une génération de la page qui a gardé sa demande la refait (keptRequest) ; sinon
 // (galerie, génération reprise de la file) la demande est reconstruite de l'image (againFrom), une seule image,
 // absente pour un masque (le masque n'est pas gardé avec l'image)
 function keptRequest(p, whole){                    // whole : tout le lot ; sinon l'image seule (sa photo d'une campagne)
@@ -1694,7 +1703,7 @@ function resumeOwn(queue){ const own=new Set(ownIds()); return followQueue(queue
 // espace privé : la page suit toutes les générations privées actives de la file, qu'elle les ait lancées ou non
 // (l'espace n'a qu'un propriétaire ; aucun identifiant privé n'est écrit dans le navigateur pour les reconnaître)
 function adoptPrivate(){ return followQueue(queueState.filter(e=>e.kind==='private'), {adopted:true}); }
-(async function resume(){                          // après un rechargement : la page En cours repart de la file
+(async function resume(){                          // après un rechargement : le Labo repart de la file
   try{ const s=await (await fetch('/api/status')).json(); await resumeOwn(s.queue||[]); }catch(e){} })();
 async function cancelShown(){ if(shown && isActive(shown)){ log('annulation demandée'); await postJson('/api/job/'+shown.id+'/cancel', {}).catch(()=>{}); } }
 $('cancelLoader').onclick=cancelShown;
@@ -1812,6 +1821,10 @@ const srcOf = it => it.private ? privImage(it.id) : resultUrl(it.name);
 const thumbOf = it => it.private ? privThumb(it.id) : thumbUrl(it);
 const dlOf = it => it.private ? privImage(it.id)+'&download=1' : resultUrl(it.name)+'&download=1';
 function goTab(m){ document.querySelector(`#tabbar [data-pane="${m}"]`).click(); }
+// le Labo affiché, à son haut (la génération en cours) ou à son champ de création (where : 'top', 'composer'), d'où
+// que l'on vienne : un changement d'onglet garde la position de la page d'avant
+function showLabo(where){ if(mode!=='labo') goTab('labo');
+  if(where==='top') window.scrollTo({top:0, behavior:'smooth'}); else $('composer').scrollIntoView({block:'start', behavior:'smooth'}); }
 async function loadHistory(){ const priv=inPrivate();   // réponse arrivée après un changement d'espace : ignorée
   try{ const r=await fetch(priv ? '/api/private/history' : '/api/history'); if(!r.ok) throw new Error();
     const items=(await r.json()).map(it=>it.private ? {...it, name:privName(it.id)} : it); if(priv!==inPrivate()) return; histItems=items; }
@@ -1820,7 +1833,7 @@ async function loadHistory(){ const priv=inPrivate();   // réponse arrivée apr
 function renderGallery(){
   const g=$('histGrid'); g.innerHTML='';
   $('histCount').textContent = histItems.length ? histItems.length+' image'+(histItems.length>1?'s':'') : '';
-  if(!histItems.length){ g.innerHTML='<div class="hempty">Aucune image pour l\'instant.<button class="btn" onclick="goTab(\'create\')">Créer une image</button></div>'; return; }
+  if(!histItems.length){ g.innerHTML='<div class="hempty">Aucune image pour l\'instant.<button class="btn" onclick="goTab(\'labo\')">Aller au Labo</button></div>'; return; }
   const inLot={};                                  // images de chaque lot encore dans la galerie
   histItems.forEach(it=>{ if(it.lot) inLot[it.lot.id]=(inLot[it.lot.id]||0)+1; });
   histItems.forEach((it, i)=>{ const b=document.createElement('button'); b.dataset.name=it.name; b.setAttribute('aria-label', it.prompt||it.name);
@@ -1975,7 +1988,7 @@ async function resumeFrom(it){
     $('prompt').value=it.prompt;
     if(!priv) $('prompt').dispatchEvent(new Event('input'));   // brouillon public
     list.splice(0, list.length, ...entries); drawOn=mask; if(mask) setMaskMode('mask');
-    if(mode!=='create') goTab('create');           // (qui propose le format « Image » : remplacé ci-dessous)
+    showLabo('composer');                          // (qui propose le format « Image » : remplacé ci-dessous)
     // la même demande : ses réglages, et une édition à plusieurs références n'est pas une campagne
     if(it.width && it.height) Object.assign(opt, settingsFor(it.width, it.height, it.steps));
     if(campaignShown()) $('campChk').checked=campaignOn=false;
@@ -1985,13 +1998,13 @@ async function resumeFrom(it){
     asideInput.drawing={...asideInput.drawing, on:mask, mask:mask ? 'mask' : asideInput.drawing.mask,
       image:mask ? entries[0] : null, pixels:null};
     try{ if(!priv) localStorage.setItem(DRAFT_KEY, it.prompt); }catch(e){} } }
-// image ajoutée par « Éditer » aux images d'entrée de Créer : list est la saisie de l'espace où le geste a commencé
+// image ajoutée par « Éditer » aux images d'entrée de la saisie : list est la saisie de l'espace où le geste a commencé
 // (prise avant toute attente) ; plafond et dessin actif revus à l'arrivée de l'image
 function addEditImage(list, entry){
   if(refuseWhileDrawing(list)) return;
   if(list.length>=MAX_REFS){ if(list===inputImages) toast(MAX_REFS+' images d\'entrée au maximum', 'err'); return; }
   list.push(entry); if(list!==inputImages) return;
-  renderInputs(); goTab('create'); suggestRatio(); toast('Ajoutée aux images d\'entrée'); }
+  renderInputs(); showLabo('composer'); suggestRatio(); toast('Ajoutée aux images d\'entrée'); }
 // ------------------------------------------------------------ partager et copier (HTTPS ou Mac seulement : boutons masqués sinon)
 const canShare = (()=>{ try{ return !!(navigator.canShare && navigator.canShare({files:[new File([''], 'x.png', {type:'image/png'})]})); }catch(e){ return false; } })();
 const canCopy = !!(window.isSecureContext && navigator.clipboard && navigator.clipboard.write && window.ClipboardItem);
@@ -2081,15 +2094,15 @@ async function keepThis(){                        // variantes : garder cette im
     if(r && r.ok){ gone.push(o); forgetResult(o.name); log('supprimé : '+o.name, !!o.private); } }
   toast(gone.length===n ? 'Image gardée, '+n+' supprimée'+s : 'Suppression incomplète', gone.length===n ? '' : 'err');
   removeFromViewer(gone); const k=vList.indexOf(it); if(k>=0) openViewer(k); }
-function forgetResult(name){                      // image supprimée : elle quitte la page En cours
+function forgetResult(name){                      // image supprimée : elle quitte le Labo
   const p=pageJobs.find(q=>q.result && q.result.name===name);
   if(p) drop(p); }
 // ------------------------------------------------------------ espace privé : galerie chiffrée sur le Mac, ouverte par un
 // code privé propre à chaque appareil (session du serveur, cookie HttpOnly). Entrée discrète, un cadenas dans l'en-tête
-// de la galerie (rien à côté de Générer à l'arrivée : décision du porteur) ; masquée si le serveur ne le propose pas.
+// des Tirages (rien à côté de Générer à l'arrivée : décision du porteur) ; masquée si le serveur ne le propose pas.
 // Déverrouillé sur cet appareil, on est « dans l'espace privé » (décision du porteur du 14/10/2026) : thème propre,
 // une seule sortie (le cadenas en haut à droite, qui verrouille). Entrée : le cadenas discret
-// de l'en-tête de la galerie.
+// de l'en-tête des Tirages.
 function inPrivate(){ return privState.unlocked; }
 function applyPrivate(p){ if(!p) return; const was=inPrivate(); privState=p;
   $('privEntry').hidden=!p.available || p.unlocked; $('privEntry').title=p.exists ? 'Espace privé' : 'Créer l\'espace privé';
@@ -2103,7 +2116,7 @@ function applyPrivate(p){ if(!p) return; const was=inPrivate(); privState=p;
   // hors de l'espace, asideInput est la saisie privée : effacée après « Sortir » (même vue à une interrogation suivante)
   // ou avec l'espace supprimé ; sinon (fermeture par le Mac) gardée pour le retour
   if(!p.unlocked && (erasePrivate || !p.exists)){ asideInput=null; erasePrivate=false; } }
-// entrée ou sortie de l'espace privé : la galerie et la page En cours suivent. En entrant, les
+// entrée ou sortie de l'espace privé : les Tirages et le Labo suivent. En entrant, les
 // générations publiques de la page quittent l'écran mais restent suivies ; la page suit les générations privées actives
 // de la file (adoptPrivate, à chaque état reçu). En sortant, les générations privées de la page la quittent, celle en
 // cours comprise (elle continue sur le Mac et sera rangée dans l'espace) ; les publiques reviennent, avec l'image de
@@ -2125,7 +2138,7 @@ function changedSpace(inside){
     openLots.clear(); lotCancels.clear();          // identifiants de lots (privés compris) des cartes de la file
     resumeOwn(queueState); }
   show(nextActive()); renderDone();
-  histItems=[]; $('histGrid').innerHTML=''; $('histCount').textContent=''; if(mode==='hist') loadHistory();
+  histItems=[]; $('histGrid').innerHTML=''; $('histCount').textContent=''; if(mode==='tirages') loadHistory();
   syncThemeColor(); }
 // Saisie propre à chaque espace (texte, images d'entrée, dessin : actif ou non, masque ou annotation, tracé) :
 // celle de l'espace affiché est dans les champs, celle de l'autre espace est mise de côté en mémoire de la page

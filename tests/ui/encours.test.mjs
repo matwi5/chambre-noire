@@ -1,7 +1,7 @@
-// Page En cours, dans la vue du téléphone : onglets dans l'ordre En cours, Créer, Galerie (ouverture
-// sur Créer), « Générer » et la pastille du haut qui y mènent, pastille de l'onglet (nombre de la file de l'espace),
-// génération en cours en grand (de la page, d'un autre appareil, ou cachée dans l'autre espace : « En attente »),
-// « Rien en cours », et rien qui dépasse à 367 px.
+// Labo et génération en cours, dans la vue du téléphone : deux onglets, Labo et Tirages (ouverture sur le Labo, qui
+// réunit la génération en cours, la file, les images de la page et la saisie), la pastille du haut qui mène au Labo,
+// pastille de l'onglet (nombre de la file de l'espace), génération en cours en grand en haut du Labo (de la page, d'un
+// autre appareil, ou cachée dans l'autre espace : « En attente »), « Rien en cours », et rien qui dépasse à 367 px.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/encours.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -42,23 +42,47 @@ const overflowing = () => page.eval(`(() => {
     .filter(el => { const r = el.getBoundingClientRect(); return r.width && out(r) && !clipped(el); })
     .map(el => el.id || el.className || el.tagName); })()`);
 
-test('onglets En cours, Créer, Galerie ; ouverture sur Créer', async () => {
+test('deux onglets, Labo et Tirages ; ouverture sur le Labo ; plus de page En cours, Créer ni Galerie', async () => {
   assert.deepEqual(await page.eval(`[...$('tabbar').querySelectorAll('button')].map(b => b.dataset.pane)`),
-    ['run', 'create', 'hist']);
-  assert.equal(await page.eval(`mode`), 'create');
-  assert.equal(await page.eval(`document.querySelector('#tabbar button.active').dataset.pane`), 'create');
-  assert.equal(await page.eval(`$('lens').style.transform`), 'translateX(100%)', 'lentille sous Créer');
+    ['labo', 'tirages']);
+  assert.deepEqual(await page.eval(`[...$('tabbar').querySelectorAll('button')].map(b => b.textContent.trim())`),
+    ['Labo', 'Tirages']);
+  assert.equal(await page.eval(`mode`), 'labo');
+  assert.equal(await page.eval(`document.querySelector('#tabbar button.active').dataset.pane`), 'labo');
+  assert.equal(await page.eval(`$('lens').style.transform`), 'translateX(0%)', 'lentille sous le Labo');
+  assert.deepEqual(await page.eval(`['pane-run', 'pane-create', 'pane-hist'].filter(id => $(id))`), []);
+  // icônes en pixels : dessinées sans lissage, sur une grille
+  assert.deepEqual(await page.eval(`[...$('tabbar').querySelectorAll('svg.pix')]
+    .map(s => s.getAttribute('shape-rendering'))`), ['crispEdges', 'crispEdges']);
+  // la génération, la file, les images de la page et la saisie sont toutes dans le Labo
+  assert.deepEqual(await page.eval(`['stage', 'runNow', 'runQueue', 'runDone', 'composer', 'refs', 'prompt']
+    .filter(id => !$('pane-labo').contains($(id)))`), []);
+  await page.tab('tirages');
+  assert.equal(await page.eval(`$('pane-tirages').contains($('histGrid')) && document.body.className`), 'm-tirages');
+  assert.equal(await page.eval(`$('lens').style.transform`), 'translateX(100%)', 'lentille sous les Tirages');
+  await page.tab('labo');
   page.assertNoErrors();
 });
 
-test('rien en cours : « Rien en cours » et un bouton vers Créer ; la pastille ouvre le panneau Moteur', async () => {
-  await page.click('#tabbar [data-pane="run"]');
-  await page.waitFor(`mode === 'run' && $('pane-run').classList.contains('active')`, { what: 'page En cours' });
+test('glisser le doigt change d\'onglet hors du champ de création, jamais sur lui', async () => {
+  await page.tab('labo');
+  await page.swipe('#runZone', -160);
+  await page.waitFor(`mode === 'tirages'`, { what: 'Tirages après un glissement vers la gauche' });
+  await page.swipe('#pane-tirages', 160);
+  await page.waitFor(`mode === 'labo'`, { what: 'Labo après un glissement vers la droite' });
+  for (const sel of ['#prompt', '#refs']) {
+    await page.swipe(sel, -160);
+    assert.equal(await page.eval(`mode`), 'labo', `glissement sur ${sel} : onglet inchangé`);
+  }
+  page.assertNoErrors();
+});
+
+test('rien en cours : « Rien en cours » au-dessus de la saisie ; la pastille ouvre le panneau Moteur', async () => {
+  await page.tab('labo');
   assert.equal(await visible('#resultEmpty'), true);
   assert.match(await page.eval(`$('resultEmpty').textContent`), /Rien en cours/);
+  assert.equal(await visible('#composer'), true, 'saisie dans le Labo');
   assert.equal(await page.eval(`$('runCount').hidden`), true, 'pastille de l\'onglet cachée à zéro');
-  await page.click('#resultEmpty button');
-  await page.waitFor(`mode === 'create'`, { what: 'retour sur Créer' });
   await page.click('#island');
   await page.waitFor(`$('engineSheet').classList.contains('on')`, { what: 'panneau Moteur' });
   await page.eval(`closeSheet()`);
@@ -66,28 +90,27 @@ test('rien en cours : « Rien en cours » et un bouton vers Créer ; la pastille
 });
 
 test('file qui attend, rien qui tourne (rangement de la précédente) : pas « Rien en cours »', async () => {
-  await page.click('#tabbar [data-pane="run"]');
+  await page.tab('labo');
   // file reçue entre deux générations : une entrée en attente d'un autre appareil, rien en cours, rien de caché
   assert.equal(await page.eval(`(() => { const was = queueState;
     queueState = [{ status: 'queued', position: 1, ahead: 0, estimate: 30, elapsed: null, kind: 'normal',
       id: 'zq5-rangement', prompt: 'zq5 en attente', mode: 't2i', lot: null }];
     renderRun(); const hidden = $('resultEmpty').hidden; queueState = was; renderRun(); return hidden; })()`), true);
   assert.equal(await visible('#resultEmpty'), true, 'file vide : « Rien en cours » de nouveau');
-  await page.click('#tabbar [data-pane="create"]');
   page.assertNoErrors();
 });
 
-test('« Générer » mène à En cours ; pastille de l\'onglet et pastille du haut', async () => {
+test('« Générer » reste sur le Labo ; pastille de l\'onglet ; la pastille du haut mène au Labo', async () => {
   await page.launch('HOLD=encours zq5 d\'un autre appareil', { width: 768, height: 512 });
   await page.typePrompt('zq5 de cette page');
   await page.click('#go');
-  await page.waitFor(`mode === 'run' && pageJobs.some(isActive)`, { what: 'page En cours après « Générer »' });
+  await page.waitFor(`mode === 'labo' && pageJobs.some(isActive)`, { what: 'Labo après « Générer »' });
   await page.eval(`refreshStatus()`);
   await page.waitFor(`!$('runCount').hidden && $('runCount').textContent === '2'`,
     { what: 'pastille de l\'onglet : 2' });
   // la génération d'un autre appareil tourne : en grand, avec son texte et ses réglages, cadre aux proportions
   // demandées, annulable (génération normale) ; anneau de l'onglet en route
-  await page.waitFor(`$('pane-run').classList.contains('other')
+  await page.waitFor(`$('runZone').classList.contains('other')
     && $('nowPrompt').textContent.includes('zq5 d\\'un autre appareil')`,
     { what: 'génération de l\'autre appareil en haut de la page' });
   assert.equal(await page.eval(`$('nowSub').textContent`), 'Texte → image · 768×512 · 20 étapes');
@@ -95,9 +118,9 @@ test('« Générer » mène à En cours ; pastille de l\'onglet et pastille du h
   assert.equal(await visible('#nowCancel'), true);
   assert.notEqual(await page.eval(`$('runRing').style.strokeDashoffset`), '100');
   assert.equal(await visible('#stage'), false, 'zone de la page cachée');
-  await page.click('#tabbar [data-pane="create"]');
+  await page.tab('tirages');
   await page.click('#island');
-  await page.waitFor(`mode === 'run'`, { what: 'pastille du haut : page En cours' });
+  await page.waitFor(`mode === 'labo'`, { what: 'pastille du haut : Labo' });
   assert.deepEqual(await overflowing(), [], 'rien ne dépasse à 367 px');
   if (process.env.SHOT_DIR) await page.screenshot(process.env.SHOT_DIR + '/encours-autre.png');
   await cancelAll();
@@ -115,10 +138,10 @@ test('génération cachée de l\'autre espace : « En attente » et la durée av
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`, { what: 'publique en cours' });
   await page.launch('zq5secret d\'un autre appareil', { private: true });
   await page.eval(`refreshStatus()`);
-  await page.click('#tabbar [data-pane="run"]');
-  await page.waitFor(`$('pane-run').classList.contains('other') && $('nowTitle').textContent === 'En attente'
+  await page.tab('labo');
+  await page.waitFor(`$('runZone').classList.contains('other') && $('nowTitle').textContent === 'En attente'
     && $('nowEta').textContent.startsWith('≈')`, { what: '« En attente » et sa durée' });
-  assert.doesNotMatch(await page.eval(`$('pane-run').innerText`), /zq5public/);
+  assert.doesNotMatch(await page.eval(`$('runZone').innerText`), /zq5public/);
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.doesNotMatch(await page.eval(`document.body.innerHTML`), /zq5secret/, 'rien de privé dans la page');
@@ -128,14 +151,8 @@ test('génération cachée de l\'autre espace : « En attente » et la durée av
   page.assertNoErrors();
 });
 
-test('une seconde génération de la page prend le haut d\'En cours quand elle démarre', async () => {
-  for (const text of ['HOLD=premiere zq5 première', 'HOLD=seconde zq5 seconde']) {
-    await page.click('#tabbar [data-pane="create"]');
-    await page.typePrompt(text);
-    await page.click('#go');
-    await page.waitFor(`mode === 'run' && pageJobs.some(p => p.prompt === ${JSON.stringify(text)})`,
-      { what: 'demande acceptée, page En cours' });
-  }
+test('une seconde génération de la page prend le haut du Labo quand elle démarre', async () => {
+  for (const text of ['HOLD=premiere zq5 première', 'HOLD=seconde zq5 seconde']) await page.generate(text);
   await page.waitFor(`shown && shown.prompt.endsWith('première') && shown.j.status === 'running'`,
     { what: 'la première en haut' });
   bench.release('premiere');
@@ -147,17 +164,18 @@ test('une seconde génération de la page prend le haut d\'En cours quand elle d
   page.assertNoErrors();
 });
 
-test('grand écran : Créer et En cours sont une colonne centrée', async () => {
+test('grand écran : le Labo est une colonne centrée, les Tirages prennent la largeur', async () => {
   await page.send('Emulation.setDeviceMetricsOverride', { ...PHONE, width: 1280, mobile: false });
-  for (const pane of ['create', 'run']) {
-    await page.click(`#tabbar [data-pane="${pane}"]`);
-    // largeur de la vue sans la barre de défilement : clientWidth
-    const [left, width, right] = await page.eval(`(() => {
-      const r = document.querySelector('main').getBoundingClientRect();
-      return [r.left, r.width, document.documentElement.clientWidth - r.right]; })()`);
-    assert.ok(width <= 640, `${pane} : colonne de ${width} px`);
-    assert.ok(Math.abs(left - right) < 1, `${pane} : centrée (${left} / ${right})`);
-  }
+  // largeur de la vue sans la barre de défilement : clientWidth
+  const column = () => page.eval(`(() => { const r = document.querySelector('main').getBoundingClientRect();
+    return [r.left, r.width, document.documentElement.clientWidth - r.right]; })()`);
+  await page.tab('labo');
+  const [left, width, right] = await column();
+  assert.ok(width <= 640, `Labo : colonne de ${width} px`);
+  assert.ok(Math.abs(left - right) < 1, `Labo : centré (${left} / ${right})`);
+  await page.tab('tirages');
+  assert.ok((await column())[1] > 640, 'Tirages : toute la largeur');
+  await page.tab('labo');
   await page.send('Emulation.setDeviceMetricsOverride', PHONE);
   page.assertNoErrors();
 });

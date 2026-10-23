@@ -1,7 +1,7 @@
 // « Relancer », dans la vue du téléphone : la même demande avec une nouvelle graine, sans toucher la saisie, depuis une
 // terminée (demande gardée par la page : une image, ou tout le lot depuis sa carte, variantes ou campagne), un échec ou
-// la visionneuse (galerie : demande reconstruite de l'image, absente pour un masque), dans l'espace affiché, puis la
-// page En cours.
+// la visionneuse (galerie : demande reconstruite de l'image, absente pour un masque), dans l'espace affiché, la
+// génération en haut du Labo.
 // La demande envoyée est lue au passage (fetch enveloppé).
 //   venv/bin/python tests/check.py --quick --ui tests/ui/relance.test.mjs
 import { test, before, after } from 'node:test';
@@ -35,13 +35,13 @@ async function fresh() {
     window.sentBodies = []; const f = window.fetch; window.fetch = (u, o) => {
       if (String(u).endsWith('/api/generate')) sentBodies.push(JSON.parse(o.body)); return f(u, o); }`);
 }
-// « Relancer » (sélecteur) : la demande suivante part, la page est sur En cours ; rend cette demande, images réduites à
+// « Relancer » (sélecteur) : la demande suivante part, la page est sur le Labo ; rend cette demande, images réduites à
 // leur nombre (les dimensions seules pour une campagne)
 async function again(selector) {
   const [n, jobs] = await page.eval(`[sentBodies.length, pageJobs.length]`);
   await page.click(selector);
-  await page.waitFor(`sentBodies.length > ${n} && pageJobs.length > ${jobs} && mode === 'run'`,
-    { what: 'demande relancée, suivie, page En cours' });
+  await page.waitFor(`sentBodies.length > ${n} && pageJobs.length > ${jobs} && mode === 'labo'`,
+    { what: 'demande relancée, suivie, Labo' });
   return sent(-1);
 }
 const sent = k => page.eval(`(b => ({ ...b, ref_images: b.ref_images.length,
@@ -56,7 +56,7 @@ const send = body => page.eval(`postJson('/api/generate', { width: 512, height: 
   preview: false, ref_images: [], ...${body} }).then(r => r.status)`);
 async function view(prompt) {
   await bench.keepAll(page);                      // piles gardées (privée comprise) : dans la galerie
-  await page.click('#tabbar [data-pane="hist"]');
+  await page.tab('tirages');
   const at = `histItems.findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
   await page.waitFor(`${at} >= 0`, { what: 'image dans la galerie' });
   await page.eval(`openViewer(${at}, histItems)`);
@@ -65,19 +65,16 @@ async function view(prompt) {
 const shown = sel => page.eval(`(el => !!el && !el.hidden && el.getClientRects().length > 0)
   (document.querySelector(${JSON.stringify(sel)}))`);
 
-test('terminée : la même demande, nouvelle graine, saisie intacte, page En cours', async () => {
+test('terminée : la même demande, nouvelle graine, saisie intacte, Labo', async () => {
   await fresh();
   await page.generate('zl1 phare');
   await bench.idle({ page });
-  await page.click('#tabbar [data-pane="create"]');
   await page.typePrompt('texte suivant');
-  await page.click('#tabbar [data-pane="run"]');
   await page.waitFor(`!!$('doneList').querySelector('.dcard [data-again]')`, { what: 'Relancer sur la terminée' });
   const b = await again('#doneList .dcard [data-again]');
   assert.deepEqual(b, { ...await sent(0) }, 'la même demande');
   assert.equal(b.seed, -1, 'nouvelle graine (tirée par le Mac)');
   assert.equal(await page.eval(`pageJobs.length`), 2, 'suivie par la page');
-  await page.click('#tabbar [data-pane="create"]');
   assert.equal(await page.eval(`$('prompt').value`), 'texte suivant', 'saisie intacte');
   await bench.idle({ page });
   page.assertNoErrors();
@@ -106,7 +103,7 @@ test('lot de variantes : la carte relance tout le lot, une image du lot (visionn
 
 test('campagne : la carte relance les mêmes photos, une image du lot sa seule photo, à ses dimensions', async () => {
   await fresh();
-  await page.click('#tabbar [data-pane="create"]');
+  await page.tab('labo');
   await addImage('#c02020');
   await addImage('#2060c0');
   await page.eval(`$('campChk').click()`);
@@ -192,7 +189,7 @@ test('espace du moment : dans l\'espace public, puis dans l\'espace privé', asy
 
 test('« Générer » avec une image : le format choisi reste pour la demande suivante', async () => {
   await fresh();
-  await page.click('#tabbar [data-pane="create"]');
+  await page.tab('labo');
   await addImage('#c02020');
   await page.eval(`opt.ratio = '16:9'; saveOpt(); refreshChoices()`);
   await page.generate('zl10 format');

@@ -1,5 +1,5 @@
 // Étanchéité de l'espace privé, dans la vue du téléphone : après un parcours privé complet (galerie, visionneuse,
-// images d'entrée, lot, page En cours et sa file, prompts enregistrés, saisie, suppression), puis la sortie par
+// images d'entrée, lot, Labo et sa file, prompts enregistrés, saisie, suppression), puis la sortie par
 // « Sortir » ou par la fermeture que décide le Mac, rien de privé ne reste dans la page : ni dans le HTML (attributs et
 // textes cachés compris), ni dans les champs, ni dans la mémoire de la page (toutes ses variables globales et leur
 // contenu : listes d'images, générations suivies, images prêtes, prompts, file…), ni dans localStorage (page.leaks du
@@ -51,8 +51,7 @@ async function privateTour() {
   assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE2lot', count: 2 }`), 202);
   assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE7supprimee' }`), 202);
   await bench.idle();
-  // une génération de la page jusqu'aux terminées de la page En cours, puis une autre gardée en file
-  await page.click('#tabbar [data-pane="create"]');
+  // une génération de la page jusqu'aux terminées du Labo, puis une autre gardée en file
   await page.typePrompt('zqE3resultat');
   await page.click('#go');
   await page.waitFor(`(img => img && img.complete && img.naturalWidth > 0)($('doneList').querySelector('img'))`,
@@ -62,17 +61,16 @@ async function privateTour() {
   await page.eval(`refreshStatus()`);
   await page.waitFor(`pageJobs.some(p => p.private && p.adopted)`, { what: 'génération privée suivie en file' });
   // une édition de la page en file derrière elle : sa carte porte la vignette de son image d'entrée (data:)
-  await page.click('#tabbar [data-pane="create"]');
   await page.eval(`(async () => { const c = document.createElement('canvas'); c.width = c.height = 200;
     const x = c.getContext('2d'); x.fillStyle = '#5040c0'; x.fillRect(0, 0, 200, 200); x.fillStyle = '#e0b030';
     x.fillRect(40, 60, 90, 30); inputImages.push(await toEntry('zqE8.png', c.toDataURL('image/png')));
     renderInputs(); })()`);
   await page.typePrompt('zqE8vignette');
   await page.click('#go');
-  await page.waitFor(`mode === 'run' && !!$('queueList').querySelector('.qcard.own img[src^="data:"]')
+  await page.waitFor(`mode === 'labo' && !!$('queueList').querySelector('.qcard.own img[src^="data:"]')
     && $('queueList').textContent.includes('zqE8vignette')`, { what: 'carte privée avec sa vignette d\'entrée' });
   const thumb = await page.eval(`$('queueList').querySelector('.qcard.own img').getAttribute('src')`);
-  await page.click('#tabbar [data-pane="create"]');
+  await page.tab('labo');
   await page.typePrompt('zqE6saisie');             // saisie privée laissée en place : texte et image d'entrée
   await page.eval(`(async () => { inputImages.push(await toEntry('zqE9saisie.png', ${ref})); renderInputs(); })()`);
   // prompts enregistrés de l'espace
@@ -81,7 +79,7 @@ async function privateTour() {
   await page.waitFor(`$('promptSheet').textContent.includes('zqE5titre')`, { what: 'prompt privé affiché' });
   await page.eval(`closeSheet()`);
   // galerie, suppression d'une image, visionneuse, images d'entrée, feuille du lot
-  await page.click('#tabbar [data-pane="hist"]');
+  await page.tab('tirages');
   await page.waitFor(`histItems.length === 5 && histItems.every(it => it.private)`, { what: 'galerie privée' });
   await page.eval(`(() => { openViewer(histItems.findIndex(it => it.prompt === 'zqE7supprimee'), histItems);
     viewerAction('delete'); })()`);                // sans attendre la fin : elle attend la confirmation
@@ -112,7 +110,7 @@ test('« Sortir » : plus rien de l\'espace privé dans la page', async () => {
 
 test('fermeture par le Mac : plus rien de l\'espace privé dans la page (hors saisie mise de côté)', async () => {
   await enter();
-  await page.click('#tabbar [data-pane="hist"]');
+  await page.tab('tirages');
   await page.waitFor(`histItems.length === ${kept} && histItems.every(it => it.private)`, { what: 'galerie privée' });
   const markers = [...new Set([...await page.eval(`histItems.map(it => it.id)`), ...WORDS, '/api/private/', 'prive_'])];
   await page.eval(`openViewer(histItems.findIndex(it => it.inputs.length), histItems); openInputs(0); openPrompts()`);

@@ -26,13 +26,13 @@ const look = selector => page.eval(`(() => { const b = document.querySelector(${
   return { width: r.width, height: r.height, color: cs.color, stroke: shape.strokeWidth,
     opacity: [getComputedStyle(b).opacity, cs.opacity] }; })()`);
 
-test('Galerie : le cadenas de l\'espace privé est aussi visible que Rafraîchir', async () => {
-  await page.click('#tabbar [data-pane="hist"]');
+test('Tirages : le cadenas de l\'espace privé est aussi visible que Rafraîchir', async () => {
+  await page.tab('tirages');
   await page.waitFor(`!$('privEntry').hidden && !!$('privEntry').getClientRects().length`, { what: 'cadenas affiché' });
   const lock = await look('#privEntry'), refresh = await look('.hist-head button[onclick="loadHistory()"]');
   assert.deepEqual(lock, refresh);
   assert.deepEqual(lock.opacity, ['1', '1'], 'pleine opacité');
-  await page.click('#tabbar [data-pane="create"]');
+  await page.tab('labo');
   page.assertNoErrors();
 });
 

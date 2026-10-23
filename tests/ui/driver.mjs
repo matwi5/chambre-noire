@@ -11,8 +11,10 @@
 //   await bench.idle()                           // rien en cours ni en file (avant un rechargement de la page)
 //   await bench.keepAll(page)                    // au repos, toutes les images des piles gardées (dans la galerie)
 //   const disk = bench.disk(); …; disk.written() // fichiers écrits ou changés par le serveur depuis l'instantané
-//   await page.typePrompt('texte')               // texte tapé dans le champ de Créer (événement input)
-//   await page.generate('texte')                 // tapé dans Créer puis « Générer » : demande acceptée, page En cours
+//   await page.tab('tirages')                    // appui sur l'onglet Labo ou Tirages : la page affichée a changé
+//   await page.swipe('#runZone', -150)           // doigt glissé de dx px (dy) depuis le centre d'un élément
+//   await page.typePrompt('texte')               // texte tapé dans le champ du Labo (événement input)
+//   await page.generate('texte')                 // tapé dans le Labo puis « Générer » : demande acceptée
 //   await page.launch('texte', { private: true })   // génération demandée hors de l'interface (autre appareil)
 //   await page.leaks(['mot', 'id'])              // marqueurs restés dans la page (texte, attributs, champs, mémoire)
 //   const bench = await startBench({ relay: true }); await bench.login(page);   // comme le téléphone par Tailscale :
@@ -239,20 +241,39 @@ async function connect(wsUrl) {
     },
     // attend qu'une expression de la page soit vraie
     waitFor(expression, opts = {}) { return waitUntil(() => page.eval(expression), { what: expression, ...opts }); },
-    // texte tapé dans le champ de Créer, comme au clavier (événement input : le brouillon est écrit)
+    // appui sur l'onglet de la page name (labo, tirages), comme au doigt ; attend la page affichée
+    async tab(name) {
+      await page.click(`#tabbar [data-pane="${name}"]`);
+      await page.waitFor(`mode === ${JSON.stringify(name)} && $('pane-' + mode).classList.contains('active')`,
+        { what: `onglet ${name} affiché` });
+    },
+    // doigt posé au centre de l'élément selector (amené à l'écran), glissé de dx, dy px en quelques pas, puis relevé
+    // (événements tactiles de Chrome : touch et pointer)
+    async swipe(selector, dx, dy = 0) {
+      const c = await page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return null; el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+      if (!c) throw new Error(`élément absent : ${selector}`);
+      const at = k => [{ x: c.x + dx * k, y: c.y + dy * k, id: 1 }];
+      await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: at(0) });
+      for (const k of [0.25, 0.5, 0.75, 1])
+        await page.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: at(k) });
+      await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    },
+    // texte tapé dans le champ du Labo, comme au clavier (événement input : le brouillon est écrit)
     typePrompt(text) {
       return page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
         t.dispatchEvent(new Event('input')); })()`);
     },
-    // texte tapé dans Créer puis « Générer » : attend la demande acceptée (une génération de plus suivie par la page)
-    // et la page En cours
+    // texte tapé dans le Labo puis « Générer » : attend la demande acceptée (une génération de plus suivie par la
+    // page), le Labo affiché
     async generate(text) {
-      if (await page.eval(`mode`) !== 'create') await page.click('#tabbar [data-pane="create"]');
+      if (await page.eval(`mode`) !== 'labo') await page.tab('labo');
       await page.typePrompt(text);
       const before = await page.eval(`pageJobs.length`);
       await page.click('#go');
-      await page.waitFor(`mode === 'run' && pageJobs.length > ${before}`,
-        { what: `« ${text} » acceptée, page En cours` });
+      await page.waitFor(`mode === 'labo' && pageJobs.length > ${before}`,
+        { what: `« ${text} » acceptée, Labo affiché` });
     },
     // génération demandée hors de l'interface, comme depuis un autre appareil (texte → image 512×512, 20 étapes ;
     // extra : champs changés ou ajoutés, private: true pour une génération privée) ; échoue si le Mac la refuse,

@@ -118,21 +118,20 @@ dernier bloc, après le HTML.
 
 - **CSS** : sections « jetons » (lumière inactinique ; `html.priv` : lumière verte), « fond »,
   « surfaces mates » (classe `mat`), « barre du haut », « barre d'onglets », « panneaux du
-  bas », « compositeur », « panneau Réglages », « images d'entrée (Créer) et Dessiner », « visionneuse plein écran »,
-  « résultat », « île », « liste de la file (page En cours) » (cartes de la file), « prompts enregistrés », « espace
+  bas », « compositeur », « panneau Réglages », « images d'entrée (Labo) et Dessiner », « visionneuse plein écran »,
+  « résultat », « île », « liste de la file (Labo) » (cartes de la file), « prompts enregistrés », « espace
   privé », « messages et confirmations », « typographie » (police pixel `--pixel`, chasse fixe `--mono`, déclaration
   `@font-face`), « téléphone (html.lite) ».
-- **HTML** : onglets `#pane-run` (page En cours : zone de la page `#ownZone` avec `#stage` et « Rien en cours »
-  `#resultEmpty` ; génération d'un autre appareil ou attente `#runNow` ; file `#runQueue` ; terminées `#runDone`, liste
-  `#doneList`, « Tout retirer » `#doneClear`), `#pane-create` (page Créer : images d'entrée `#refs`, vignettes
-  `#inThumbs`, ajout `#inDrop` et son champ `#inFiles`, bouton Dessiner `#drawBtn` (choix d'une image `#drawFile`,
-  explication `#drawHint`), zone de dessin `#paintWrap` et `#paintCanvas`, masque ou annotation `#mask_mode`,
-  interrupteur Campagne `#campSwitch` ; classe `drawing` quand le dessin est actif), `#pane-hist`
-  (galerie `#histGrid`) ; compositeur `#composer` (champ unique `#prompt`, bouton `#go`) ; barre
-  d'onglets `#tabbar` (onglet En cours : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vKeep` :
-  « Garder celle-ci ») ; images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`, `#engineSheet`,
-  `#lotSheet`, `#promptSheet`, `#promptEditSheet` et celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`,
-  `#privCodeSheet`…).
+- **HTML** : onglets `#pane-labo` (Labo : en haut `#runZone`, avec la zone de la page `#ownZone`, `#stage` et « Rien en
+  cours » `#resultEmpty` ; génération d'un autre appareil ou attente `#runNow` ; file `#runQueue` ; terminées
+  `#runDone`, liste `#doneList`, « Tout retirer » `#doneClear` ; dessous, le compositeur `#composer` : images d'entrée
+  `#refs`, vignettes `#inThumbs`, ajout `#inDrop` et son champ `#inFiles`, bouton Dessiner `#drawBtn` (choix d'une
+  image `#drawFile`, explication `#drawHint`), zone de dessin `#paintWrap` et `#paintCanvas`, masque ou annotation
+  `#mask_mode`, interrupteur Campagne `#campSwitch`, champ unique `#prompt`, bouton `#go` ; classe `drawing` quand le
+  dessin est actif), `#pane-tirages` (Tirages, grille `#histGrid`) ; barre d'onglets `#tabbar` (icônes en pixels ;
+  onglet Labo : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vKeep` : « Garder celle-ci ») ;
+  images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`, `#engineSheet`, `#lotSheet`, `#promptSheet`,
+  `#promptEditSheet` et celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`, `#privCodeSheet`…).
 - **JavaScript**, sections dans l'ordre :
   - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
     privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
@@ -143,11 +142,11 @@ dernier bloc, après le HTML.
     fois des anciens `qwen-<onglet>_prompt`).
   - « onglets & statut » : `TABS`, changement d'onglet (`mode`) ; « panneaux du bas » : `openSheet`, `closeSheet`
     (un seul ouvert, `openedSheet`) ; `refreshStatus()` (interroge `/api/status` toutes les 5 s, 2 s tant que la file
-    n'est pas vide ; met à jour `queueState`, l'île, la page En cours et l'espace privé par `applyPrivate`, et le
+    n'est pas vide ; met à jour `queueState`, l'île, le haut du Labo et l'espace privé par `applyPrivate`, et le
     panneau Moteur, version servie comprise : `fmtVersion`, `staleServer`).
-  - « images », « dessin » : `toEntry`, `addInputFiles` (choix, dépôt et collage, écouteur `paste` de la page Créer),
+  - « images », « dessin » : `toEntry`, `addInputFiles` (choix, dépôt et collage, écouteur `paste` du Labo),
     `refuseWhileDrawing` (ajout refusé pendant le dessin, saisie affichée ou mise de côté), `noteInput` (saisie visée
-    par un ajout, notée avant toute attente), `renderInputs` (images d'entrée de Créer, `inputImages`, puis
+    par un ajout, notée avant toute attente), `renderInputs` (images d'entrée de la saisie, `inputImages`, puis
     `renderDrawing` : bouton Dessiner et zone de dessin, image du dessin `#paintImg` par `showImage`),
     `drawCanvasFor` (le tracé appartient à `drawFor`, l'image pour laquelle il a été commencé : gardé quand on éteint
     Dessiner, effacé avec son image), `drawWith` (une image seule dans la saisie, dessin actif, tracé vierge),
@@ -165,16 +164,16 @@ dernier bloc, après le HTML.
     chargés en avance, chargements en cours abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne
     jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
     de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
-  - « générations de la page, page En cours, île et file » : `pageJobs` (générations lancées par cette page),
+  - « générations de la page, haut du Labo, île et file » : `pageJobs` (générations lancées par cette page),
     `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`, `isDone` (image prête ou échec),
     `isCampaignLot`, `lotOf`, `show` (`showOwn` : une génération active de la page, ou rien ; puis `renderRun`),
     `pageItem` (image de la page pour la visionneuse : vrai mode et images d'entrée, `mode` et `inputs` de son suivi),
     `spaceNow` (état de l'espace pour l'île et l'onglet ; `entryFrac`, `firstWait`, `ringOffset`), `renderIsland` (île)
-    et `renderRunTab` (nombre et anneau de l'onglet En cours), `onIsland` (file non vide : page En cours, sinon
+    et `renderRunTab` (nombre et anneau de l'onglet Labo), `onIsland` (file non vide : le Labo, sinon
     `#engineSheet`), `renderRun` (haut de la page : génération de la page qui tourne, sinon d'un autre appareil, ou
     attente d'une génération cachée, classe `other` ; « Rien en cours » sans file ni terminée), terminées : `renderDone`
     (`doneEntries`, cartes `doneCard`, `failCard`, `lotCard` en grille ; `doneView` : leurs images pour la visionneuse),
-    `evictDone` (`MAX_DONE`), `notifyDone` (message « Image prête », « Lot prêt » hors de la page En cours, `toast(…,
+    `evictDone` (`MAX_DONE`), `notifyDone` (message « Image prête », « Lot prêt » hors du Labo, `toast(…,
     go)`), `renderQueue` (file de la page en cartes : `queueCards` regroupe les entrées d'un lot, `queueCard` dessine
     une carte, `lotCases` ses cases (`lotCancels` : rangs annulés pendant la vie de la page), `lotSubs` ses lignes une
     fois dépliée (`openLots`) ; `lotLabel` : « N variantes » ou « Campagne · N photos » ; `qbtn` : bouton d'annulation
@@ -203,7 +202,7 @@ dernier bloc, après le HTML.
     `settingsFor` (format, résolution et étapes qui redonnent l'image) ; « Relancer » (visionneuse `#vAgain`, terminées
     `data-again`) : `keptRequest` (demande gardée : l'image seule ou tout le lot), `againFrom` (reconstruite de l'image
     sinon), `canAgain`, `relaunch` (graine et espace du moment ; estimation), puis `launch` (envoi commun avec
-    « Générer » : suivi, `accepted` (vidage de la saisie de « Générer »), message, page En cours), `again` (un geste à
+    « Générer » : suivi, `accepted` (vidage de la saisie de « Générer »), message, haut du Labo), `again` (un geste à
     la fois) ;
     actions de la visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`, `keepThis` (« Garder celle-ci »),
     `deleteItem` (« Supprimer » : visionneuse et terminées), `forgetResult`.
@@ -218,7 +217,7 @@ Libellés visibles et code (la spec et les tickets parlent avec les libellés de
 « Supprimer » → `viewerAction('edit' | 'mask' | 'resume' | 'again' | 'delete')`, avec l'image décrite par `pageItem`
 pour une image de la page ; carte d'une terminée → `doneCard`, ses boutons → `data-act` (« Relancer » : `data-again`,
 aussi sur la carte d'un lot et d'un échec) dans l'écouteur de `#doneList` ; « Garder celle-ci » →
-`keepThis` ; cadenas de la Galerie → `#privEntry`, « Sortir » → `privLock` ; pastille du haut → `#island`,
+`keepThis` ; cadenas des Tirages → `#privEntry`, « Sortir » → `privLock` ; pastille du haut → `#island`,
 `renderIsland`.
 
 Deux boucles suivent les générations sans se synchroniser : `pollJobs` (`/api/job/<id>`, chaque seconde) et
@@ -299,7 +298,7 @@ invariants ».
   requête privée. Sans `cryptography` (`HAVE_CRYPTO`), routes en 503 et interface masquée. Le banc repointe `PRIVATE`
   et abaisse `SCRYPT_N`. Changer le code rechiffre tout dans `private/.rekey/` ; la bascule est le `os.replace` de
   `space.json`. Côté interface, déverrouillé = « dans l'espace privé » (`inPrivate()`, classe `html.priv`) : aucun
-  bouton ne le signale à l'arrivée (entrée : cadenas `#privEntry` de la galerie ; sortie : `#privExit`), décision du
+  bouton ne le signale à l'arrivée (entrée : cadenas `#privEntry` des Tirages ; sortie : `#privExit`), décision du
   porteur.
 - **Génération privée** (`"private": true`, session exigée) : pendant le calcul, dossier `jobs/private_<id>/`
   supprimé en fin de job (et au démarrage), `sd-cli.log` vers `os.devnull`, identifiant de 128 bits (comme celui de
@@ -328,7 +327,7 @@ invariants ».
   l'image décodée par `toEntry` (`decoded`) ; `tests/check.py` la surveille (`IMAGE_IDS`). La couleur de la barre
   d'état tirée de l'image de la visionneuse (`syncThemeColor`, cache `tints`) : `tintOf` refuse toute adresse privée
   (`secretUrl`), que le cache garderait après la sortie de l'espace (`tests/ui/etancheite.test.mjs`).
-- **Saisie par espace** : la saisie de Créer (texte, images d'entrée, dessin et son tracé) est propre à chaque
+- **Saisie par espace** : la saisie du Labo (texte, images d'entrée, dessin et son tracé) est propre à chaque
   espace, et non plus à chaque onglet. Tout ajout à la saisie qui attend (lecture d'image, sélecteur de fichiers,
   collage, « Éditer », « Dessiner », « Reprendre », envoi d'une demande) note sa liste et son espace avant la
   première attente (`noteInput()`) ; « Relancer », qui ne touche pas la saisie, note l'espace avant de lire les images

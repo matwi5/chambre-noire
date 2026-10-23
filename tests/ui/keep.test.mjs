@@ -35,7 +35,7 @@ test('garder l\'image 2 d\'un lot de variantes après un rechargement de la gale
   const names = await lotNames(lot);
   assert.equal(names.length, 3);
 
-  await page.click('#tabbar [data-pane="hist"]');
+  await page.tab('tirages');
   await page.waitFor(`!!$('histGrid').querySelector('button[data-name="${names[1]}"]')`, { what: 'image 2 dans la galerie' });
   await page.click(`#histGrid button[data-name="${names[1]}"]`);
   await page.waitFor(`$('viewer').classList.contains('on') && !$('vKeep').hidden`, { what: 'visionneuse ouverte, « Garder celle-ci » visible' });
@@ -66,7 +66,8 @@ async function launchLot(extra) {
 // « Garder celle-ci » offert sur la première image du lot, ouverte depuis la galerie
 async function keepOffered(lot) {
   const [name] = await lotNames(lot);
-  await page.eval(`goTab('create'); goTab('hist')`);
+  await page.tab('labo');
+  await page.tab('tirages');
   await page.waitFor(`!!$('histGrid').querySelector('button[data-name="${name}"]')`, { what: 'image dans la galerie' });
   await page.click(`#histGrid button[data-name="${name}"]`);
   await page.waitFor(`$('viewer').classList.contains('on') && vList[vIndex].name === '${name}'`,

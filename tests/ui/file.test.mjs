@@ -1,4 +1,4 @@
-// File d'attente de la page En cours, dans la vue du téléphone : une carte par demande (un lot sur une carte, une case
+// File d'attente du Labo, dans la vue du téléphone : une carte par demande (un lot sur une carte, une case
 // par image, réglages, heure « prête vers », « autre appareil »), cloisonnée par espace comme la pastille ; « Passer en
 // tête » et l'annulation d'une carte ou d'une image d'un lot dépliée, les générations de la page restant reconnues.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/file.test.mjs
@@ -29,9 +29,9 @@ async function enterPrivate() {
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
 }
-// génération de la page annulée depuis la file de la page En cours
+// génération de la page annulée depuis la file du Labo
 async function cancelOwnFromQueue() {
-  await page.click('#tabbar [data-pane="run"]');
+  await page.tab('labo');
   await page.waitFor(`!!$('queueList').querySelector('.qcard.own [data-kind="cancel"]')`,
     { what: 'carte de la génération' });
   await page.click('#queueList .qcard.own [data-kind="cancel"]');
@@ -52,10 +52,10 @@ test('espace privé : la file ne montre que les générations privées, avec leu
   await page.waitFor(`$('island').classList.contains('run') && $('islStep').textContent === 'En attente' && $('islEta').textContent.startsWith('≈')`,
     { what: 'pastille en attente avec sa durée' });
   assert.match(await page.eval(`$('islMore').textContent`), /^\+2/);
-  await page.click('#tabbar [data-pane="create"]');
+  await page.tab('tirages');
   await page.click('#island');
-  await page.waitFor(`mode === 'run' && ${count(2)}`,
-    { what: 'page En cours, file avec les deux générations privées' });
+  await page.waitFor(`mode === 'labo' && ${count(2)}`,
+    { what: 'Labo, file avec les deux générations privées' });
   const [other, mine] = await cards();
   assert.match(other, /zq9secret d'un autre appareil/);
   assert.match(mine, /zq9secret de cette page/);
@@ -179,9 +179,9 @@ test('espace public : une génération privée en cours n\'allume pas la pastill
   await page.eval(`refreshStatus()`);
   await page.waitFor(`$('islStep').textContent === 'En attente' && $('islEta').textContent.startsWith('≈')`,
     { what: 'pastille en attente' });
-  await page.click('#tabbar [data-pane="create"]');
+  await page.tab('tirages');
   await page.click('#island');
-  await page.waitFor(`mode === 'run' && ${count(1)}`, { what: 'une seule carte' });
+  await page.waitFor(`mode === 'labo' && ${count(1)}`, { what: 'une seule carte' });
   const [card] = await cards();
   assert.match(card, /zq9public derrière/);
   assert.doesNotMatch(card, /zq9secret|· autre appareil/);
@@ -286,9 +286,9 @@ test('« Passer en tête » d\'une image du lot d\'un autre appareil, carte dép
     const other = await page.launch('zq9 avant le lot');
     const lot = await page.launch('zq9 lot', { count: 3 });
     await page.eval(`refreshStatus()`);
-    await page.click('#tabbar [data-pane="create"]');
+    await page.tab('tirages');
     await page.click('#island');
-    await page.waitFor(`mode === 'run' && ${count(2)}`, { what: 'deux cartes : l\'autre génération et le lot' });
+    await page.waitFor(`mode === 'labo' && ${count(2)}`, { what: 'deux cartes : l\'autre génération et le lot' });
     const lotCard = `[...$('queueList').querySelectorAll('.qcard')].find(c => /zq9 lot/.test(c.textContent))`;
     assert.equal(await page.eval(`${lotCard}.querySelectorAll('.qcase.wait').length`), 3);
     await page.eval(`${lotCard}.querySelector('[data-toggle]').click()`);
@@ -326,7 +326,7 @@ test('rien ne dépasse à 367 px : cartes, cases et lignes dépliées', async ()
   await page.launch('zq9 Portrait of an old fisherman mending his nets at dawn, golden light, 85 mm', { count: 4 });
   await page.launch('zq9 seule', { width: 1536, height: 2752 });
   await page.eval(`refreshStatus()`);
-  await page.click('#tabbar [data-pane="run"]');
+  await page.tab('labo');
   await page.waitFor(count(2), { what: 'deux cartes' });
   await page.eval(`$('queueList').querySelector('[data-toggle]').click()`);
   await page.waitFor(`!!$('queueList').querySelector('.qsub')`, { what: 'lot déplié' });

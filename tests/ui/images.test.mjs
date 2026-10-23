@@ -1,4 +1,4 @@
-// Affichage des images (visionneuse, images d'entrée, terminées de la page En cours, galerie), dans la vue du
+// Affichage des images (visionneuse, images d'entrée, terminées du Labo, galerie), dans la vue du
 // téléphone : jamais l'image d'avant le temps d'un chargement, rien de l'espace privé à l'écran ni dans la page après
 // en être sorti (galerie privée comprise, sortie faite depuis un autre onglet), image voisine et image d'entrée
 // montrées sans attente, zoom au pincement sur les images d'entrée comme sur les images générées.
@@ -48,7 +48,7 @@ test('espace privé : après la sortie, ni visionneuse ni images d\'entrée ne m
   await bench.keepAll(page);                      // piles gardées (privée comprise) : dans la galerie
 
   // dans l'espace privé : la galerie, la visionneuse et l'image d'entrée de l'image privée, chargées
-  await page.click('#tabbar [data-pane="hist"]');
+  await page.tab('tirages');
   await page.waitFor(`histItems.length === 1 && histItems[0].private`, { what: 'galerie privée' });
   await page.click('#histGrid button');
   await page.waitFor(`$('viewer').classList.contains('on') && ${loaded('vImg')}`, { what: 'image privée affichée' });
@@ -93,7 +93,7 @@ test('espace privé : après la sortie, ni visionneuse ni images d\'entrée ne m
 });
 
 test('visionneuse : l\'image voisine, déjà chargée, s\'affiche sans attente et sans l\'image d\'avant', async () => {
-  await page.eval(`goTab('hist')`);
+  await page.tab('tirages');
   await page.waitFor(`histItems.length === 2 && !!$('histGrid').querySelector('button')`, { what: 'galerie publique' });
   const urls = await page.eval(`histItems.map(srcOf)`);
   await page.eval(`openViewer(0, histItems)`);
@@ -108,20 +108,20 @@ test('visionneuse : l\'image voisine, déjà chargée, s\'affiche sans attente e
   page.assertNoErrors();
 });
 
-test('galerie : sortir de l\'espace privé depuis Créer puis revenir à la galerie ne montre pas la privée', async () => {
+test('Tirages : sortir de l\'espace privé depuis le Labo puis y revenir ne montre pas la privée', async () => {
   assert.equal(await privatePost('/api/private/unlock'), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'de nouveau dans l\'espace privé' });
-  await page.click('#tabbar [data-pane="hist"]');
+  await page.tab('tirages');
   await page.waitFor(`histItems.length === 1 && histItems[0].private
     && [...$('histGrid').querySelectorAll('img')].every(i => i.complete && i.naturalWidth > 0)`,
   { what: 'galerie privée affichée' });
-  await page.click('#tabbar [data-pane="create"]');
-  await page.click('#privExit');                   // « Sortir », depuis Créer
+  await page.tab('labo');
+  await page.click('#privExit');                   // « Sortir », depuis le Labo
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   // retour à la galerie : à chaque image peinte jusqu'à la galerie publique chargée, aucune image privée
   const seen = await page.eval(`new Promise(res => { const out = [...${PRIVATE_IMAGES}];
-    goTab('hist'); out.push(...${PRIVATE_IMAGES});
+    goTab('tirages'); out.push(...${PRIVATE_IMAGES});
     let n = 0; (function frame(){ out.push(...${PRIVATE_IMAGES});
       const done = histItems.length === 2 && histItems.every(it => !it.private);
       if (++n < 90 && !done) requestAnimationFrame(frame); else res(out); })(); })`);
@@ -188,7 +188,8 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
     height: 512, steps: 2, cfg: 1, seed: -1, preview: false, ref_images: [], private: true, count: 2 })
     .then(r => r.status)`), 202);
   await bench.keepAll(page);                      // piles gardées (privée comprise) : dans la galerie
-  await page.eval(`goTab('create'); goTab('hist')`);   // galerie rechargée, lot compris
+  await page.tab('labo');
+  await page.tab('tirages');                        // galerie rechargée, lot compris
   await page.waitFor(`histItems.filter(it => it.lot).length === 2`, { what: 'lot privé dans la galerie' });
   await page.eval(`openViewer(histItems.findIndex(it => it.lot), histItems); openLot()`);
   await page.waitFor(`openedSheet === $('lotSheet') && $('lotSheetGrid').querySelectorAll('img').length === 2`,
@@ -206,7 +207,7 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
 
 test('terminées : une image retirée de la liste, son lien de téléchargement part avec elle', async () => {
   await page.waitFor(`!inPrivate()`, { what: 'espace public' });
-  await page.eval(`goTab('create')`);
+  await page.tab('labo');
   await page.typePrompt('zq3 retirée');
   await page.click('#go');
   await page.waitFor(`!!$('doneList').querySelector('.dcard a[download]')`,
@@ -230,7 +231,8 @@ async function inputSizes(prompt, w, h, during) {
     .then(r => r.status)`),
   202);
   await bench.keepAll();                          // images de la pile gardées : dans la galerie
-  await page.eval(`goTab('create'); goTab('hist')`);
+  await page.tab('labo');
+  await page.tab('tirages');
   const index = `histItems.findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
   await page.waitFor(`${index} >= 0`, { what: 'image dans la galerie' });
   const held = [], hold = p => held.push(p.requestId);

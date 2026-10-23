@@ -191,7 +191,8 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   Wi-Fi), ou sur l'ordinateur lui-même. Le message transite chiffré par le service de notification du navigateur
   (Google pour Chrome) et ne contient ni le prompt ni le nom du fichier : « Image prête — Générée en 12 min 14 s ·
   1024×1024 » (dans l'espace privé, le même message qu'une image normale, pour que rien ne le trahisse). Un lot
-  (plusieurs images d'une seule demande, voir [Créer](#créer)) n'envoie qu'une notification, à la fin de
+  (plusieurs images d'une seule demande, voir [Créer une image](#créer-une-image-labo)) n'envoie qu'une notification, à
+  la fin de
   sa dernière image : « 3 images prêtes », « 2 images prêtes, 1 en échec », « Échec du lot » si aucune n'a réussi
   (le même message qu'un lot normal dans l'espace privé), et rien si tout le
   lot a été annulé. Il faut la bibliothèque `pywebpush` (installée par `requirements.txt` ; sur une installation
@@ -218,11 +219,12 @@ est dans `logs/service.log`. Le raccourci `Chambre noire.command` ouvre alors si
 
 ## Utilisation
 
-L'interface a trois onglets, dans la barre du bas : **En cours** (la génération en cours et la file d'attente),
-**Créer** (texte → image, édition avec des images d'entrée, ou dessin guidé sur une image) et **Galerie** ; elle s'ouvre
-sur Créer. Sur un grand écran, chaque page est une colonne centrée (la galerie prend toute la largeur). Sur un écran
-tactile, glisser le doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le dessin et sur les rangées qui
-défilent). Elle s'adapte au téléphone comme à l'ordinateur, toujours sombre, même quand le système est en mode clair :
+L'interface a deux onglets aux icônes en pixels, dans la barre du bas : **Labo** (en haut, la génération en cours, la
+file d'attente et les images terminées de la page ; dessous, le champ de création : texte → image, édition avec des
+images d'entrée, ou dessin guidé sur une image) et **Tirages** (les images gardées) ; elle s'ouvre sur le Labo. Sur un
+grand écran, le Labo est une colonne centrée et les Tirages prennent toute la largeur. Sur un écran tactile, glisser le
+doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le champ de création). Elle s'adapte au téléphone
+comme à l'ordinateur, toujours sombre, même quand le système est en mode clair :
 lumière inactinique de chambre noire (noir chaud, halo rouge de la lampe, grain léger, textes couleur papier, accent
 ambre, erreurs en rouge vif avec leur icône). Sur un écran tactile, elle allège ses animations pour rester fluide ;
 ajouter `?lite=1` ou `?lite=0` à l'adresse force l'un ou l'autre rendu.
@@ -237,7 +239,7 @@ Sous le texte, trois pastilles résument le format, la résolution et les étape
 | **Format** | 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16, et « Image » (les proportions de l'image) quand une seule image est chargée | Proportions de l'image produite |
 | **Résolution** | 360p (512×512) · 540p (768×768) · **720p** (1024×1024, par défaut) · 1080p (1536×1536) · 1440p (2048×2048, 2K natif du modèle) | Nombre de pixels, nommé d'après le format vidéo qui en compte autant (720p : ≈ 0,9 à 1 million de pixels) ; les dimensions exactes, qui dépendent du format, s'affichent en bas du panneau |
 | **Étapes** | Low 8 · Medium 12 · High 20 · XHigh 30 · **Max 40** (par défaut, réglage officiel du modèle) | Finesse des détails ; chaque option affiche le **temps estimé** |
-| **Images** (hors campagne) | **1**, 2, 3 ou 4 | Nombre de variantes du même prompt, chacune avec sa graine, avec ou sans images d'entrée, dessin compris (voir [Créer](#créer)) ; le temps affiché est celui de toutes les images |
+| **Images** (hors campagne) | **1**, 2, 3 ou 4 | Nombre de variantes du même prompt, chacune avec sa graine, avec ou sans images d'entrée, dessin compris (voir [Créer une image](#créer-une-image-labo)) ; le temps affiché est celui de toutes les images |
 | **Aperçu toutes les 5 étapes** | interrupteur, activé par défaut | Montre l'image en cours de formation ; coût affiché à côté |
 
 Le bouton **Générer** affiche le temps estimé. Le navigateur retient les réglages choisis et le texte en cours de
@@ -247,21 +249,22 @@ Conseil : **540p + 12 étapes** pour chercher la bonne formulation, puis montez 
 Les descriptions en **anglais, longues et précises** donnent les meilleurs résultats.
 
 **Générer** reste actif pendant une génération : chaque appui ajoute une demande à la **file d'attente**, avec les
-réglages du moment, et mène à la page **En cours**. Dès que le Mac accepte la demande, la saisie est vidée pour la
+réglages du moment, et remonte en haut du **Labo**. Dès que le Mac accepte la demande, la saisie est vidée pour la
 suivante de ce qui est parti : texte et son brouillon, images d'entrée d'une édition (campagne comprise : l'interrupteur
 **Campagne** reste tel quel), image et tracé d'un dessin ; ce qui a été tapé ou ajouté pendant l'envoi reste ; les
 Réglages ne bougent pas (seul le format « Image », qui suit l'image, part avec elle). Si la demande est refusée (erreur
-du Mac, Mac injoignable, génération longue non confirmée), rien n'est vidé et l'on reste sur la page. Le Mac calcule les
+du Mac, Mac injoignable, génération longue non confirmée), rien n'est vidé et la page ne bouge pas. Le Mac calcule les
 générations une à une, dans l'ordre d'arrivée (sauf celles passées en tête depuis la file d'attente), qu'elles viennent
 de l'ordinateur ou du téléphone.
 
-La page **En cours** montre en haut, en grand, la génération en cours. Lancée par la page : l'étape, le temps restant,
+Le **Labo** montre en haut, en grand, la génération en cours. Lancée par la page : l'étape, le temps restant,
 les aperçus et un bouton d'annulation (une génération annulée ne laisse aucun fichier : ni image, ni images d'entrée, ni
 aperçus, ni journal du moteur) ; une génération de la page qui attend affiche sa place dans la file et le temps avant
 son image. Lancée par un autre appareil : son texte, un cadre aux proportions demandées, ses réglages et une progression
 estimée, sans aperçu, avec l'annulation là où l'appareil y a droit. Quand le Mac calcule une génération que l'espace où
 l'on est ne voit pas, le haut de la page dit « En attente » et le temps avant le début de la première génération de
-l'espace. Quand la file est vide et qu'il n'y a aucune terminée, elle dit « Rien en cours », avec un bouton vers Créer.
+l'espace. Quand la file est vide et qu'il n'y a aucune terminée, il dit « Rien en cours », au-dessus du champ de
+création.
 Sous la génération en cours, la **file d'attente** de l'espace, en cartes, dans l'ordre de calcul, sous un en-tête qui
 dit combien de générations attendent et à quelle heure la file sera vide (« 4 en attente · file vide vers 15 h 10 (≈ 60
 min) »). Une carte par demande : une génération seule, ou tout un lot (« 3 variantes », « Campagne · 6 photos ») avec
@@ -276,8 +279,8 @@ derrière une campagne) ; la flèche d'une carte de lot la déplie, avec une lig
 passer en tête seule. Une génération normale s'annule ou passe en tête depuis n'importe quel appareil. La file et la
 pastille ne montrent que les générations de l'espace où l'on est (public, ou espace privé) : rang et « +N en attente »
 ne comptent qu'elles. La pastille d'état en haut suit la génération en cours depuis n'importe quel onglet et affiche
-« +N en attente » (« +N » seul quand l'écran est trop étroit pour tout contenir) ; un appui mène à la page En cours (au
-panneau Moteur quand rien de l'espace n'est en file). L'onglet **En cours** porte le nombre de générations de l'espace
+« +N en attente » (« +N » seul quand l'écran est trop étroit pour tout contenir) ; un appui mène au Labo (au
+panneau Moteur quand rien de l'espace n'est en file). L'onglet **Labo** porte le nombre de générations de l'espace
 en cours et en attente (rien à zéro), et son icône un anneau qui suit la génération en cours. Une génération qui attend
 derrière une génération de l'autre espace affiche « en attente » et un temps qui compte ce travail caché, sans ligne
 pour lui ; si rien de l'espace ne tourne, la pastille dit « En attente » et le temps avant le début de la première, et
@@ -287,7 +290,7 @@ pas à celles des autres appareils, qui restent visibles dans la file ; dans l'e
 privées en cours (voir « Espace privé »). Une génération ainsi reprise garde son prompt complet (sous l'image, et pour
 **Reprendre** depuis la visionneuse), pas seulement le début qu'en montre la file. Chaque image terminée est
 enregistrée en PNG dans la pile, **`outputs\.pile\`**, où elle attend d'être triée : gardée, elle passe dans
-`outputs\` (la galerie) ; jetée, elle est effacée. Ses images d'entrée (références, image d'origine, zone peinte) sont
+`outputs\` (les Tirages) ; jetée, elle est effacée. Ses images d'entrée (références, image d'origine, zone peinte) sont
 dans `outputs\.inputs\`.
 
 Sous la file, les **terminées** : les générations finies de la page, la plus récente en premier. Une image a sa vignette
@@ -299,15 +302,16 @@ génération annulée n'y laisse rien. Une carte de lot ou d'échec reprise apr�
 page n'a plus la demande). Le « × » d'une carte la retire de la liste sans la supprimer de la pile, **Tout retirer**
 vide la liste. La liste garde au plus 12 générations (les deux espaces comptent ensemble) : au-delà, la plus ancienne en
 sort d'elle-même, échecs compris. Elle repart vide après un rechargement de la page (les images sont dans la pile) ;
-les générations reprises y arrivent à leur fin. Quand une génération de la page finit pendant qu'on est sur un autre
-onglet, un message le dit (« Image prête », « Lot prêt · 3 images », avec « , 1 en échec » s'il y en a, « Échec de la
-génération », « Échec du lot ») et mène à En cours quand on le touche ; rien pour une génération annulée. Partager et
+les générations reprises y arrivent à leur fin. Quand une génération de la page finit pendant qu'on est sur les
+Tirages, un message le dit (« Image prête », « Lot prêt · 3 images », avec « , 1 en échec » s'il y en a, « Échec de la
+génération », « Échec du lot ») et mène au Labo quand on le touche ; rien pour une génération annulée. Partager et
 Copier ne sont proposés que là où le navigateur les permet : sur l'ordinateur lui-même, ou sur le téléphone par
 l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du Wi-Fi).
 
-### Créer
+### Créer une image (Labo)
 
-Un seul champ de texte et une seule liste d'**images d'entrée**. Sans image d'entrée, la génération part du texte :
+Sous la génération en cours, le Labo a un seul champ de texte et une seule liste d'**images d'entrée**. Sans image
+d'entrée, la génération part du texte :
 écrire la description, ajuster les réglages si besoin, appuyer sur **Générer**. Avec des images, c'est une
 **édition** (voir plus bas). L'exemple affiché dans le champ vide suit la saisie : décrire l'image sans image
 d'entrée, dire quoi changer avec des images.
@@ -319,7 +323,7 @@ génération par image, à la suite dans la file (jamais en même temps), chacun
 d'attente montre tout le lot sur une seule carte, une case par image, dont l'annulation arrête tout le lot (le bouton de
 l'image en cours n'annule que celle-ci, et une image en échec n'arrête pas les autres). À la fin, le lot entre dans les
 terminées en **grille** : un appui ouvre une image en grand, avec sa graine, et **Garder celle-ci** supprime les autres
-images du lot après confirmation. Sans choix, toutes les images restent dans la galerie.
+images du lot après confirmation. Sans choix, toutes les images restent dans les Tirages.
 Les variantes marchent de la même façon avec des images d'entrée (hors campagne) et en dessin : plusieurs essais
 de la même édition, chacun avec sa graine, à départager par **Garder celle-ci**.
 
@@ -328,7 +332,7 @@ de la même édition, chacun avec sa graine, à départager par **Garder celle-c
 sont convertis en PNG par le serveur), une à une ou plusieurs d'un coup dans le sélecteur (elles sont ajoutées dans
 l'ordre de sélection), en les déposant sur **Ajouter des images**, en collant une image copiée (Cmd+V sur le Mac,
 « Coller » sur le téléphone ; un texte collé dans le champ reste un texte), ou par **Éditer** sur une image de la
-galerie, des terminées ou des images d'entrée, puis écrire une **instruction** :
+Tirages, des terminées ou des images d'entrée, puis écrire une **instruction** :
 
 - « Replace the sky with a dramatic orange sunset, keep everything else unchanged »
 - « The woman in image 1 wears the jacket from image 2 »
@@ -346,13 +350,13 @@ du format, et le choix du format disparaît des Réglages : chaque image prend l
 charge le plus proche, à la résolution choisie, côtés multiples de 32 ; une photo en portrait reste en portrait). Le
 temps estimé additionne les photos une à une. La campagne est un lot comme les variantes : suivie image par image
 (« Photo 2 sur 6 »), annulable en entier depuis la file d'attente, une seule notification à la fin, une grille des
-images, et chaque image garde sa photo comme image d'entrée dans la galerie ; elle n'a pas de variantes (le choix du
+images, et chaque image garde sa photo comme image d'entrée dans les Tirages ; elle n'a pas de variantes (le choix du
 nombre d'images disparaît) ni de **Garder celle-ci**, chaque image venant d'une photo différente. Interrupteur
 désactivé, l'édition reste celle d'avant (1 à 10 références combinées en une image).
 
 ### Dessiner (dessin guidé)
 
-Le bouton **Dessiner**, sous les images d'entrée de Créer, transforme l'unique image d'entrée en dessin :
+Le bouton **Dessiner**, sous les images d'entrée du Labo, transforme l'unique image d'entrée en dessin :
 
 1. Avec une image, **Dessiner** active le dessin sur elle ; sans image, il fait choisir une image, puis active le
    dessin. À plusieurs images, il est grisé (« Dessiner se fait sur une seule image »).
@@ -366,38 +370,38 @@ Le bouton **Dessiner**, sous les images d'entrée de Créer, transforme l'unique
 Pendant le dessin, aucune image ne s'ajoute (choix, dépôt, collage ou **Éditer** : « Désactivez Dessiner pour
 ajouter d'autres images »), la campagne n'est pas proposée, et **Générer** refuse une demande sans zone peinte. Un
 nouvel appui sur **Dessiner** l'éteint sans perdre le tracé, retrouvé en le rallumant tant que l'image reste ;
-retirer l'image (« × ») éteint le dessin et efface le tracé. **Dessiner** sur une image de la galerie, des terminées ou
+retirer l'image (« × ») éteint le dessin et efface le tracé. **Dessiner** sur une image des Tirages, des terminées ou
 des images d'entrée la met seule dans la saisie, dessin actif et tracé vierge, après confirmation si la saisie
 contenait déjà des images (« Remplacer les 2 images de la saisie par celle-ci ? »).
 
 Formulez toujours une **instruction** (« Replace … with … »). Une simple description (« a fountain ») pousse souvent
 le modèle à redessiner l'original.
 
-### Galerie
+### Tirages
 
-L'onglet **Galerie** montre toutes les images de `outputs\`, la plus récente d'abord. Un appui sur une miniature
+L'onglet **Tirages** montre toutes les images de `outputs\`, la plus récente d'abord. Un appui sur une miniature
 l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèle, durée, et la graine quand elle est connue). Glisser sur le côté passe
 à l'image voisine (flèches du clavier sur ordinateur), glisser vers le bas ferme, un appui sur l'image masque les
 commandes. Pour zoomer (jusqu'à ×6), pincer l'image : elle passe au-dessus de tout, peut couvrir tout l'écran, suit les
 doigts, et revient à sa taille dès qu'on les relâche. Sur ordinateur, la molette zoome, glisser déplace l'image et un
 clic la remet à sa taille. En haut à droite : **Partager**, **Copier** et **Télécharger** ; en bas : **Éditer** (ajoute
-l'image aux images d'entrée de Créer), **Dessiner**, **Reprendre**, **Relancer** et **Supprimer** (définitif, après
-confirmation : images d'entrée, dossier de travail et ligne du journal des générations compris). La zone de génération
-est masquée dans la galerie.
+l'image aux images d'entrée du Labo), **Dessiner**, **Reprendre**, **Relancer** et **Supprimer** (définitif, après
+confirmation : images d'entrée, dossier de travail et ligne du journal des générations compris). Le champ de création
+n'est pas sur les Tirages.
 
-**Reprendre** remet dans Créer la saisie d'où vient l'image, à la place de la saisie en cours (après confirmation si
+**Reprendre** remet dans le Labo la saisie d'où vient l'image, à la place de la saisie en cours (après confirmation si
 elle n'est pas vide) : son texte, ses réglages (format, résolution, étapes) et ses images d'entrée selon son usage.
 Une édition revient avec ses références (Campagne éteinte : c'était une seule édition) ; un dessin en masque avec son
 image de départ, Dessiner actif en masque et le tracé vide (la zone peinte n'est pas gardée) ; une annotation revient
-en édition, avec sa référence où le trait rouge est déjà dessiné. Les images d'entrée se lisent dans la galerie
+en édition, avec sa référence où le trait rouge est déjà dessiné. Les images d'entrée se lisent dans les Tirages
 (publique ou privée), ou, pour une image des terminées, dans la demande que la page a gardée. Si l'on tape ou ajoute une
 image pendant la lecture des images, la confirmation est redemandée. Le geste est absent pour une édition ou un dessin
-dont la galerie n'a pas gardé les images d'entrée (images anciennes).
+dont les Tirages n'ont pas gardé les images d'entrée (images anciennes).
 
-**Relancer** refait la même demande avec une nouvelle graine, sans toucher la saisie de Créer, puis mène à **En
-cours**, comme **Générer** : dans l'espace où l'on est (dans l'espace privé, tout part en privé). Pour une image des
+**Relancer** refait la même demande avec une nouvelle graine, sans toucher la saisie du Labo, puis mène en haut du
+**Labo**, comme **Générer** : dans l'espace où l'on est (dans l'espace privé, tout part en privé). Pour une image des
 terminées, c'est la demande que la page a gardée (une image d'un lot : cette image seule ; la carte du lot : tout le
-lot, mêmes variantes ou mêmes photos de campagne). Pour une image de la galerie, ou une image reprise après un
+lot, mêmes variantes ou mêmes photos de campagne). Pour une image des Tirages, ou une image reprise après un
 rechargement, la demande est refaite à partir de l'image : son texte, ses images d'entrée, ses dimensions, ses étapes
 et son usage (une annotation repart en annotation), pour une seule image ; le geste est absent pour un dessin en masque
 (le masque n'est pas gardé avec l'image) et pour une édition dont les images d'entrée ne sont pas connues.
@@ -405,12 +409,12 @@ et son usage (une annotation repart en annotation), pour une seule image ; le ge
 Une image ne s'affiche qu'une fois chargée : sa miniature d'abord, puis l'image complète, sans jamais laisser voir un
 instant l'image vue avant (ni celle d'une autre image, ni celle de l'autre espace). Les images voisines de la
 visionneuse et des images d'entrée sont chargées en avance, pour que glisser de l'une à l'autre soit immédiat, comme
-la première image d'entrée dès que l'image est affichée ; en revenant à la galerie, celle de l'autre espace ne
+la première image d'entrée dès que l'image est affichée ; en revenant aux Tirages, celle de l'autre espace ne
 réapparaît pas le temps du chargement. Pendant une génération, chaque aperçu reste à l'écran jusqu'à ce que le
 suivant soit prêt.
 
 Les images d'un même lot (variantes ou campagne) portent un repère « 2/4 » (leur rang dans le lot) tant qu'il en reste
-au moins deux dans la galerie. Dans la visionneuse, **Voir le lot** montre les images du lot côte à côte ; un appui en
+au moins deux dans les Tirages. Dans la visionneuse, **Voir le lot** montre les images du lot côte à côte ; un appui en
 ouvre une en grand, et l'on passe de l'une à l'autre en glissant. **Tout télécharger** enchaîne le téléchargement de
 chaque image du lot (une par fichier, pas d'archive ; le navigateur peut demander d'autoriser plusieurs
 téléchargements), et **Garder celle-ci** (variantes seulement) supprime les autres images du lot après confirmation.
@@ -418,13 +422,13 @@ téléchargements), et **Garder celle-ci** (variantes seulement) supprime les au
 Pour une édition ou un dessin guidé, le bouton **Image d'entrée** (ou **N images d'entrée**) ouvre les images de départ
 en grand, une par une, avec les mêmes gestes que la visionneuse : pincer pour zoomer (molette sur ordinateur), glisser à
 gauche ou à droite pour passer de l'une à l'autre, vers le bas pour fermer. Chacune peut être téléchargée, ou reprise
-par **Éditer** (images d'entrée de Créer) ou **Dessiner** pour repartir d'elle. Les images d'entrée sont conservées
+par **Éditer** (images d'entrée du Labo) ou **Dessiner** pour repartir d'elle. Les images d'entrée sont conservées
 depuis le 13/10/2026 ; pour les images plus anciennes, elles ont été récupérées tant que leur dossier de travail
 existait encore (les 20 derniers).
 
 ### Prompts enregistrés
 
-Le bouton **Prompts**, sous le champ de texte de **Créer**, ouvre la liste des prompts
+Le bouton **Prompts**, sous le champ de texte du **Labo**, ouvre la liste des prompts
 enregistrés, le dernier utilisé en tête. Elle est gardée sur le Mac (`tools/saved_prompts.json`) : on retrouve sur le
 téléphone ce qui a été enregistré depuis le Mac, et inversement. Dans l'espace privé, la liste est celle des prompts
 privés, chiffrés avec l'espace (voir [Espace privé](#espace-privé)) ; les prompts types restent les mêmes.
@@ -449,16 +453,16 @@ privés, chiffrés avec l'espace (voir [Espace privé](#espace-privé)) ; les pr
 
 ### Espace privé
 
-Une galerie à part, chiffrée sur le Mac, qui ne s'ouvre qu'avec un **code privé**. Ce code est distinct du code
+Un espace à part, chiffrée sur le Mac, qui ne s'ouvre qu'avec un **code privé**. Ce code est distinct du code
 d'accès du téléphone et demandé sur chaque appareil, le Mac compris : connaître le code d'accès, ou ouvrir les dossiers
 du Mac, ne suffit pas pour voir les images privées. C'est le seul mode de confidentialité : l'ancien mode incognito
 est retiré, et un appareil qui l'avait allumé voit une seule fois, au chargement, « L'incognito n'existe plus : vos
 images sont enregistrées. Pour la confidentialité, passez par l'espace privé. »
 
-- Rien ne le signale à l'arrivée sur l'application. Son entrée est le **cadenas** de l'en-tête de la **Galerie**,
+- Rien ne le signale à l'arrivée sur l'application. Son entrée est le **cadenas** de l'en-tête des **Tirages**,
   à côté du bouton Rafraîchir et aussi visible que lui : la première fois, il crée l'espace (code de 8 caractères au moins, lettres, chiffres, signes ;
   majuscules et minuscules comptent ; saisi deux fois).
-- **En HTTPS ou sur le Mac seulement** : l'espace privé ne s'ouvre (création, entrée, galerie privée, Changer le
+- **En HTTPS ou sur le Mac seulement** : l'espace privé ne s'ouvre (création, entrée, Tirages privés, Changer le
   code) que sur le Mac lui-même ou par l'adresse HTTPS de Tailscale (celle en `https://` du panneau
   Téléphone). Par l'adresse `http://` du Wi-Fi, le code et les images passeraient en clair sur le réseau : le cadenas
   le dit et ne demande pas le code. Le téléphone doit donc passer par l'adresse HTTPS, ce qu'il fait déjà s'il a
@@ -479,9 +483,10 @@ images sont enregistrées. Pour la confidentialité, passez par l'espace privé.
 - Les **variantes** et les **campagnes** marchent aussi dans l'espace privé : chaque image du lot est chiffrée, la
   grille et « Garder celle-ci » restent, et la notification est celle d'un lot normal (« N images prêtes »).
 - L'espace privé a sa propre **pile** : une image privée terminée y attend d'être triée (la marque « à trier » est
-  dans sa fiche chiffrée, jamais en clair sur le disque) ; gardée, elle passe dans la
-  galerie privée, jetée, ses fichiers chiffrés sont supprimés. Les images privées d'avant la pile sont dans la galerie.
-- La **Galerie** de l'espace privé ne montre que les images privées, avec la même visionneuse : télécharger,
+  dans sa fiche chiffrée, jamais en clair sur le disque) ; gardée, elle passe dans les
+  Tirages privés ; jetée, ses fichiers chiffrés sont supprimés. Les images privées d'avant la pile sont dans les
+  Tirages.
+- Les **Tirages** de l'espace privé ne montrent que les images privées, avec la même visionneuse : télécharger,
   partager, copier, images d'entrée, Éditer, Dessiner, Reprendre, Supprimer. En sortant, elles quittent l'écran.
 - **Chaque espace a sa propre saisie** : texte, images d'entrée, dessin (actif ou non, masque ou annotation) et son
   tracé. En
@@ -489,8 +494,8 @@ images sont enregistrées. Pour la confidentialité, passez par l'espace privé.
   la première fois) ; en sortant, la saisie publique revient intacte. La saisie privée n'est jamais retenue par le
   navigateur, brouillons compris : elle ne survit pas à la fermeture de l'application. L'interrupteur **Campagne** et
   les Réglages sont communs aux deux espaces.
-- **Sortir vide l'écran** : la saisie privée est effacée, comme les images privées de la page En cours, de la grille,
-  de la galerie, de la visionneuse, des images d'entrée et de la feuille « Voir le lot » (fermée), même cachées, et les
+- **Sortir vide l'écran** : la saisie privée est effacée, comme les images privées du Labo, de la grille,
+  des Tirages, de la visionneuse, des images d'entrée et de la feuille « Voir le lot » (fermée), même cachées, et les
   lignes du journal du panneau Moteur écrites dans l'espace : la page ne les garde plus prêtes à l'affichage, et celles
   qui chargeaient encore sont abandonnées (si le Mac est injoignable, un message le dit et l'on reste dans l'espace).
   Les générations privées en file ou en cours quittent aussi l'écran et la page (progression, aperçu, prompt, vignette,
@@ -780,7 +785,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   dans la file, et la réponse devient `{"lot": {"id", "size", "campaign"}, "jobs": [...]}` ; chaque génération porte
   `lot` (`id`, `rank`, `size` et `campaign` : vrai pour une campagne, faux pour des variantes, quel que soit le mode ;
   une image d'avant ce marqueur n'en a pas et un lot du mode `edit` y compte comme une campagne), aussi écrit dans
-  `outputs/journal.jsonl`, dans la galerie et dans les réglages d'une image privée ; `POST /api/lot/<id>/cancel` annule
+  `outputs/journal.jsonl`, dans les Tirages et dans les réglages d'une image privée ; `POST /api/lot/<id>/cancel` annule
   toutes ses générations non terminées (404 une fois le lot fini).
   Graine `-1` : le serveur la tire lui-même (distincte pour chaque image d'un lot) et l'écrit au journal ; graine
   choisie avec `count` : graine, graine + 1… ; pile et tirages : une image normale terminée arrive dans la pile,
@@ -828,7 +833,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   génération privée, et `POST /api/lot/<id>/cancel` et `…/first` d'un lot privé : requête sûre et session exigées, sinon
   404 (« job inconnu », « lot inconnu »), comme un identifiant inconnu, avant tout test d'état ; l'annulation et le
   passage en tête prolongent la session, ni le suivi ni l'oubli ; la fermeture de la page ne l'arrête pas.
-  Pile et galerie privées, session exigée (403 sinon), chaque requête prolongeant la session : une génération privée
+  Pile et tirages privés, session exigée (403 sinon), chaque requête prolongeant la session : une génération privée
   terminée arrive dans la pile privée, marquée `"pile": true` dans sa fiche chiffrée (`meta`) ; `GET
   /api/private/pile` (la pile) et `GET /api/private/history` (les tirages privés, fiches sans la marque, dont toutes
   les images privées d'avant la pile ; réglages déchiffrés de chaque image, avec `id`, sans la marque), `POST
@@ -952,10 +957,10 @@ le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier, et `--name
 nom correspond (échec immédiat si aucun ne correspond). Un test bloqué échoue au bout de 3 minutes (20 pour un
 fichier), et Chrome et le banc sont arrêtés à la fin de chaque fichier. Les tests ouvrent l'interface servie par le
 banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du
-navigateur. Ils couvrent les écrans principaux, la page En cours (onglets, pastilles, génération d'un autre appareil
+navigateur. Ils couvrent les écrans principaux, le Labo (deux onglets, pastilles, génération d'un autre appareil
 ou cachée, rien qui dépasse à la largeur du téléphone), les terminées (cartes, grille d'un lot, échecs, « × » et « Tout
 retirer », plafond, message
-« Image prête »), « Garder celle-ci » après un rechargement de la galerie, la saisie (page Créer unique, Dessiner,
+« Image prête »), « Garder celle-ci » après un rechargement des Tirages, la saisie (unique, dans le Labo, Dessiner,
 collage, campagne à partir de 2 images, plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque
 espace), l'en-tête (cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés, la reprise d'une
 génération, le suivi d'une génération privée devenue inconnue (sans faux « Échec »), le brouillon unique (reprise des

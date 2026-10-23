@@ -1,8 +1,8 @@
-// Terminées de la page En cours, dans la vue du téléphone : sous la file, les générations finies de la page, la plus
+// Terminées de la page, dans le Labo, vue du téléphone : sous la file, les générations finies de la page, la plus
 // récente en premier (lot en grille, échec avec son message, annulée absente), leurs actions (visionneuse, Télécharger,
 // Éditer, Dessiner, Supprimer), « × » et « Tout retirer » (sans confirmation : les images restent sur le Mac),
 // plafond de 12, liste vide au rechargement, vrai mode et images d'entrée de chaque image, et le
-// message « Image prête » ou « Lot prêt » quand on est ailleurs dans l'application.
+// message « Image prête » ou « Lot prêt » quand on est sur les Tirages, qui mène au Labo.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/terminees.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -87,25 +87,25 @@ test('échec : carte avec le message du Mac ; annulée : absente', async () => {
   page.assertNoErrors();
 });
 
-test('ailleurs : « Image prête » mène à En cours ; lot en grille, « Lot prêt » avec ses échecs', async () => {
+test('sur les Tirages : « Image prête » mène au Labo ; lot en grille, « Lot prêt » avec ses échecs', async () => {
   await watchToasts();
-  await page.generate('HOLD=pret zq4 depuis Créer');
-  await page.click('#tabbar [data-pane="create"]');
-  bench.release('pret');                           // elle finit pendant qu'on est sur Créer
+  await page.generate('HOLD=pret zq4 vue des Tirages');
+  await page.tab('tirages');
+  bench.release('pret');                           // elle finit pendant qu'on est sur les Tirages
   await page.waitFor(`seenToasts.includes('Image prête')`, { what: 'message « Image prête »' });
   await page.click('#toastBox');
-  await page.waitFor(`mode === 'run'`, { what: 'page En cours après le message' });
+  await page.waitFor(`mode === 'labo'`, { what: 'Labo après le message' });
   // lot de 3 variantes dont la deuxième échoue (graines 20, 21, 22 ; le faux moteur échoue sur la graine 21)
   await page.eval(`opt.count = 3; saveOpt(); refreshChoices();
     window.realBuild = window.realBuild || buildRequest; window.buildRequest = () => ({ ...realBuild(), seed: 20 })`);
   await page.generate('HOLD=lotpret FAILSEED=21 zq4 lot');
   await page.eval(`opt.count = 1; saveOpt(); refreshChoices(); window.buildRequest = realBuild`);
-  await page.click('#tabbar [data-pane="create"]');
+  await page.tab('tirages');
   bench.release('lotpret');
   await page.waitFor(`seenToasts.some(t => t.startsWith('Lot prêt'))`, { what: 'message du lot', timeout: 30000 });
   assert.deepEqual(await page.eval(`seenToasts.filter(t => /prêt|Échec/.test(t))`),
     ['Image prête', 'Lot prêt · 2 images, 1 en échec']);
-  await page.click('#tabbar [data-pane="run"]');
+  await page.tab('labo');
   const lot = `$('doneList').querySelector('.dlot')`;
   assert.equal(await page.eval(`${lot}.querySelectorAll('[data-open]').length`), 2, 'deux images dans la grille');
   assert.equal(await page.eval(`${lot}.querySelectorAll('.cell.fail').length`), 1, 'une case pour l\'échec');
@@ -142,7 +142,7 @@ test('plafond : 12 terminées, la plus ancienne sort d\'elle-même', async () =>
 });
 
 test('vrai mode et images d\'entrée : une édition à deux références les montre toutes', async () => {
-  await page.click('#tabbar [data-pane="create"]');
+  await page.tab('labo');
   await page.eval(`(async () => { for (const c of ['#a03070', '#30a070']) {
     const cv = document.createElement('canvas'); cv.width = cv.height = 256; const x = cv.getContext('2d');
     x.fillStyle = c; x.fillRect(0, 0, 256, 256);
@@ -166,7 +166,7 @@ test('rechargement : la liste repart vide', async () => {
   await bench.idle();
   await page.goto(bench.url + '/');
   await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
-  await page.click('#tabbar [data-pane="run"]');
+  await page.tab('labo');
   assert.equal(await page.eval(`$('doneList').children.length`), 0);
   assert.equal(await visible('#resultEmpty'), true);
   page.assertNoErrors();
