@@ -4,6 +4,27 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-23 · PNG renommé avant l'effacement, fichiers du serveur pour le seul porteur
+
+- **Contexte** : passe « bogues » du durcissement de la pile (`e1f05d9`).
+- **Décision** (porteur, 23/10/2026, réponse « ok pour tes reco ») :
+  - « PNG verrouillé sous Windows. Windows refuse d'effacer un fichier ouvert, par exemple pendant le calcul de sa
+    vignette. Le PNG étant effacé en dernier, il peut rester seul : le reste est déjà parti, y compris le prompt.
+    Garder une telle image en ferait un tirage sans prompt. Sur le Mac, le cas n'arrive pas. (a) Renommer d'abord le
+    PNG en nom caché : sous Windows, ce renommage échoue aussi sur un fichier ouvert, donc tout de suite, avant
+    d'avoir rien effacé. Ensuite, tout effacer, et remettre le nom d'origine si une pièce résiste. (b) Laisser
+    ainsi : la seule plateforme concernée n'est pas la tienne, et l'image se rejette. » → recommandation (a) acceptée ;
+  - « Fichiers de travail lisibles par les autres comptes du Mac. Pendant le calcul d'une image privée, sd-cli écrit
+    le PNG en clair dans `jobs/private_<id>/`, et ce PNG contient le prompt dans ses métadonnées. Le dossier et le
+    fichier sont lisibles par les autres comptes du Mac jusqu'à la fin de la génération. Les vignettes, les copies
+    d'images d'entrée et les anciens tirages le sont aussi. Ça existait avant la refonte. (a) Créer tout ce que le
+    serveur et sd-cli écrivent en lecture pour ton seul compte (masque de création 0o077 au lancement du serveur),
+    dans un petit ticket à part. (b) Laisser ainsi : ton Mac n'a sans doute qu'un compte. » → recommandation (a)
+    acceptée.
+- **Écarté** : laisser le PNG seul sous Windows ; garder les droits de création du système.
+- **Conséquences** : un PNG caché resté après une panne reprend son nom au démarrage (l'image revient, on la rejette) ;
+  les fichiers déjà créés gardent leurs droits, seuls les nouveaux sont pour le seul porteur.
+
 ## 2026-10-23 · Suites du groupe B : effacement PNG en dernier, annulation privée, droits des fichiers, page restaurée
 
 - **Contexte** : compte rendu du groupe B (pile côté serveur) et passe « bogues » du ticket des couleurs ; questions
@@ -13,14 +34,25 @@ les messages de commit.
     le contenu privé quelques secondes. On confie la correction au ticket « Trier dans l'espace privé en lumière
     verte » du groupe E ? » → oui ;
   - « Suppression privée durcie par la revue du groupe B. `/api/private/delete` reprend d'abord un éventuel changement
-    de code interrompu, puis renomme le dossier avant de l'effacer. […] On garde ? » → oui ;
-  - « Ordre d'effacement de Jeter et Supprimer. […] Faut-il effacer le PNG en dernier ? Un échec laisserait alors
-    l'image visible, et on pourrait la rejeter. Je modifierais la spec en conséquence. » → oui ;
+    de code interrompu, puis renomme le dossier avant de l'effacer. C'est ce qu'exige déjà le piège « Verrous » de
+    `CLAUDE.md`. Le relecteur a voulu défaire ce changement, mais le contrôle de permissions l'a bloqué comme un
+    affaiblissement de la sécurité. On garde ? » → oui ;
+  - « Ordre d'effacement de Jeter et Supprimer. Aujourd'hui, le PNG est effacé d'abord, comme le dit la spec. Si une
+    pièce suivante résiste, la ligne du journal, qui contient le prompt, peut rester sans plus rien pour la retirer.
+    Faut-il effacer le PNG en dernier ? Un échec laisserait alors l'image visible, et on pourrait la rejeter. Je
+    modifierais la spec en conséquence. » → oui ;
   - « Dates de la fiche privée. Garder une image privée ne réécrit que sa fiche chiffrée : ses dates de fichier
-    changent, pas celles de l'image. […] » → « (a) » : l'accepter et l'écrire, comme les dates, tailles et nombres
-    de fichiers privés que le README dit déjà visibles sur le disque ;
-  - « Annulation pendant le rangement d'une génération privée. […] On corrige de la même façon ? Une annulation
-    arrivée à ce moment-là ne laisserait alors aucune image. » → oui ;
+    changent, pas celles de l'image. Sur le disque ou dans une sauvegarde, on peut donc deviner quelles images
+    privées ont été gardées, et combien attendent encore. C'est la fuite que ton choix de la marque chiffrée devait
+    éviter. (a) L'accepter et l'écrire dans `DECISIONS.md` et la spec. Le README dit déjà que les dates, tailles et
+    nombres de fichiers privés restent visibles sur le disque ; ce serait une limite de plus, de même nature. (b)
+    Remettre les dates d'origine. Ce n'est que partiel : la date de changement du système de fichiers reste. (c)
+    Réécrire toute l'image dans un dossier neuf. C'est la seule option qui ferme la fuite, mais elle coûte cher et ne
+    doit pas risquer de perdre l'image. » → recommandation (a) acceptée ;
+  - « Annulation pendant le rangement d'une génération privée. Une course existait avant la refonte : une annulation
+    qui arrive pile pendant le rangement laisse l'image privée dans la pile, marquée « terminée ». Le côté public est
+    déjà protégé. On corrige de la même façon ? Une annulation arrivée à ce moment-là ne laisserait alors aucune
+    image. » → oui ;
   - « Droits des fichiers. Le journal des images (qui contient les prompts) et les PNG de la pile sont créés lisibles
     par les autres comptes de la Mac (0o644). Les passer en lecture par toi seul (0o600) ? Il faudrait un nouveau
     ticket Asana, qui couvrirait aussi les tests de refus d'accès de `/api/keep` et `/api/discard` » → oui ;

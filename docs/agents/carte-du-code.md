@@ -60,14 +60,14 @@ Dans l'ordre du fichier :
   `JOURNAL_LOCK` (un `RLock` : journal, tri, lecture des tirages et de la pile), `journal_line` (une ligne lue, ou
   illisible : même jugement à la lecture et à la réécriture), `journal_entries`, `append_journal`, `to_pile` (fin
   d'une génération normale : PNG du dossier de travail vers la pile, sous `S.turn` contre une annulation, puis ligne
-  du journal et entrées, d'un bloc sous `JOURNAL_LOCK` ; PNG et journal en 0o600), `delete_output` (effacement
-  complet : `delete_extras` (miniatures et entrées), dossier de travail et lignes du journal par `drop_from_journal`,
-  réécrit dans un fichier temporaire puis remplacé, et le PNG en dernier, seulement si tout le reste est parti ; une
-  pièce qui résiste n'arrête pas les suivantes), `SORTS` et
-  `sort_image` (Garder, Jeter, Supprimer, d'un bloc sous `JOURNAL_LOCK` : le premier geste arrivé l'emporte),
-  `read_inputs`, `images_in` (PNG d'un dossier croisés avec le journal), `history()` (les tirages), `pile()`,
-  `thumb_jpeg`, `thumbnail` (`outputs/.thumbs/` ; mise en place sous `JOURNAL_LOCK`, jamais pour une image déjà
-  jetée).
+  du journal et entrées, d'un bloc sous `JOURNAL_LOCK` ; PNG et journal en 0o600), `delete_output` (effacement complet
+  : `delete_extras` (miniatures et entrées), dossier de travail et lignes du journal par `drop_from_journal`, réécrit
+  dans un fichier temporaire puis remplacé, et le PNG en dernier, seulement si tout le reste est parti, renommé en nom
+  caché avant tout effacement et rendu à son nom si une pièce résiste ; `restore_hidden_images` au démarrage ; une
+  pièce qui résiste n'arrête pas les suivantes), `SORTS` et `sort_image` (Garder, Jeter, Supprimer, d'un bloc sous
+  `JOURNAL_LOCK` : le premier geste arrivé l'emporte), `read_inputs`, `images_in` (PNG d'un dossier croisés avec le
+  journal), `history()` (les tirages), `pile()`, `thumb_jpeg`, `thumbnail` (`outputs/.thumbs/` ; mise en place sous
+  `JOURNAL_LOCK`, jamais pour une image déjà jetée).
 - **État** : `class State`, instance `S` (moteur, modèle, générations en mémoire `S.jobs`, file `S.pending` (liste des
   générations en attente dans l'ordre de calcul, seule source de l'ordre) protégée avec `S.current` par la condition
   `S.turn`, lots `S.lots`, génération en cours `S.current`, sessions privées `S.private_sessions`, noms `S.lan_hosts`
@@ -106,7 +106,8 @@ Dans l'ordre du fichier :
   privées : `_private_get`, `_private_post` ; toutes les autres routes : `do_GET`, `do_POST` (une suite de
   `if path == …`).
 - **Démarrage** : `exclude_from_backup` (Mac : `jobs/` hors de Time Machine), `setup_state`, `main()` (options,
-  `--lan`, Tailscale, ménage de `jobs/`, threads). Le banc n'exécute pas `main()`.
+  `--lan`, Tailscale, ménage de `jobs/`, PNG cachés rendus par `restore_hidden_images`, threads). Le banc n'exécute
+  pas `main()`.
 
 `tools/estimate.py` : modèle de coût des durées (`predict`, `ref_px`, `prefix_cache`, `make_sample`, `class Store`
 pour `tools/calibration.json`).

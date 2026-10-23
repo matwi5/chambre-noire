@@ -100,7 +100,8 @@ def pieces(j):
     """Ce qui reste sur le disque d'une image : PNG (pile ou tirage), vignettes, images d'entrée, dossier de travail,
     lignes du journal."""
     stem = j["name"][:-4]
-    return {"png": files("outputs", j["name"]) + files("outputs", ".pile", j["name"]),
+    return {"png": files("outputs", j["name"]) + files("outputs", ".pile", j["name"])
+            + files("outputs", "." + j["name"]) + files("outputs", ".pile", "." + j["name"]),
             "thumbs": files("outputs", ".thumbs", stem + "*"),
             "inputs": files("outputs", ".inputs", stem), "job": files("jobs", j["id"]),
             "journal": [line for line in journal_lines() if j["name"].encode() in line]}
@@ -227,6 +228,78 @@ class DiscardTest(bench.BenchCase):
                 self.assertEqual(call("POST", path, body, headers={"Content-Type": "text/plain"})[0], 415)
         self.assertEqual(pile_names(), [j["name"]])
         self.assertTrue(all(pieces(j).values()), pieces(j))
+
+
+class HiddenPngTest(bench.BenchCase):
+    """Le PNG est renommé en nom caché avant tout effacement (décision du 23/10/2026) : sous Windows, un fichier ouvert
+    refuse ce renommage tout de suite, avant que rien ne soit effacé ; un PNG caché resté après une panne reprend son
+    nom au démarrage."""
+
+    def test_a_png_that_cannot_be_renamed_leaves_everything(self):
+        j = edited_image(self)
+        before = pieces(j)
+        real_replace = os.replace
+
+        def replace(src, dst):
+            if src.endswith(j["name"]) and os.path.basename(dst).startswith("."):
+                raise PermissionError("fichier ouvert ailleurs")
+            real_replace(src, dst)
+        with mock.patch.object(bench.launch.os, "replace", replace):
+            self.assertEqual(call("POST", "/api/discard", {"name": j["name"]}),
+                             (500, {"error": "effacement incomplet"}))
+        self.assertEqual(pieces(j), before)
+        self.assertEqual(pile_names(), [j["name"]])
+
+    def test_any_exception_gives_the_png_its_name_back(self):
+        for failure in (OSError("pièce verrouillée"), RecursionError("journal trop imbriqué"), KeyboardInterrupt()):
+            with self.subTest(failure=type(failure).__name__):
+                j = edited_image(self)
+                with mock.patch.object(bench.launch, "drop_from_journal", side_effect=failure):
+                    with self.assertRaises(type(failure)):
+                        with bench.launch.JOURNAL_LOCK:
+                            bench.launch.delete_output(bench.launch.P("outputs", ".pile", j["name"]))
+                self.assertEqual(pile_names(), [j["name"]])
+                self.assertEqual(files("outputs", ".pile", "." + j["name"]), [])
+                call("POST", "/api/discard", {"name": j["name"]})
+
+    def test_a_png_whose_name_cannot_come_back_keeps_the_first_error(self):
+        j = edited_image(self)
+        real_replace = os.replace
+
+        def replace(src, dst):
+            if os.path.basename(src).startswith("."):
+                raise PermissionError("indexeur")
+            real_replace(src, dst)
+        with mock.patch.object(bench.launch, "delete_extras", side_effect=OSError("vignette verrouillée")), \
+                mock.patch.object(bench.launch.os, "replace", replace):
+            with self.assertRaisesRegex(OSError, "vignette verrouillée"):
+                with bench.launch.JOURNAL_LOCK:
+                    bench.launch.delete_output(bench.launch.P("outputs", ".pile", j["name"]))
+        bench.launch.restore_hidden_images()          # le démarrage suivant la rend
+        self.assertEqual(pile_names(), [j["name"]])
+
+    def test_hidden_pngs_left_by_a_crash_come_back_at_start(self):
+        kept, waiting = edited_image(self, "gardée"), edited_image(self, "en attente")
+        self.assertEqual(call("POST", "/api/keep", {"name": kept["name"]})[0], 200)
+        out, pile = bench.launch.P("outputs"), bench.launch.P("outputs", ".pile")
+        os.replace(os.path.join(out, kept["name"]), os.path.join(out, "." + kept["name"]))
+        os.replace(os.path.join(pile, waiting["name"]), os.path.join(pile, "." + waiting["name"]))
+        other = os.path.join(pile, "._autre.png")          # fichier caché d'un volume exFAT ou SMB
+        with open(other, "wb") as f:
+            f.write(b"AppleDouble")
+        self.assertEqual((pile_names(), history_names()), ([], []))
+        bench.launch.restore_hidden_images()
+        self.assertEqual((pile_names(), history_names()), ([waiting["name"]], [kept["name"]]))
+        self.assertTrue(os.path.exists(other))
+        os.remove(other)
+
+    def test_a_hidden_copy_of_a_visible_png_is_removed_at_start(self):
+        j = edited_image(self)
+        pile = bench.launch.P("outputs", ".pile")
+        shutil.copy(os.path.join(pile, j["name"]), os.path.join(pile, "." + j["name"]))
+        bench.launch.restore_hidden_images()
+        self.assertEqual(files("outputs", ".pile", "." + j["name"]), [])
+        self.assertEqual(pile_names(), [j["name"]])
 
 
 @unittest.skipIf(os.name == "nt", "droits Unix")

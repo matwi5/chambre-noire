@@ -1035,27 +1035,73 @@ def to_pile(job, meta):
     return True
 
 
+def hidden_png(fp):
+    """Nom caché d'un PNG pendant son effacement : un point devant, dans le même dossier ; images_in (glob « *.png »)
+    et les routes (image_in) ne voient pas les noms en point."""
+    return os.path.join(os.path.dirname(fp), "." + os.path.basename(fp))
+
+
 def delete_output(fp):
-    """Efface une image (tirage ou image de la pile) et tout ce qui s'y rattache : ses miniatures, ses images d'entrée,
-    son dossier de travail jobs/<id>/ (identifiant tiré du nom, validé par JOB_ID_RE) et ses lignes du journal, puis le
-    PNG en dernier, seulement si tout le reste est parti (décision du 23/10/2026) : une pièce qui résiste laisse l'image
-    là où elle était, qu'un second geste efface en entier, au lieu d'une ligne du journal (son prompt) que plus rien ne
-    retirerait. Une pièce déjà absente est sautée (le démarrage ne garde que 20 dossiers de travail) ; une pièce qui
-    résiste n'arrête pas les suivantes : la première erreur est levée à la fin. Sous JOURNAL_LOCK (sort_image)."""
-    name = os.path.basename(fp)
-    jid = name[:-4].rsplit("_", 1)[0]
-    steps = [lambda: delete_extras(name[:-4]), lambda: drop_from_journal(name)]
-    if JOB_ID_RE.fullmatch(jid):
-        steps.insert(1, lambda: remove_tree(P("jobs", jid)))
-    error = None
-    for step in steps:
-        try:
-            step()
-        except OSError as e:
-            error = error or e
-    if error:
-        raise error
-    os.remove(fp)
+    """Efface une image (tirage ou image de la pile) et tout ce qui s'y rattache (décisions du 23/10/2026). Le PNG est
+    d'abord renommé en nom caché (hidden_png) : sous Windows, un fichier ouvert refuse ce renommage tout de suite, avant
+    que rien ne soit effacé. Puis ses miniatures, ses images d'entrée, son dossier de travail jobs/<id>/ (identifiant
+    tiré du nom, validé par JOB_ID_RE) et ses lignes du journal, et le PNG en dernier, seulement si tout le reste est
+    parti : une pièce qui résiste (ou toute autre exception) lui rend son nom, et l'image reste là où elle était, qu'un
+    second geste efface en entier, au lieu d'une ligne du journal (son prompt) que plus rien ne retirerait ; une panne
+    entre-temps est rattrapée au démarrage (restore_hidden_images). Une pièce déjà absente est sautée (le démarrage ne
+    garde que 20 dossiers de travail) ; une pièce qui résiste n'arrête pas les suivantes : la première erreur est levée
+    à la fin. Sous JOURNAL_LOCK (sort_image)."""
+    name, hidden = os.path.basename(fp), hidden_png(fp)
+    os.replace(fp, hidden)
+    try:
+        jid = name[:-4].rsplit("_", 1)[0]
+        steps = [lambda: delete_extras(name[:-4]), lambda: drop_from_journal(name)]
+        if JOB_ID_RE.fullmatch(jid):
+            steps.insert(1, lambda: remove_tree(P("jobs", jid)))
+        error = None
+        for step in steps:
+            try:
+                step()
+            except OSError as e:
+                error = error or e
+        if not error:
+            os.remove(hidden)
+            return
+    except BaseException:
+        unhide(hidden, fp)
+        raise
+    unhide(hidden, fp)
+    raise error
+
+
+def unhide(hidden, fp):
+    """Rend son nom au PNG d'un effacement qui n'a pas abouti ; s'il résiste, le démarrage le rattrapera
+    (restore_hidden_images) : l'erreur que voit l'appelant reste celle d'origine."""
+    try:
+        os.replace(hidden, fp)
+    except OSError:
+        pass
+
+
+def restore_hidden_images():
+    """Démarrage : un PNG resté sous son nom caché (delete_output coupé par une panne) reprend son nom ; l'image revient
+    dans la pile ou les tirages, et un nouveau geste l'efface en entier. Seuls les noms d'images du serveur
+    (identifiant JOB_ID_RE) sont rendus, pas un fichier caché d'un autre outil (« ._X.png » des volumes exFAT ou SMB) ;
+    si le nom d'origine est déjà pris, la copie cachée, en double, est supprimée. Un renommage qui échoue est retenté
+    au démarrage suivant."""
+    for folder in (P("outputs"), PILE):
+        for fp in glob.glob(os.path.join(folder, ".*.png")):
+            name = os.path.basename(fp)[1:]
+            if not JOB_ID_RE.fullmatch(name[:-4].rsplit("_", 1)[0]):
+                continue
+            dst = os.path.join(folder, name)
+            try:
+                if os.path.exists(dst):
+                    os.remove(fp)
+                else:
+                    os.replace(fp, dst)
+            except OSError:
+                pass
 
 
 def drop_from_journal(name):
@@ -2538,6 +2584,7 @@ def main():
         os.remove(os.path.join(PRIVATE, META_TMP))
     except FileNotFoundError:
         pass
+    restore_hidden_images()                            # PNG caché d'un effacement coupé : l'image revient
     if sys.platform == "darwin":
         exclude_from_backup(P("jobs"))
     # tirages antérieurs à la conservation des entrées, et images de la pile dont les entrées n'ont pas pu être

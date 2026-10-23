@@ -787,40 +787,42 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   les images de `outputs/`, dont toutes celles d'avant la pile ; `GET /api/pile` et `GET /api/history` (une entrée par
   image, la plus récente d'abord, avec `name`, `time`, `size`, `mode`, `prompt`, `width`, `height`, `steps`,
   `seconds`, `model`, `seed`, `inputs` et `lot` : `id`, `rank`, `size`, `campaign`, ou `null` pour une image seule ;
-  le journal des images et les PNG de la pile sont créés lisibles par le seul compte qui fait tourner le serveur,
-  droits 0o600, sans effet sur les droits d'accès de Windows), `POST /api/keep {"name"}` (Garder : l'image passe de la
-  pile aux tirages, d'un seul `os.replace` ; vignettes et images d'entrée restent où elles sont, rangées par nom
-  d'image ; 409 si un tirage du même nom existe), `POST /api/discard {"name"}` (Jeter : seulement une image de la pile
-  ; efface ses vignettes, ses images d'entrée, son dossier de travail `jobs/<id>/` et ses lignes du journal, réécrit
-  dans un fichier temporaire puis remplacé d'un coup, les lignes illisibles recopiées telles quelles, puis le PNG en
-  dernier, seulement si tout le reste est parti : une pièce qui résiste laisse l'image dans la pile, qu'on rejette ;
-  une pièce déjà absente est sautée), `POST /api/delete {"name"}` (Supprimer : seulement un tirage, effacé aussi
-  complètement que Jeter) ; Garder et Jeter répondent 404 « déjà triée » pour une image qui n'est pas (ou plus) dans
-  la pile, Supprimer 404 « fichier inconnu » pour un nom qui n'est pas un tirage ; chacun se fait d'un bloc, sous un
-  seul verrou : quand deux appareils trient la même image, le premier geste arrivé l'emporte. `GET /api/thumb?name=…`
-  (miniatures gardées dans `outputs/.thumbs/`), `GET /api/result?name=…&download=1` et les images d'entrée servent un
-  tirage comme une image de la pile ; images d'entrée d'une image : `GET
-  /api/input?name=…&file=init.png|ref_N.png[&thumb=1][&download=1]` (gardées dans `outputs/.inputs/<image>/`) ;
-  prompts enregistrés : `GET /api/prompts` (`{"saved": [...], "types": [...]}`, `saved` le dernier utilisé d'abord ;
-  chaque prompt : `id`, `title`, `text`, `usage` = `t2i`, `edit` ou `mask`, `used` = dernière utilisation en secondes
-  ; `types` : les prompts types de `tools/prompt_types.json`, sans `used`, qu'aucune route ne modifie), `POST
-  /api/prompts {"title", "text", "usage"}` (création) ou `{"id", "title", "text"}` (modification du titre et du
-  texte), `POST /api/prompts/delete {"id"}`, `POST /api/prompts/used {"id"}` (le met en tête) ; 404 pour un `id`
-  inconnu ; avec `--lan`, `POST /api/login` ; espace privé (`private/`, voir `DECISIONS.md` pour le format) : `POST
-  /api/private/create {"code"}` (409 s'il existe déjà), `POST /api/private/unlock {"code"}` (403 après une seconde si
-  le code est faux), qui ouvrent une session pour l'appareil (cookie `qwen_private`, HttpOnly, sans durée de vie,
-  fermée par le serveur après 15 minutes sans requête privée), `POST /api/private/lock`, `POST /api/private/code
-  {"old", "new"}` (nouvelles clés, images et prompts privés rechiffrés, toutes les sessions fermées et le cookie de
-  l'appareil effacé ; 500 si le rechiffrement échoue, sans perte : le message dit si le code a changé), `POST
-  /api/private/reset {"confirm": "SUPPRIMER"}` (efface l'espace et ferme toutes les sessions ; 403 hors du Mac
-  lui-même) ; `/api/status` porte `private` : `available` (bibliothèque `cryptography` présente), `exists`, `unlocked`
-  (pour cet appareil, sans prolonger la session), `secure` (l'espace peut s'ouvrir par cette adresse) et `local` (le
-  Mac lui-même, seul à pouvoir supprimer l'espace sans le code) ; sans `cryptography`, ces routes répondent 503.
-  Toutes les routes de l'espace privé sauf `lock` et la génération privée répondent 403 hors du Mac lui-même et de
-  l'adresse HTTPS de « tailscale serve » (jugé sur l'adresse source 127.0.0.1 et le nom d'hôte, jamais sur les
-  en-têtes de relais) ; génération privée : `"private": true` dans `/api/generate` (403 sans session, 400 si `private`
-  n'est pas un booléen, 503 sans `cryptography`), identifiant de 32 caractères hexadécimaux tirés au hasard (comme
-  celui d'un lot privé), absente de `queue` hors de l'espace privé (rien n'y trahit l'espace privé aux autres
+  le journal des images et les PNG de la pile ne sont lisibles que par le compte qui fait tourner le serveur, droits
+  0o600, sans effet sur les droits d'accès de Windows),
+  `POST /api/keep {"name"}` (Garder : l'image passe de la pile aux tirages, d'un seul `os.replace` ; vignettes et
+  images d'entrée restent où elles sont, rangées par nom d'image ; 409 si un tirage du même nom existe), `POST
+  /api/discard {"name"}` (Jeter : seulement une image de la pile ; efface ses vignettes, ses images d'entrée, son
+  dossier de travail `jobs/<id>/` et ses lignes du journal, réécrit dans un fichier temporaire puis remplacé d'un
+  coup, les lignes illisibles recopiées telles quelles, puis le PNG en dernier, seulement si tout le reste est parti
+  (renommé en nom caché avant tout effacement : sous Windows, un PNG ouvert échoue là, sans rien effacer ; une pièce
+  qui résiste lui rend son nom, et un PNG resté caché après une panne le reprend au démarrage) : une pièce
+  qui résiste laisse l'image dans la pile, qu'on rejette ; une pièce déjà absente est sautée), `POST /api/delete
+  {"name"}` (Supprimer : seulement un tirage, effacé aussi complètement que Jeter) ; Garder et Jeter répondent 404 «
+  déjà triée » pour une image qui n'est pas (ou plus) dans la pile, Supprimer 404 « fichier inconnu » pour un nom qui
+  n'est pas un tirage ; chacun se fait d'un bloc, sous un seul verrou : quand deux appareils trient la même image, le
+  premier geste arrivé l'emporte. `GET /api/thumb?name=…` (miniatures gardées dans `outputs/.thumbs/`), `GET
+  /api/result?name=…&download=1` et les images d'entrée servent un tirage comme une image de la pile ; images d'entrée
+  d'une image : `GET /api/input?name=…&file=init.png|ref_N.png[&thumb=1][&download=1]` (gardées dans
+  `outputs/.inputs/<image>/`) ; prompts enregistrés : `GET /api/prompts` (`{"saved": [...], "types": [...]}`, `saved`
+  le dernier utilisé d'abord ; chaque prompt : `id`, `title`, `text`, `usage` = `t2i`, `edit` ou `mask`, `used` =
+  dernière utilisation en secondes ; `types` : les prompts types de `tools/prompt_types.json`, sans `used`, qu'aucune
+  route ne modifie), `POST /api/prompts {"title", "text", "usage"}` (création) ou `{"id", "title", "text"}`
+  (modification du titre et du texte), `POST /api/prompts/delete {"id"}`, `POST /api/prompts/used {"id"}` (le met en
+  tête) ; 404 pour un `id` inconnu ; avec `--lan`, `POST /api/login` ; espace privé (`private/`, voir `DECISIONS.md`
+  pour le format) : `POST /api/private/create {"code"}` (409 s'il existe déjà), `POST /api/private/unlock {"code"}`
+  (403 après une seconde si le code est faux), qui ouvrent une session pour l'appareil (cookie `qwen_private`,
+  HttpOnly, sans durée de vie, fermée par le serveur après 15 minutes sans requête privée), `POST /api/private/lock`,
+  `POST /api/private/code {"old", "new"}` (nouvelles clés, images et prompts privés rechiffrés, toutes les sessions
+  fermées et le cookie de l'appareil effacé ; 500 si le rechiffrement échoue, sans perte : le message dit si le code a
+  changé), `POST /api/private/reset {"confirm": "SUPPRIMER"}` (efface l'espace et ferme toutes les sessions ; 403 hors
+  du Mac lui-même) ; `/api/status` porte `private` : `available` (bibliothèque `cryptography` présente), `exists`,
+  `unlocked` (pour cet appareil, sans prolonger la session), `secure` (l'espace peut s'ouvrir par cette adresse) et
+  `local` (le Mac lui-même, seul à pouvoir supprimer l'espace sans le code) ; sans `cryptography`, ces routes
+  répondent 503. Toutes les routes de l'espace privé sauf `lock` et la génération privée répondent 403 hors du Mac
+  lui-même et de l'adresse HTTPS de « tailscale serve » (jugé sur l'adresse source 127.0.0.1 et le nom d'hôte, jamais
+  sur les en-têtes de relais) ; génération privée : `"private": true` dans `/api/generate` (403 sans session, 400 si
+  `private` n'est pas un booléen, 503 sans `cryptography`), identifiant de 32 caractères hexadécimaux tirés au hasard
+  (comme celui d'un lot privé), absente de `queue` hors de l'espace privé (rien n'y trahit l'espace privé aux autres
   appareils), entrée complète dedans (`kind` `private`, `id`, `mode`, `prompt`, `lot` avec son `id`) ; `GET
   /api/job/<id>` porte `private` et, une fois l'image rangée, `item` (son identifiant dans l'espace privé) ; `POST
   /api/job/<id>/forget` l'oublie (l'image reste dans l'espace ; sans cela, le serveur oublie une génération privée
