@@ -282,8 +282,10 @@ si l'espace n'a rien en file, elle reste éteinte même quand le Mac calcule pou
 page sans rien perdre : elle se rattache aux générations normales qu'elle avait lancées (retenues par le navigateur),
 pas à celles des autres appareils, qui restent visibles dans la file ; dans l'espace privé, à toutes les générations
 privées en cours (voir « Espace privé »). Une génération ainsi reprise garde son prompt complet (sous l'image, et pour
-**Reprendre** depuis la visionneuse), pas seulement le début qu'en montre la file. Chaque image est enregistrée en PNG
-dans **`outputs\`**, avec ses images d'entrée (références, image d'origine, zone peinte) dans `outputs\.inputs\`.
+**Reprendre** depuis la visionneuse), pas seulement le début qu'en montre la file. Chaque image terminée est
+enregistrée en PNG dans la pile, **`outputs\.pile\`**, où elle attend d'être triée : gardée, elle passe dans
+`outputs\` (la galerie) ; jetée, elle est effacée. Ses images d'entrée (références, image d'origine, zone peinte) sont
+dans `outputs\.inputs\`.
 
 Sous la file, les **terminées** : les générations finies de la page, la plus récente en premier. Une image a sa vignette
 (un appui l'ouvre en grand, avec ses images d'entrée), son texte, ses réglages et ses actions : **Télécharger**,
@@ -291,9 +293,9 @@ Sous la file, les **terminées** : les générations finies de la page, la plus 
 départ, **Relancer** et **Supprimer**. Un lot fini s'y montre en grille, une case par image en échec avec son message,
 et **Relancer** sur sa carte refait tout le lot ; une génération en échec garde son message et **Relancer** ; une
 génération annulée n'y laisse rien. Une carte de lot ou d'échec reprise après un rechargement n'a pas **Relancer** (la
-page n'a plus la demande). Le « × » d'une carte la retire de la liste sans la supprimer de la galerie, **Tout retirer**
+page n'a plus la demande). Le « × » d'une carte la retire de la liste sans la supprimer de la pile, **Tout retirer**
 vide la liste. La liste garde au plus 12 générations (les deux espaces comptent ensemble) : au-delà, la plus ancienne en
-sort d'elle-même, échecs compris. Elle repart vide après un rechargement de la page (les images sont dans la galerie) ;
+sort d'elle-même, échecs compris. Elle repart vide après un rechargement de la page (les images sont dans la pile) ;
 les générations reprises y arrivent à leur fin. Quand une génération de la page finit pendant qu'on est sur un autre
 onglet, un message le dit (« Image prête », « Lot prêt · 3 images », avec « , 1 en échec » s'il y en a, « Échec de la
 génération », « Échec du lot ») et mène à En cours quand on le touche ; rien pour une génération annulée. Partager et
@@ -377,7 +379,8 @@ commandes. Pour zoomer (jusqu'à ×6), pincer l'image : elle passe au-dessus de 
 doigts, et revient à sa taille dès qu'on les relâche. Sur ordinateur, la molette zoome, glisser déplace l'image et un
 clic la remet à sa taille. En haut à droite : **Partager**, **Copier** et **Télécharger** ; en bas : **Éditer** (ajoute
 l'image aux images d'entrée de Créer), **Dessiner**, **Reprendre**, **Relancer** et **Supprimer** (définitif, après
-confirmation, images d'entrée comprises). La zone de génération est masquée dans la galerie.
+confirmation : images d'entrée, dossier de travail et ligne du journal des générations compris). La zone de génération
+est masquée dans la galerie.
 
 **Reprendre** remet dans Créer la saisie d'où vient l'image, à la place de la saisie en cours (après confirmation si
 elle n'est pas vide) : son texte, ses réglages (format, résolution, étapes) et ses images d'entrée selon son usage.
@@ -714,7 +717,7 @@ aux plateformes connues de `setup.py` et `tools/launch.py`.
 ## Fonctionnement technique
 
 ```text
-navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance──▶ sdcpp/<moteur>/sd-cli ──▶ outputs/*.png
+navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance──▶ sdcpp/<moteur>/sd-cli ──▶ jobs/<id>/ ─▶ outputs/.pile/
    tools/ui/index.html        file d'attente, suivi des étapes,         Vulkan : diffusion + VAE   (Windows)
                               aperçus, annulation                       CPU    : encodeur texte    (Windows)
                                                                         Metal  : tout              (Mac)
@@ -760,8 +763,11 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   de l'espace, sinon `null` ; `last_job` : dernière génération normale, `null` dans l'espace
   privé ; `busy` : le Mac calcule, quel que soit l'espace ; `version` : `commit`, `date` et `branch` du dernier commit
   du dossier servi (`null` hors git) et `server`, empreinte de `tools/launch.py` et `tools/estimate.py`, relus toutes
-  les 30 s ; `server_version` : la même chose au lancement du serveur, `null` sans `main()`) ; lots : `"count"` de 2 à 4
-  dans `/api/generate` (tous les modes ; 1 : génération seule ; 400 « count : pas de variantes dans une campagne »
+  les 30 s ; `server_version` : la même chose au lancement du serveur, `null` sans `main()` ; `rev` : compteur de la
+  pile et des tirages de l'espace de l'appareil, qui change à chaque image arrivée dans la pile et à chaque Garder,
+  Jeter et Supprimer, et part de l'heure du lancement du serveur : l'interface relit pile et tirages quand il change) ;
+  lots : `"count"` de 2 à 4 dans `/api/generate` (tous les modes ; 1 : génération seule ; 400 « count : pas de variantes
+  dans une campagne »
   au-delà de 1 avec `campaign`) crée autant de générations ; `"campaign": [{"image": <data URL>, "width", "height"}, …]`
   (1 à 10 photos, en édition, `"mode": "edit"`, sans `ref_images`) crée une édition par photo, avec cette seule photo
   en référence et à ses dimensions (une seule photo : génération seule) ; les générations d'un lot passent à la suite
@@ -771,10 +777,22 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `outputs/journal.jsonl`, dans la galerie et dans les réglages d'une image privée ; `POST /api/lot/<id>/cancel` annule
   toutes ses générations non terminées (404 une fois le lot fini).
   Graine `-1` : le serveur la tire lui-même (distincte pour chaque image d'un lot) et l'écrit au journal ; graine
-  choisie avec `count` : graine, graine + 1… ; historique : `GET
-  /api/history` (une entrée par image, avec ses réglages, sa `seed` et son `lot` : `id`, `rank`, `size`, `campaign`, ou
-  `null` pour une image seule), `GET /api/thumb?name=…` (miniatures gardées dans `outputs/.thumbs/`), `GET
-  /api/result?name=…&download=1`, `POST /api/delete` ; images d'entrée d'une image : `GET
+  choisie avec `count` : graine, graine + 1… ; pile et tirages : une image normale terminée arrive dans la pile,
+  `outputs/.pile/`, à trier (elle s'écrit dans son dossier de travail `jobs/<id>/`, puis y passe avec sa ligne du
+  journal) ; les tirages sont les images de `outputs/`, dont toutes celles d'avant la pile ; `GET /api/pile` et `GET
+  /api/history` (une entrée par image, la plus récente d'abord, avec `name`, `time`, `size`, `mode`, `prompt`,
+  `width`, `height`, `steps`, `seconds`, `model`, `seed`, `inputs` et `lot` : `id`, `rank`, `size`, `campaign`, ou
+  `null` pour une image seule), `POST /api/keep {"name"}` (Garder : l'image passe de la pile aux tirages, d'un seul
+  `os.replace` ; vignettes et images d'entrée restent où elles sont, rangées par nom d'image ; 409 si un tirage du
+  même nom existe), `POST /api/discard {"name"}` (Jeter : seulement une image de la pile ; efface le PNG, ses
+  vignettes, ses images d'entrée, son dossier de travail `jobs/<id>/` et ses lignes du journal, réécrit dans un
+  fichier temporaire puis remplacé d'un coup, les lignes illisibles recopiées telles quelles ; une pièce déjà absente
+  est sautée), `POST /api/delete {"name"}` (Supprimer : seulement un tirage, effacé aussi complètement que Jeter) ;
+  Garder et Jeter répondent 404 « déjà triée » pour une image qui n'est pas (ou plus) dans la pile, Supprimer 404
+  « fichier inconnu » pour un nom qui n'est pas un tirage ; chacun se fait d'un bloc, sous un seul verrou : quand deux
+  appareils trient la même image, le premier geste arrivé l'emporte. `GET /api/thumb?name=…` (miniatures gardées dans
+  `outputs/.thumbs/`), `GET /api/result?name=…&download=1` et les images d'entrée servent un tirage comme une image de
+  la pile ; images d'entrée d'une image : `GET
   /api/input?name=…&file=init.png|ref_N.png[&thumb=1][&download=1]` (gardées dans `outputs/.inputs/<image>/`) ; prompts
   enregistrés : `GET /api/prompts` (`{"saved": [...], "types": [...]}`, `saved` le dernier utilisé d'abord ; chaque
   prompt : `id`, `title`, `text`, `usage` = `t2i`, `edit` ou `mask`, `used` = dernière utilisation en secondes ; `types`
@@ -836,7 +854,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `/api/generate` (ses refus propres, 403 et 503, ne viennent que de l'espace privé ; ses refus d'accès, 401, 403 et
   415, n'y sont donc pas non plus) : la suite des requêtes réussies (image et miniature lues après une génération
   normale seulement) trahirait sinon les générations privées. Une connexion coupée par l'appareil (page quittée pendant
-  un chargement) donne la seule ligne « [ui] connexion interrompue », et une suppression réussie n'écrit rien.
+  un chargement) donne la seule ligne « [ui] connexion interrompue », et un tri (Garder, Jeter) ou une suppression
+  réussis n'écrivent rien.
 - Pourquoi pas ComfyUI ? ComfyUI repose sur PyTorch, qui n'a pas de backend GPU utilisable sur les Radeon intégrés
   sous Windows (ROCm Windows ne couvre que les cartes RDNA3/RDNA4, DirectML est limité à d'anciennes versions) :
   il tournerait en CPU pur. Si vous avez une carte NVIDIA, les workflows officiels Comfy-Org

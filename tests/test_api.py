@@ -23,7 +23,7 @@ class GenerationTest(bench.BenchCase):
         self.assertEqual(j["dims"], [512, 512])
         self.assertTrue(os.path.isfile(j["path"]))
         self.assertEqual(journal()[-1]["prompt"], "a red car")
-        names = [it["name"] for it in call("GET", "/api/history")[1]]
+        names = [it["name"] for it in call("GET", "/api/pile")[1]]
         self.assertIn(j["name"], names)
         code, raw = call("GET", "/api/result?name=" + j["name"])
         self.assertEqual((code, raw[:8]), (200, b"\x89PNG\r\n\x1a\n"))
@@ -40,12 +40,12 @@ class GenerationTest(bench.BenchCase):
         j = wait_job(generate("FAIL")["id"])
         self.assertEqual(j["status"], "failed")
         self.assertIn("panne simulée", j["error"])
-        self.assertEqual(files("outputs", "*.png"), [])
+        self.assertEqual(files("outputs", ".pile", "*.png"), [])
 
     def test_edit_keeps_its_input_images(self):
         j = wait_job(generate("make it blue", mode="edit", ref_images=[bench.data_url(bench.png_bytes())])["id"])
         self.assertEqual(j["status"], "done")
-        item = next(it for it in call("GET", "/api/history")[1] if it["name"] == j["name"])
+        item = next(it for it in call("GET", "/api/pile")[1] if it["name"] == j["name"])
         self.assertEqual(item["inputs"], ["ref_1.png"])
 
     def test_inputs_the_engine_cannot_read_are_converted_to_png(self):
@@ -71,7 +71,7 @@ class CancelTest(bench.BenchCase):
         self.assertEqual(wait_job(first)["status"], "done")
         bench.wait_idle()
         self.assertEqual(bench.job(second)["status"], "cancelled")
-        self.assertEqual(len(files("outputs", "*.png")), 1)
+        self.assertEqual(len(files("outputs", ".pile", "*.png")), 1)
         self.assertEqual(files("jobs", second), [])
 
     def test_cancel_the_running_generation(self):
@@ -79,7 +79,7 @@ class CancelTest(bench.BenchCase):
         wait_job(jid, ("running",), check=lambda j: (j.get("step") or 0) >= 1)
         self.assertEqual(call("POST", f"/api/job/{jid}/cancel")[1]["status"], "cancelled")
         bench.wait_idle()                           # « cancelled » est posé avant l'arrêt du moteur
-        self.assertEqual(files("outputs", "*.png"), [])
+        self.assertEqual(files("outputs", ".pile", "*.png"), [])
         self.assertEqual(files("jobs", jid), [])
         self.assertEqual(journal(), [])
 

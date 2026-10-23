@@ -7,8 +7,9 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   (téléphone, tablette) : les appareils autres que le Mac doivent saisir une fois le code d'accès de
   tools/access_code.txt, créé au premier lancement ; sur macOS, le Mac ne se met pas en veille tant que le lanceur tourne.
 - Chaque génération lance sd-cli (rechargement quasi instantané grâce à --mmap et au cache disque),
-  lit sa progression (étape k/N, secondes par étape), expose des aperçus intermédiaires optionnels et enregistre
-  le PNG final dans outputs/.
+  lit sa progression (étape k/N, secondes par étape), expose des aperçus intermédiaires optionnels et écrit le PNG
+  dans son dossier de travail jobs/<id>/ ; fini, il passe dans la pile (outputs/.pile/), à trier : Garder le fait
+  passer dans les tirages (outputs/), Jeter l'efface avec tout ce qui s'y rattache.
 - Espace privé ({"private": true} dans /api/generate, session de l'espace exigée) : pendant le calcul, fichiers de
   travail dans jobs/private_<id>/, supprimé dès la fin du job (ni journal, ni calibration ; dans logs/, rien que la
   ligne commune « [job] génération terminée »), puis l'image, sa
@@ -28,7 +29,8 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
         prompts enregistrés de l'espace privé (private/prompts, chiffré) : GET /api/private/prompts,
         POST /api/private/prompts, POST /api/private/prompts/delete, POST /api/private/prompts/used,
         GET /api/result?name=<png>[&download=1], GET /api/status,
-        historique : GET /api/history, GET /api/thumb?name=<png>, POST /api/delete {"name": <png>},
+        tirages et pile : GET /api/history, GET /api/pile, GET /api/thumb?name=<png>, POST /api/keep {"name": <png>},
+        POST /api/discard {"name": <png>}, POST /api/delete {"name": <png>},
         images d'entrée d'une image : GET /api/input?name=<png>&file=<init.png|ref_N.png>[&thumb=1][&download=1],
         notifications de fin de génération : GET /api/push/key, POST /api/push/subscribe {"subscription": …},
         POST /api/push/unsubscribe {"endpoint": …},
@@ -511,8 +513,8 @@ def private_dir(d, exist_ok=False):
 
 
 def write_synced(fp, data, full=True):
-    """Écrit un fichier de private/ (droits 0o600, open_private) et attend qu'il soit sur le disque : une coupure de
-    courant ne le laisse ni vide ni tronqué derrière un renommage qui, lui, aurait été écrit."""
+    """Écrit un fichier de private/ ou le journal réécrit (droits 0o600, open_private) et attend qu'il soit sur le
+    disque : une coupure de courant ne le laisse ni vide ni tronqué derrière un renommage qui, lui, aurait été écrit."""
     with open_private(fp) as f:
         f.write(data)
         f.flush()
@@ -823,8 +825,12 @@ def push_notify(payload):
             push_subscriptions(lambda l: [x for x in l if x.get("endpoint") not in gone])
         print(f"[push] notification envoyée à {sent} appareil{'s' if sent > 1 else ''}", flush=True)
     threading.Thread(target=send, daemon=True).start()
-INPUTS = P("outputs", ".inputs")      # images d'entrée de chaque image de outputs/ : .inputs/<nom sans .png>/
+INPUTS = P("outputs", ".inputs")      # images d'entrée d'un tirage ou d'une image de la pile : .inputs/<nom sans .png>/
 INPUT_RE = re.compile(r"(init|ref_\d+)\.png")
+# pile de l'espace public : images terminées à trier ; Garder les fait passer dans outputs/ (les tirages), Jeter les
+# efface. Vignettes et images d'entrée sont rangées par nom d'image et ne bougent pas quand elle passe aux tirages.
+PILE = P("outputs", ".pile")
+JOB_ID_RE = re.compile(r"\d{8}_\d{6}_[0-9a-f]{6}")   # identifiant d'une génération normale (new_job)
 
 
 def input_files(job_dir):
@@ -843,34 +849,60 @@ def save_inputs(job_dir, out_png):
             shutil.copy2(os.path.join(job_dir, n), os.path.join(dst, n))
 
 
-def output_path(name):
-    """Chemin d'une image de outputs/ à partir de son nom, ou None si le nom sort du dossier ou n'est pas un PNG."""
+def image_in(folder, name):
+    """Chemin d'une image de folder à partir de son nom, ou None si le nom sort du dossier, n'est pas un PNG ou n'y
+    est pas."""
     name = os.path.basename(str(name or ""))
     if not name or name.startswith(".") or not name.lower().endswith(".png"):
         return None
-    fp = P("outputs", name)
+    fp = os.path.join(folder, name)
     return fp if os.path.isfile(fp) else None
 
 
-# écriture du journal des images : un seul écrivain aujourd'hui (fin de génération), verrou gardé pour qu'une future
-# écriture ne se mêle pas à celle-ci
-JOURNAL_LOCK = threading.Lock()
+def output_path(name):
+    """Chemin d'un tirage (image de outputs/), ou None."""
+    return image_in(P("outputs"), name)
+
+
+def pile_path(name):
+    """Chemin d'une image de la pile, ou None."""
+    return image_in(PILE, name)
+
+
+def image_path(name):
+    """Chemin d'un tirage ou d'une image de la pile : ce que l'image, sa vignette et ses images d'entrée servent."""
+    return output_path(name) or pile_path(name)
+
+
+# journal des images et tri : l'arrivée d'une image dans la pile avec sa ligne (to_pile), Garder, Jeter et Supprimer
+# (vérification, déplacement ou effacements, réécriture du journal), comme la lecture des tirages et de la pile, se
+# font chacun d'un bloc sous ce verrou ; le premier geste arrivé l'emporte. RLock : ces blocs appellent des fonctions
+# qui le prennent aussi.
+JOURNAL_LOCK = threading.RLock()
+
+
+def journal_line(line):
+    """Ligne du journal (octets) : (nom de l'image, réglages), ou None pour une ligne illisible (pas du JSON en UTF-8,
+    pas un objet). Lecture et réécriture du journal la jugent de la même façon."""
+    try:
+        m = json.loads(line)
+    except ValueError:                          # UnicodeDecodeError compris
+        return None
+    return (os.path.basename(str(m.get("file") or "")), m) if isinstance(m, dict) else None
 
 
 def journal_entries():
     """Lignes du journal des images (outputs/journal.jsonl) par nom d'image (la dernière si plusieurs)."""
     entries = {}
-    try:
-        with open(P("outputs", "journal.jsonl"), encoding="utf-8") as f:
-            for line in f:
-                try:
-                    m = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(m, dict):
-                    entries[os.path.basename(m.get("file") or "")] = m
-    except OSError:
-        pass
+    with JOURNAL_LOCK:
+        try:
+            with open(P("outputs", "journal.jsonl"), "rb") as f:
+                for line in f:
+                    entry = journal_line(line)
+                    if entry:
+                        entries[entry[0]] = entry[1]
+        except OSError:
+            pass
     return entries
 
 
@@ -881,14 +913,113 @@ def append_journal(meta):
             f.write(json.dumps(meta, ensure_ascii=False) + "\n")
 
 
+def to_pile(job, meta):
+    """Fin d'une génération normale réussie : son image passe du dossier de travail dans la pile, puis sa ligne du
+    journal (meta) et ses images d'entrée, d'un bloc sous JOURNAL_LOCK : ni la lecture de la pile ni un tri ne voient
+    l'image sans sa ligne. L'image d'abord : une panne ensuite laisse une image de la pile que Jeter efface en entier,
+    jamais une ligne du journal (son prompt) sans image. Le passage dans la pile et le statut « done » se font sous
+    S.turn, comme une annulation (cancel_job) : une génération annulée entre-temps n'arrive pas dans la pile, False
+    (run_job la jette). jobs/ et outputs/ sont sous ROOT, sur le même disque : os.replace déplace sans copier (un
+    outputs/ sur un autre disque ferait échouer la génération)."""
+    with JOURNAL_LOCK:
+        os.makedirs(PILE, exist_ok=True)
+        dst = os.path.join(PILE, os.path.basename(job["out"]))
+        with S.turn:
+            if job.get("status") == "cancelled":
+                return False
+            os.replace(job["out"], dst)
+            # réussie dès qu'elle est dans la pile : un échec du journal ou des entrées ne la retire pas (fail_job)
+            job["out"], job["status"], job["phase"] = dst, "done", "terminé"
+        sync_dir(PILE)
+        S.rev["public"] += 1
+        append_journal({**meta, "file": dst})
+        try:
+            save_inputs(job["dir"], dst)
+        except OSError:
+            print("[job] images d'entrée non conservées", flush=True)   # sans détail : chemin de l'image
+    return True
+
+
 def delete_output(fp):
-    """Supprime une image de outputs/ avec ses miniatures et ses images d'entrée (sa ligne du journal reste)."""
+    """Efface une image (tirage ou image de la pile) et tout ce qui s'y rattache : le PNG, puis ses miniatures, ses
+    images d'entrée, son dossier de travail jobs/<id>/ (identifiant tiré du nom, validé par JOB_ID_RE) et ses lignes
+    du journal. Une pièce déjà absente est sautée (le démarrage ne garde que 20 dossiers de travail) ; une pièce qui
+    résiste n'arrête pas l'effacement des suivantes (le PNG parti, rien ne permettrait d'y revenir) : la première
+    erreur est levée à la fin. Sous JOURNAL_LOCK (sort_image)."""
+    name = os.path.basename(fp)
     os.remove(fp)
-    delete_extras(os.path.basename(fp)[:-4])
+    jid = name[:-4].rsplit("_", 1)[0]
+    steps = [lambda: delete_extras(name[:-4]), lambda: drop_from_journal(name)]
+    if JOB_ID_RE.fullmatch(jid):
+        steps.insert(1, lambda: shutil.rmtree(P("jobs", jid), ignore_errors=True))
+    error = None
+    for step in steps:
+        try:
+            step()
+        except OSError as e:
+            error = error or e
+    if error:
+        raise error
+
+
+def drop_from_journal(name):
+    """Retire du journal les lignes de l'image name, sous JOURNAL_LOCK : le journal réécrit dans un fichier temporaire
+    mis sur le disque (droits 600), puis remplacé d'un coup, jamais à moitié réécrit. Les lignes illisibles sont
+    recopiées telles quelles."""
+    fp = P("outputs", "journal.jsonl")
+    with JOURNAL_LOCK:
+        try:
+            with open(fp, "rb") as f:
+                lines = f.readlines()
+        except FileNotFoundError:
+            return
+        kept = [line for line in lines if (journal_line(line) or ("",))[0] != name]
+        if len(kept) == len(lines):
+            return
+        try:
+            write_synced(fp + ".tmp", b"".join(kept))
+            os.replace(fp + ".tmp", fp)
+        except BaseException:
+            try:
+                os.remove(fp + ".tmp")
+            except OSError:
+                pass
+            raise
+        sync_dir(P("outputs"))
+
+
+# Garder et Jeter visent la pile, Supprimer les tirages : où chercher l'image, et la réponse quand elle n'y est pas
+SORTS = {"keep": (pile_path, "déjà triée"), "discard": (pile_path, "déjà triée"),
+         "delete": (output_path, "fichier inconnu")}
+
+
+def sort_image(action, name):
+    """Garder (keep : de la pile aux tirages, PNG seul déplacé, de façon atomique) ou Jeter (discard : effacement
+    complet) une image de la pile, Supprimer (delete : effacement complet) un tirage ; (code, réponse). D'un bloc sous
+    JOURNAL_LOCK : le premier geste arrivé l'emporte, le second ne trouve plus l'image (404)."""
+    find, unknown = SORTS[action]
+    with JOURNAL_LOCK:
+        fp = find(name)
+        if not fp:
+            return 404, {"error": unknown}
+        dst = P("outputs", os.path.basename(fp))
+        if action == "keep" and os.path.lexists(dst):   # os.replace écraserait le tirage
+            return 409, {"error": "un tirage du même nom existe déjà"}
+        S.rev["public"] += 1
+        try:
+            if action == "keep":
+                os.replace(fp, dst)
+                sync_dir(P("outputs"))
+            else:
+                delete_output(fp)       # sans ligne au journal du serveur : une suppression privée n'en écrit pas
+        except OSError:
+            return 500, {"error": "image gardée dans la pile : déplacement impossible" if action == "keep"
+                         else "effacement incomplet"}
+    return 200, {"ok": True}
 
 
 def delete_extras(stem):
-    """Miniatures et images d'entrée d'une image de outputs/ déjà supprimée."""
+    """Miniatures et images d'entrée d'un tirage ou d'une image de la pile déjà supprimés."""
     for th in [os.path.join(THUMBS, stem + ".jpg"), *glob.glob(os.path.join(THUMBS, glob.escape(stem) + "__*.jpg"))]:
         if os.path.exists(th):
             os.remove(th)
@@ -904,20 +1035,35 @@ def read_inputs(d):
     return inputs
 
 
-def history():
-    """Images de outputs/, la plus récente d'abord, avec les réglages notés dans outputs/journal.jsonl."""
-    meta = journal_entries()
+def images_in(folder):
+    """Images d'un dossier (outputs/ ou la pile), la plus récente d'abord, avec les réglages notés dans
+    outputs/journal.jsonl ; sous JOURNAL_LOCK : une image et sa ligne y arrivent ensemble (to_pile), un tri n'efface
+    rien pendant la lecture."""
     items = []
-    for fp in glob.glob(P("outputs", "*.png")):
-        name, st = os.path.basename(fp), os.stat(fp)
-        m = meta.get(name, {})
-        items.append({"name": name, "time": int(st.st_mtime), "size": st.st_size, "mode": m.get("mode"),
-                      "prompt": m.get("prompt"), "width": m.get("width"), "height": m.get("height"),
-                      "steps": m.get("steps"), "seconds": m.get("seconds"), "model": m.get("model"), "seed": m.get("seed"),
-                      # identifiant, rang, taille et marqueur de campagne d'une image de lot ; None pour une image seule
-                      "lot": m.get("lot"),
-                      "inputs": input_files(os.path.join(INPUTS, name[:-4]))})
-    return sorted(items, key=lambda x: x["time"], reverse=True)
+    with JOURNAL_LOCK:
+        meta = journal_entries()
+        for fp in glob.glob(os.path.join(folder, "*.png")):
+            name, st = os.path.basename(fp), os.stat(fp)
+            m = meta.get(name, {})
+            item = {"name": name, "time": int(st.st_mtime), "size": st.st_size, "mode": m.get("mode"),
+                    "prompt": m.get("prompt"), "width": m.get("width"), "height": m.get("height"),
+                    "steps": m.get("steps"), "seconds": m.get("seconds"), "model": m.get("model"),
+                    "seed": m.get("seed"),
+                    # identifiant, rang, taille et marqueur de campagne d'une image de lot ; None pour une image seule
+                    "lot": m.get("lot"),
+                    "inputs": input_files(os.path.join(INPUTS, name[:-4]))}
+            items.append((st.st_mtime_ns, item))   # à la nanoseconde : deux images d'un lot finies la même seconde
+    return [it for _, it in sorted(items, key=lambda x: x[0], reverse=True)]
+
+
+def history():
+    """Tirages (images de outputs/), le plus récent d'abord ; les images d'avant la pile en sont."""
+    return images_in(P("outputs"))
+
+
+def pile():
+    """Pile de l'espace public, la dernière arrivée d'abord."""
+    return images_in(PILE)
 
 
 def thumb_jpeg(src):
@@ -932,14 +1078,25 @@ def thumb_jpeg(src):
 
 
 def thumbnail(fp, th=None):
-    """Miniature d'une image de outputs/, gardée dans outputs/.thumbs/ et refaite si l'image change."""
+    """Miniature d'un tirage, d'une image de la pile ou d'une de leurs images d'entrée (fp), gardée dans
+    outputs/.thumbs/ et refaite si l'image change. Mise en place sous JOURNAL_LOCK, et seulement si fp existe
+    encore : une miniature finie après Jeter ou Supprimer ne reste pas ; FileNotFoundError alors."""
     th = th or os.path.join(THUMBS, os.path.basename(fp)[:-4] + ".jpg")
     if not os.path.exists(th) or os.path.getmtime(th) < os.path.getmtime(fp):
         os.makedirs(THUMBS, exist_ok=True)
         tmp = f"{th}.{threading.get_ident()}.tmp"   # écrite à côté puis renommée : jamais lue à moitié écrite
-        with open(tmp, "wb") as f:
-            f.write(thumb_jpeg(fp))
-        os.replace(tmp, th)
+        try:
+            with open(tmp, "wb") as f:
+                f.write(thumb_jpeg(fp))
+            with JOURNAL_LOCK:
+                if not os.path.exists(fp):
+                    raise FileNotFoundError(fp)
+                os.replace(tmp, th)
+        finally:
+            try:
+                os.remove(tmp)
+            except FileNotFoundError:
+                pass
     return th
 
 
@@ -1044,6 +1201,10 @@ class State:
                                    # une seule opération ; cancel_job y annule (la fin d'une génération, done ou
                                    # failed, s'écrit sans lui)
     current = None
+    # compteur de chaque espace, augmenté à chaque image arrivée dans sa pile et à chaque Garder, Jeter, Supprimer
+    # (sous le verrou du changement) : l'interface relit pile et tirages quand celui de son espace change. Il part de
+    # l'heure du lancement, pour qu'un redémarrage ne redonne pas une valeur qu'une page a déjà vue.
+    rev = dict.fromkeys(("public", "private"), time.time_ns() // 1_000_000)
     started = None           # version du code au lancement du serveur (code_version) : launch.py n'est relu qu'au
                              # redémarrage, l'interface à chaque requête
 
@@ -1241,19 +1402,18 @@ def run_job(job):
             job["phase"] = "terminé"
             print(DONE_LINE, flush=True)
             return
-        job["status"] = "done"
-        job["phase"] = "terminé"
-        if not job.get("calibration"):            # les générations de tools/calibrate.py restent hors du journal
+        if job.get("calibration"):                # les générations de tools/calibrate.py restent hors du journal
+            job["status"] = "done"
+            job["phase"] = "terminé"
+        else:                                     # dans la pile, à trier
             meta = {"mode": job["req"].get("mode"), "prompt": job["req"]["prompt"], "width": job["req"]["width"], "height": job["req"]["height"],
                     "steps": job["req"]["steps"], "seed": job["req"].get("seed"), "seconds": job["seconds"], "encode_seconds": job.get("encode_seconds"),
-                    "sec_per_it": job.get("sec_per_it"), "file": job["out"], "size": job["size"], "backend": S.backend, "model": S.model}
+                    "sec_per_it": job.get("sec_per_it"), "size": job["size"], "backend": S.backend, "model": S.model}
             if job.get("lot"):
                 meta["lot"] = job["lot"]
-            append_journal(meta)
-            try:
-                save_inputs(job["dir"], job["out"])
-            except OSError:
-                print("[job] images d'entrée non conservées", flush=True)   # sans détail : chemin de l'image
+            if not to_pile(job, meta):            # annulée pendant la fin du calcul : rien n'en reste
+                discard_cancelled(job)
+                return
         print(DONE_LINE, flush=True)
         record_calib(job)
     else:
@@ -1618,8 +1778,9 @@ def new_job(req, inputs, lot=None):
     mode = re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
     d = P("jobs", ("private_" if private else "") + jid)
     os.makedirs(d, exist_ok=True)
-    # en privé, le PNG reste dans le dossier de travail (supprimé en fin de job)
-    out = os.path.join(d, f"{jid}_{mode}.png") if private else P("outputs", f"{jid}_{mode}.png")
+    # le PNG s'écrit dans le dossier de travail : une génération normale le fait passer dans la pile une fois fini
+    # (to_pile), la pile ne voit jamais une image à moitié écrite ; une privée le chiffre (keep_private)
+    out = os.path.join(d, f"{jid}_{mode}.png")
     return {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
             "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot,
             # noms des images d'entrée que build_cmd écrit et que save_inputs garde (init.png, puis ref_N.png) : la page
@@ -1976,6 +2137,7 @@ class H(BaseHTTPRequestHandler):
                                     "current_job": current_id if current and in_space(current, inside) else None,
                                     "last_job": public(last) if last else None,
                                     "estimates": coefs,
+                                    "rev": S.rev["public"],   # pile et tirages de l'espace de l'appareil
                                     # code servi (git) : l'interface maintenant, le serveur à son lancement
                                     "version": code_version(), "server_version": S.started,
                                     # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
@@ -2001,14 +2163,20 @@ class H(BaseHTTPRequestHandler):
         q = {k: v[0] for k, v in parse_qs(query).items()}
         if path.startswith("/api/private/"):
             return self._private_get(path, q)
-        if path == "/api/result":
-            fp = output_path(q.get("name"))
+        if path == "/api/result":                 # un tirage ou une image de la pile
+            fp = image_path(q.get("name"))
             if not fp:
                 return self._send(404, {"error": "fichier inconnu"})
             extra = {"Content-Disposition": f'attachment; filename="{os.path.basename(fp)}"'} if q.get("download") else None
-            return self._send(200, open(fp, "rb").read(), "image/png", extra)
+            try:
+                data = open(fp, "rb").read()
+            except FileNotFoundError:             # gardée ou jetée entre-temps
+                return self._send(404, {"error": "fichier inconnu"})
+            return self._send(200, data, "image/png", extra)
         if path == "/api/history":
             return self._send(200, history())
+        if path == "/api/pile":
+            return self._send(200, pile())
         if path == "/api/prompts":                # prompts enregistrés, le dernier utilisé d'abord
             try:
                 saved = sorted(saved_prompts(), key=lambda p: -p["used"])
@@ -2018,8 +2186,8 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/push/key":
             key = push_public_key()
             return self._send(200, {"key": key}) if key else self._send(503, {"error": "pywebpush non installé"})
-        if path == "/api/input":                  # image d'entrée d'une image de la galerie
-            out, f = output_path(q.get("name")), q.get("file", "")
+        if path == "/api/input":                  # image d'entrée d'un tirage ou d'une image de la pile
+            out, f = image_path(q.get("name")), q.get("file", "")
             fp = os.path.join(INPUTS, os.path.basename(out)[:-4], f) if out and INPUT_RE.fullmatch(f) else None
             if not fp or not os.path.isfile(fp):
                 return self._send(404, {"error": "image d'entrée inconnue"})
@@ -2027,17 +2195,25 @@ class H(BaseHTTPRequestHandler):
                 try:   # l'envoi reste hors du try : une connexion coupée n'est pas une miniature impossible
                     th = thumbnail(fp, os.path.join(THUMBS, f"{os.path.basename(out)[:-4]}__{f[:-4]}.jpg"))
                     data = open(th, "rb").read()
+                except FileNotFoundError:         # image jetée ou supprimée entre-temps
+                    return self._send(404, {"error": "image d'entrée inconnue"})
                 except Exception as e:
                     return self._send(500, {"error": f"miniature impossible : {e}"})
                 return self._send(200, data, "image/jpeg")
             extra = {"Content-Disposition": f'attachment; filename="{os.path.basename(out)[:-4]}_{f}"'} if q.get("download") else None
-            return self._send(200, open(fp, "rb").read(), "image/png", extra)
+            try:
+                data = open(fp, "rb").read()
+            except FileNotFoundError:             # image jetée ou supprimée entre-temps
+                return self._send(404, {"error": "image d'entrée inconnue"})
+            return self._send(200, data, "image/png", extra)
         if path == "/api/thumb":
-            fp = output_path(q.get("name"))
+            fp = image_path(q.get("name"))
             if not fp:
                 return self._send(404, {"error": "fichier inconnu"})
             try:       # l'envoi reste hors du try : une connexion coupée n'est pas une miniature impossible
                 data = open(thumbnail(fp), "rb").read()
+            except FileNotFoundError:             # gardée ou jetée entre-temps
+                return self._send(404, {"error": "fichier inconnu"})
             except Exception as e:
                 return self._send(500, {"error": f"miniature impossible : {e}"})
             return self._send(200, data, "image/jpeg")
@@ -2077,15 +2253,12 @@ class H(BaseHTTPRequestHandler):
             return self._send(401, {"error": "code d'accès requis"})
         if path.startswith("/api/private/"):
             return self._private_post(path, raw)
-        if path == "/api/delete":
+        if path in ("/api/delete", "/api/keep", "/api/discard"):   # Supprimer un tirage ; Garder, Jeter
             try:
-                fp = output_path(json.loads(raw).get("name"))
-            except Exception:
-                fp = None
-            if not fp:
-                return self._send(404, {"error": "fichier inconnu"})
-            delete_output(fp)       # sans ligne au journal : une suppression privée n'en écrit pas
-            return self._send(200, {"ok": True})
+                name = json.loads(raw).get("name")
+            except Exception:                     # pas du JSON, pas un objet, trop imbriqué
+                name = None
+            return self._send(*sort_image(path[len("/api/"):], name))
         if path in ("/api/push/subscribe", "/api/push/unsubscribe"):
             try:
                 body = json.loads(raw)

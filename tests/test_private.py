@@ -127,7 +127,7 @@ class PrivateSpaceTest(bench.PrivateFilesCheck, bench.BenchCase):
         bench.create_private(CODE)
         name = bench.wait_job(bench.generate("an image that stays public")["id"])["name"]
         self.assertEqual(call("POST", "/api/private/adopt", {"name": name, "code": CODE})[0], 404)
-        self.assertIn(name, [it["name"] for it in call("GET", "/api/history")[1]])
+        self.assertIn(name, [it["name"] for it in call("GET", "/api/pile")[1]])
 
 
 if __name__ == "__main__":

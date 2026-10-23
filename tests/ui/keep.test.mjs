@@ -31,6 +31,7 @@ test('garder l\'image 2 d\'un lot de variantes après un rechargement de la gale
     body: ${JSON.stringify(JSON.stringify(body))} }).then(r => r.json())`);
   const lot = reply.lot.id;
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)`, { what: 'lot terminé' });
+  await bench.keepAll();                          // images de la pile gardées : dans la galerie
   const names = await lotNames(lot);
   assert.equal(names.length, 3);
 
@@ -59,7 +60,7 @@ async function launchLot(extra) {
   const body = { prompt: 'à départager', width: 512, height: 512, steps: 2, cfg: 1, seed: -1, preview: false,
     preview_interval: 5, init_image: null, mask_image: null, strength: 1, ...extra(image) };
   const reply = await page.eval(`postJson('/api/generate', ${JSON.stringify(body)}).then(r => r.json())`);
-  await bench.idle();                              // lot terminé
+  await bench.keepAll();                           // lot terminé, ses images gardées : dans la galerie
   return reply.lot.id;
 }
 // « Garder celle-ci » offert sur la première image du lot, ouverte depuis la galerie

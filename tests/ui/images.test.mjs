@@ -40,7 +40,7 @@ const loaded = id => `$('${id}').complete && $('${id}').naturalWidth > 0`;
 test('espace privé : après la sortie, ni visionneuse ni images d\'entrée ne montrent une image privée', async () => {
   assert.equal(await edit('zq3 publique a', '#2060c0'), 202);
   assert.equal(await edit('zq3 publique b', '#20a040'), 202);
-  await bench.idle();
+  await bench.keepAll();                          // images de la pile gardées : dans la galerie
   assert.equal(await privatePost('/api/private/create'), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
@@ -229,7 +229,7 @@ async function inputSizes(prompt, w, h, during) {
       x.fillStyle = '#3080a0'; x.fillRect(0, 0, ${w}, ${h}); return c.toDataURL('image/png'); })()] })
     .then(r => r.status)`),
   202);
-  await bench.idle();
+  await bench.keepAll();                          // images de la pile gardées : dans la galerie
   await page.eval(`goTab('create'); goTab('hist')`);
   const index = `histItems.findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
   await page.waitFor(`${index} >= 0`, { what: 'image dans la galerie' });

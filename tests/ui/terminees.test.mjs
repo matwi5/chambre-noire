@@ -63,9 +63,9 @@ test('une image finie : carte sous la file, visionneuse d\'un appui, « × » la
   await page.click('#doneList [data-remove]');
   await page.waitFor(`$('doneList').children.length === 0 && pageJobs.length === 0`, { what: 'carte retirée' });
   assert.equal(await visible('#resultEmpty'), true, '« Rien en cours » de nouveau');
-  assert.ok(await page.eval(`fetch('/api/history').then(r => r.json())
+  assert.ok(await page.eval(`fetch('/api/pile').then(r => r.json())
     .then(h => h.some(it => it.name === ${JSON.stringify(name)}))`),
-    'toujours dans la galerie');
+    'toujours dans la pile');
   await page.waitFor(`!document.querySelector('[href*="${name}"]')`,
     { what: 'plus de lien vers elle (visionneuse vidée)' });
   page.assertNoErrors();
@@ -120,15 +120,14 @@ test('ailleurs : « Image prête » mène à En cours ; lot en grille, « Lot pr
   page.assertNoErrors();
 });
 
-test('« Tout retirer » : la liste se vide sans confirmation, l\'image reste dans la galerie', async () => {
+test('« Tout retirer » : la liste se vide sans confirmation, l\'image reste dans la pile', async () => {
   await page.generate('zq4 retiree');
   await page.waitFor(`$('doneList').children.length === 1 && !pageJobs.some(isActive)`, { what: 'image finie' });
   await page.click('#doneClear');
   await page.waitFor(`$('doneList').children.length === 0 && !pageJobs.length`, { what: 'liste vidée' });
   assert.equal(await page.eval(`openedSheet`), null, 'aucune confirmation');
-  await page.click('#tabbar [data-pane="hist"]');
-  await page.waitFor(`histItems.some(it => it.prompt === 'zq4 retiree')`, { what: 'image dans la galerie' });
-  await page.click('#tabbar [data-pane="run"]');
+  assert.ok(await page.eval(`fetch('/api/pile').then(r => r.json())
+    .then(h => h.some(it => it.prompt === 'zq4 retiree'))`), 'image dans la pile');
   page.assertNoErrors();
 });
 

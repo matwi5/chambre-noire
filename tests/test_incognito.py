@@ -38,7 +38,7 @@ class IncognitoRefusedTest(bench.BenchCase):
         self.assertRegex(job["id"], r"^\d{8}_\d{6}_[0-9a-f]{6}$")
         self.assertEqual([k for k in ("incognito", "tag") if k in job], [])
         self.assertEqual(wait_job(job["id"])["status"], "done")
-        self.assertEqual(len(bench.files("outputs", "*.png")), 1)
+        self.assertEqual(len(bench.files("outputs", ".pile", "*.png")), 1)
 
     def test_the_incognito_routes_are_gone(self):
         jid = generate("visible")["id"]

@@ -108,7 +108,7 @@ class QuietSuccessTest(bench.BenchCase):
         name = wait_job(generate("visible")["id"])["name"]
         bench.wait_idle()
         bench.LOG.clear()
-        for path in ("/api/history", "/api/result?name=" + name, "/api/thumb?name=" + name, "/"):
+        for path in ("/api/history", "/api/pile", "/api/result?name=" + name, "/api/thumb?name=" + name, "/"):
             self.assertEqual(call("GET", path)[0], 200, path)
         self.assertEqual(logged(), [], "requêtes réussies écrites au journal")
         self.assertEqual(call("GET", "/api/result?name=absente.png")[0], 404)
@@ -175,11 +175,13 @@ class NoPrivateTraceTest(bench.BenchCase):
                          403)
         self.assertEqual(logged(), [])
 
-    def test_a_deletion_writes_nothing(self):
-        name = wait_job(generate("visible")["id"])["name"]
+    def test_sorting_and_deletion_write_nothing(self):
+        kept, thrown = (wait_job(generate(p)["id"])["name"] for p in ("visible", "jetée"))
         bench.wait_idle()
         bench.LOG.clear()
-        self.assertEqual(call("POST", "/api/delete", {"name": name})[0], 200)
+        self.assertEqual(call("POST", "/api/keep", {"name": kept})[0], 200)
+        self.assertEqual(call("POST", "/api/discard", {"name": thrown})[0], 200)
+        self.assertEqual(call("POST", "/api/delete", {"name": kept})[0], 200)
         self.assertEqual(logged(), [])
 
 
