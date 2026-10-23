@@ -63,7 +63,7 @@ test('interface, téléphone en mode clair : noir chaud, sans verre ; espace pri
   assert.equal(l.themes.length, 1, 'une seule couleur de barre d\'état');
   assert.deepEqual(l.glass, [], 'aucune surface en verre flouté');
   const titles = ['.topbar h1', '.hist-head h2', '#setTitle', '#engineTitle', '#tabbar button span:last-child',
-    '#pileEmpty p'], text = ['#prompt', '#go', '.note', '#status', 'label', '#stepBig'];
+    '#pileEmpty p'], text = ['#prompt', '#go', '.note', '#status', 'label', '#runPhase'];
   assert.deepEqual(await pixel([...titles, ...text]), { ...allAs(titles, true), ...allAs(text, false) },
     'nom, titres, onglets et états vides en police pixel, le reste en police du téléphone');
   const created = `postJson('/api/private/create', { code: 'code-identite-1' }).then(r => r.status)`;

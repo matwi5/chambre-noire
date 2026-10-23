@@ -116,25 +116,25 @@ Le fichier se lit par ses commentaires d'en-tête `/* ---…` (CSS) et `// ---�
 `<script>` dans `<head>` pose `html.lite` (téléphone : effets allégés) ; tout le reste du JavaScript est dans le
 dernier bloc, après le HTML.
 
-- **CSS** : sections « jetons » (lumière inactinique ; `html.priv` : lumière verte), « fond »,
-  « surfaces mates » (classe `mat`), « barre du haut », « barre d'onglets », « panneaux du
-  bas », « compositeur », « panneau Réglages », « images d'entrée (Labo) et Dessiner », « visionneuse plein écran »,
-  « résultat », « pile du Labo » (cartes `pcard`, bandeau Annuler `undo`), « île », « liste de la file (Labo) » (cartes
-  de la file), « prompts enregistrés », « espace
-  privé », « messages et confirmations », « typographie » (police pixel `--pixel`, chasse fixe `--mono`, déclaration
-  `@font-face`), « téléphone (html.lite) ».
-- **HTML** : onglets `#pane-labo` (Labo : en haut `#runZone`, avec la zone de la page `#ownZone` et `#stage` ;
-  génération d'un autre appareil ou attente `#runNow` ; file `#runQueue` ; puis la pile `#pile`, ses boutons ✕
-  `#pileNo` et ✓ `#pileYes`, son compte `#pileCount`, l'état vide `#pileEmpty` ; dessous, le compositeur `#composer` :
-  images d'entrée
-  `#refs`, vignettes `#inThumbs`, ajout `#inDrop` et son champ `#inFiles`, bouton Dessiner `#drawBtn` (choix d'une
-  image `#drawFile`, explication `#drawHint`), zone de dessin `#paintWrap` et `#paintCanvas`, masque ou annotation
+- **CSS** : sections « jetons » (lumière inactinique ; `html.priv` : lumière verte), « fond », « surfaces mates »
+  (classe `mat`), « barre du haut », « barre d'onglets », « panneaux du bas », « compositeur », « panneau Réglages »,
+  « images d'entrée (Labo) et Dessiner », « visionneuse plein écran », « carte en cours » (`runcard`, classe `behind`
+  derrière une pile non vide), « pile du Labo » (cartes `pcard`, bandeau Annuler `undo`), « liste de la file (feuille
+  de la file du Labo) » (cartes de la file), « prompts enregistrés », « espace privé », « messages et confirmations »,
+  « typographie » (police pixel `--pixel`, chasse fixe `--mono`, déclaration `@font-face`), « téléphone (html.lite) ».
+- **HTML** : en-tête (état du moteur `#statusChip`, qui ouvre `#engineSheet`) ; onglets `#pane-labo` (Labo : la
+  pastille « +N en attente » `#queueChip`, la carte en cours `#runCard` (cadre `#runFrame` et son canevas
+  `#revealCanvas`, rang dans un lot `#lotBadge`, étape `#runStep`, phase `#runPhase`, fin prévue `#runEta`, annulation
+  `#runCancel`, prompt `#runPrompt`, avancement `#runBar`), la pile `#pile`, ses boutons ✕ `#pileNo` et ✓ `#pileYes`,
+  son compte `#pileCount`, l'état vide `#pileEmpty` ; dessous, le compositeur `#composer` : images d'entrée `#refs`,
+  vignettes `#inThumbs`, ajout `#inDrop` et son champ `#inFiles`, bouton Dessiner `#drawBtn` (choix d'une image
+  `#drawFile`, explication `#drawHint`), zone de dessin `#paintWrap` et `#paintCanvas`, masque ou annotation
   `#mask_mode`, interrupteur Campagne `#campSwitch`, champ unique `#prompt`, bouton `#go` ; classe `drawing` quand le
   dessin est actif), `#pane-tirages` (Tirages, grille `#histGrid`) ; barre d'onglets `#tabbar` (icônes en pixels ;
-  onglet Labo : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vSort` : Garder et Jeter
-  une image de la pile) ; bandeau Annuler `#undoBar` ;
-  images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`, `#engineSheet`, `#lotSheet`, `#promptSheet`,
-  `#promptEditSheet` et celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`, `#privCodeSheet`…).
+  onglet Labo : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vSort` : Garder et Jeter une image de
+  la pile) ; bandeau Annuler `#undoBar` ; images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`,
+  `#engineSheet`, `#lotSheet`, la file `#fileSheet` (`#queueNote`, `#queueList`), `#promptSheet`, `#promptEditSheet` et
+  celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`, `#privCodeSheet`…).
 - **JavaScript**, sections dans l'ordre :
   - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
     privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
@@ -146,8 +146,8 @@ dernier bloc, après le HTML.
   - « onglets & statut » : `TABS`, changement d'onglet (`mode`, `goTab`, `showLabo`), `tabSwipe` (glissement
     d'onglet, jamais depuis le champ de création ni la pile) ; « panneaux du bas » : `openSheet`, `closeSheet`
     (un seul ouvert, `openedSheet`) ; `refreshStatus()` (interroge `/api/status` toutes les 5 s, 2 s tant que la file
-    n'est pas vide ; met à jour `queueState`, l'île, le haut du Labo et l'espace privé par `applyPrivate`, et le
-    panneau Moteur, version servie comprise : `fmtVersion`, `staleServer`).
+    n'est pas vide ; met à jour `queueState`, l'onglet Labo, la carte en cours, la file et l'espace privé par
+    `applyPrivate`, et le panneau Moteur, version servie comprise : `fmtVersion`, `staleServer`).
   - « images », « dessin » : `toEntry`, `addInputFiles` (choix, dépôt et collage, écouteur `paste` du Labo),
     `refuseWhileDrawing` (ajout refusé pendant le dessin, saisie affichée ou mise de côté), `noteInput` (saisie visée
     par un ajout, notée avant toute attente), `renderInputs` (images d'entrée de la saisie, `inputImages`, puis
@@ -164,24 +164,32 @@ dernier bloc, après le HTML.
     miniature des visionneuses à la taille de l'image complète, par `fitThumb`, en unités de la scène `cqw`, `cqh`),
     `preload` et `ready` (les 10 dernières images décodées : miniatures des voisines de la visionneuse, image complète
     de la suivante dans le sens du parcours `vStep`, première image d'entrée),
-    `clearImage`, `forgetPrivateImages` (sortie de l'espace privé : images privées et aperçus affichés, attendus ou
+    `clearImage`, `abortPrivateLoads` (chargements privés en route abandonnés, aussi avant la fermeture de la session
+    par « Sortir »), `forgetPrivateImages` (sortie de l'espace privé : images privées et aperçus affichés, attendus ou
     chargés en avance, chargements en cours abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne
     jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
     de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
-  - « générations de la page, haut du Labo, île et file » : `pageJobs` (générations lancées par cette page),
-    `ownIds` et `saveOwn` (`localStorage` `qwen-own`), `isActive`,
-    `isCampaignLot`, `lotOf`, `show` (`showOwn` : une génération active de la page, ou rien ; puis `renderRun`),
-    `pageItem` (image d'une génération finie de la page : vrai mode et images d'entrée de son suivi ; cases d'un lot),
-    `spaceNow` (état de l'espace pour l'île et l'onglet ; `entryFrac`, `firstWait`, `ringOffset`), `renderIsland` (île)
-    et `renderRunTab` (nombre et anneau de l'onglet Labo), `onIsland` (file non vide : le Labo, sinon
-    `#engineSheet`), `renderRun` (haut de la page : génération de la page qui tourne, sinon d'un autre appareil, ou
-    attente d'une génération cachée, classe `other`), pile : voir plus bas, `notifyDone` (message « Image prête »,
-    « Lot prêt » hors du Labo, `toast(…, go)`), `renderQueue` (file de la page en cartes : `queueCards` regroupe les
-    entrées d'un lot, `queueCard` dessine
+  - « générations de la page, carte en cours et file » : `pageJobs` (générations lancées par cette page), `ownIds` et
+    `saveOwn` (`localStorage` `qwen-own`), `isActive`, `isCampaignLot`, `lotOf`, `progress` (étape, phase, temps
+    restant d'une génération de la page), `pageItem` (image d'une génération finie de la page : vrai mode et images
+    d'entrée de son suivi ; cases d'un lot), `spaceNow` (état de l'espace pour l'onglet ; `entryFrac`, `firstWait`,
+    `ringOffset`), `renderRunTab` (nombre de la pile et anneau de l'onglet Labo), pile : voir plus bas ; carte en
+    cours : `runNow` (ce qu'elle montre : génération de la page qui tourne, sinon d'un autre appareil, sinon la
+    prochaine de la page, sinon l'attente d'une génération cachée de l'autre espace), `renderRunCard` (sur le dessus
+    pile vide, sinon `behind` ; `shown` : la génération de la page montrée ; `lotRankLabel` ; annulation confirmée par
+    `ask`), `openQueue` (feuille de la file, pastille `#queueChip`), révélation en pixels sur le canevas : `reveal`
+    (génération révélée, couleurs des carrés lues par `cssRgb`, dernier aperçu ; `blankReveal`), `startReveal` et
+    `drawNoise` (carrés au hasard avant le premier aperçu,
+    allégés en `html.lite`, immobiles en `prefers-reduced-motion`), `revealPreview` (aperçu décodé par `preload`,
+    servi une fois) et `drawMosaic` (blocs de `REVEAL_COARSE` à `REVEAL_FINE` px selon step / total, sans lissage),
+    `sizeReveal`, `redrawReveal`, `clearReveal`, `lite` (canevas vidé : fin, changement de génération, sortie de
+    l'espace par `forgetPrivateImages`) ; `notifyDone` (message « Image prête »,
+    « Lot prêt » hors du Labo, `toast(…, go)`), `renderQueue` (file de l'espace en cartes, feuille ouverte seulement :
+    `queueCards` regroupe les entrées d'un lot, `queueCard` dessine
     une carte, `lotCases` ses cases (`lotCancels` : rangs annulés pendant la vie de la page), `lotSubs` ses lignes une
     fois dépliée (`openLots`) ; `lotLabel` : « N variantes » ou « Campagne · N photos » ; `qbtn` : bouton d'annulation
     ou de « Passer en tête », chemin fixé à l'affichage ; `hhmm` : heure de fin, `resLabel` : résolution), `ownOf`
-    (ligne de `queue` → génération de la page, par identifiant), `ofSpace`, `spaceActive`, `firstActive` (celle qui
+    (ligne de `queue` → génération de la page, par identifiant), `ofSpace`, `firstActive` (celle qui
     tourne, sinon la prochaine dans l'ordre de calcul) et `nextActive` (la même, parmi les générations de l'espace
     affiché), `track` (suit une génération, avec sa demande `req` si la page l'a envoyée, un objet par lot, en mémoire
     de la page seulement ; `pollJobs` chaque seconde ; une privée « inconnue » quitte la page sans message), `finish`
@@ -231,15 +239,17 @@ dernier bloc, après le HTML.
     `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,
     `putInput`, `swapInput`, `emptyInput` (vidage après « Générer », dans l'espace d'où la demande est partie) ; un
     ajout d'image asynchrone (Éditer, Dessiner) va dans la saisie de l'espace où il a commencé. `openPrivSheet`,
-    `privCreate`, `privUnlock`, `privLock`, `privChangeCode`, `privReset`.
+    `privCreate`, `privUnlock`, `privLock` (sortie appliquée dès la réponse du Mac : `spaceEpoch` écarte une réponse de
+    `/api/status` demandée avant ; `leavingPrivate` : aucun aperçu privé demandé pendant la fermeture),
+    `privChangeCode`, `privReset`.
 
 Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
 « Dessiner », « Reprendre » (texte, images d'entrée, dessin et réglages : `resumeFrom`), « Relancer » (`againFrom`) et
 « Supprimer » → `viewerAction('edit' | 'mask' | 'resume' | 'again' | 'delete')` ; « Garder » et « Jeter » → ✓
 `#pileYes` et ✕ `#pileNo`, ou balayage de la carte (`pileSwipe`), puis `sortTop` ; dans la visionneuse, `sortFromViewer`
-; « Annuler » → `undoDiscard` ; carte
-d'échec, « Relancer » → `data-again` dans l'écouteur de `#pile` ; cadenas des Tirages → `#privEntry`, « Sortir » →
-`privLock` ; pastille du haut → `#island`, `renderIsland`.
+; « Annuler » → `undoDiscard` ; carte d'échec, « Relancer » → `data-again` dans l'écouteur de `#pile` ; « Annuler » de
+la carte en cours → `#runCancel` ; « +N en attente » → `openQueue` ; cadenas des Tirages → `#privEntry`, « Sortir »
+→ `privLock` ; pastille d'état du haut → `#statusChip`.
 
 Deux boucles suivent les générations sans se synchroniser : `pollJobs` (`/api/job/<id>`, chaque seconde) et
 `refreshStatus` (`/api/status`, toutes les 2 à 5 s). Une réponse de l'une peut arriver avant celle de l'autre :
@@ -295,8 +305,9 @@ invariants ».
   quitté ; une réponse reçue après un changement d'espace est ignorée.
 - **Interface et serveur** : l'interface suit les générations qu'elle a lancées (`pageJobs`) en interrogeant chacune par
   `/api/job/<id>` chaque seconde, et la file de son espace (`queue` de `/api/status`, entrées produites par
-  `queue_view`) toutes les 2 s tant qu'elle n'est pas vide ; la file et l'île ne parlent que des générations de l'espace
-  affiché (`ofSpace`, `spaceActive`), le temps d'attente ajoute `ahead` ; après un rechargement, elle se rattache aux
+  `queue_view`) toutes les 2 s tant qu'elle n'est pas vide ; la file, la carte en cours et l'onglet ne parlent que des
+  générations de l'espace
+  affiché (`ofSpace`), le temps d'attente ajoute `ahead` ; après un rechargement, elle se rattache aux
   seules générations normales lancées depuis ce navigateur (identifiants dans `localStorage`, `qwen-own`), et dans
   l'espace privé à toutes les générations privées actives (`adoptPrivate`), avec le prompt complet que donne leur suivi
   (`followQueue`). À la sortie de l'espace privé, `changedSpace` retire de la

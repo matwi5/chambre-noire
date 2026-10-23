@@ -11,7 +11,7 @@
 //   await bench.idle()                           // rien en cours ni en file (avant un rechargement de la page)
 //   const disk = bench.disk(); …; disk.written() // fichiers écrits ou changés par le serveur depuis l'instantané
 //   await page.tab('tirages')                    // appui sur l'onglet Labo ou Tirages : la page affichée a changé
-//   await page.swipe('#runZone', -150)           // doigt glissé de dx px (dy) depuis le centre d'un élément
+//   await page.swipe('#pileEmpty', -150)         // doigt glissé de dx px (dy) depuis le centre d'un élément
 //   await page.swipe('#pile .pimg', 200, 0, { mouse: true, hold: true })   // à la souris ; hold : sans relâcher ;
 //                                                // pause : ms immobile avant de relâcher (geste lent)
 //   await page.release(300)                      // relâche le geste tenu (après 300 ms immobile : geste lent)
@@ -19,6 +19,9 @@
 //   await page.generate('texte')                 // tapé dans le Labo puis « Générer » : demande acceptée
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
 //   await page.viewPile('texte')                 // visionneuse ouverte sur l'image de la pile à ce prompt
+//   await page.openQueue()                       // feuille de la file ouverte par la pastille « +N en attente »
+//   await page.cancelRun()                       // « Annuler » de la carte en cours, confirmé
+//   await page.canvasInk('#revealCanvas')        // { width, height, ink } : pixels non transparents d'un canevas
 //   await bench.api('/api/pile')                 // réponse JSON d'une route du banc (sans cookie : le Mac)
 //   await page.launch('texte', { private: true })   // génération demandée hors de l'interface (autre appareil)
 //   await page.leaks(['mot', 'id'])              // marqueurs restés dans la page (texte, attributs, champs, mémoire)
@@ -285,6 +288,27 @@ async function connect(wsUrl) {
       await page.waitFor(`${at} >= 0`, { what: `« ${prompt} » dans la pile`, timeout: 30000 });
       await page.eval(`openViewer(${at}, pileView())`);
       await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
+    },
+    // feuille de la file de l'espace, ouverte par la pastille « +N en attente » du Labo (attendue)
+    async openQueue() {
+      if (await page.eval(`mode`) !== 'labo') await page.tab('labo');
+      await page.eval(`refreshStatus()`);
+      await page.waitFor(`!$('queueChip').hidden`, { what: 'pastille « +N en attente »' });
+      await page.click('#queueChip');
+      await page.waitFor(`openedSheet === $('fileSheet')`, { what: 'feuille de la file' });
+    },
+    // « Annuler » de la carte en cours, puis la confirmation acceptée (yes = false : refusée)
+    async cancelRun(yes = true) {
+      await page.click('#runCancel');
+      await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation de l\'annulation' });
+      await page.eval(`answer(${yes})`);
+    },
+    // taille d'un canevas et nombre de ses pixels non transparents (ce qui y est dessiné)
+    canvasInk(selector) {
+      return page.eval(`(c => { const out = { width: c.width, height: c.height, ink: 0 }; if (!c.width) return out;
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        for (let i = 3; i < d.length; i += 4) if (d[i]) out.ink++;
+        return out; })(document.querySelector(${JSON.stringify(selector)}))`);
     },
     // texte tapé dans le champ du Labo, comme au clavier (événement input : le brouillon est écrit)
     typePrompt(text) {

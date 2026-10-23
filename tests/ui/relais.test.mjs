@@ -29,9 +29,8 @@ test('par l\'adresse HTTPS relayée : espace privé ouvert, aperçus d\'une gén
   await page.eval(`$('previewChk').checked = true`);
   await page.typePrompt('SLOW=0.2 zq8 aperçu relayé');
   await page.click('#go');
-  await page.waitFor(`shown && shown.private && $('stageImg').classList.contains('preview')
-    && $('stageImg').getAttribute('src').includes('/preview?v=') && $('stageImg').naturalWidth > 0`,
-  { what: 'aperçu privé affiché', timeout: 30000 });
+  await page.waitFor(`shown && shown.private && !!reveal.img && reveal.img.src.includes('/preview?v=')
+    && reveal.img.naturalWidth > 0`, { what: 'aperçu privé révélé sur la carte en cours', timeout: 30000 });
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queue.length)`,
     { what: 'génération finie', timeout: 30000 });
   await page.click('#privExit');

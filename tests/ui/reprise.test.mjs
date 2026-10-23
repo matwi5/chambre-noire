@@ -237,7 +237,7 @@ test('« Reprendre » une image de la pile lancée ici : images de sa demande ga
   await page.click('#vResume');
   await page.waitFor(`mode === 'labo' && inputImages.length === 1`, { what: 'image reprise' });
   assert.deepEqual(await page.eval(`performance.getEntriesByType('resource').map(e => e.name)
-    .filter(u => u.includes('/api/input'))`), [], 'lue dans la demande gardée par la page');
+    .filter(u => u.includes('/api/input') && !u.includes('thumb=1'))`), [], 'lue dans la demande gardée par la page');
   assert.equal(await page.eval(`$('prompt').value`), 'zr5 terminee');
   assert.deepEqual(await colors(), ['#d08020']);
   assert.equal(await draft(), 'zr5 terminee', 'texte repris écrit en brouillon public');

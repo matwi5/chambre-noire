@@ -43,14 +43,16 @@ test('feuille des prompts', async () => {
   page.assertNoErrors();
 });
 
-// (titre attendu tel quel par tests/test_check.py, UiNameTest : « la page En cours » est le haut du Labo)
+// (titre attendu tel quel par tests/test_check.py, UiNameTest : « la page En cours » est la carte en cours du Labo,
+// « le haut de la page » sa carte)
 test('« Générer » mène à la page En cours, puis annulation depuis le haut de la page', async () => {
   // une génération lente lancée depuis l'interface (le faux moteur ralentit sur SLOW=…)
   await page.typePrompt('SLOW=0.3 essai de la file');
   await page.click('#go');
   await page.waitFor(`pageJobs.some(isActive) && mode === 'labo'`, { what: 'génération suivie, Labo' });
-  await page.waitFor(`shown && shown.j.status === 'running'`, { what: 'génération en cours en haut de la page' });
-  await page.click('#cancelLoader');
+  await page.waitFor(`shown && shown.j.status === 'running' && !$('runCard').hidden`,
+    { what: 'génération sur la carte en cours' });
+  await page.cancelRun();
   await page.waitFor(`!pageJobs.some(isActive)`, { what: 'génération annulée' });
   const status = await (await fetch(bench.url + '/api/status')).json();
   assert.equal(status.queue.length, 0);

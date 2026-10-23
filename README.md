@@ -219,12 +219,14 @@ est dans `logs/service.log`. Le raccourci `Chambre noire.command` ouvre alors si
 
 ## Utilisation
 
-L'interface a deux onglets aux icônes en pixels, dans la barre du bas : **Labo** (en haut, la génération en cours, la
-file d'attente et la pile des images à trier ; dessous, le champ de création : texte → image, édition avec des
+L'interface a deux onglets aux icônes en pixels, dans la barre du bas : **Labo** (en haut, la pile des images à trier et
+la
+génération en cours, la file d'attente dans une feuille ; dessous, le champ de création : texte → image, édition avec
+des
 images d'entrée, ou dessin guidé sur une image) et **Tirages** (les images gardées) ; elle s'ouvre sur le Labo. Sur un
 grand écran, le Labo est une colonne centrée et les Tirages prennent toute la largeur. Sur un écran tactile, glisser le
-doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le champ de création et sur la pile, dont les cartes
-se balaient). Elle s'adapte au téléphone
+doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le champ de création, sur la carte en cours et sur
+la pile, dont les cartes se balaient). Elle s'adapte au téléphone
 comme à l'ordinateur, toujours sombre, même quand le système est en mode clair :
 lumière inactinique de chambre noire (noir chaud, halo rouge de la lampe, grain léger, textes couleur papier, accent
 ambre, erreurs en rouge vif avec leur icône). Sur un écran tactile, elle allège ses animations pour rester fluide ;
@@ -258,33 +260,36 @@ du Mac, Mac injoignable, génération longue non confirmée), rien n'est vidé e
 générations une à une, dans l'ordre d'arrivée (sauf celles passées en tête depuis la file d'attente), qu'elles viennent
 de l'ordinateur ou du téléphone.
 
-Le **Labo** montre en haut, en grand, la génération en cours. Lancée par la page : l'étape, le temps restant,
-les aperçus et un bouton d'annulation (une génération annulée ne laisse aucun fichier : ni image, ni images d'entrée, ni
-aperçus, ni journal du moteur) ; une génération de la page qui attend affiche sa place dans la file et le temps avant
-son image. Lancée par un autre appareil : son texte, un cadre aux proportions demandées, ses réglages et une progression
-estimée, sans aperçu, avec l'annulation là où l'appareil y a droit. Quand le Mac calcule une génération que l'espace où
-l'on est ne voit pas, le haut de la page dit « En attente » et le temps avant le début de la première génération de
-l'espace.
-Sous la génération en cours, la **file d'attente** de l'espace, en cartes, dans l'ordre de calcul, sous un en-tête qui
-dit combien de générations attendent et à quelle heure la file sera vide (« 4 en attente · file vide vers 15 h 10 (≈ 60
-min) »). Une carte par demande : une génération seule, ou tout un lot (« 3 variantes », « Campagne · 6 photos ») avec
-une case par image, en attente, en cours, faite (avec sa vignette pour un lot de la page), en échec ou annulée (pour un
-lot d'un autre appareil, « sortie » quand l'image n'est plus dans la file). Chaque carte montre une vignette (l'image
-d'entrée pour une édition ou un dessin de la page, sinon un cadre aux proportions demandées), le début du prompt, la
-ligne des réglages (« 16:9 · 720p · 40 étapes »), l'heure à laquelle la demande sera prête (« prête vers 14 h 32 ») et
-sa durée, et « autre appareil » pour une génération normale lancée ailleurs (rien dans l'espace privé). La génération en
-cours n'a pas de carte, sauf dans celle de son lot. Les boutons d'une carte annulent la génération ou tout ce qui reste
-du lot, et **Passer en tête** la fait passer, avec tout le lot, juste après celle en cours (pour un essai rapide bloqué
-derrière une campagne) ; la flèche d'une carte de lot la déplie, avec une ligne par image pour l'annuler ou la faire
-passer en tête seule. Une génération normale s'annule ou passe en tête depuis n'importe quel appareil. La file et la
-pastille ne montrent que les générations de l'espace où l'on est (public, ou espace privé) : rang et « +N en attente »
-ne comptent qu'elles. La pastille d'état en haut suit la génération en cours depuis n'importe quel onglet et affiche
-« +N en attente » (« +N » seul quand l'écran est trop étroit pour tout contenir) ; un appui mène au Labo (au
-panneau Moteur quand rien de l'espace n'est en file). L'icône de l'onglet **Labo** a un
-anneau qui suit la génération en cours. Une génération qui attend
-derrière une génération de l'autre espace affiche « en attente » et un temps qui compte ce travail caché, sans ligne
-pour lui ; si rien de l'espace ne tourne, la pastille dit « En attente » et le temps avant le début de la première, et
-si l'espace n'a rien en file, elle reste éteinte même quand le Mac calcule pour l'autre espace. On peut recharger la
+La génération en cours de l'espace a sa **carte en cours** dans le Labo : sur le dessus quand la pile est vide, sinon
+juste derrière la pile, réduite à un bandeau au bord de celle-ci (sa vignette, son étape, l'heure de fin prévue et
+le liseré de son avancement). L'image s'y **révèle en pixels** : avant le premier aperçu, des carrés s'allument au
+hasard ; puis chaque aperçu (toutes les 5 étapes) s'affiche en mosaïque de gros carrés, de plus en plus fins à mesure
+que la génération avance, jusqu'à l'image nette qui arrive sur la pile. Sur un téléphone, l'animation est allégée ;
+elle s'arrête si le système demande de réduire les animations. Lancée par la page : l'étape, la phase et l'heure de
+fin prévue (chiffres en chasse fixe), et un bouton d'annulation qui demande confirmation (une génération annulée ne
+laisse aucun fichier : ni image, ni images d'entrée, ni aperçus, ni journal du moteur) ; une génération de la page qui
+attend affiche sa place dans la file. Lancée par un autre appareil : son texte, ses réglages et une progression
+estimée, sans aperçu, avec l'annulation là où l'appareil y a droit. Quand le Mac calcule une génération que l'espace
+où l'on est ne voit pas, la carte dit « En attente » et l'heure du début de la première génération de l'espace. La
+carte en cours ne se balaie pas.
+
+Au-dessus de la pile, la pastille **+N en attente** ouvre la **file d'attente** de l'espace, en cartes, dans l'ordre de
+calcul, sous un en-tête qui dit combien de générations attendent et à quelle heure la file sera vide (« 4 en attente ·
+file vide vers 15 h 10 (≈ 60 min) »). Une carte par demande : une génération seule, ou tout un lot (« 3 variantes »,
+« Campagne · 6 photos ») avec une case par image, en attente, en cours, faite (avec sa vignette pour un lot de la
+page), en échec ou annulée (pour un lot d'un autre appareil, « sortie » quand l'image n'est plus dans la file). Chaque
+carte montre une vignette (l'image d'entrée pour une édition ou un dessin de la page, sinon un cadre aux proportions
+demandées), le début du prompt, la ligne des réglages (« 16:9 · 720p · 40 étapes »), l'heure à laquelle la demande
+sera prête (« prête vers 14 h 32 ») et sa durée, et « autre appareil » pour une génération normale lancée ailleurs
+(rien dans l'espace privé). La génération en cours n'a pas de carte, sauf dans celle de son lot. Les boutons d'une
+carte annulent la génération ou tout ce qui reste du lot, et **Passer en tête** la fait passer, avec tout le lot,
+juste après celle en cours (pour un essai rapide bloqué derrière une campagne) ; la flèche d'une carte de lot la
+déplie, avec une ligne par image pour l'annuler ou la faire passer en tête seule. Une génération normale s'annule ou
+passe en tête depuis n'importe quel appareil. La file, la carte en cours et la pastille ne montrent que les
+générations de l'espace où l'on est (public, ou espace privé) : rang et « +N en attente » ne comptent qu'elles ; une
+génération qui attend derrière une génération de l'autre espace affiche un temps qui compte ce travail caché, sans
+ligne pour lui. L'icône de l'onglet **Labo** a un anneau qui suit la génération en cours. En haut, l'état du moteur
+(« Prêt », « En cours ») ouvre le panneau Moteur. On peut recharger la
 page sans rien perdre : elle se rattache aux générations normales qu'elle avait lancées (retenues par le navigateur),
 pas à celles des autres appareils, qui restent visibles dans la file ; dans l'espace privé, à toutes les générations
 privées en cours (voir « Espace privé »). Une génération ainsi reprise garde son prompt complet (sous l'image, et pour
@@ -293,7 +298,7 @@ enregistrée en PNG dans la pile, **`outputs\.pile\`**, où elle attend d'être 
 `outputs\` (les Tirages) ; jetée, elle est effacée. Ses images d'entrée (références, image d'origine, zone peinte) sont
 dans `outputs\.inputs\`.
 
-Sous la file, la **pile** : les images terminées de l'espace qui attendent d'être triées, la dernière arrivée sur le
+Au centre, la **pile** : les images terminées de l'espace qui attendent d'être triées, la dernière arrivée sur le
 dessus, les deux suivantes devinées dessous ; ce sont les mêmes sur tous les appareils, et elles restent après un
 rechargement de la page ou un redémarrage du Mac. La carte du dessus montre l'image, son texte sur deux lignes, ses
 réglages (taille, étapes, durée) et, pour une image d'un lot (variantes ou campagne), son rang (« 2/3 ») : chaque
@@ -969,14 +974,16 @@ le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier, et `--name
 nom correspond (échec immédiat si aucun ne correspond). Un test bloqué échoue au bout de 3 minutes (20 pour un
 fichier), et Chrome et le banc sont arrêtés à la fin de chaque fichier. Les tests ouvrent l'interface servie par le
 banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du
-navigateur. Ils couvrent les écrans principaux, le Labo (deux onglets, pastilles, génération d'un autre appareil
-ou cachée, rien qui dépasse à la largeur du téléphone), la pile (ordre, cartes de lot, ✓ et ✕, balayage au doigt et à la
-souris, bandeau Annuler et
+navigateur. Ils couvrent les écrans principaux, le Labo (deux onglets, carte en cours sur ou derrière la pile,
+non balayable, annulation confirmée, révélation en pixels, génération d'un autre appareil sans aperçu ou cachée, « +N
+en attente », rien qui dépasse à la largeur du téléphone), la pile (ordre, cartes de lot, ✓ et ✕, balayage au doigt et à
+la souris, bandeau Annuler et
 rien d'envoyé avant sa fin ni au rechargement, deux Jeter de suite, « Déjà triée », visionneuse, carte d'échec, pile
 privée, message « Image prête »), Garder et Jeter par nom après une relecture de la pile, la saisie (unique, dans le
 Labo, Dessiner,
 collage, campagne à partir de 2 images, plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque
-espace), l'en-tête (cadenas, pastille), la file cloisonnée par espace, les prompts enregistrés privés, la reprise d'une
+espace), l'en-tête (cadenas, état du moteur), la file cloisonnée par espace, les prompts enregistrés privés, la reprise
+d'une
 génération, le suivi d'une génération privée devenue inconnue (sans faux « Échec »), le brouillon unique (reprise des
 anciens, aucun brouillon privé dans le navigateur, ancien réglage incognito signalé une fois puis oublié) et le pilote
 lui-même (recherche de données restées dans la page, fichiers écrits par le banc, délais).

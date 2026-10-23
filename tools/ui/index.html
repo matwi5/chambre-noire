@@ -70,12 +70,13 @@
   .brand { display:flex; align-items:center; gap:10px; min-width:0; overflow:hidden; }
   /* logo : paysage en carrés qui finit de se former, sous la lumière inactinique ; source des icônes PNG */
   .logo { flex:none; display:block; width:34px; height:34px; border-radius:23%; box-shadow:0 0 0 1px var(--line); }
-  .topbar h1 { font-size:18px; margin:0; letter-spacing:-.02em; font-weight:720; white-space:nowrap; }
+  .topbar h1 { font-size:18px; margin:0; letter-spacing:-.02em; font-weight:720; white-space:nowrap; overflow:hidden;
+    text-overflow:ellipsis; }
   .chipbtn { display:inline-flex; align-items:center; gap:8px; height:36px; padding:0 14px; border-radius:var(--r-m); cursor:pointer;
     font-size:14px; font-weight:600; color:var(--ink); }
-  #phoneBtn { margin-left:auto; } #phoneBtn + .island { margin-left:0; }
-  .island { margin-left:auto; flex:none; max-width:62vw; }
-  @media (max-width: 420px) { .topbar:has(.island.run) :is(#phoneBtn, h1) { display:none; } }
+  .brand { margin-right:auto; }
+  #phoneBtn[hidden] { display:none; }
+  #statusChip { flex:none; max-width:50vw; }
   #status { display:flex; align-items:center; gap:8px; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #status::before { content:""; flex:none; width:8px; height:8px; border-radius:50%; background:var(--warn); box-shadow:0 0 8px var(--warn); }
   #status.ok::before { background:var(--ok); box-shadow:0 0 8px var(--ok); } #status.err::before { background:var(--err); box-shadow:0 0 8px var(--err); }
@@ -103,7 +104,7 @@
   .tabcount { position:absolute; left:calc(100% - 7px); top:-5px; min-width:17px; height:17px; padding:0 5px; border-radius:var(--r-s);
     background:var(--accent); color:var(--on-accent); font-size:10.5px; font-weight:750; line-height:17px; text-align:center;
     font-variant-numeric:tabular-nums; }
-  .tabcount[hidden], .hud-x[hidden] { display:none; }
+  .tabcount[hidden] { display:none; }
 
   /* ------------------------------------------------------------ panneaux du bas (fenêtres centrées sur grand écran) */
   .scrim { position:fixed; inset:0; z-index:40; background:var(--scrim); opacity:0; pointer-events:none; transition:opacity .3s; }
@@ -357,25 +358,50 @@
   .acts.iv-acts { grid-template-columns:repeat(3, 1fr); }
   .viewer.iv.single .v-nav { display:none; }
   .v-stage img { touch-action:none; }
-  /* ------------------------------------------------------------ résultat : l'image est posée telle quelle, sur la plaque mate */
-  #runZone, #ownZone, #runNow, .runq { display:flex; flex-direction:column; gap:12px; min-width:0; }
-  /* haut du Labo : la génération de la page (#ownZone), ou celle d'un autre appareil de l'espace, ou l'attente d'une
-     génération cachée de l'autre espace (#runNow, classe other) */
-  #runNow, #runZone.other #ownZone, .runq[hidden] { display:none; }
-  #runZone.other #runNow { display:flex; }
-  .nowframe { position:relative; width:min(100%, calc(60svh * var(--ar, 1))); margin-inline:auto; aspect-ratio:var(--ar, 1);
-    border-radius:var(--r-m); overflow:hidden; background:var(--field); box-shadow:0 30px 70px -30px rgba(0,0,0,.85), 0 0 0 1px var(--line); }
-  .nowframe .qicon { position:absolute; left:50%; top:42%; transform:translate(-50%, -50%); width:64px; height:64px; border-radius:var(--r-m); }
-  .nowframe .qicon svg { width:30px; height:30px; }
-  .runq-head { margin:10px 6px 0; font-size:13px; font-weight:650; color:var(--ink2); }
-  .runq .qlist { margin-top:0; }
+  /* ------------------------------------------------------------ carte en cours : la génération de l'espace se
+     révèle en pixels sur un canevas ; sur le dessus quand la pile est vide, sinon juste derrière elle, réduite à un
+     bandeau au bord de la pile (vignette, étape, fin prévue), le liseré d'avancement en bas */
+  .runcard { order:1; position:relative; display:flex; flex-direction:column; min-width:0; border-radius:var(--r-m);
+    overflow:hidden; }
+  .runcard[hidden] { display:none; }
+  .rframe { position:relative; width:min(100%, calc(52svh * var(--ar, 1))); margin-inline:auto; aspect-ratio:var(--ar, 1);
+    background:var(--field); }
+  .rframe canvas { position:absolute; inset:0; width:100%; height:100%; image-rendering:pixelated; }
+  .rhud { display:flex; align-items:center; gap:10px; min-width:0; padding:10px 10px 8px 12px; }
+  .rtxt { flex:1; min-width:0; display:flex; flex-direction:column; line-height:1.3; }
+  .rtxt b { font-size:15px; font-weight:600; white-space:nowrap; }
+  .rtxt span { font-size:12.5px; color:var(--ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .reta { font-size:12.5px; color:var(--ink2); white-space:nowrap; }
+  .rbar { position:absolute; left:0; bottom:0; width:100%; height:3px; background:var(--accent); transform-origin:left;
+    transform:scaleX(.02); transition:transform .9s linear; }
+  .runcard .m-prompt { margin:0 12px 14px; font-size:14px; color:var(--ink2); }
+  .runcard .m-prompt:empty { display:none; }
+  .runcard.behind { order:3; flex-direction:row; align-items:center; margin-top:-8px; padding:8px; }
+  .runcard.behind .rframe { flex:none; width:52px; margin:0; aspect-ratio:1; border-radius:var(--r-s); overflow:hidden; }
+  .runcard.behind .rhud { flex:1; display:grid; grid-template-columns:minmax(0, 1fr) auto; column-gap:10px;
+    padding:0 0 0 10px; }
+  .runcard.behind .rtxt span { display:none; }        /* derrière : l'étape, et la fin prévue dessous */
+  .runcard.behind .reta { grid-column:1; grid-row:2; }
+  .runcard.behind .hud-x { grid-column:2; grid-row:1 / span 2; }
+  .runcard.behind :is(.m-prompt, .lotbadge) { display:none; }
+  .hud-x { flex:none; width:38px; height:38px; border-radius:var(--r-m); border:0; background:var(--surf-hi); color:var(--ink);
+    display:grid; place-items:center; cursor:pointer; }
+  .hud-x svg { width:18px; height:18px; }
+  .hud-x[hidden] { display:none; }
+  .lotbadge { position:absolute; z-index:2; left:12px; top:12px; padding:5px 11px; border-radius:var(--r-s); font-size:13px;
+    font-weight:700; color:var(--ink); background:var(--badge); font-variant-numeric:tabular-nums; pointer-events:none; }
+  .lotbadge[hidden] { display:none; }
+  /* pastille « +N en attente » au-dessus de la pile : la file de l'espace dans une feuille */
+  .pile-head { order:0; display:flex; justify-content:flex-end; }
+  .pile-head:has(#queueChip[hidden]) { display:none; }
+  #queueChip[hidden] { display:none; }
   .empty { display:grid; place-items:center; align-content:center; gap:12px; aspect-ratio:1; border-radius:var(--r-m); color:var(--ink2); text-align:center; padding:24px; }
   .empty svg { width:44px; height:44px; color:var(--ink3); }
   .empty p { margin:0; max-width:24ch; }
   /* ------------------------------------------------------------ pile du Labo : la carte du dessus et, devinées
      dessous, les deux suivantes ; ✕ (Jeter) et ✓ (Garder) sous la pile ; une carte qui part glisse de son côté */
   .pilezone { display:flex; flex-direction:column; gap:12px; overflow-x:clip; }   /* une carte balayée ne fait pas défiler la page */
-  .pile { display:grid; padding-bottom:20px; }
+  .pile { order:2; display:grid; padding-bottom:20px; }
   .pile:empty { display:none; }
   .pcard { grid-area:1/1; position:relative; display:flex; flex-direction:column; min-width:0; border-radius:var(--r-m); overflow:hidden;
     background:var(--surf); border:1px solid var(--line); box-shadow:var(--shadow); transform-origin:50% 100%;
@@ -404,7 +430,7 @@
   .pfail .qicon { color:var(--err); }
   .perr { margin:0; font-size:13px; color:var(--err); overflow-wrap:anywhere; }
   .pfail .btn svg { width:16px; height:16px; }
-  .pile-acts { display:flex; align-items:center; justify-content:center; gap:22px; }
+  .pile-acts { order:4; display:flex; align-items:center; justify-content:center; gap:22px; }
   .pile-acts[hidden], #pileEmpty[hidden] { display:none; }
   .pbtn { width:58px; height:58px; display:grid; place-items:center; border-radius:var(--r-m); cursor:pointer; color:var(--ink); }
   .pbtn svg { width:24px; height:24px; }
@@ -412,7 +438,7 @@
   .pbtn:disabled { opacity:.35; cursor:default; }
   .pbtn:active:not(:disabled) { transform:scale(.94); }
   .pcount { min-width:72px; text-align:center; font-size:12.5px; color:var(--ink2); }
-  #pileEmpty { aspect-ratio:auto; padding:40px 24px; }
+  #pileEmpty { order:5; aspect-ratio:auto; padding:40px 24px; }
   #pileEmpty small { color:var(--ink3); max-width:30ch; }
   /* bandeau Annuler d'un Jeter, sous la barre du haut : ✕ et ✓ restent libres pour la carte suivante */
   .undo { position:fixed; z-index:45; left:50%; top:calc(62px + env(safe-area-inset-top)); transform:translateX(-50%);
@@ -420,31 +446,6 @@
     border-radius:var(--r-m); font-size:15px; font-weight:600; }
   .undo[hidden] { display:none; }
   .undoing .toast { top:calc(122px + env(safe-area-inset-top)); }   /* un message ne cache pas Annuler */
-  .stage { position:relative; display:none; width:min(100%, calc(72svh * var(--ar, 1))); margin-inline:auto; aspect-ratio:1/1; border-radius:var(--r-m); overflow:hidden;
-    background:var(--field); box-shadow:0 30px 70px -30px rgba(0,0,0,.85), 0 0 0 1px var(--line); }
-  .stage img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
-  .stage img:not([src]), .stage img[src=""] { display:none; }
-  .stage img.reveal { animation:reveal 1.1s var(--ease) both; }
-  @keyframes reveal { from { opacity:0; filter:blur(24px) saturate(1.5); transform:scale(1.04); } to { opacity:1; filter:none; transform:none; } }
-  /* plaque mate en attente du premier aperçu */
-  .shimmer { position:absolute; inset:0; overflow:hidden; background:var(--field); }
-  .loader { position:absolute; inset:0; display:flex; align-items:flex-end; justify-content:center; padding:12px; }
-  .hud { display:flex; align-items:center; gap:10px; width:100%; max-width:440px; padding:8px 8px 8px 10px; border-radius:var(--r-m); color:var(--ink); }
-  .pring { flex:none; width:38px; height:38px; transform:rotate(-90deg); }
-  .pring circle, .isl svg circle { fill:none; stroke-width:3.5; }
-  .pring circle:first-child, .isl svg circle:first-child { stroke:var(--line-hi); }
-  .pring circle + circle, .isl svg circle + circle { stroke:var(--accent); stroke-linecap:butt; stroke-dasharray:100; stroke-dashoffset:98; transition:stroke-dashoffset .9s linear; }
-  .hud-txt { display:flex; flex-direction:column; flex:1; min-width:0; line-height:1.25; }
-  .hud-txt b { font-size:15px; font-variant-numeric:tabular-nums; }
-  .hud-txt span { font-size:12.5px; color:var(--ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .hud .eta { font-size:13.5px; font-weight:650; white-space:nowrap; font-variant-numeric:tabular-nums; }
-  .hud-x { flex:none; width:38px; height:38px; border-radius:var(--r-m); border:0; background:var(--surf-hi); color:var(--ink); display:grid; place-items:center; cursor:pointer; }
-  .hud-x svg { width:18px; height:18px; }
-  .bar { position:absolute; left:0; right:0; bottom:0; height:3px; display:none; }
-  .bar i { display:block; height:100%; transform:scaleX(0); transform-origin:left; background:var(--accent); transition:transform .9s linear; }
-  .lotbadge { position:absolute; z-index:2; left:12px; top:12px; padding:5px 11px; border-radius:var(--r-s); font-size:13px; font-weight:700; color:var(--ink);
-    background:var(--badge); font-variant-numeric:tabular-nums; pointer-events:none; }
-  .lotbadge[hidden] { display:none; }
   .meta:empty { display:none; }
   .m-prompt { margin:0 6px; font-size:15px; line-height:1.45; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .m-chips { display:flex; flex-wrap:wrap; gap:6px; margin:8px 4px 0; }
@@ -457,22 +458,7 @@
   .act:active { transform:scale(.96); }
   .act.danger { color:var(--err); }
 
-  /* ------------------------------------------------------------ île : la pastille d'état suit la génération en cours */
-  /* la bulle suit son contenu jusqu'à sa largeur maximale ; au-delà, « +N » seul (renderIsland), et en dernier recours
-     l'étape cède (points de suspension) : rien ne dépasse de la bulle */
-  .isl { display:none; align-items:center; gap:8px; min-width:0; white-space:nowrap; font-variant-numeric:tabular-nums; }
-  .isl svg { flex:none; width:20px; height:20px; transform:rotate(-90deg); }
-  .isl b { min-width:0; overflow:hidden; text-overflow:ellipsis; }
-  .isl span { flex:none; color:var(--ink2); font-weight:500; }
-  .island.run #status { display:none; } .island.run .isl { display:flex; }
-  .island::after { content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none; opacity:0;
-    box-shadow:0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), 0 6px 26px -6px color-mix(in srgb, var(--accent) 60%, transparent); }
-  .island.run::after { animation:breathe 2.8s ease-in-out infinite; }
-  @keyframes breathe { 50% { opacity:1; } }
-  .isl .isl-more { padding:1px 8px; border-radius:var(--r-s); background:var(--field); color:var(--ink); font-size:12.5px; font-weight:650; }
-  .isl .isl-more:empty { display:none; }
-
-  /* ------------------------------------------------------------ liste de la file (Labo) */
+  /* ------------------------------------------------------------ liste de la file (feuille de la file du Labo) */
   .qlist { display:grid; grid-template-columns:minmax(0, 1fr); gap:8px; margin-top:12px; }
   .qrow { display:flex; align-items:center; gap:12px; padding:8px; border-radius:var(--r-m); background:var(--field); border:1px solid var(--line); }
   .qicon { flex:none; width:44px; height:44px; border-radius:var(--r-s); object-fit:cover; }
@@ -545,13 +531,11 @@
   :is(.topbar h1, .sheet h2, .hist-head h2, .tabbar button > span:last-child, .empty p, .hempty) { font-family:var(--pixel);
     font-weight:500; letter-spacing:0; }
   .hempty .btn { font-family:var(--sans); }
-  :is(#go small, .estimate b, .opt small, .hud .eta, #islEta, #vCount, #ivCount, .facts .code, .tabcount, .plot, .pset, .pcount) {
+  :is(#go small, .estimate b, .opt small, .rtxt b, #runPhase, .reta, #vCount, #ivCount, .facts .code, .tabcount, .plot, .pset, .pcount) {
     font-family:var(--mono); }
   /* ------------------------------------------------------------ téléphone (html.lite) : effets allégés pour le GPU
      Rien de flou ni d'animé en fond : le halo et le grain sont fixes, et gardés. Les animations d'interface restent
      courtes. ?lite=1 ou ?lite=0 dans l'adresse force le choix. */
-  .lite .stage img.reveal { animation-name:reveal-lite; }
-  @keyframes reveal-lite { from { opacity:0; transform:scale(1.03); } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; } }
 </style>
 </head>
@@ -560,48 +544,21 @@
 <header class="topbar">
   <div class="brand"><img class="logo" src="/logo.svg" alt=""><h1>Chambre noire</h1></div>
   <button class="chipbtn mat" id="phoneBtn" hidden onclick="openSheet('engineSheet')" aria-label="Ouvrir depuis le téléphone"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="6.5" y="2.5" width="11" height="19" rx="3"/><path d="M10.5 18.5h3"/></svg><span>Téléphone</span></button>
-  <button class="chipbtn mat island" id="island" onclick="onIsland()" aria-label="État du moteur"><span id="status">connexion…</span><span class="isl" aria-live="polite"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="15" pathLength="100"/><circle id="islRing" cx="20" cy="20" r="15" pathLength="100"/></svg><b id="islStep"></b><span id="islEta"></span><span class="isl-more" id="islMore"></span></span></button>
+  <button class="chipbtn mat" id="statusChip" onclick="openSheet('engineSheet')" aria-label="État du moteur"><span id="status">connexion…</span></button>
   <button class="chipbtn mat" id="privExit" hidden onclick="privLock()" aria-label="Sortir de l'espace privé" title="Sortir de l'espace privé"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg><span>Sortir</span></button>
 </header>
 
 <main>
   <div class="pane active" id="pane-labo">
-  <div id="runZone">
-    <div id="ownZone">
-      <div class="stage" id="stage">
-        <div class="shimmer" id="shimmer"></div>
-        <img id="stageImg" alt="Image générée">
-        <span class="lotbadge" id="lotBadge" hidden></span>
-        <div class="loader" id="loader">
-          <div class="hud mat">
-            <svg class="pring" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16" pathLength="100"/><circle id="ringVal" cx="20" cy="20" r="16" pathLength="100"/></svg>
-            <div class="hud-txt"><b id="stepBig">Préparation</b><span id="phaseTxt"></span></div>
-            <span class="eta" id="etaTxt"></span>
-            <button class="hud-x" id="cancelLoader" aria-label="Annuler la génération"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-          </div>
-        </div>
-        <div class="bar" id="bar"><i></i></div>
-      </div>
-    </div>
-    <div id="runNow">
-      <div class="nowframe" id="nowFrame">
-        <div class="shimmer"></div>
-        <span class="qicon" id="nowIco"></span>
-        <div class="loader">
-          <div class="hud mat">
-            <svg class="pring" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16" pathLength="100"/><circle id="nowRing" cx="20" cy="20" r="16" pathLength="100"/></svg>
-            <div class="hud-txt"><b id="nowTitle"></b><span id="nowSub"></span></div>
-            <span class="eta" id="nowEta"></span>
-            <button class="hud-x" id="nowCancel" aria-label="Annuler la génération"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-          </div>
-        </div>
-      </div>
-      <p class="m-prompt" id="nowPrompt"></p>
-    </div>
-    <div class="runq" id="runQueue" hidden><h2 class="runq-head" id="queueNote"></h2><div class="qlist" id="queueList"></div></div>
-  </div>
-
   <section class="pilezone" aria-label="Pile à trier">
+    <div class="pile-head"><button class="chipbtn mat" id="queueChip" hidden onclick="openQueue()"></button></div>
+    <!-- génération en cours de l'espace, révélée en pixels (renderRunCard) -->
+    <article class="runcard mat" id="runCard" hidden>
+      <div class="rframe" id="runFrame"><canvas id="revealCanvas"></canvas><span class="lotbadge" id="lotBadge" hidden></span></div>
+      <div class="rhud"><div class="rtxt"><b id="runStep" aria-live="polite"></b><span id="runPhase"></span></div><span class="reta" id="runEta"></span><button class="hud-x" id="runCancel" aria-label="Annuler la génération"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <p class="m-prompt" id="runPrompt"></p>
+      <i class="rbar" id="runBar"></i>
+    </article>
     <div class="pile" id="pile"></div>
     <div class="pile-acts" id="pileActs" hidden><button class="pbtn mat" id="pileNo" aria-label="Jeter" title="Jeter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button><span class="pcount" id="pileCount"></span><button class="pbtn yes" id="pileYes" aria-label="Garder" title="Garder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
     <!-- pile vide : une cuve vide en pixels -->
@@ -744,6 +701,12 @@
   <div class="sheet-head"><h2 id="lotTitle">Lot</h2><button class="btn secondary small" onclick="closeSheet()">Fermer</button></div>
   <div class="lotsheet-grid" id="lotSheetGrid"></div>
   <button class="btn" onclick="closeSheet(); downloadLot()">Tout télécharger</button>
+</section>
+<section class="sheet mat" id="fileSheet" role="dialog" aria-modal="true" aria-labelledby="fileTitle">
+  <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
+  <div class="sheet-head"><h2 id="fileTitle">File d'attente</h2><button class="btn secondary small" onclick="closeSheet()">Fermer</button></div>
+  <p class="note" id="queueNote"></p>
+  <div class="qlist" id="queueList"></div>
 </section>
 <section class="sheet mat" id="promptSheet" role="dialog" aria-modal="true" aria-labelledby="promptTitle">
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
@@ -972,10 +935,12 @@ function tintOf(src){ if(secretUrl(src)) return Promise.resolve(null);
   im.onerror=()=>res(null); im.src=src; })); }
 const saturate=(c, k)=>{ const g=.2126*c[0]+.7152*c[1]+.0722*c[2]; return c.map(v=>Math.max(0, Math.min(255, g+(v-g)*k))); };
 let tintSeq=0;
+// couleur d'un jeton du :root en [r, g, b] (jeton illisible : noir)
+const cssToken = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const cssRgb = n => (cssToken(n).match(/^#(..)(..)(..)$/) || [0, '0', '0', '0']).slice(1).map(h=>parseInt(h, 16));
 async function syncThemeColor(){
-  const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-  const seq=++tintSeq, m=css('--void').match(/^#(..)(..)(..)$/);
-  let c=m ? m.slice(1).map(h=>parseInt(h, 16)) : [0, 0, 0];      // repli (jeton illisible) : noir
+  const css=cssToken, seq=++tintSeq;
+  let c=cssRgb('--void');
   // visionneuse : image floutée assombrie (.v-bg img), jamais dans l'espace privé, pour ne lire aucune image privée
   if(!inPrivate() && ivIndex<0 && vIndex>=0){
     const it=vList[vIndex], t=it && await tintOf(thumbOf(it));
@@ -994,12 +959,12 @@ TABS.forEach(b=>b.addEventListener('click',()=>{
   // (glissement d'onglet : l'animation d'arrivée est reposée après ; sinon elle rejouerait à chaque retour)
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active', 'in-l', 'in-r')); mode=b.dataset.pane; $('pane-'+mode).classList.add('active');
   document.body.className='m-'+mode; placeLens(); if(mode==='tirages') loadHistory(); suggestRatio();
-  renderQueue(); renderRun(); }));
+  renderQueue(); renderRunCard(); }));
 document.body.className='m-'+mode; placeLens();     // ouverture sur le Labo
 // glisser horizontalement sur la page : onglet voisin, sauf sur le champ de création (dessin, rangées qui défilent,
-// texte en cours de saisie compris) et sur la pile (balayage des cartes)
+// texte en cours de saisie compris), sur la carte en cours et sur la pile (balayage des cartes)
 (function tabSwipe(){
-  const main=document.querySelector('main'), SKIP='#composer, #pile';
+  const main=document.querySelector('main'), SKIP='#composer, #pile, #runCard';
   let t0=null;
   main.addEventListener('touchstart', e=>{
     t0 = e.touches.length===1 && !openedSheet && !e.target.closest(SKIP)
@@ -1031,8 +996,13 @@ let statusTimer=null, queueState=[], queueAt=0;   // file de l'espace de l'appar
 const fmtVersion = v => v ? [v.commit, v.branch, v.date && v.date.split('-').reverse().join('/')].filter(Boolean).join(' · ') : '';
 const staleServer = s => s.server_version && s.version && s.server_version.server && s.version.server
   && s.server_version.server!==s.version.server ? 'à relancer : son code a changé depuis son lancement' : '';
+// spaceEpoch : change quand la page quitte l'espace privé sans attendre /api/status (« Sortir », privLock) ; une
+// réponse demandée avant, qui dirait encore l'espace ouvert, n'est pas appliquée : une nouvelle est demandée
+let spaceEpoch=0;
 async function refreshStatus(){
+  const epoch=spaceEpoch;
   try{ const s=await (await fetch('/api/status')).json(); const el=$('status');
+    if(epoch!==spaceEpoch) return refreshStatus();
     queueState=s.queue||[]; queueAt=Date.now();
     // adresse et code d'accès pour le téléphone : envoyés seulement quand la page est ouverte sur le Mac
     $('phone').hidden=$('phoneBtn').hidden=!s.phone; if(s.phone) facts('phoneFacts', [['Adresse', s.phone.urls[0]], ...s.phone.urls.slice(1).map(u=>['ou', u]), ['Code', s.phone.code, 'code']]);
@@ -1044,8 +1014,8 @@ async function refreshStatus(){
       ['File d\'attente', s.queued ? s.queued+' en attente' : ''], ['Estimations', !s.estimates ? '' : calibrated ? 'calibrées sur '+s.estimates.samples+' mesure'+(s.estimates.samples>1?'s':'') : 'non calibrées'],
       ['Version', fmtVersion(s.version)], ['Serveur', staleServer(s)]]); }
   catch(e){ $('status').textContent='Hors ligne'; $('status').className='err'; facts('engineFacts', [['État', 'serveur injoignable']]); }
-  renderIsland(); renderQueue(); renderRun();
-  clearTimeout(statusTimer);                       // un appel hors du rythme (lancement, île) remplace le suivant prévu
+  renderRunTab(); renderQueue(); renderRunCard();
+  clearTimeout(statusTimer);                       // un appel hors du rythme (lancement, annulation) remplace le suivant prévu
   statusTimer=setTimeout(refreshStatus, queueState.length || pageJobs.some(isActive) ? 2000 : 5000);
 }
 refreshStatus();
@@ -1250,19 +1220,22 @@ const THUMB_SIDE = 320;                           // côté le plus long des min
 const dropLink = a => { a.removeAttribute('href'); a.removeAttribute('download'); };   // lien de téléchargement retiré
 // aperçus (/api/job/) compris : dans l'espace privé, la page ne montre que ceux des générations privées
 const secretUrl = u => !!u && (u.startsWith('/api/private/') || u.startsWith('/api/job/'));
-function forgetPrivateImages(){
-  for(const [u, e] of [...ready]) if(secretUrl(u)){ ready.delete(u); if(e.im===undefined) e.el.src=''; }   // chargement abandonné
+// chargements en cours d'images de l'espace privé (et d'aperçus) abandonnés : rien n'arrive après la sortie, et rien
+// n'est encore demandé quand la session se ferme (privLock)
+function abortPrivateLoads(){ for(const [u, e] of [...ready]) if(secretUrl(u) && e.im===undefined){ ready.delete(u); e.el.src=''; } }
+function forgetPrivateImages(){ if(reveal.img) clearReveal();   // canevas de la carte en cours (aperçus : /api/job/)
+  abortPrivateLoads(); for(const u of [...ready.keys()]) if(secretUrl(u)) ready.delete(u);
   document.querySelectorAll('img').forEach(i=>{   // affichée, ou attendue (chargement en cours : ignorée à son arrivée)
     if(secretUrl(i.getAttribute('src')) || secretUrl(i.want)) clearImage(i); });
   document.querySelectorAll('[href]').forEach(a=>{   // liens de téléchargement, et leur nom de fichier (prive_<id>)
     if(secretUrl(a.getAttribute('href'))) dropLink(a); }); }
 
-// ------------------------------------------------------------ générations de la page, haut du Labo, île et file
-// La page suit les générations qu'elle a lancées (ou reprises après un rechargement), dans l'ordre : pageJobs. Le Labo
-// en montre une en haut (shown) : celle qui tourne, sinon la prochaine ; finie, son image arrive dans la pile ;
-// une génération d'un autre appareil de l'espace qui tourne y prend sa place (renderRun), et la file de l'espace suit.
-// L'île et l'onglet Labo résument la file de l'espace où l'on est, tous appareils confondus (queue de /api/status) ;
-// un appui sur l'île mène à la page. Chaque génération garde les réglages de son lancement.
+// ------------------------------------------------------------ générations de la page, carte en cours et file
+// La page suit les générations qu'elle a lancées (ou reprises après un rechargement), dans l'ordre : pageJobs. La carte
+// en cours du Labo (runNow, renderRunCard) en montre une (shown) : celle qui tourne, sinon la prochaine ; finie, son
+// image arrive dans la pile ; une génération d'un autre appareil de l'espace qui tourne y prend sa place. La carte, la
+// pastille « +N en attente » et l'onglet Labo résument la file de l'espace où l'on est, tous appareils confondus (queue
+// de /api/status). Chaque génération garde les réglages de son lancement.
 const pageJobs=[];
 let shown=null, polling=false;
 // générations normales lancées depuis ce navigateur (identifiants retenus) : seules reprises après un rechargement ;
@@ -1276,11 +1249,10 @@ const isActive = p => ['queued','running'].includes(p.j.status);
 // lot d'une campagne (une image par photo) ou de variantes : son marqueur campaign ; un lot d'avant le marqueur (journal
 // ancien, serveur pas encore relancé) : campagne s'il est du mode Éditer
 const isCampaignLot = (lot, lotMode) => !!lot && (lot.campaign ?? lotMode==='edit');
-// génération de l'espace affiché (privée dans l'espace privé, normale hors de lui) : le haut du Labo, la
-// file et l'île ne parlent que de celles-là, comme /api/status. Dans l'espace privé, les générations
+// génération de l'espace affiché (privée dans l'espace privé, normale hors de lui) : la carte en cours et la file ne
+// parlent que de celles-là, comme /api/status. Dans l'espace privé, les générations
 // publiques de la page restent suivies en mémoire, hors de l'écran ; les privées quittent la page à la sortie.
 const ofSpace = p => !!p.private===inPrivate();
-const spaceActive = () => pageJobs.some(p=>ofSpace(p) && isActive(p));
 // génération active à montrer parmi list : celle qui tourne, sinon la prochaine dans l'ordre de calcul (une génération
 // passée en tête passe devant celles lancées avant elle), à rang égal la plus ancienne
 const firstActive = list => list.filter(isActive).sort((a, b)=>turnOf(a)-turnOf(b))[0];
@@ -1290,9 +1262,6 @@ const nextActive = () => firstActive(pageJobs.filter(ofSpace));
 const lotOf = p => p && p.lot ? pageJobs.filter(q=>q.lot && q.lot.id===p.lot.id) : [];
 const ordinal = n => n===1 ? '1re' : n+'e';
 const kindOf = m => m==='edit' ? 'edit' : (m==='mask' || m==='annot') ? 'mask' : 't2i';   // nature d'un mode (icônes)
-function setStageRatio(w, h){ $('stage').style.aspectRatio=w+'/'+h; $('stage').style.setProperty('--ar', w/h); }
-function showLoader(){ $('stage').style.display='block'; $('loader').style.display='flex'; $('shimmer').style.display='block'; $('bar').style.display='block'; }
-function hideStage(){ clearImage($('stageImg')); $('stageImg').job=null; $('stage').style.display='none'; }
 const forgetJob = id => fetch('/api/job/'+id+'/forget', {method:'POST', headers:{'Content-Type':'application/json'}}).catch(()=>{});
 // progression d'une génération de la page : part faite (0 à 1), titre, détail, temps restant avant son image
 function progress(p){
@@ -1311,33 +1280,12 @@ function ownOf(e){ return e.id ? pageJobs.find(p=>p.id===e.id) : undefined; }
 function entryLeft(e){ const p=ownOf(e); if(p && p.j.status==='running') return progress(p).remaining;
   return e.status==='running' ? Math.max(0, e.estimate-(e.elapsed||0)-(Date.now()-queueAt)/1000) : e.estimate; }
 function waitBefore(n){ return queueState.filter(e=>e.position<n).reduce((t, e)=>t+entryLeft(e), 0); }
-// met une génération active de la page en haut du Labo (ou rien), puis le haut de la page suit (renderRun)
-function show(p){ showOwn(p); renderRun(); }
-function showOwn(p){                               // étape, temps restant, aperçus et annulation ; une finie n'y va pas
-  shown=p && isActive(p) ? p : null; if(!shown) return hideStage();
-  $('lotBadge').hidden=!p.lot; if(p.lot) $('lotBadge').textContent=`${isCampaignLot(p.lot, p.j.mode) ? 'Photo' : 'Image'} ${p.lot.rank} sur ${p.lot.size}`;
-  const img=$('stageImg'), was=img.job; img.job=p.id;   // img.job : génération dont la zone montre l'aperçu
-  if(p.w && p.h) setStageRatio(p.w, p.h);
-  showLoader();
-  if(was!==p.id){ img.className=''; clearImage(img); $('stage').classList.remove('has-preview'); p.pv=0; }
-  else if($('stage').classList.contains('has-preview')) $('shimmer').style.display='none';   // son aperçu reste
-  renderProgress(); }
 // image d'une génération finie de la page (même forme qu'une entrée de /api/history), pour la vignette de sa case
 // dans la carte de son lot : son vrai mode et ses images d'entrée, que dit son suivi
 function pageItem(p){ const r=p.result;
   return { name:r.name, time:Math.round(p.j.finished||Date.now()/1000), mode:p.j.mode||'t2i', prompt:p.prompt, width:r.dims&&r.dims[0], height:r.dims&&r.dims[1],
     steps:p.j.total, seconds:p.j.seconds, seed:p.j.seed, lot:p.lot, page:p,
     private:!!r.item, id:r.item, inputs:p.j.inputs||[] }; }
-function renderProgress(){                         // image en cours en haut du Labo : étape, temps restant, aperçu
-  const p=shown; if(!p || !isActive(p)) return;
-  const j=p.j, pr=progress(p), pct=Math.max(pr.frac, 0.02)*100;
-  $('stepBig').textContent=pr.title; $('phaseTxt').textContent=pr.sub; $('etaTxt').textContent='≈ '+fmt(pr.remaining);
-  $('bar').firstElementChild.style.transform=`scaleX(${pct/100})`; $('ringVal').style.strokeDashoffset=(100-pct).toFixed(1);
-  if(j.preview_version && j.preview_version!==p.pv && (!p.private || inPrivate())){ p.pv=j.preview_version; const img=$('stageImg');   // aperçu privé : dans l'espace seulement
-    img.style.display='block';                     // l'aperçu d'avant reste jusqu'au suivant, chargé
-    const url='/api/job/'+j.id+'/preview?v='+p.pv;
-    showImage(img, url, {keep:true, once:true, then:ok=>{ if(!ok || shown!==p) return;
-      img.className='preview'; $('stage').classList.add('has-preview'); $('shimmer').style.display='none'; }}); } }
 // ------------------------------------------------------------ pile du Labo
 // Les images terminées de l'espace qui attendent d'être triées (/api/pile, ou /api/private/pile dans l'espace privé),
 // la dernière arrivée sur le dessus, les mêmes sur tous les appareils : relue au chargement, au changement d'espace,
@@ -1401,10 +1349,10 @@ function failCard(p, k){
 // la carte du dessus et les deux suivantes (devinées dessous), les boutons ✕ et ✓, l'état vide, la pastille de l'onglet
 function renderPile(){
   const fails=pileFails(), items=pileView(), list=[...fails.map(p=>({fail:p})), ...items.map(it=>({it}))];
-  $('pileEmpty').hidden=list.length>0 || !pileRead; $('pileActs').hidden=!list.length;
+  $('pileActs').hidden=!list.length;
   $('pileYes').disabled=!!fails.length;            // échec en tête : rien à garder, ✕ le retire
   $('pileCount').textContent=items.length ? items.length+' à trier' : '';
-  renderIsland();
+  renderRunTab(); renderRunCard();
   const shownNow=list.slice(0, 3), key=JSON.stringify(shownNow.map(e=>e.fail ? 'f'+e.fail.id : pileTag(e.it)));
   if(key===pileShown) return; pileShown=key; flying=false;   // (une carte qui partait a quitté l'écran)
   dropSwipe();                                     // un geste ne trie jamais une carte qu'il ne tient pas
@@ -1518,77 +1466,130 @@ function notifyDone(p){
   const ok=l.filter(q=>q.result).length, ko=l.filter(q=>q.j.status==='failed').length;
   if(ok) toast(`Lot prêt · ${ok} image${ok>1 ? 's' : ''}${ko ? `, ${ko} en échec` : ''}`, '', true);
   else if(ko) toast('Échec du lot', 'err', true); }
-// état de l'espace pour l'île et l'onglet Labo : génération en cours de l'espace (de cette page : ses étapes ; d'un
-// autre appareil : estimation), sinon « En attente » et la durée jusqu'au début de la première (travail caché compris)
+// état de l'espace pour l'anneau de l'onglet Labo : génération en cours de l'espace (de cette page : ses étapes ;
+// d'un autre appareil : estimation)
 const entryFrac = e => Math.min(.97, 1-entryLeft(e)/Math.max(e.estimate, 1));   // progression estimée d'une entrée
 const firstWait = next => waitBefore(next.position)+(next.ahead||0);   // attente avant le début d'une entrée
 const ringOffset = frac => (100-Math.max(frac, .02)*100).toFixed(1);    // anneau (pathLength 100) rempli à frac
 function spaceNow(){
-  const own=pageJobs.find(p=>ofSpace(p) && p.j.status==='running'), run=queueState.find(e=>e.status==='running'), next=queueState.find(e=>e.status==='queued');
-  let frac=.02, label='En attente', eta=next ? '≈ '+fmt(firstWait(next)) : '';
-  if(own){ const pr=progress(own); frac=pr.frac; label=own.j.step && own.j.phase!=='décodage VAE' ? `${own.j.step}/${own.j.total}` : pr.title; eta='≈ '+fmt(pr.remaining); }
-  else if(run){ frac=entryFrac(run); label='En cours'; eta='≈ '+fmt(entryLeft(run)); }
-  return { on:queueState.length>0 || spaceActive(), running:!!(own || run), frac, label, eta }; }
+  const own=pageJobs.find(p=>ofSpace(p) && p.j.status==='running'), run=queueState.find(e=>e.status==='running');
+  return { running:!!(own || run), frac:own ? progress(own).frac : run ? entryFrac(run) : .02 }; }
 // onglet Labo : nombre d'images de la pile de l'espace, anneau de la génération qui tourne
-function renderRunTab(now){
-  const count=pileSize();
+function renderRunTab(){
+  const now=spaceNow(), count=pileSize();
   $('runCount').hidden=!count; $('runCount').textContent=count || '';
   $('runRing').style.strokeDashoffset=now.running ? ringOffset(now.frac) : '100';
   $('runRing').style.visibility=now.running ? '' : 'hidden'; }   // vide : pas même le bout du trait
-// île : l'état de l'espace et « +N en attente » ; rien dans l'espace : éteinte (l'onglet Labo suit le même état)
-function renderIsland(){
-  const now=spaceNow(); renderRunTab(now);
-  $('island').classList.toggle('run', now.on); if(!now.on) return;
-  const {frac, label, eta}=now, waiting=queueState.filter(e=>e.status==='queued').length;
-  $('islRing').style.strokeDashoffset=ringOffset(frac); $('islStep').textContent=label; $('islEta').textContent=eta;
-  $('islMore').textContent = waiting ? `+${waiting} en attente` : '';
-  const isl=$('island'), step=$('islStep');      // trop étroit (étape tronquée ou contenu qui dépasse) : « +N » seul
-  if(waiting && (step.scrollWidth>step.clientWidth+1 || isl.scrollWidth>isl.clientWidth+1)) $('islMore').textContent=`+${waiting}`; }
-function onIsland(){                               // file non vide : le Labo ; sinon : panneau Moteur
-  if(!queueState.length && !spaceActive()) return openSheet('engineSheet');
-  showLabo('top'); refreshStatus(); }
-// haut du Labo. La génération de la page qui tourne (elle remplace dans la zone de la page #ownZone une
-// génération qui attend ; une génération finie n'y reste pas, son image arrive dans la pile), ou à défaut ce que
-// montre cette zone (show). Sinon, une génération d'un autre appareil de l'espace qui tourne : son texte, un cadre
-// aux proportions demandées avec l'icône de sa nature, une progression
-// estimée, sans aperçu, et l'annulation si l'appareil y a droit (entrée avec id). Sinon, des générations de l'espace
-// attendent derrière une génération cachée de l'autre espace (ahead) : « En attente » et la durée jusqu'au début de la
-// première, comme l'île. Quitter ces deux cas vide #runNow (rien d'une génération privée n'y reste après la sortie).
-let nowKey='';
-function renderRun(){
-  const ownRun=pageJobs.find(p=>ofSpace(p) && p.j.status==='running');
-  if(ownRun && shown!==ownRun && !(shown && shown.j.status==='running')) return show(ownRun);   // show rappelle renderRun
-  const run=queueState.find(e=>e.status==='running'), next=queueState.find(e=>e.status==='queued');
-  const other=!ownRun && (run ? !ownOf(run) : !!(next && next.ahead));
-  $('runZone').classList.toggle('other', other);
-  if(!other){ if(nowKey){ nowKey=''; $('nowFrame').style.removeProperty('--ar'); $('nowIco').innerHTML='';
-      ['nowTitle', 'nowSub', 'nowEta', 'nowPrompt'].forEach(id=>$(id).textContent=''); $('nowCancel').dataset.id=''; }
-    return; }
-  const e=run, key=e ? e.id+(e.width||'')+'×'+(e.height||'') : 'wait';
-  if(key!==nowKey){ nowKey=key;                    // cadre et icône redessinés seulement quand la génération change
-    $('nowFrame').style.setProperty('--ar', e ? (e.width||1)/(e.height||1) : 1);
-    $('nowIco').innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-      stroke-linejoin="round">${e ? QICON[kindOf(e.mode)] : QICON.wait}</svg>`; }
-  if(e){ $('nowTitle').textContent='En cours'; $('nowEta').textContent='≈ '+fmt(entryLeft(e));
-    $('nowSub').textContent=[MODE_LABELS[e.mode]||e.mode, e.width ? e.width+'×'+e.height : '', e.steps ? e.steps+' étapes' : ''].filter(Boolean).join(' · ');
-    $('nowPrompt').textContent=e.prompt||''; }
-  else { const n=queueState.filter(x=>x.status==='queued').length;
-    $('nowTitle').textContent='En attente'; $('nowEta').textContent='≈ '+fmt(firstWait(next));
-    $('nowSub').textContent=`le Mac termine une autre génération · ${n} en attente`; $('nowPrompt').textContent=''; }
-  $('nowRing').style.strokeDashoffset=ringOffset(e ? entryFrac(e) : 0);
-  $('nowCancel').hidden=!(e && e.id); $('nowCancel').dataset.id=e && e.id || ''; }
-$('nowCancel').onclick=async ()=>{ const id=$('nowCancel').dataset.id; if(!id) return; $('nowCancel').disabled=true;
-  log('annulation demandée'); await postJson('/api/job/'+id+'/cancel', {}).catch(()=>{});
-  $('nowCancel').disabled=false; refreshStatus(); };
-// icônes de la nature d'une demande (file, haut de la page) ; annulation et « Passer en tête » partout dans l'espace
+// ------------------------------------------------------------ carte en cours : la génération se révèle en pixels
+// Ce que montre la carte (runNow) : la génération de la page qui tourne ; sinon celle d'un autre appareil de l'espace,
+// sans aperçu ; sinon la prochaine génération de la page, en attente ; sinon, des générations de l'espace attendent
+// derrière une génération cachée de l'autre espace (« En attente », jusqu'au début de la première). Sur le dessus quand
+// la pile est vide ; sinon juste derrière elle, réduite à un bandeau au bord de la pile (behind). Elle ne se balaie
+// pas ; « Annuler » demande confirmation. shown : la génération de la page montrée, sinon null. Rien d'une génération
+// privée n'y reste après la sortie de l'espace (changedSpace la redessine, forgetPrivateImages efface le canevas).
+function runNow(){
+  const ownRun=pageJobs.find(p=>ofSpace(p) && p.j.status==='running'); if(ownRun) return {p:ownRun};
+  const run=queueState.find(e=>e.status==='running'); if(run && !ownOf(run)) return {e:run};
+  const next=nextActive(); if(next) return {p:next};
+  const wait=queueState.find(e=>e.status==='queued');
+  return wait && wait.ahead ? {wait} : null; }
+const lotRankLabel = p => `${isCampaignLot(p.lot, p.j.mode) ? 'Photo' : 'Image'} ${p.lot.rank} sur ${p.lot.size}`;
+function renderRunCard(){
+  const now=runNow(), card=$('runCard'); shown=now && now.p || null;
+  const waiting=queueState.filter(e=>e.status==='queued').length;   // « +N en attente » : la file de l'espace
+  $('queueChip').hidden=!waiting; $('queueChip').textContent=waiting ? `+${waiting} en attente` : '';
+  card.hidden=!now; card.classList.toggle('behind', !!now && (pileFails().length>0 || pileSize()>0));
+  $('pileEmpty').hidden=!!now || pileFails().length>0 || pileSize()>0 || !pileRead;   // rien à trier ni en cours
+  if(!now){ if(reveal.key) clearReveal();
+    ['runStep', 'runPhase', 'runEta', 'runPrompt'].forEach(id=>$(id).textContent=''); $('runCancel').dataset.id='';
+    $('lotBadge').hidden=true; return; }
+  const p=now.p, e=now.e;
+  let step, phase, left, frac, w, h, prompt, cancel;
+  if(p){ const pr=progress(p); step=pr.title; phase=pr.sub; left=pr.remaining; frac=pr.frac; w=p.w; h=p.h; prompt=p.prompt;
+    cancel=p.id; }
+  else if(e){ step='En cours'; phase=[MODE_LABELS[e.mode]||e.mode, e.width ? e.width+'×'+e.height : '',
+      e.steps ? e.steps+' étapes' : ''].filter(Boolean).join(' · ');
+    left=entryLeft(e); frac=entryFrac(e); w=e.width; h=e.height; prompt=e.prompt||''; cancel=e.id; }
+  else { step='En attente'; phase=`le Mac termine une autre génération · ${waiting} en attente`;
+    left=firstWait(now.wait); frac=0; prompt=''; cancel=null; }
+  $('runStep').textContent=step; $('runPhase').textContent=phase;
+  $('runEta').textContent=(p || e ? 'fin vers ' : 'début vers ')+hhmm(left); $('runPrompt').textContent=prompt;
+  $('runBar').style.transform=`scaleX(${Math.max(frac, .02).toFixed(3)})`;
+  $('runFrame').style.setProperty('--ar', w && h ? w/h : 1);
+  $('lotBadge').hidden=!(p && p.lot); if(p && p.lot) $('lotBadge').textContent=lotRankLabel(p);
+  $('runCancel').hidden=!cancel; $('runCancel').dataset.id=cancel || '';
+  // révélation : celle de cette génération (une autre la recommence) ; aperçus pour une génération de la page
+  const key=p ? 'p'+p.id : e ? 'e'+(e.id || e.position) : 'wait';
+  if(key!==reveal.key) startReveal(key); else sizeReveal() && redrawReveal();
+  if(p && p.j.preview_version && (!p.private || inPrivate())) revealPreview(p); }
+$('runCancel').onclick=async ()=>{ const id=$('runCancel').dataset.id, priv=inPrivate(); if(!id) return;
+  if(!await ask('Annuler cette génération ?', 'Le calcul en cours ou en attente sera perdu.', 'Annuler la génération', true)) return;
+  if(priv!==inPrivate()) return;                   // espace changé pendant la question : rien ne part
+  // finie pendant la question (la carte montre une autre génération), ou refusée : rien n'est annulé, on le dit
+  const r=$('runCancel').dataset.id===id ? await postJson('/api/job/'+id+'/cancel', {}).catch(()=>null) : null;
+  if(priv!==inPrivate()) return;
+  if(r && r.ok) log('annulation demandée', priv); else toast('Déjà terminée');
+  refreshStatus(); };
+// la file de l'espace en cartes, dans sa feuille
+function openQueue(){ openSheet('fileSheet'); queueHtml=''; renderQueue(); }
+// Révélation sur le canevas de la carte : avant le premier aperçu, des carrés s'allument au hasard ; chaque aperçu
+// (preview_version, tous les PREVIEW_EVERY pas) est dessiné réduit puis agrandi sans lissage, en blocs d'autant plus
+// fins que la génération avance (de REVEAL_COARSE à REVEAL_FINE px selon step / total). L'image finale arrive nette sur
+// la carte du dessus de la pile. Allégée en html.lite (moins de carrés, plus lents), immobile si le système réduit les
+// animations, et sans dessin tant que la carte, le Labo ou la page sont cachés. reveal : la génération révélée (key),
+// les couleurs des carrés (rgb), son dernier aperçu (img, pv : sa version ; une adresse /api/job/, effacée à la sortie
+// de l'espace privé), la part faite à cet aperçu (frac) et le minuteur des carrés.
+const REVEAL_COARSE=24, REVEAL_FINE=4, NOISE_CELL=10;
+const blankReveal = () => ({key:'', rgb:null, img:null, pv:0, frac:0, timer:null});
+let reveal=blankReveal();
+const lite = () => document.documentElement.classList.contains('lite');
+function sizeReveal(){ const c=$('revealCanvas'), r=c.getBoundingClientRect(), dpr=Math.min(devicePixelRatio || 1, 2);
+  const w=Math.round(r.width*dpr), h=Math.round(r.height*dpr);
+  if(c.width===w && c.height===h) return false;
+  c.width=w; c.height=h; return true; }
+function clearReveal(){ clearInterval(reveal.timer); reveal=blankReveal();
+  const c=$('revealCanvas'); c.width=c.height=0; }
+function startReveal(key){ clearReveal(); reveal.key=key; reveal.rgb=[cssRgb('--void'), cssRgb('--accent')];
+  sizeReveal(); drawNoise();
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches)
+    reveal.timer=setInterval(drawNoise, lite() ? 420 : 160); }
+function redrawReveal(){ if(reveal.img) drawMosaic(); else drawNoise(); }
+// carrés au hasard, couleur de l'accent, sur un fond qui s'éteint doucement
+function drawNoise(){ if(reveal.img || $('runCard').hidden || mode!=='labo' || document.hidden) return;
+  const c=$('revealCanvas'); if(!c.width) sizeReveal();
+  const x=c.getContext('2d'), [[vr, vg, vb], [ar, ag, ab]]=reveal.rgb;
+  const cell=Math.max(4, Math.round(NOISE_CELL*c.width/Math.max(1, c.getBoundingClientRect().width)));
+  const nx=Math.ceil(c.width/cell), ny=Math.ceil(c.height/cell);
+  x.fillStyle=`rgba(${vr},${vg},${vb},.18)`; x.fillRect(0, 0, c.width, c.height);
+  const n=Math.max(3, Math.round(nx*ny/(lite() ? 60 : 30)));
+  for(let k=0; k<n; k++){ x.fillStyle=`rgba(${ar},${ag},${ab},${(.12+Math.random()*.45).toFixed(2)})`;
+    x.fillRect(Math.floor(Math.random()*nx)*cell, Math.floor(Math.random()*ny)*cell, cell, cell); } }
+// l'aperçu en mosaïque : réduit à un bloc par carré (cadré comme la carte), puis agrandi sans lissage
+function drawMosaic(){ const im=reveal.img, c=$('revealCanvas'); if(!im || !c.width) return;
+  const scale=c.width/Math.max(1, c.getBoundingClientRect().width);
+  const block=Math.max(1, Math.round((REVEAL_COARSE-(REVEAL_COARSE-REVEAL_FINE)*reveal.frac)*scale));
+  const nx=Math.max(1, Math.ceil(c.width/block)), ny=Math.max(1, Math.ceil(c.height/block));
+  const iw=im.naturalWidth, ih=im.naturalHeight, cr=c.width/c.height;
+  const sw=Math.min(iw, ih*cr), sh=Math.min(ih, iw/cr);
+  const t=document.createElement('canvas'); t.width=nx; t.height=ny;
+  t.getContext('2d').drawImage(im, (iw-sw)/2, (ih-sh)/2, sw, sh, 0, 0, nx, ny);
+  const x=c.getContext('2d'); x.imageSmoothingEnabled=false; x.clearRect(0, 0, c.width, c.height);
+  x.drawImage(t, 0, 0, nx*block, ny*block); }
+// nouvel aperçu d'une génération de la page : décodé à part (preload), puis dessiné s'il est toujours celui attendu
+function revealPreview(p){ const v=p.j.preview_version; if(v===reveal.pv || p.private && leavingPrivate) return; reveal.pv=v;
+  const url='/api/job/'+p.j.id+'/preview?v='+v, key=reveal.key, frac=p.j.total ? (p.j.step||0)/p.j.total : 0, e=preload(url);
+  e.p.then(im=>{ if(ready.get(url)===e) ready.delete(url);   // servi une fois : il ne reste pas parmi les images prêtes
+    if(!im || reveal.key!==key || reveal.pv!==v || (p.private && !inPrivate())) return;
+    clearInterval(reveal.timer); reveal.img=im; reveal.frac=frac; drawMosaic(); }); }
+// icônes de la nature d'une demande (cartes de la file) ; annulation et « Passer en tête » partout dans l'espace
 // de la génération
 const QICON = {
   t2i:'<path d="M11 3.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7Z"/>',
   edit:'<rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/>',
-  mask:'<path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/>',
-  wait:'<circle cx="12" cy="12" r="8.5"/><path d="M12 8v4.2l2.6 1.6"/>' };
+  mask:'<path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/>' };
 // File de l'espace (/api/status) en cartes : une carte par demande, génération seule ou toutes les entrées d'un même lot
-// (lot.id), dans l'ordre de calcul. La génération en cours n'a pas de carte (elle est en haut de la page),
+// (lot.id), dans l'ordre de calcul, dans la feuille de la file. La génération en cours n'a pas de carte (elle est sur
+// la carte en cours),
 // sauf dans la carte de son lot. Une génération privée, dans l'espace privé, a sa carte complète comme une normale. Le
 // temps restant avant une image compte les entrées devant elle et le travail caché de l'autre espace (ahead).
 // openLots : cartes de lot dépliées ; lotCancels : rangs annulés pendant la vie de la page, par lot (une image qui n'est
@@ -1656,12 +1657,11 @@ function renderQueue(){
   const keys=new Set(cards.map(c=>c.key));         // lots sans carte : plus rien d'eux en mémoire
   [...openLots].forEach(k=>{ if(!keys.has(k)) openLots.delete(k); });
   [...lotCancels.keys()].forEach(k=>{ if(!keys.has(k) && !pageJobs.some(p=>p.lot && p.lot.id===k && isActive(p))) lotCancels.delete(k); });
-  $('runQueue').hidden=!cards.length;
-  $('queueNote').textContent = n ? `${n} en attente · file vide vers ${hhmm(total)} (≈ ${fmt(total)})` : '';
-  // cartes dessinées sur le Labo seulement (rendu à son ouverture) : ailleurs, rien à refaire toutes les 2 s
-  // (vignettes d'entrée en data URL), et rien de l'espace quitté ne reste dans la liste cachée ; sur le Labo, redessinées
-  // seulement quand elles changent (la page où l'on tape)
-  const html = mode==='labo' ? cards.map(c=>queueCard(c, own)).join('') : '';
+  $('queueNote').textContent = n ? `${n} en attente · file vide vers ${hhmm(total)} (≈ ${fmt(total)})` : 'Rien en attente.';
+  // cartes dessinées feuille ouverte seulement (rendue à son ouverture) : sinon, rien à refaire toutes les 2 s
+  // (vignettes d'entrée en data URL), et rien de l'espace quitté ne reste dans la liste cachée ; ouverte, redessinées
+  // seulement quand elles changent
+  const html = openedSheet===$('fileSheet') ? cards.map(c=>queueCard(c, own)).join('') : '';
   if(html!==queueHtml){ queueHtml=html; $('queueList').innerHTML=html; } }
 let queueHtml='';                                  // cartes de la file affichées (renderQueue)
 $('queueList').addEventListener('click', async ev=>{
@@ -1683,11 +1683,7 @@ function track(j, info){
       est:info.est||estSeconds, stepSec:info.stepSec||stepSeconds, vaeSec:info.vaeSec||vaeSeconds, result:null, pv:0,
       adopted:!!info.adopted });                    // adopted : reprise de la file (espace privé), pas lancée ici
     if(!j.private) saveOwn(); }
-  // une génération reprise de la file (adopted) ne remplace pas ce qui est montré, ni une génération de l'autre espace
-  // (demande publique acceptée après l'entrée dans l'espace privé : hors de l'écran)
-  if((info.adopted && shown) || !ofSpace(p)) renderRun();
-  else show(nextActive());
-  renderIsland(); pollJobs(); }
+  renderRunCard(); renderRunTab(); pollJobs(); }
 async function pollJobs(){
   if(polling) return; polling=true;
   try{ while(pageJobs.some(isActive)){ await sleep(1000); let ended=false;
@@ -1699,8 +1695,8 @@ async function pollJobs(){
         if(!r.ok && p.private){ drop(p); ended=true; continue; }
         p.j = r.ok ? await r.json() : {...p.j, status:'failed', error:'génération introuvable (serveur relancé ?)'};
         if(!isActive(p)){ finish(p); ended=true; } }
-      if(ended){ saveOwn(); refreshStatus(); }     // l'île et la file suivent tout de suite (la suivante a démarré)
-      renderProgress(); renderIsland(); renderRun(); } }
+      if(ended){ saveOwn(); refreshStatus(); }     // la carte et la file suivent tout de suite (la suivante a démarré)
+      renderRunTab(); renderRunCard(); } }
   finally{ polling=false; } }
 function finish(p){                                // génération terminée : son image arrive dans la pile, ou elle sort de la page
   const j=p.j;
@@ -1715,14 +1711,14 @@ function finish(p){                                // génération terminée : s
       p.result={...(p.result||{}), name:j.private ? privName(j.item) : j.name, dims:j.dims};
       log('terminé en '+Math.round(secs)+' s → '+(j.private ? 'image privée' : j.path), !!j.private); }
     else log('ERREUR '+(j.error||j.status), !!j.private); }
-  if(shown===p) showOwn(nextActive());
+  if(j.status==='done') pileRead=false;            // son image arrive : pas de « Rien à trier » entre-temps
   notifyDone(p); loadPile(); renderPile(); }
 // retire une génération de la page (annulée, échec retiré, image triée ou supprimée) ; quiet : sans redessiner (l'appelant
 // le fait une fois pour plusieurs)
 function drop(p, quiet){
   const k=pageJobs.indexOf(p); if(k>=0) pageJobs.splice(k, 1);
-  if(shown===p) showOwn(nextActive());
-  if(!quiet) renderPile(); }
+  queueState=queueState.filter(e=>e.id!==p.id);   // (sinon elle reviendrait sur la carte jusqu'à /api/status)
+  if(!quiet) renderPile(); else renderRunCard(); }
 function inputThumb(kind){ return kind==='t2i' ? null : inputImages[0].dataUrl; }
 $('go').onclick=async()=>{                         // toujours actif : la demande rejoint la file avec les réglages du moment
   let body; try{ body=buildRequest(); }catch(e){ toast(e.message, 'err'); return; }
@@ -1801,7 +1797,7 @@ async function followQueue(entries, info){
       if(!isActive({j}) || !!j.private!==inPrivate() || pageJobs.some(p=>p.id===j.id)) continue;
       if(!j.private) log('reprise de la génération '+j.id);
       // prompt complet du suivi (la file n'en a que le début ; serveur pas encore relancé : l'extrait)
-      track(j, {prompt:j.prompt||e.prompt, est:e.estimate, ...info}); }
+      track(j, {prompt:j.prompt||e.prompt, est:e.estimate, w:e.width, h:e.height, steps:e.steps, ...info}); }
     catch(err){}
     finally{ following.delete(e.id); } } }
 // générations normales de la file (espace public) lancées depuis ce navigateur : après un rechargement, et au retour
@@ -1812,8 +1808,6 @@ function resumeOwn(queue){ const own=new Set(ownIds()); return followQueue(queue
 function adoptPrivate(){ return followQueue(queueState.filter(e=>e.kind==='private'), {adopted:true}); }
 (async function resume(){                          // après un rechargement : le Labo repart de la file
   try{ const s=await (await fetch('/api/status')).json(); await resumeOwn(s.queue||[]); }catch(e){} })();
-async function cancelShown(){ if(shown && isActive(shown)){ log('annulation demandée'); await postJson('/api/job/'+shown.id+'/cancel', {}).catch(()=>{}); } }
-$('cancelLoader').onclick=cancelShown;
 // ------------------------------------------------------------ notifications de fin de génération (Web Push, envoyées par
 // l'ordinateur même si l'application est fermée ; HTTPS ou ordinateur lui-même seulement)
 const canPush = !!(window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window);
@@ -2220,7 +2214,7 @@ function changedSpace(inside){
   swapInput();
   // prompts enregistrés : ceux de l'espace quitté ne restent ni à l'écran ni en mémoire de la page
   // (confirmation de suppression comprise : elle montre le titre du prompt)
-  if([$('promptSheet'), $('promptEditSheet'), $('askSheet')].includes(openedSheet)){ closeSheet(); $('askText').textContent=''; }
+  if([$('promptSheet'), $('promptEditSheet'), $('askSheet'), $('fileSheet')].includes(openedSheet)){ closeSheet(); $('askText').textContent=''; }
   if(openedSheet===$('lotSheet')) closeSheet();      // « Voir le lot » : images de l'espace quitté
   $('lotSheetGrid').innerHTML=''; $('lotSheetGrid').onclick=null;
   prompts={saved:[], types:prompts.types}; editingPrompt=null; $('peTitle').value=$('peText').value=''; renderPrompts();
@@ -2230,13 +2224,15 @@ function changedSpace(inside){
     logLines=logLines.filter(x=>!x.priv); renderLog();
     if(ivIndex<0) emptyInputs(); if(vIndex<0) emptyViewer(); }   // vues fermées : vidées sans attendre le fondu
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
+    // file privée reçue avant la sortie : elle ne s'affiche pas en attendant /api/status (carte, pastille, feuille)
+    queueState=queueState.filter(e=>e.kind!=='private'); queueHtml=''; $('queueList').innerHTML='';
     openLots.clear(); lotCancels.clear();          // identifiants de lots (privés compris) des cartes de la file
     resumeOwn(queueState); }
   // pile : celle de l'espace où l'on arrive ; un Jeter privé qui attend son bandeau est abandonné (l'espace est fermé
   // pour cet appareil : l'image reste dans la pile privée)
   if(!inside && discarding && discarding.priv){ clearTimeout(discarding.timer); discarding=null; hideUndo(); }
   if(!inside) [...sorting].forEach(t=>{ if(t[0]==='p') sorting.delete(t); });   // (leur réponse sera ignorée)
-  pileItems=[]; pileRead=false; pileShown=''; show(nextActive()); renderPile(); loadPile();
+  pileItems=[]; pileRead=false; pileShown=''; renderRunCard(); renderPile(); loadPile();
   histItems=[]; $('histGrid').innerHTML=''; $('histCount').textContent=''; if(mode==='tirages') loadHistory();
   syncThemeColor(); }
 // Saisie propre à chaque espace (texte, images d'entrée, dessin : actif ou non, masque ou annotation, tracé) :
@@ -2298,14 +2294,17 @@ async function privUnlock(){ if(!$('puCode').value) return;
 // « Sortir » vide l'écran de tout ce qui vient de l'espace (décision du porteur du 14/10/2026) : la saisie privée est
 // effacée (applyPrivate, à la sortie), en plus de ce que changedSpace retire à toute sortie (résultats, grille,
 // visionneuse, aperçus)
-async function privLock(){ erasePrivate=true;
-  const r=await postJson('/api/private/lock', {}).catch(()=>null);
-  if(!r || !r.ok){ erasePrivate=false;                // rien n'est effacé
+// leavingPrivate : « Sortir » demandé, réponse du Mac attendue ; aucun aperçu privé n'est demandé entre-temps (une
+// requête servie après la fermeture de la session répondrait 404)
+let leavingPrivate=false;
+async function privLock(){ erasePrivate=true; leavingPrivate=true; abortPrivateLoads();
+  const r=await postJson('/api/private/lock', {}).catch(()=>null); leavingPrivate=false;
+  if(!r || !r.ok){ erasePrivate=false; pileShown=''; renderPile();   // rien n'est effacé ; images abandonnées redemandées
     return toast('Sortie impossible : '+(r ? 'erreur '+r.status : 'Mac injoignable'), 'err'); }
   // sortie appliquée dès la réponse, sans attendre /api/status : la page ne demande plus rien de l'espace (une carte de
   // la pile redessinée entre-temps réclamerait sa miniature privée à une session fermée)
-  if(inPrivate()) applyPrivate({...privState, unlocked:false});
-  await refreshStatus(); toast('Sorti de l\'espace privé'); }
+  if(inPrivate()){ spaceEpoch++; applyPrivate({...privState, unlocked:false}); }
+  await refreshStatus(); resumeOwn(queueState); toast('Sorti de l\'espace privé'); }   // (la file publique, relue)
 async function privChangeCode(){ const n=$('pkNew').value;
   if(n.length<8) return $('pkErr').textContent='Nouveau code : 8 caractères au moins.';
   if(n!==$('pkNew2').value) return $('pkErr').textContent='Les deux nouveaux codes diffèrent.';

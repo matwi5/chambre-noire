@@ -1,7 +1,9 @@
-// Labo et génération en cours, dans la vue du téléphone : deux onglets, Labo et Tirages (ouverture sur le Labo, qui
-// réunit la génération en cours, la file, les images de la page et la saisie), la pastille du haut qui mène au Labo,
-// génération en cours en grand en haut du Labo (de la page, d'un autre appareil, ou cachée dans l'autre espace :
-// « En attente »), anneau de l'onglet, et rien qui dépasse à 367 px.
+// Labo et carte en cours, dans la vue du téléphone : deux onglets, Labo et Tirages (ouverture sur le Labo, qui réunit
+// la génération en cours, la pile et la saisie) ; la carte en cours (de la page, d'un autre appareil sans aperçu, ou
+// cachée dans l'autre espace : « En attente ») sur le dessus quand la pile est vide, juste derrière sinon, non
+// balayable, « Annuler » confirmé ; révélation en pixels (carrés au hasard, puis mosaïque des aperçus, immobile si le
+// système réduit les animations, canevas vidé à la sortie de l'espace) ; « +N en attente » ; anneau de l'onglet ; rien
+// qui dépasse à 367 px.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/encours.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,7 +20,7 @@ before(async () => {
 });
 
 after(async () => {
-  bench?.release('encours');
+  for (const name of ['dessus', 'balaye', 'derriere']) bench?.release(name);
   await chrome?.close();
   await bench?.stop();
 });
@@ -55,7 +57,7 @@ test('deux onglets, Labo et Tirages ; ouverture sur le Labo ; plus de page En co
   assert.deepEqual(await page.eval(`[...$('tabbar').querySelectorAll('svg.pix')]
     .map(s => s.getAttribute('shape-rendering'))`), ['crispEdges', 'crispEdges']);
   // la génération, la file, les images de la page et la saisie sont toutes dans le Labo
-  assert.deepEqual(await page.eval(`['stage', 'runNow', 'runQueue', 'pile', 'composer', 'refs', 'prompt']
+  assert.deepEqual(await page.eval(`['runCard', 'queueChip', 'pile', 'composer', 'refs', 'prompt']
     .filter(id => !$('pane-labo').contains($(id)))`), []);
   await page.tab('tirages');
   assert.equal(await page.eval(`$('pane-tirages').contains($('histGrid')) && document.body.className`), 'm-tirages');
@@ -66,7 +68,7 @@ test('deux onglets, Labo et Tirages ; ouverture sur le Labo ; plus de page En co
 
 test('glisser le doigt change d\'onglet hors du champ de création, jamais sur lui', async () => {
   await page.tab('labo');
-  await page.swipe('#runZone', -160);
+  await page.swipe('#pileEmpty', -160);
   await page.waitFor(`mode === 'tirages'`, { what: 'Tirages après un glissement vers la gauche' });
   await page.swipe('#pane-tirages', 160);
   await page.waitFor(`mode === 'labo'`, { what: 'Labo après un glissement vers la droite' });
@@ -77,43 +79,107 @@ test('glisser le doigt change d\'onglet hors du champ de création, jamais sur l
   page.assertNoErrors();
 });
 
-test('rien en cours : la pastille du haut ouvre le panneau Moteur', async () => {
+test('rien en cours : pas de carte en cours ; l\'état du moteur ouvre son panneau', async () => {
   await page.tab('labo');
-  assert.equal(await visible('#composer'), true, 'saisie dans le Labo');
-  await page.click('#island');
+  assert.deepEqual(await page.eval(`[$('runCard').hidden, $('queueChip').hidden]`), [true, true]);
+  assert.equal(await visible('#pileEmpty'), true, 'pile vide : l\'état vide');
+  await page.click('#statusChip');
   await page.waitFor(`$('engineSheet').classList.contains('on')`, { what: 'panneau Moteur' });
   await page.eval(`closeSheet()`);
   page.assertNoErrors();
 });
 
-test('« Générer » reste sur le Labo ; génération d\'un autre appareil ; la pastille du haut mène au Labo', async () => {
-  await page.launch('HOLD=encours zq5 d\'un autre appareil', { width: 768, height: 512 });
-  await page.typePrompt('zq5 de cette page');
-  await page.click('#go');
-  await page.waitFor(`mode === 'labo' && pageJobs.some(isActive)`, { what: 'Labo après « Générer »' });
+test('carte d\'un autre appareil : texte, réglages, sans aperçu ; « +N en attente » ouvre la file', async () => {
+  // lente, avec des aperçus, lancée ailleurs : la page n'en montre aucun
+  const away = await page.launch('SLOW=0.3 zq5 d\'un autre appareil', { width: 768, height: 512, preview: true,
+    preview_interval: 5 });
+  await page.generate('zq5 de cette page');
   await page.eval(`refreshStatus()`);
-  // la génération d'un autre appareil tourne : en grand, avec son texte et ses réglages, cadre aux proportions
-  // demandées, annulable (génération normale) ; anneau de l'onglet en route
-  await page.waitFor(`$('runZone').classList.contains('other')
-    && $('nowPrompt').textContent.includes('zq5 d\\'un autre appareil')`,
-    { what: 'génération de l\'autre appareil en haut de la page' });
-  assert.equal(await page.eval(`$('nowSub').textContent`), 'Texte → image · 768×512 · 20 étapes');
-  assert.equal(await page.eval(`getComputedStyle($('nowFrame')).aspectRatio`), '1.5 / 1');
-  assert.equal(await visible('#nowCancel'), true);
-  assert.notEqual(await page.eval(`$('runRing').style.strokeDashoffset`), '100');
-  assert.equal(await visible('#stage'), false, 'zone de la page cachée');
-  await page.tab('tirages');
-  await page.click('#island');
-  await page.waitFor(`mode === 'labo'`, { what: 'pastille du haut : Labo' });
+  await page.waitFor(`!$('runCard').hidden && $('runPrompt').textContent.includes('zq5 d\\'un autre appareil')`,
+    { what: 'génération de l\'autre appareil sur la carte' });
+  assert.equal(await page.eval(`shown`), null, 'pas une génération de la page');
+  assert.equal(await page.eval(`$('runPhase').textContent`), 'Texte → image · 768×512 · 20 étapes');
+  assert.match(await page.eval(`$('runEta').textContent`), /^fin vers \d+ h \d\d$/);
+  assert.equal(await page.eval(`getComputedStyle($('runFrame')).aspectRatio`), '1.5 / 1');
+  assert.equal(await visible('#runCancel'), true);
+  assert.equal(await page.eval(`$('runCard').classList.contains('behind')`), false, 'pile vide : sur le dessus');
+  assert.notEqual(await page.eval(`$('runRing').style.strokeDashoffset`), '100', 'anneau de l\'onglet en route');
+  await page.waitFor(`fetch('/api/job/${away.id}').then(r => r.json()).then(j => j.preview_version > 0)`,
+    { what: 'aperçus produits par le Mac' });
+  await page.eval(`refreshStatus()`);
+  assert.deepEqual(await page.eval(`[reveal.pv, !!reveal.img]`), [0, false], 'aperçu d\'un autre appareil montré');
+  assert.equal(await page.eval(`$('queueChip').textContent`), '+1 en attente');
   assert.deepEqual(await overflowing(), [], 'rien ne dépasse à 367 px');
   if (process.env.SHOT_DIR) await page.screenshot(process.env.SHOT_DIR + '/encours-autre.png');
+  await page.click('#queueChip');
+  await page.waitFor(`openedSheet === $('fileSheet') && $('queueList').textContent.includes('zq5 de cette page')`,
+    { what: 'la file dans sa feuille' });
+  await page.eval(`closeSheet()`);
   await cancelAll();
-  bench.release('encours');
-  await bench.idle();
+  await bench.idle({ page });
   page.assertNoErrors();
 });
 
-test('génération cachée de l\'autre espace : « En attente » et la durée avant la première de l\'espace', async () => {
+test('carte en cours : non balayable ; « Annuler » demande confirmation', async () => {
+  await page.generate('HOLD=balaye zq5 à annuler');
+  await page.waitFor(`shown && shown.j.status === 'running' && !$('runCard').hidden`, { what: 'carte en cours' });
+  await page.swipe('#runFrame', 220);
+  await page.swipe('#runFrame', -220);
+  assert.deepEqual(await page.eval(`[mode, shown && shown.j.status]`), ['labo', 'running'], 'balayée ou onglet changé');
+  await page.cancelRun(false);                      // refusée : elle continue
+  await page.eval(`window.seenJob = shown.j`);      // un suivi de plus (pollJobs, chaque seconde) : toujours en cours
+  await page.waitFor(`shown && shown.j !== seenJob`, { what: 'suivi suivant' });
+  assert.equal(await page.eval(`shown.j.status`), 'running', 'annulée malgré le refus');
+  await page.cancelRun();
+  await page.waitFor(`!pageJobs.some(isActive) && $('runCard').hidden`, { what: 'génération annulée, carte partie' });
+  bench.release('balaye');
+  await bench.idle({ page });
+  page.assertNoErrors();
+});
+
+test('révélation : carrés au hasard, puis chaque aperçu en mosaïque de plus en plus fine', async () => {
+  await page.eval(`opt.steps = 'high'; opt.res = 'low'; $('previewChk').checked = true; saveOpt(); refreshChoices()`);
+  await page.generate('SLOW=0.3 zq5 révélée');
+  await page.waitFor(`shown && !$('runCard').hidden && reveal.key && !!reveal.timer`, { what: 'carrés au hasard' });
+  assert.ok((await page.canvasInk('#revealCanvas')).ink > 0, 'aucun carré allumé');
+  await page.waitFor(`!!reveal.img`, { what: 'premier aperçu', timeout: 30000 });
+  const first = await page.eval(`reveal.frac`);
+  await page.waitFor(`reveal.frac > ${first}`, { what: 'aperçu suivant, plus fin', timeout: 30000 });
+  const ink = await page.canvasInk('#revealCanvas');
+  assert.ok(ink.width > 0 && ink.ink === ink.width * ink.height, `mosaïque pleine : ${JSON.stringify(ink)}`);
+  await bench.idle({ page });
+  await page.waitFor(`$('runCard').hidden && pileItems.some(it => it.prompt === 'SLOW=0.3 zq5 révélée')`,
+    { what: 'image nette dans la pile' });
+  assert.equal(await page.eval(`$('revealCanvas').width`), 0, 'canevas vidé');
+  // système qui réduit les animations : les carrés ne bougent plus
+  await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+  await page.eval(`opt.steps = 'low'; saveOpt(); refreshChoices()`);
+  await page.generate('HOLD=dessus zq5 immobile');
+  await page.waitFor(`shown && !$('runCard').hidden`, { what: 'carte en cours' });
+  assert.equal(await page.eval(`reveal.timer`), null, 'carrés animés malgré la réduction des animations');
+  await page.send('Emulation.setEmulatedMedia', { features: [] });
+  bench.release('dessus');
+  await bench.idle({ page });
+  page.assertNoErrors();
+});
+
+test('pile non vide : la carte en cours passe juste derrière, au bord de la pile', async () => {
+  await page.waitFor(`pileSize() > 0`, { what: 'images dans la pile' });
+  await page.generate('HOLD=derriere zq5 derrière');
+  await page.waitFor(`!$('runCard').hidden && $('runCard').classList.contains('behind')`, { what: 'carte derrière' });
+  const [pile, card] = await page.eval(`[$('pile').getBoundingClientRect().bottom,
+    $('runCard').getBoundingClientRect().top]`);
+  assert.ok(card >= pile - 30 && card <= pile + 30, `au bord de la pile (${pile} / ${card})`);
+  assert.equal(await visible('#runEta'), true, 'fin prévue');
+  assert.deepEqual(await overflowing(), [], 'rien ne dépasse à 367 px');
+  if (process.env.SHOT_DIR) await page.screenshot(process.env.SHOT_DIR + '/encours-derriere.png');
+  bench.release('derriere');
+  await bench.idle({ page });
+  await page.keepPile();
+  page.assertNoErrors();
+});
+
+test('derrière une génération cachée de l\'autre espace : « En attente » ; rien de privé à la sortie', async () => {
   const exists = await page.eval(`privState.exists`);
   assert.equal((await post(exists ? '/api/private/unlock' : '/api/private/create', { code: CODE })).status, 200);
   await page.eval(`refreshStatus()`);
@@ -123,9 +189,10 @@ test('génération cachée de l\'autre espace : « En attente » et la durée av
   await page.launch('zq5secret d\'un autre appareil', { private: true });
   await page.eval(`refreshStatus()`);
   await page.tab('labo');
-  await page.waitFor(`$('runZone').classList.contains('other') && $('nowTitle').textContent === 'En attente'
-    && $('nowEta').textContent.startsWith('≈')`, { what: '« En attente » et sa durée' });
-  assert.doesNotMatch(await page.eval(`$('runZone').innerText`), /zq5public/);
+  // la privée (suivie par la page, qui adopte les générations privées) attend derrière la publique, cachée
+  await page.waitFor(`!$('runCard').hidden && $('runStep').textContent === 'En attente'
+    && /^fin vers \\d+ h \\d\\d$/.test($('runEta').textContent)`, { what: '« En attente » et son heure' });
+  assert.doesNotMatch(await page.eval(`$('runCard').innerText`), /zq5public/);
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.doesNotMatch(await page.eval(`document.body.innerHTML`), /zq5secret/, 'rien de privé dans la page');
@@ -135,13 +202,13 @@ test('génération cachée de l\'autre espace : « En attente » et la durée av
   page.assertNoErrors();
 });
 
-test('une seconde génération de la page prend le haut du Labo quand elle démarre', async () => {
+test('une seconde génération de la page passe sur la carte en cours quand elle démarre', async () => {
   for (const text of ['HOLD=premiere zq5 première', 'HOLD=seconde zq5 seconde']) await page.generate(text);
   await page.waitFor(`shown && shown.prompt.endsWith('première') && shown.j.status === 'running'`,
-    { what: 'la première en haut' });
+    { what: 'la première sur la carte' });
   bench.release('premiere');
   await page.waitFor(`shown && shown.prompt.endsWith('seconde') && shown.j.status === 'running'
-    && $('loader').style.display === 'flex'`, { what: 'la seconde en haut, avec sa progression' });
+    && !$('runCard').hidden`, { what: 'la seconde sur la carte en cours' });
   bench.release('seconde');
   await page.waitFor(`!shown && pileItems.some(it => it.prompt.endsWith('zq5 seconde'))`,
     { what: 'la seconde dans la pile' });

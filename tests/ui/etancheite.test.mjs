@@ -5,7 +5,9 @@
 // variables globales et leur contenu : listes d'images, générations suivies, images prêtes, prompts, file…), ni dans
 // localStorage (page.leaks du pilote). La recherche porte sur des marqueurs : identifiants des images, des générations
 // et des lots privés, mots des prompts privés, routes /api/private/ et noms prive_….
-// Les deux tests se suivent : le second rouvre l'espace et les Tirages que le premier a remplis.
+// Les deux premiers tests se suivent : le second rouvre l'espace et les Tirages que le premier a remplis. Le
+// troisième sort de l'espace pendant qu'un aperçu privé est révélé sur le canevas de la carte en cours, que
+// page.leaks ne fouille pas : il en lit les pixels.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/etancheite.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -74,10 +76,13 @@ async function privateTour() {
     renderInputs(); })()`);
   await page.typePrompt('zqE8vignette');
   await page.click('#go');
-  await page.waitFor(`mode === 'labo' && !!$('queueList').querySelector('.qcard.own img[src^="data:"]')
+  await page.eval(`refreshStatus()`);
+  await page.waitFor(`!$('queueChip').hidden`, { what: 'pastille de la file' });
+  await page.click('#queueChip');                  // la file dans sa feuille
+  await page.waitFor(`!!$('queueList').querySelector('.qcard.own img[src^="data:"]')
     && $('queueList').textContent.includes('zqE8vignette')`, { what: 'carte privée avec sa vignette d\'entrée' });
   const thumb = await page.eval(`$('queueList').querySelector('.qcard.own img').getAttribute('src')`);
-  await page.tab('labo');
+  await page.eval(`closeSheet()`);
   await page.typePrompt('zqE6saisie');             // saisie privée laissée en place : texte et image d'entrée
   await page.eval(`(async () => { inputImages.push(await toEntry('zqE9saisie.png', ${ref})); renderInputs(); })()`);
   // prompts enregistrés de l'espace
@@ -134,6 +139,35 @@ test('fermeture par le Mac : plus rien de l\'espace privé dans la page (hors sa
   // pendant que la visionneuse montre encore l'image privée ; le cache tints ne doit pas garder son adresse
   assert.deepEqual(await scan(markers, false), [], 'données privées restées dans la page');
   bench.release('etanche');
+  await bench.idle();
+  page.assertNoErrors();
+});
+
+test('« Sortir » pendant la révélation d\'une génération privée : son canevas est vidé', async () => {
+  await enter();
+  await page.tab('labo');
+  await page.eval(`$('previewChk').checked = true; opt.steps = 'high'; saveOpt(); refreshChoices()`);
+  await page.typePrompt('SLOW=0.4 zqE10revelee');
+  await page.click('#go');
+  await page.waitFor(`shown && shown.private && !!reveal.img`, { what: 'aperçu privé en mosaïque', timeout: 30000 });
+  assert.ok((await page.canvasInk('#revealCanvas')).ink > 0, 'mosaïque dessinée');
+  // /api/status retenu : une réponse demandée dans l'espace (qui le dit encore ouvert) n'arrive qu'après « Sortir »,
+  // et les suivantes pas avant la fin des vérifications : la page ne montre que ce qu'elle sait de l'espace public
+  await page.eval(`(() => { window.heldStatus = true; const f = window.fetch;
+    window.fetch = (u, ...a) => { if (String(u) !== '/api/status' || !heldStatus) return f(u, ...a);
+      const sent = f(u, ...a);
+      return new Promise(r=>{ const t = setInterval(() => { if (!heldStatus){ clearInterval(t); r(sent); } }, 30); });
+    };
+    window.lateStatus = refreshStatus(); })()`);
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  assert.deepEqual(await page.canvasInk('#revealCanvas'), { width: 0, height: 0, ink: 0 }, 'aperçu privé resté');
+  assert.deepEqual(await page.eval(`[reveal.img, $('runCard').hidden, $('queueChip').hidden, queueState.length]`),
+    [null, true, true, 0], 'génération ou file privée à l\'écran');
+  assert.deepEqual(await scan(['zqE10revelee'], true), [], 'données privées restées dans la page');
+  await page.eval(`heldStatus = false; lateStatus`);   // la réponse d'avant la sortie, puis une nouvelle
+  assert.equal(await page.eval(`inPrivate()`), false, 'réponse d\'avant la sortie : l\'espace rouvert dans la page');
+  assert.deepEqual(await scan(['zqE10revelee'], true), [], 'données privées revenues dans la page');
   await bench.idle();
   page.assertNoErrors();
 });
