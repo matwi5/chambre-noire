@@ -621,6 +621,7 @@ Labo et Tirages, pile à trier » (spec, section 4) : même but, mais hors de la
 du fond de l'espace (normal ou privé), puisque le fond ne montre plus d'image floutée ; la visionneuse garde son
 calcul à partir de l'image. Hors de la visionneuse, une couleur fixe évite aussi le bug Chromium 559396686 cité plus
 bas._
+
 - **Contexte** : le porteur veut que l'application installée « continue » sous la barre d'état d'Android, sans bande
   de couleur.
 - **Décision** : rester en `display: standalone` et donner à `<meta name="theme-color">`, à chaque changement de vue

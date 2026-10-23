@@ -104,7 +104,8 @@ dernier bloc, après le HTML.
   « surfaces mates » (classe `mat`), « barre du haut », « barre d'onglets », « panneaux du
   bas », « compositeur », « panneau Réglages », « images d'entrée (Créer) et Dessiner », « visionneuse plein écran »,
   « résultat », « île », « liste de la file (page En cours) » (cartes de la file), « prompts enregistrés », « espace
-  privé », « messages et confirmations », « téléphone (html.lite) ».
+  privé », « messages et confirmations », « typographie » (police pixel `--pixel`, chasse fixe `--mono`, déclaration
+  `@font-face`), « téléphone (html.lite) ».
 - **HTML** : onglets `#pane-run` (page En cours : zone de la page `#ownZone` avec `#stage` et « Rien en cours »
   `#resultEmpty` ; génération d'un autre appareil ou attente `#runNow` ; file `#runQueue` ; terminées `#runDone`, liste
   `#doneList`, « Tout retirer » `#doneClear`), `#pane-create` (page Créer : images d'entrée `#refs`, vignettes
