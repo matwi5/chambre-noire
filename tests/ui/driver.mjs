@@ -12,6 +12,9 @@
 //   const disk = bench.disk(); …; disk.written() // fichiers écrits ou changés par le serveur depuis l'instantané
 //   await page.tab('tirages')                    // appui sur l'onglet Labo ou Tirages : la page affichée a changé
 //   await page.swipe('#runZone', -150)           // doigt glissé de dx px (dy) depuis le centre d'un élément
+//   await page.swipe('#pile .pimg', 200, 0, { mouse: true, hold: true })   // à la souris ; hold : sans relâcher ;
+//                                                // pause : ms immobile avant de relâcher (geste lent)
+//   await page.release(300)                      // relâche le geste tenu (après 300 ms immobile : geste lent)
 //   await page.typePrompt('texte')               // texte tapé dans le champ du Labo (événement input)
 //   await page.generate('texte')                 // tapé dans le Labo puis « Générer » : demande acceptée
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
@@ -209,6 +212,7 @@ async function connect(wsUrl) {
   on('Log.entryAdded', p => { if (p.entry.level === 'error') errors.push(`${p.entry.source} : ${p.entry.text}${p.entry.url ? ' (' + p.entry.url + ')' : ''}`); });
   await Promise.all([send('Runtime.enable'), send('Log.enable'), send('Page.enable')]);
 
+  let held = null;                                   // fin du balayage tenu (page.release)
   const page = {
     send, on, errors,
     // évalue une expression dans la page (promesse attendue) et renvoie sa valeur (JSON) ; échoue après timeout ms
@@ -233,18 +237,32 @@ async function connect(wsUrl) {
         { what: `onglet ${name} affiché` });
     },
     // doigt posé au centre de l'élément selector (amené à l'écran), glissé de dx, dy px en quelques pas, puis relevé
-    // (événements tactiles de Chrome : touch et pointer)
-    async swipe(selector, dx, dy = 0) {
+    // (événements tactiles de Chrome : touch et pointer) ; mouse : la souris, bouton gauche enfoncé ; pause : le doigt
+    // reste immobile pause ms avant d'être relevé (un geste lent) ; hold : il reste posé à la fin (page.release() le
+    // relève). Un geste tenu d'avant est d'abord relevé
+    async swipe(selector, dx, dy = 0, { mouse = false, hold = false, pause = 0 } = {}) {
+      await page.release();
       const c = await page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
         if (!el) return null; el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
         return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
       if (!c) throw new Error(`élément absent : ${selector}`);
-      const at = k => [{ x: c.x + dx * k, y: c.y + dy * k, id: 1 }];
-      await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: at(0) });
-      for (const k of [0.25, 0.5, 0.75, 1])
-        await page.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: at(k) });
-      await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      const x = k => c.x + dx * k, y = k => c.y + dy * k;
+      const input = mouse
+        ? { down: 'mousePressed', move: 'mouseMoved', up: 'mouseReleased',
+          send: (type, k) => page.send('Input.dispatchMouseEvent', { type, x: x(k), y: y(k), button: 'left',
+            buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 }) }
+        : { down: 'touchStart', move: 'touchMove', up: 'touchEnd',
+          send: (type, k) => page.send('Input.dispatchTouchEvent', { type,
+            touchPoints: type === 'touchEnd' ? [] : [{ x: x(k), y: y(k), id: 1 }] }) };
+      await input.send(input.down, 0);
+      for (const k of [0.25, 0.5, 0.75, 1]) await input.send(input.move, k);
+      held = () => input.send(input.up, 1);
+      if (!hold) await page.release(pause);
     },
+    // relève le doigt ou la souris d'un balayage tenu (swipe … { hold: true }), après pause ms immobile (geste lent)
+    async release(pause = 0) { const up = held; held = null; if (!up) return;
+      if (pause) await new Promise(r => setTimeout(r, pause));
+      await up(); },
     // garde par ✓ toutes les images de la pile affichée (celle de l'espace où est la page) : elles passent dans ses
     // Tirages ; chacune attendue hors de la pile du Mac avant la suivante. Une carte d'échec en tête l'empêche
     // (erreur). Renvoie le nombre d'images gardées

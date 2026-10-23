@@ -223,7 +223,8 @@ L'interface a deux onglets aux icônes en pixels, dans la barre du bas : **Labo*
 file d'attente et la pile des images à trier ; dessous, le champ de création : texte → image, édition avec des
 images d'entrée, ou dessin guidé sur une image) et **Tirages** (les images gardées) ; elle s'ouvre sur le Labo. Sur un
 grand écran, le Labo est une colonne centrée et les Tirages prennent toute la largeur. Sur un écran tactile, glisser le
-doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le champ de création). Elle s'adapte au téléphone
+doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le champ de création et sur la pile, dont les cartes
+se balaient). Elle s'adapte au téléphone
 comme à l'ordinateur, toujours sombre, même quand le système est en mode clair :
 lumière inactinique de chambre noire (noir chaud, halo rouge de la lampe, grain léger, textes couleur papier, accent
 ambre, erreurs en rouge vif avec leur icône). Sur un écran tactile, elle allège ses animations pour rester fluide ;
@@ -296,17 +297,22 @@ Sous la file, la **pile** : les images terminées de l'espace qui attendent d'ê
 dessus, les deux suivantes devinées dessous ; ce sont les mêmes sur tous les appareils, et elles restent après un
 rechargement de la page ou un redémarrage du Mac. La carte du dessus montre l'image, son texte sur deux lignes, ses
 réglages (taille, étapes, durée) et, pour une image d'un lot (variantes ou campagne), son rang (« 2/3 ») : chaque
-image d'un lot a sa carte. Sous la pile, **✓** la **garde** (elle passe dans les Tirages) et **✕** la **jette** : elle
-quitte l'écran et un bandeau « Image jetée · Annuler » reste 5 secondes ; **Annuler** la remet sur le dessus, et
+image d'un lot a sa carte. La balayer vers la droite la **garde** (elle passe dans les Tirages), vers la gauche la
+**jette** : au doigt comme à la souris, elle suit le geste et penche, « Garder » ou « Jeter » s'y inscrit, et elle part
+une fois lâchée au-delà du tiers de sa largeur ou après un geste vif ; en deçà, elle revient à sa place. Les boutons
+**✓** et **✕** sous la pile font la même chose. Jetée, elle quitte l'écran et un bandeau « Image jetée · Annuler » reste
+5 secondes ; **Annuler** la remet sur le dessus, et
 l'image n'est effacée du Mac (image, vignette, images d'entrée, dossier de travail, ligne du journal) qu'à la fin du
 bandeau. Fermer ou recharger la page pendant ce temps la laisse dans la pile ; jeter une autre image envoie tout de
-suite l'effacement de la précédente (un seul bandeau à la fois). Si un autre appareil a déjà trié l'image, **✓** dit
-« Déjà triée » et la carte s'en va (un Jeter n'a rien à effacer). Un appui sur l'image l'ouvre en grand dans la
-visionneuse, qui parcourt la pile :
+suite l'effacement de la précédente (un seul bandeau à la fois). Si un autre appareil a déjà trié l'image, Garder (**✓**
+ou
+balayage à droite) dit « Déjà triée » et la carte s'en va (un Jeter n'a rien à effacer). Un appui sur l'image l'ouvre en
+grand dans la visionneuse, qui parcourt la pile :
 **Garder** et **Jeter** y remplacent **Supprimer**, puis elle passe à l'image suivante ; **Télécharger**, **Partager**,
 **Copier**, **Éditer**, **Dessiner**, **Reprendre** et **Relancer** y servent comme pour un tirage. Une génération de
 la page en échec arrive en tête de pile, sur une carte qui dit le message du Mac, avec **Relancer** (si la page a encore
-la demande) ; **✕** la retire (**✓** est grisé) ; elle ne reste qu'en mémoire de la page. Une génération annulée n'y
+la demande) ; **✕** ou un balayage à gauche la retire (**✓** est grisé, et elle ne se tire pas vers la droite) ; elle ne
+reste qu'en mémoire de la page. Une génération annulée n'y
 laisse rien. Pile vide : « Rien à trier », en pixels, au-dessus du champ de création. L'onglet **Labo** porte le nombre
 d'images à trier. Quand une génération de la page finit pendant qu'on est sur les
 Tirages, un message le dit (« Image prête », « Lot prêt · 3 images », avec « , 1 en échec » s'il y en a, « Échec de la
@@ -964,7 +970,8 @@ nom correspond (échec immédiat si aucun ne correspond). Un test bloqué échou
 fichier), et Chrome et le banc sont arrêtés à la fin de chaque fichier. Les tests ouvrent l'interface servie par le
 banc dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du
 navigateur. Ils couvrent les écrans principaux, le Labo (deux onglets, pastilles, génération d'un autre appareil
-ou cachée, rien qui dépasse à la largeur du téléphone), la pile (ordre, cartes de lot, ✓ et ✕, bandeau Annuler et
+ou cachée, rien qui dépasse à la largeur du téléphone), la pile (ordre, cartes de lot, ✓ et ✕, balayage au doigt et à la
+souris, bandeau Annuler et
 rien d'envoyé avant sa fin ni au rechargement, deux Jeter de suite, « Déjà triée », visionneuse, carte d'échec, pile
 privée, message « Image prête »), Garder et Jeter par nom après une relecture de la pile, la saisie (unique, dans le
 Labo, Dessiner,

@@ -143,7 +143,8 @@ dernier bloc, après le HTML.
     sans image d'entrée, `edit` avec, `mask` dessin actif : `drawOn`), `singleImage`, `campaignShown` (interrupteur
     proposé à partir de 2 images), `inCampaign`, `variants` ; brouillon unique `qwen-prompt` (dans `init` : reprise une
     fois des anciens `qwen-<onglet>_prompt`).
-  - « onglets & statut » : `TABS`, changement d'onglet (`mode`) ; « panneaux du bas » : `openSheet`, `closeSheet`
+  - « onglets & statut » : `TABS`, changement d'onglet (`mode`, `goTab`, `showLabo`), `tabSwipe` (glissement
+    d'onglet, jamais depuis le champ de création ni la pile) ; « panneaux du bas » : `openSheet`, `closeSheet`
     (un seul ouvert, `openedSheet`) ; `refreshStatus()` (interroge `/api/status` toutes les 5 s, 2 s tant que la file
     n'est pas vide ; met à jour `queueState`, l'île, le haut du Labo et l'espace privé par `applyPrivate`, et le
     panneau Moteur, version servie comprise : `fmtVersion`, `staleServer`).
@@ -198,7 +199,10 @@ dernier bloc, après le HTML.
     cours, `sorting`, avec leur génération de la page `pageOf`), `pileFails` (échecs de la page, en tête),
     `renderPile` (carte du dessus et deux devinées dessous : `pileCard`, `failCard`, chacune marquée par `pileTag` ;
     état vide, compte, pastille de l'onglet ; redessinée seulement si elle change, `pileShown`), `topEntry` (ce que
-    montre la carte du dessus, retrouvé par son nom), `sortTop` (✓ et ✕ ; `flyOut`, un départ à la fois : `flying`),
+    montre la carte du dessus, retrouvé par son nom), `sortTop` (✓, ✕ et balayage ; `flyOut`, un départ à la fois :
+    `flying`), `pileSwipe` (balayage de
+    la carte du dessus par Pointer Events, doigt et souris : seuil au tiers de la largeur ou geste vif ; `swiped` :
+    la fin d'un balayage n'ouvre pas la visionneuse),
     `sendSort` (envoi de Garder ou Jeter, « Déjà triée » sur un 404 de Garder), `keepItem`, `discardItem` (Jeter :
     bandeau `#undoBar`, `discarding`), `commitDiscard` (à la fin du bandeau, `DISCARD_MS`, ou au Jeter suivant ;
     abandonné si l'espace où il a commencé est fermé), `undoDiscard`, `sortFromViewer` (Garder et Jeter de la
@@ -232,7 +236,8 @@ dernier bloc, après le HTML.
 Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
 « Dessiner », « Reprendre » (texte, images d'entrée, dessin et réglages : `resumeFrom`), « Relancer » (`againFrom`) et
 « Supprimer » → `viewerAction('edit' | 'mask' | 'resume' | 'again' | 'delete')` ; « Garder » et « Jeter » → ✓
-`#pileYes` et ✕ `#pileNo` (`sortTop`), dans la visionneuse `sortFromViewer` ; « Annuler » → `undoDiscard` ; carte
+`#pileYes` et ✕ `#pileNo`, ou balayage de la carte (`pileSwipe`), puis `sortTop` ; dans la visionneuse, `sortFromViewer`
+; « Annuler » → `undoDiscard` ; carte
 d'échec, « Relancer » → `data-again` dans l'écouteur de `#pile` ; cadenas des Tirages → `#privEntry`, « Sortir » →
 `privLock` ; pastille du haut → `#island`, `renderIsland`.
 

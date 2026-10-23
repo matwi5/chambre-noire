@@ -4,7 +4,8 @@
 // envoyé avant, ni à la fermeture de la page ; un seul bandeau à la fois) ; « Déjà triée » quand une autre page a
 // trié l'image ; la visionneuse de la pile (Garder, Jeter, image suivante ; vrai mode et images d'entrée) ; carte
 // d'échec en tête (message, Relancer, ✕) ; état vide ; message « Image prête » sur les Tirages, qui mène au Labo ;
-// pile privée par ses routes.
+// pile privée par ses routes ; balayage de la carte du dessus au doigt et à la souris (seuil, geste vif, tampons,
+// échec qui ne part qu'à gauche, pile redessinée sous le doigt, clic qui ouvre la visionneuse).
 //   venv/bin/python tests/check.py --quick --ui tests/ui/pile.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -151,6 +152,120 @@ test('double appui sur ✕ : une seule image part, rien avant 5 s ; Annuler, vis
   await page.eval(`closeViewer()`);
   await page.waitFor(`${TOP} === 'zp2b double'`, { what: 'carte remise' });
   assert.equal(await discards(), 0);
+  await clear();
+  page.assertNoErrors();
+});
+
+// la carte du dessus, à balayer
+const CARD = '#pile [data-k="0"] .pimg';
+const TOP_CARD = `$('pile').querySelector('[data-k="0"]')`;
+// rien n'est parti : aucune carte en route ni demande de tri (une carte qui part le fait dès le lâcher : flyOut)
+const still = () => page.eval(`!flying && !$('pile').querySelector('.out-r, .out-l') && sorts.length === 0`);
+// pendant un geste tenu : déplacement de la carte et opacité des tampons
+const during = () => page.eval(`(c => ({ t: c.style.transform,
+  keep: +getComputedStyle(c.querySelector('.stamp.keep')).opacity,
+  drop: +getComputedStyle(c.querySelector('.stamp.drop')).opacity }))(${TOP_CARD})`);
+
+test('balayage au doigt : la carte suit et penche, « Garder » à droite ; trop court ou lent : retour', async () => {
+  await made('zp12 dessous');
+  await made('zp12 balayee');
+  await page.eval(`sorts.length = 0`);
+  await page.swipe(CARD, 30);                        // trop court, même vif : rien
+  assert.equal(await still(), true, 'trié par un balayage trop court');
+  assert.equal(await page.eval(`${TOP_CARD}.style.transform`), '', 'carte revenue');
+  // pendant le geste : la carte suit le doigt, penche, et dit ce qui va se passer
+  try {
+    await page.swipe(CARD, 90, 0, { hold: true });
+    await page.waitFor(`${TOP_CARD}.style.transform.startsWith('translateX(90px)')`,
+      { what: 'la carte suit le doigt' });           // (déplacements remis à l'image suivante du navigateur)
+    const d = await during();
+    assert.match(d.t, /translateX\(90px\) rotate\([\d.]+deg\)/);
+    assert.ok(d.keep > 0 && d.drop === 0, `« Garder » montré : ${JSON.stringify(d)}`);
+  } finally { await page.release(300); }   // lâcher lent : rien ne part
+  await page.swipe(CARD, 90, 0, { pause: 300 });     // 90 px, sous le seuil, en un geste lent : elle revient
+  assert.equal(await still(), true, 'trié par un geste lent sous le seuil');
+  await page.swipe(CARD, 220);                       // au-delà du tiers de la largeur : gardée
+  await page.waitFor(`sorts.some(s => s.url.endsWith('/api/keep'))`, { what: 'Garder envoyé' });
+  await waitUntil(() => kept('zp12 balayee'), { what: 'dans les Tirages' });
+  assert.equal(await top(), 'zp12 dessous');
+  page.assertNoErrors();
+});
+
+test('geste vif : sous le seuil mais rapide, la carte part', async () => {
+  await page.eval(`sorts.length = 0`);
+  await page.swipe(CARD, 80);                        // 80 px, sous le tiers (≈ 115 px), en un geste rapide
+  await page.waitFor(`sorts.some(s => s.url.endsWith('/api/keep'))`, { what: 'Garder envoyé' });
+  await waitUntil(() => kept('zp12 dessous'), { what: 'dans les Tirages' });
+  await made('zp12 gauche');
+  page.assertNoErrors();
+});
+
+test('balayage au doigt vers la gauche : « Jeter », puis Jeter avec son bandeau, sans changer d\'onglet', async () => {
+  await page.eval(`sorts.length = 0`);
+  try {
+    await page.swipe(CARD, -90, 0, { hold: true });
+    await page.waitFor(`${TOP_CARD}.style.transform.startsWith('translateX(-90px)')`, { what: 'la carte suit' });
+    const d = await during();
+    assert.ok(d.drop > 0 && d.keep === 0, `« Jeter » montré : ${JSON.stringify(d)}`);
+  } finally { await page.release(300); }   // lâcher lent : rien ne part
+  await page.swipe(CARD, -220);
+  await page.waitFor(`!$('undoBar').hidden && !pileView().some(it => it.prompt === 'zp12 gauche')`,
+    { what: 'bandeau, carte partie' });
+  assert.equal(await page.eval(`mode`), 'labo', 'un balayage de carte ne change pas d\'onglet');
+  assert.equal(await discards(), 0, 'rien envoyé avant la fin du bandeau');
+  await page.click('#undoBtn');
+  await page.waitFor(`${TOP} === 'zp12 gauche'`, { what: 'carte remise' });
+  page.assertNoErrors();
+});
+
+test('pile redessinée pendant le geste : le lâcher ne trie aucune carte', async () => {
+  await made('zp12 sous');
+  await made('zp12 autre');
+  await page.eval(`sorts.length = 0`);
+  try {
+    // à la souris : le lâcher atteint la pile redessinée (au doigt, il reste à la carte retirée)
+    await page.swipe(CARD, 90, 0, { mouse: true, hold: true });
+    await page.waitFor(`${TOP_CARD}.style.transform.startsWith('translateX(90px)')`, { what: 'la carte suit' });
+    // une autre image arrive sur le dessus pendant que le doigt tient la carte
+    await page.eval(`pileItems = [pileItems[1], pileItems[0], ...pileItems.slice(2)]; renderPile()`);
+  } finally { await page.release(300); }   // lâcher lent : rien ne part
+  assert.equal(await still(), true, 'une carte triée sans avoir été tenue');
+  await page.eval(`loadPile()`);
+  await page.waitFor(`${TOP} === 'zp12 autre'`, { what: 'pile relue' });
+  page.assertNoErrors();
+});
+
+const FAIL_ICON = '#pile [data-k="0"] .qicon';   // (le centre d'une carte d'échec peut être son bouton Relancer)
+test('carte d\'échec : elle ne se tire pas vers la droite, et ne part qu\'à gauche', async () => {
+  await page.generate('FAIL zp12 échec');
+  await page.waitFor(`!!$('pile').querySelector('[data-k="0"] .pfail')`, { what: 'carte de l\'échec en tête' });
+  await page.eval(`sorts.length = 0`);
+  try {
+    await page.swipe(FAIL_ICON, 150, 0, { hold: true });
+    await page.eval(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);   // gestes rendus
+    assert.equal((await during()).keep, 0, '« Garder » montré sur un échec');
+    assert.equal(await page.eval(`${TOP_CARD}.style.transform`), '', 'un échec suit le doigt vers la droite');
+  } finally { await page.release(300); }   // lâcher lent : rien ne part
+  assert.equal(await page.eval(`!!$('pile').querySelector('[data-k="0"] .pfail')`), true, 'échec toujours là');
+  await page.swipe(FAIL_ICON, -220);
+  await page.waitFor(`!$('pile').querySelector('.pfail') && ${TOP} === 'zp12 autre'`, { what: 'échec retiré' });
+  assert.equal(await page.eval(`sorts.length`), 0, 'aucune demande pour un échec');
+  page.assertNoErrors();
+});
+
+test('à la souris : à droite gardée ; un balayage n\'ouvre pas la visionneuse, un clic oui', async () => {
+  await page.eval(`sorts.length = 0`);
+  await page.swipe(CARD, 90, 0, { mouse: true, pause: 300 });   // lent, sous le seuil : elle revient
+  assert.equal(await still(), true);
+  assert.equal(await page.eval(`$('viewer').classList.contains('on')`), false,
+    'un balayage n\'ouvre pas la visionneuse');
+  await page.swipe(CARD, 220, 0, { mouse: true });
+  await page.waitFor(`sorts.some(s => s.url.endsWith('/api/keep'))`, { what: 'Garder envoyé' });
+  await waitUntil(() => kept('zp12 autre'), { what: 'dans les Tirages' });
+  await made('zp12 souris');
+  await page.swipe(CARD, 2, 0, { mouse: true });     // un clic, à peine bougé : la visionneuse
+  await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte par le clic' });
+  await page.eval(`closeViewer()`);
   await clear();
   page.assertNoErrors();
 });

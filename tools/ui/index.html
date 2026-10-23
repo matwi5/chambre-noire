@@ -374,15 +374,20 @@
   .empty p { margin:0; max-width:24ch; }
   /* ------------------------------------------------------------ pile du Labo : la carte du dessus et, devinées
      dessous, les deux suivantes ; ✕ (Jeter) et ✓ (Garder) sous la pile ; une carte qui part glisse de son côté */
-  .pilezone { display:flex; flex-direction:column; gap:12px; }
+  .pilezone { display:flex; flex-direction:column; gap:12px; overflow-x:clip; }   /* une carte balayée ne fait pas défiler la page */
   .pile { display:grid; padding-bottom:20px; }
   .pile:empty { display:none; }
   .pcard { grid-area:1/1; position:relative; display:flex; flex-direction:column; min-width:0; border-radius:var(--r-m); overflow:hidden;
     background:var(--surf); border:1px solid var(--line); box-shadow:var(--shadow); transform-origin:50% 100%;
     transition:transform .25s var(--ease), opacity .25s, filter .25s; }
-  .pcard[data-k="0"] { z-index:3; }
+  .pcard[data-k="0"] { z-index:3; touch-action:pan-y pinch-zoom; user-select:none; -webkit-user-select:none; }
   .pcard[data-k="1"] { z-index:2; transform:translateY(10px) scale(.95); filter:brightness(.62); pointer-events:none; }
   .pcard[data-k="2"] { z-index:1; transform:translateY(20px) scale(.9); filter:brightness(.4); pointer-events:none; }
+  .pcard.drag { transition:none; cursor:grabbing; }
+  .stamp { position:absolute; z-index:2; top:18px; padding:4px 12px; border:2px solid currentColor; border-radius:var(--r-s);
+    font:500 22px/1.2 var(--pixel); background:var(--badge); pointer-events:none; opacity:0; }
+  .stamp.keep { left:18px; color:var(--accent); transform:rotate(-8deg); opacity:clamp(0, var(--swipe, 0), 1); }
+  .stamp.drop { right:18px; color:var(--ink); transform:rotate(8deg); opacity:clamp(0, calc(var(--swipe, 0) * -1), 1); }
   .pcard.out-r { transform:translateX(115%) rotate(14deg); opacity:0; }
   .pcard.out-l { transform:translateX(-115%) rotate(-14deg); opacity:0; }
   .pimg { display:block; width:100%; height:min(52svh, 420px); padding:0; border:0; background:var(--field); cursor:zoom-in; }
@@ -992,9 +997,9 @@ TABS.forEach(b=>b.addEventListener('click',()=>{
   renderQueue(); renderRun(); }));
 document.body.className='m-'+mode; placeLens();     // ouverture sur le Labo
 // glisser horizontalement sur la page : onglet voisin, sauf sur le champ de création (dessin, rangées qui défilent,
-// texte en cours de saisie compris)
+// texte en cours de saisie compris) et sur la pile (balayage des cartes)
 (function tabSwipe(){
-  const main=document.querySelector('main'), SKIP='#composer';
+  const main=document.querySelector('main'), SKIP='#composer, #pile';
   let t0=null;
   main.addEventListener('touchstart', e=>{
     t0 = e.touches.length===1 && !openedSheet && !e.target.closest(SKIP)
@@ -1381,16 +1386,18 @@ function pileView(){
   return pileItems.filter(it=>!sorting.has(pileTag(it))).map(it=>{ const p=pageOf(it); return p ? {...it, page:p} : it; }); }
 const pileSize = () => pileItems.filter(it=>!sorting.has(pileTag(it))).length;
 const pileFails = () => pageJobs.filter(p=>ofSpace(p) && p.j.status==='failed').sort((a, b)=>(b.doneAt||0)-(a.doneAt||0));
+// ce que fera la carte balayée, montré pendant le geste (pileSwipe)
+const STAMPS = '<span class="stamp keep" aria-hidden="true">Garder</span><span class="stamp drop" aria-hidden="true">Jeter</span>';
 // réglages d'une image de la pile, chiffres techniques (chasse fixe)
 const pileSettings = it => [it.width && it.height ? it.width+'×'+it.height : '', it.steps ? it.steps+' étapes' : '',
   it.seconds ? fmt(it.seconds) : ''].filter(Boolean).join(' · ');
 function pileCard(it, k){
-  return `<article class="pcard" data-k="${k}" data-key="${esc(pileTag(it))}"><button class="pimg" data-open aria-label="Voir l'image en grand"><img alt=""></button>`
-    + (it.lot ? `<b class="plot">${it.lot.rank}/${it.lot.size}</b>` : '')
+  return `<article class="pcard" data-k="${k}" data-key="${esc(pileTag(it))}"><button class="pimg" data-open aria-label="Voir l'image en grand"><img alt="" draggable="false"></button>`
+    + (it.lot ? `<b class="plot">${it.lot.rank}/${it.lot.size}</b>` : '') + STAMPS
     + `<div class="pbody"><p class="pprompt">${esc(it.prompt||'')}</p><p class="pset">${esc(pileSettings(it))}</p></div></article>`; }
 function failCard(p, k){
   return `<article class="pcard" data-k="${k}" data-key="f${esc(p.id)}"><div class="pfail"><span class="qicon">${dicon('fail')}</span><p class="pprompt">${esc(p.prompt)}</p>`
-    + `<p class="perr">${esc(failText(p))}</p>${p.req ? `<button class="btn secondary small" data-again>${dicon('again')}Relancer</button>` : ''}</div></article>`; }
+    + `<p class="perr">${esc(failText(p))}</p>${p.req ? `<button class="btn secondary small" data-again>${dicon('again')}Relancer</button>` : ''}</div>${STAMPS}</article>`; }
 // la carte du dessus et les deux suivantes (devinées dessous), les boutons ✕ et ✓, l'état vide, la pastille de l'onglet
 function renderPile(){
   const fails=pileFails(), items=pileView(), list=[...fails.map(p=>({fail:p})), ...items.map(it=>({it}))];
@@ -1400,6 +1407,7 @@ function renderPile(){
   renderIsland();
   const shownNow=list.slice(0, 3), key=JSON.stringify(shownNow.map(e=>e.fail ? 'f'+e.fail.id : pileTag(e.it)));
   if(key===pileShown) return; pileShown=key; flying=false;   // (une carte qui partait a quitté l'écran)
+  dropSwipe();                                     // un geste ne trie jamais une carte qu'il ne tient pas
   $('pile').innerHTML=shownNow.map((e, k)=>e.fail ? failCard(e.fail, k) : pileCard(e.it, k)).join('');
   // images par showImage (jamais l'image d'avant), la miniature d'abord ; dessous, la miniature seule
   shownNow.forEach((e, k)=>{ if(e.fail) return; const img=$('pile').querySelector(`[data-k="${k}"] img`);
@@ -1411,10 +1419,12 @@ function topEntry(){ const c=$('pile').querySelector('[data-k="0"]'), key=c && c
 // la carte du dessus part à droite (Garder) ou à gauche (Jeter), puis go() ; un seul départ à la fois
 function flyOut(dir, go){ const c=$('pile').querySelector('[data-k="0"]'); flying=true;
   if(!c){ flying=false; return go(); }
-  c.classList.add('out-'+dir); setTimeout(()=>{ flying=false; go(); }, 220); }
-function sortTop(action){ if(flying) return; const top=topEntry(); if(!top) return;
-  if(top.fail){ if(action==='discard') flyOut('l', ()=>drop(top.fail)); return; }   // échec : ✕ le retire
-  const it=top.it; flyOut(action==='keep' ? 'r' : 'l', ()=>action==='keep' ? keepItem(it) : discardItem(it)); }
+  c.style.transform=''; c.classList.add('out-'+dir);   // (depuis là où le balayage l'a laissée)
+  setTimeout(()=>{ flying=false; go(); }, 220); }
+// vrai si la carte part (un échec ne part qu'à gauche, retiré de la page)
+function sortTop(action){ if(flying) return false; const top=topEntry(); if(!top) return false;
+  if(top.fail){ if(action!=='discard') return false; flyOut('l', ()=>drop(top.fail)); return true; }
+  const it=top.it; flyOut(action==='keep' ? 'r' : 'l', ()=>action==='keep' ? keepItem(it) : discardItem(it)); return true; }
 // envoie Garder ou Jeter (route) d'une image de l'espace priv ; l'image reste hors de la pile affichée jusqu'à la
 // réponse, puis la pile est relue. Déjà triée ailleurs (404) : dit pour Garder, tu pour un Jeter (elle est partie)
 function sendSort(route, priv, tag, body, done){
@@ -1452,9 +1462,48 @@ $('undoBtn').onclick=undoDiscard;
 $('pileNo').onclick=()=>sortTop('discard');
 $('pileYes').onclick=()=>sortTop('keep');
 $('pile').addEventListener('click', e=>{ const card=e.target.closest('.pcard'); if(!card || card.dataset.k!=='0' || flying) return;
+  if(swiped){ swiped=false; return; }              // la fin d'un balayage à la souris n'est pas un clic
   const top=topEntry(); if(!top) return;
   if(top.fail){ const p=top.fail; if(e.target.closest('[data-again]') && p.req) again(()=>relaunch(keptRequest(p))); return; }
   if(e.target.closest('[data-open]')){ const list=pileView(); openViewer(list.findIndex(x=>pileTag(x)===card.dataset.key), list); } });
+// Balayage de la carte du dessus (Pointer Events : doigt et souris) : elle suit le geste et penche, « Garder » ou
+// « Jeter » paraît selon le sens ; relâchée au-delà du tiers de sa largeur, ou après un geste vif, elle part de ce côté
+// (sortTop, comme ✓ et ✕), sinon elle revient. Un geste surtout vertical laisse défiler la page (touch-action), et le
+// glissement d'onglet ne part jamais de la pile (tabSwipe). Un échec ne part qu'à gauche.
+const SWIPE_START=8;                               // px : en deçà, un appui (le clic ouvre la visionneuse)
+const SWIPE_QUICK_PX=60, SWIPE_QUICK_SPEED=.5, SWIPE_SPEED_MS=100;   // geste vif : au moins 60 px, 0,5 px/ms sur ses
+                                                   // 100 dernières ms
+// swiped : le dernier geste sur la carte était un balayage (le clic qui suit à la souris n'ouvre pas la visionneuse) ;
+// dropSwipe : abandonne le geste en cours, la carte remise en place (pile redessinée sous le doigt)
+let swiped=false, dropSwipe=()=>{};
+(function pileSwipe(){ let gest=null;
+  // la carte suit le geste et penche ; --swipe : sens et force (de -1 à 1 environ) qui montrent « Garder » ou « Jeter »
+  const place = (c, dx) => { c.style.transform=dx ? `translateX(${dx}px) rotate(${(dx/20).toFixed(1)}deg)` : '';
+    c.style.setProperty('--swipe', (dx/120).toFixed(3)); };
+  const abandon = () => { if(!gest) return; const c=gest.c; gest=null; c.classList.remove('drag'); place(c, 0); };
+  dropSwipe=abandon;
+  $('pile').addEventListener('pointerdown', e=>{ if(!e.isPrimary) return;   // un second doigt ne prend pas le geste
+    abandon(); swiped=false;                       // (un geste laissé en route, souris lâchée hors de la pile)
+    const c=e.target.closest('.pcard');
+    if(!c || c.dataset.k!=='0' || flying || e.button>0 || e.target.closest('[data-again]')) return;
+    gest={c, id:e.pointerId, x0:e.clientX, y0:e.clientY, dx:0, moving:false, fail:c.dataset.key[0]==='f',
+      track:[{x:e.clientX, t:e.timeStamp}]}; });
+  $('pile').addEventListener('pointermove', e=>{ if(!gest || e.pointerId!==gest.id) return;
+    if(e.pointerType==='mouse' && !(e.buttons & 1) || flying || !gest.c.isConnected) return abandon();
+    const dy=e.clientY-gest.y0, dx=gest.fail ? Math.min(0, e.clientX-gest.x0) : e.clientX-gest.x0;   // un échec : à gauche
+    if(!gest.moving){ if(Math.abs(dx)<SWIPE_START || Math.abs(dx)<Math.abs(dy)) return;
+      gest.moving=true; gest.c.setPointerCapture(e.pointerId); gest.c.classList.add('drag'); }
+    gest.dx=dx; gest.track.push({x:e.clientX, t:e.timeStamp}); place(gest.c, dx); });
+  const end=e=>{ if(!gest || e.pointerId!==gest.id) return; const g0=gest; gest=null; if(!g0.moving) return;
+    swiped=true; g0.c.classList.remove('drag');
+    if(e.type!=='pointerup' || flying || !g0.c.isConnected) return place(g0.c, 0);
+    // vitesse sur les dernières ms avant le lâcher (doigt resté immobile : nulle)
+    const recent=g0.track.filter(p=>e.timeStamp-p.t<=SWIPE_SPEED_MS);
+    const speed=recent.length>1 ? (recent.at(-1).x-recent[0].x)/Math.max(1, recent.at(-1).t-recent[0].t) : 0;
+    const far=Math.abs(g0.dx)>g0.c.offsetWidth/3;
+    const quick=Math.abs(g0.dx)>SWIPE_QUICK_PX && Math.abs(speed)>SWIPE_QUICK_SPEED && Math.sign(speed)===Math.sign(g0.dx);
+    if(!((far || quick) && sortTop(g0.dx>0 ? 'keep' : 'discard'))) place(g0.c, 0); };
+  $('pile').addEventListener('pointerup', end); $('pile').addEventListener('pointercancel', end); })();
 // Garder ou Jeter depuis la visionneuse ouverte sur la pile : elle passe à l'image suivante, ou se ferme
 function sortFromViewer(action){ const it=vList[vIndex]; if(!it || !it.pile) return;
   const list=vList.filter(x=>pileTag(x)!==pileTag(it)), at=Math.min(vIndex, list.length-1);
