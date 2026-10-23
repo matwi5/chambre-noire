@@ -40,7 +40,7 @@ async function fresh() {
   await page.goto(bench.url + '/');
   await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
 }
-// « Générer », refusé par le Mac
+// « Révéler », refusé par le Mac
 async function refusedGenerate() {
   await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/generate', requestStage: 'Request' }] });
   await page.eval(`$('toastBox').textContent = ''`);

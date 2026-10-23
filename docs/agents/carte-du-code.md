@@ -117,20 +117,24 @@ Le fichier se lit par ses commentaires d'en-tête `/* ---…` (CSS) et `// ---�
 dernier bloc, après le HTML.
 
 - **CSS** : sections « jetons » (lumière inactinique ; `html.priv` : lumière verte), « fond », « surfaces mates »
-  (classe `mat`), « barre du haut », « barre d'onglets », « panneaux du bas », « compositeur », « panneau Réglages »,
-  « images d'entrée (Labo) et Dessiner », « visionneuse plein écran », « carte en cours » (`runcard`, classe `behind`
-  derrière une pile non vide), « pile du Labo » (cartes `pcard`, bandeau Annuler `undo`), « liste de la file (feuille
-  de la file du Labo) » (cartes de la file), « prompts enregistrés », « espace privé », « messages et confirmations »,
+  (classe `mat`), « barre du haut », « barre d'onglets », « panneaux du bas », « compositeur » (champ replié, grille des
+  réglages `setgrid`), « panneau Réglages », « images d'entrée (Labo) et Dessiner », « visionneuse plein écran »,
+  « carte en cours » (`runcard`, classe `behind` derrière une pile non vide), « pile du Labo » (cartes `pcard`,
+  bandeau Annuler `undo`), « liste de la file (feuille de la file du Labo) » (cartes de la file), « prompts
+  enregistrés », « espace privé », « messages et confirmations »,
   « typographie » (police pixel `--pixel`, chasse fixe `--mono`, déclaration `@font-face`), « téléphone (html.lite) ».
 - **HTML** : en-tête (état du moteur `#statusChip`, qui ouvre `#engineSheet`) ; onglets `#pane-labo` (Labo : la
   pastille « +N en attente » `#queueChip`, la carte en cours `#runCard` (cadre `#runFrame` et son canevas
   `#revealCanvas`, rang dans un lot `#lotBadge`, étape `#runStep`, phase `#runPhase`, fin prévue `#runEta`, annulation
   `#runCancel`, prompt `#runPrompt`, avancement `#runBar`), la pile `#pile`, ses boutons ✕ `#pileNo` et ✓ `#pileYes`,
-  son compte `#pileCount`, l'état vide `#pileEmpty` ; dessous, le compositeur `#composer` : images d'entrée `#refs`,
-  vignettes `#inThumbs`, ajout `#inDrop` et son champ `#inFiles`, bouton Dessiner `#drawBtn` (choix d'une image
+  son compte `#pileCount`, l'état vide `#pileEmpty` ; dessous, le compositeur `#composer` (classe `folded` : replié
+  en sa ligne `#composerLine`, nombre d'images `#lineCount` ; déplié : poignée `#composerGrab`) : images d'entrée
+  `#refs`, vignettes `#inThumbs`, ajout `#inDrop` et son champ `#inFiles`, bouton Dessiner `#drawBtn` (choix d'une image
   `#drawFile`, explication `#drawHint`), zone de dessin `#paintWrap` et `#paintCanvas`, masque ou annotation
-  `#mask_mode`, interrupteur Campagne `#campSwitch`, champ unique `#prompt`, bouton `#go` ; classe `drawing` quand le
-  dessin est actif), `#pane-tirages` (Tirages, grille `#histGrid`) ; barre d'onglets `#tabbar` (icônes en pixels ;
+  `#mask_mode`, interrupteur Campagne `#campSwitch`, champ unique `#prompt`, grille des réglages `#setGrid` (une case
+  `data-set` par réglage, qui ouvre `#setSheet`), Prompts `#promptsBtn`, bouton « Révéler » `#go` (`#goLabel`,
+  estimation `#goEta`) ; classe `drawing` quand le dessin est actif : le champ prend toute la hauteur, la pile
+  s'efface), `#pane-tirages` (Tirages, grille `#histGrid`) ; barre d'onglets `#tabbar` (icônes en pixels ;
   onglet Labo : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vSort` : Garder et Jeter une image de
   la pile) ; bandeau Annuler `#undoBar` ; images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`,
   `#engineSheet`, `#lotSheet`, la file `#fileSheet` (`#queueNote`, `#queueList`), `#promptSheet`, `#promptEditSheet` et
@@ -139,15 +143,21 @@ dernier bloc, après le HTML.
   - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
     privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
     (`refPx`, `inputsFor`, `parts` : copies de `estimate.py`) ; réglages `opt` (`localStorage` `qwen-opt`),
-    `refreshChoices` (exemple du champ, `PLACEHOLDERS`) ; nature de la demande lue dans la saisie : `inputKind` (`t2i`
-    sans image d'entrée, `edit` avec, `mask` dessin actif : `drawOn`), `singleImage`, `campaignShown` (interrupteur
-    proposé à partir de 2 images), `inCampaign`, `variants` ; brouillon unique `qwen-prompt` (dans `init` : reprise une
-    fois des anciens `qwen-<onglet>_prompt`).
+    `refreshChoices` (exemple du champ, `PLACEHOLDERS`, grille `#setGrid`) ; nature de la demande lue dans la saisie :
+    `inputKind` (`t2i` sans image d'entrée, `edit` avec, `mask` dessin actif : `drawOn`), `singleImage`, `campaignShown`
+    (interrupteur proposé à partir de 2 images), `inCampaign`, `variants` ; brouillon unique `qwen-prompt` (dans
+    `init` : reprise une fois des anciens `qwen-<onglet>_prompt`).
   - « onglets & statut » : `TABS`, changement d'onglet (`mode`, `goTab`, `showLabo`), `tabSwipe` (glissement
-    d'onglet, jamais depuis le champ de création ni la pile) ; « panneaux du bas » : `openSheet`, `closeSheet`
+    d'onglet, jamais depuis le champ de création déplié ni la pile) ; « panneaux du bas » : `openSheet`, `closeSheet`
     (un seul ouvert, `openedSheet`) ; `refreshStatus()` (interroge `/api/status` toutes les 5 s, 2 s tant que la file
     n'est pas vide ; met à jour `queueState`, l'onglet Labo, la carte en cours, la file et l'espace privé par
     `applyPrivate`, et le panneau Moteur, version servie comprise : `fmtVersion`, `staleServer`).
+  - « champ de création replié ou déplié » : `setComposer`, `openComposer`, `foldComposer`, `followLabIdle` (appelé
+    par `renderRunCard` : déplié d'office quand le Labo n'a plus rien à trier ni en cours ; replié quand il a de
+    nouveau quelque chose si on n'y a pas touché depuis, `autoOpen` ; `labIdle`, remis à `null` par `changedSpace`),
+    `foldGesture` (poignée), toucher sur la pile (`.pilezone`, image comprise, hors ✓, ✕ et autres boutons), dépôt
+    d'une image sur le champ replié (`dragover`, `drop`) ; replié aussi après « Révéler » ; `showLabo('composer')` le
+    déplie. Hauteur de l'image de pile `--pimg-h` : ✓ et ✕ restent au-dessus de la ligne repliée.
   - « images », « dessin » : `toEntry`, `addInputFiles` (choix, dépôt et collage, écouteur `paste` du Labo),
     `refuseWhileDrawing` (ajout refusé pendant le dessin, saisie affichée ou mise de côté), `noteInput` (saisie visée
     par un ajout, notée avant toute attente), `renderInputs` (images d'entrée de la saisie, `inputImages`, puis
@@ -231,13 +241,13 @@ dernier bloc, après le HTML.
     `settingsFor` (format, résolution et étapes qui redonnent l'image) ; « Relancer » (visionneuse `#vAgain`, carte
     d'échec `data-again`) : `keptRequest` (demande gardée : l'image seule), `againFrom` (reconstruite de
     l'image sinon), `canAgain`, `relaunch` (graine et espace du moment ; estimation), puis `launch` (envoi commun avec
-    « Générer » : suivi, `accepted` (vidage de la saisie de « Générer »), message, haut du Labo), `again` (un geste à
-    la fois) ;
+    « Révéler » : suivi, `accepted` (vidage de la saisie de « Révéler », champ replié), message, haut du Labo), `again`
+    (un geste à la fois) ;
     actions de la visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`, `deleteItem` (« Supprimer » un
     tirage), `forgetResult`.
   - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
     `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,
-    `putInput`, `swapInput`, `emptyInput` (vidage après « Générer », dans l'espace d'où la demande est partie) ; un
+    `putInput`, `swapInput`, `emptyInput` (vidage après « Révéler », dans l'espace d'où la demande est partie) ; un
     ajout d'image asynchrone (Éditer, Dessiner) va dans la saisie de l'espace où il a commencé. `openPrivSheet`,
     `privCreate`, `privUnlock`, `privLock` (sortie appliquée dès la réponse du Mac : `spaceEpoch` écarte une réponse de
     `/api/status` demandée avant ; `leavingPrivate` : aucun aperçu privé demandé pendant la fermeture),

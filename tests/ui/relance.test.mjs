@@ -177,7 +177,7 @@ test('espace du moment : dans l\'espace public, puis dans l\'espace privé', asy
   page.assertNoErrors();
 });
 
-test('« Générer » avec une image : le format choisi reste pour la demande suivante', async () => {
+test('« Révéler » avec une image : le format choisi reste pour la demande suivante', async () => {
   await fresh();
   await page.tab('labo');
   await addImage('#c02020');

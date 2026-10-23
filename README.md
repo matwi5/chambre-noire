@@ -186,7 +186,7 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   sans `--lan`, elles sont refusées. Sur iPhone, Safari → Partager → **Sur l'écran d'accueil** fonctionne aussi en HTTP.
 - **Notification de fin de génération** : à la fin de chaque génération (ou en cas d'échec), l'ordinateur envoie une
   notification au téléphone, même si l'application y est fermée ou en arrière-plan ; la toucher rouvre l'application.
-  L'autorisation est demandée au premier appui sur **Générer** ; l'interrupteur **Notification en fin de génération**
+  L'autorisation est demandée au premier appui sur **Révéler** ; l'interrupteur **Notification en fin de génération**
   du panneau Réglages les coupe. Elles ne passent que par l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du
   Wi-Fi), ou sur l'ordinateur lui-même. Le message transite chiffré par le service de notification du navigateur
   (Google pour Chrome) et ne contient ni le prompt ni le nom du fichier : « Image prête — Générée en 12 min 14 s ·
@@ -220,13 +220,11 @@ est dans `logs/service.log`. Le raccourci `Chambre noire.command` ouvre alors si
 ## Utilisation
 
 L'interface a deux onglets aux icônes en pixels, dans la barre du bas : **Labo** (en haut, la pile des images à trier et
-la
-génération en cours, la file d'attente dans une feuille ; dessous, le champ de création : texte → image, édition avec
-des
-images d'entrée, ou dessin guidé sur une image) et **Tirages** (les images gardées) ; elle s'ouvre sur le Labo. Sur un
-grand écran, le Labo est une colonne centrée et les Tirages prennent toute la largeur. Sur un écran tactile, glisser le
-doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le champ de création, sur la carte en cours et sur
-la pile, dont les cartes se balaient). Elle s'adapte au téléphone
+la génération en cours, la file d'attente dans une feuille ; en bas, le champ de création, replié quand la pile a des
+images : texte → image, édition avec des images d'entrée, ou dessin guidé sur une image) et **Tirages** (les images
+gardées) ; elle s'ouvre sur le Labo. Sur un grand écran, le Labo est une colonne centrée et les Tirages prennent toute
+la largeur. Sur un écran tactile, glisser le doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le
+champ de création déplié, sur la carte en cours et sur la pile, dont les cartes se balaient). Elle s'adapte au téléphone
 comme à l'ordinateur, toujours sombre, même quand le système est en mode clair :
 lumière inactinique de chambre noire (noir chaud, halo rouge de la lampe, grain léger, textes couleur papier, accent
 ambre, erreurs en rouge vif avec leur icône). Sur un écran tactile, elle allège ses animations pour rester fluide ;
@@ -234,8 +232,8 @@ ajouter `?lite=1` ou `?lite=0` à l'adresse force l'un ou l'autre rendu.
 
 ### Réglages communs
 
-Sous le texte, trois pastilles résument le format, la résolution et les étapes ; un appui ouvre le panneau
-**Réglages**. Tous les réglages sont à valeurs fixes :
+Sous le texte, une grille de quatre cases résume le format, la taille (la résolution), les étapes et le nombre
+d'images ; un appui sur une case ouvre le panneau **Réglages**. Tous les réglages sont à valeurs fixes :
 
 | Réglage | Choix | Effet |
 | --- | --- | --- |
@@ -245,15 +243,16 @@ Sous le texte, trois pastilles résument le format, la résolution et les étape
 | **Images** (hors campagne) | **1**, 2, 3 ou 4 | Nombre de variantes du même prompt, chacune avec sa graine, avec ou sans images d'entrée, dessin compris (voir [Créer une image](#créer-une-image-labo)) ; le temps affiché est celui de toutes les images |
 | **Aperçu toutes les 5 étapes** | interrupteur, activé par défaut | Montre l'image en cours de formation ; coût affiché à côté |
 
-Le bouton **Générer** affiche le temps estimé. Le navigateur retient les réglages choisis et le texte en cours de
+Le bouton **Révéler** affiche le temps estimé. Le navigateur retient les réglages choisis et le texte en cours de
 l'espace public (un seul brouillon).
 
 Conseil : **540p + 12 étapes** pour chercher la bonne formulation, puis montez la résolution et les étapes pour la version finale.
 Les descriptions en **anglais, longues et précises** donnent les meilleurs résultats.
 
-**Générer** reste actif pendant une génération : chaque appui ajoute une demande à la **file d'attente**, avec les
-réglages du moment, et remonte en haut du **Labo**. Dès que le Mac accepte la demande, la saisie est vidée pour la
-suivante de ce qui est parti : texte et son brouillon, images d'entrée d'une édition (campagne comprise : l'interrupteur
+**Révéler** reste actif pendant une génération : chaque appui ajoute une demande à la **file d'attente**, avec les
+réglages du moment, et remonte en haut du **Labo**. Dès que le Mac accepte la demande, le champ de création se replie
+pour laisser voir la carte qui arrive, et la saisie est vidée pour la suivante de ce qui est parti : texte et son
+brouillon, images d'entrée d'une édition (campagne comprise : l'interrupteur
 **Campagne** reste tel quel), image et tracé d'un dessin ; ce qui a été tapé ou ajouté pendant l'envoi reste ; les
 Réglages ne bougent pas (seul le format « Image », qui suit l'image, part avec elle). Si la demande est refusée (erreur
 du Mac, Mac injoignable, génération longue non confirmée), rien n'est vidé et la page ne bouge pas. Le Mac calcule les
@@ -327,16 +326,25 @@ l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du Wi-Fi).
 
 ### Créer une image (Labo)
 
-Sous la génération en cours, le Labo a un seul champ de texte et une seule liste d'**images d'entrée**. Sans image
-d'entrée, la génération part du texte :
-écrire la description, ajuster les réglages si besoin, appuyer sur **Générer**. Avec des images, c'est une
+Sous la pile et la génération en cours, le Labo a un seul champ de texte et une seule liste d'**images d'entrée**.
+Sans image d'entrée, la génération part du texte : écrire la description, ajuster les réglages si besoin, appuyer sur
+**Révéler**. Avec des images, c'est une
 **édition** (voir plus bas). L'exemple affiché dans le champ vide suit la saisie : décrire l'image sans image
 d'entrée, dire quoi changer avec des images.
 
-Pour obtenir plusieurs propositions du même prompt, choisir 2, 3 ou 4 **Images** dans les Réglages (une pastille « 3
-images » le rappelle sous le texte ; le choix est retenu). Une seule demande lance alors un **lot de variantes** : une
+Le champ de création est en bas du Labo. Quand la pile a des images ou qu'une génération est en cours, il est replié
+en une ligne « Décrire une image… » (avec le nombre d'images d'entrée), tenue au-dessus de la barre d'onglets, sans
+jamais cacher ✓ et ✕ ; un toucher la déplie, et une image glissée dessus (sur ordinateur) la déplie et rejoint les
+images d'entrée. Il se déplie de lui-même quand il n'y a plus rien à trier ni en cours ; tant qu'on n'y a pas touché,
+il se replie de lui-même dès que le Labo a de nouveau quelque chose (une carte revenue par « Annuler », une image d'un
+autre appareil). Une fois touché, il ne se replie qu'après **Révéler**, en glissant sa poignée vers le bas (ou en la
+touchant) ou en touchant la pile (la visionneuse s'ouvre aussi si l'on a touché l'image) ; replier ne perd rien de la
+saisie. Pendant le dessin, il prend toute la hauteur du Labo et la pile s'efface.
+
+Pour obtenir plusieurs propositions du même prompt, choisir 2, 3 ou 4 **Images** dans les Réglages (la case Images de
+la grille le rappelle sous le texte ; le choix est retenu). Une seule demande lance alors un **lot de variantes** : une
 génération par image, à la suite dans la file (jamais en même temps), chacune avec sa propre graine. Le bouton
-**Générer** affiche le temps de tout le lot. Pendant le calcul, l'image en cours porte « Image 2 sur 3 » et la file
+**Révéler** affiche le temps de tout le lot. Pendant le calcul, l'image en cours porte « Image 2 sur 3 » et la file
 d'attente montre tout le lot sur une seule carte, une case par image, dont l'annulation arrête tout le lot (le bouton de
 l'image en cours n'annule que celle-ci, et une image en échec n'arrête pas les autres). À la fin, chaque image du lot
 arrive dans la pile sur sa carte (« 2/3 ») : on garde celles qu'on veut et on jette les autres.
@@ -361,14 +369,14 @@ ajoutées et un message le signale.
 bleues »), activer l'interrupteur **Campagne** sous les images (le choix est retenu ; il n'est proposé qu'à partir
 de 2 images, et ignoré tant qu'il ne l'est pas : une seule photo est une édition simple).
 Chaque photo est alors éditée seule, avec cette seule photo en référence : une image par photo, jusqu'à 10 photos, au
-lieu d'une image qui les combine. Le compteur passe à « n photos », la pastille « Campagne · n photos » remplace celle
-du format, et le choix du format disparaît des Réglages : chaque image prend la forme de sa photo (le format pris en
-charge le plus proche, à la résolution choisie, côtés multiples de 32 ; une photo en portrait reste en portrait). Le
-temps estimé additionne les photos une à une. La campagne est un lot comme les variantes : suivie image par image
-(« Photo 2 sur 6 »), annulable en entier depuis la file d'attente, une seule notification à la fin, une carte par
-image dans la pile, et chaque image garde sa photo comme image d'entrée ; elle n'a pas de variantes (le choix du
-nombre d'images disparaît). Interrupteur
-désactivé, l'édition reste celle d'avant (1 à 10 références combinées en une image).
+lieu d'une image qui les combine. Le compteur passe à « n photos », la case Campagne (n photos) remplace celle du
+format, la case Images disparaît, et le choix du format disparaît des Réglages : chaque image prend la forme de sa photo
+(le format pris en charge le plus proche, à la résolution choisie, côtés multiples de 32 ; une photo en portrait reste
+en portrait). Le temps estimé additionne les photos une à une. La campagne est un lot comme les variantes : suivie image
+par image (« Photo 2 sur 6 »), annulable en entier depuis la file d'attente, une seule notification à la fin, une
+carte par image dans la pile, et chaque image garde sa photo comme image d'entrée ; elle n'a pas de variantes (le choix
+du nombre d'images disparaît). Interrupteur désactivé, l'édition reste celle d'avant (1 à 10 références combinées en une
+image).
 
 ### Dessiner (dessin guidé)
 
@@ -384,7 +392,7 @@ Le bouton **Dessiner**, sous les images d'entrée du Labo, transforme l'unique i
 4. Écrire une instruction : « Replace the object in the painted area with a small stone fountain ».
 
 Pendant le dessin, aucune image ne s'ajoute (choix, dépôt, collage ou **Éditer** : « Désactivez Dessiner pour
-ajouter d'autres images »), la campagne n'est pas proposée, et **Générer** refuse une demande sans zone peinte. Un
+ajouter d'autres images »), la campagne n'est pas proposée, et **Révéler** refuse une demande sans zone peinte. Un
 nouvel appui sur **Dessiner** l'éteint sans perdre le tracé, retrouvé en le rallumant tant que l'image reste ;
 retirer l'image (« × ») éteint le dessin et efface le tracé. **Dessiner** sur une image des Tirages, de la pile ou
 des images d'entrée la met seule dans la saisie, dessin actif et tracé vierge, après confirmation si la saisie
@@ -416,7 +424,7 @@ image pendant la lecture des images, la confirmation est redemandée. Le geste e
 dont les Tirages n'ont pas gardé les images d'entrée (images anciennes).
 
 **Relancer** refait la même demande avec une nouvelle graine, sans toucher la saisie du Labo, puis mène en haut du
-**Labo**, comme **Générer** : dans l'espace où l'on est (dans l'espace privé, tout part en privé). Pour une image de la
+**Labo**, comme **Révéler** : dans l'espace où l'on est (dans l'espace privé, tout part en privé). Pour une image de la
 pile lancée par la page, c'est la demande qu'elle a gardée (une image d'un lot : cette image seule, sa photo pour une
 campagne), de même pour une carte d'échec. Pour une image des Tirages, ou une image reprise après un
 rechargement, la demande est refaite à partir de l'image : son texte, ses images d'entrée, ses dimensions, ses étapes
@@ -981,12 +989,15 @@ la souris, bandeau Annuler et
 rien d'envoyé avant sa fin ni au rechargement, deux Jeter de suite, « Déjà triée », visionneuse, carte d'échec, pile
 privée, message « Image prête »), Garder et Jeter par nom après une relecture de la pile, la saisie (unique, dans le
 Labo, Dessiner,
-collage, campagne à partir de 2 images, plusieurs photos d'un coup, vidage après « Générer », saisie propre à chaque
-espace), l'en-tête (cadenas, état du moteur), la file cloisonnée par espace, les prompts enregistrés privés, la reprise
-d'une
-génération, le suivi d'une génération privée devenue inconnue (sans faux « Échec »), le brouillon unique (reprise des
-anciens, aucun brouillon privé dans le navigateur, ancien réglage incognito signalé une fois puis oublié) et le pilote
-lui-même (recherche de données restées dans la page, fichiers écrits par le banc, délais).
+collage, campagne à partir de 2 images, plusieurs photos d'un coup, vidage après « Révéler », saisie propre à chaque
+espace), le champ de création (replié avec une pile, déplié pile vide, replié après « Révéler », par sa poignée ou un
+toucher sur la pile sans rien perdre de la saisie, déplié d'office puis replié quand la carte revient, touché il reste
+déplié, pas replié par la fin d'un balayage, image glissée sur la ligne, ✓ et ✕ jamais sous la ligne, dessin en pleine
+hauteur, grille de réglages qui ouvre le panneau, rien qui dépasse), l'en-tête (cadenas, état du moteur), la file
+cloisonnée par espace, les prompts enregistrés privés, la reprise d'une génération, le suivi d'une génération privée
+devenue inconnue (sans faux « Échec »), le brouillon unique (reprise des anciens, aucun brouillon privé dans le
+navigateur, ancien réglage incognito signalé une fois puis oublié) et le pilote lui-même (recherche de données restées
+dans la page, fichiers écrits par le banc, délais).
 
 Tests de bout en bout, interface lancée :
 

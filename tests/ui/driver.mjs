@@ -16,7 +16,11 @@
 //                                                // pause : ms immobile avant de relâcher (geste lent)
 //   await page.release(300)                      // relâche le geste tenu (après 300 ms immobile : geste lent)
 //   await page.typePrompt('texte')               // texte tapé dans le champ du Labo (événement input)
-//   await page.generate('texte')                 // tapé dans le Labo puis « Générer » : demande acceptée
+//   await page.generate('texte')                 // tapé dans le Labo puis « Révéler » : demande acceptée
+//   await page.overflowing()                     // éléments visibles qui dépassent de la largeur de la vue
+//   await page.visible('#prompt')                // élément affiché (ni absent, ni masqué, ni sans boîte)
+//   await page.pasteImage()                      // une image de 64×64 collée dans le champ du Labo (Cmd+V)
+//   await page.made('texte')                     // « Révéler » puis l'image attendue dans la pile affichée
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
 //   await page.viewPile('texte')                 // visionneuse ouverte sur l'image de la pile à ce prompt
 //   await page.openQueue()                       // feuille de la file ouverte par la pastille « +N en attente »
@@ -303,6 +307,39 @@ async function connect(wsUrl) {
       await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation de l\'annulation' });
       await page.eval(`answer(${yes})`);
     },
+    // élément affiché : présent, ni masqué (hidden, display:none) ni sans boîte
+    visible(selector) {
+      return page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
+        return !!el && !el.hidden && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0; })()`);
+    },
+    // une image de 64×64 pixels collée dans le champ du Labo (Cmd+V : événement paste avec un fichier image)
+    pasteImage() {
+      return page.eval(`(async () => { const dt = new DataTransfer(), c = document.createElement('canvas');
+        c.width = c.height = 64; const b = await new Promise(r => c.toBlob(r, 'image/png'));
+        dt.items.add(new File([b], 'image.png', { type: 'image/png' }));
+        const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+        $('prompt').dispatchEvent(ev); })()`);
+    },
+    // génération demandée par la page (page.generate), finie : son image est dans la pile affichée
+    async made(prompt) {
+      await page.generate(prompt);
+      await page.waitFor(`pileItems.some(it => it.prompt === ${JSON.stringify(prompt)})`,
+        { what: `« ${prompt} » dans la pile`, timeout: 30000 });
+    },
+    // éléments visibles qui dépassent de la largeur de la vue (boîtes mesurées), hors feuilles, visionneuses et
+    // messages ; un élément rogné par un parent qui tient dans la vue (overflow hidden ou défilant : reflets animés,
+    // rangées qui défilent) ne dépasse pas. Renvoie l'identifiant (ou la classe) de chacun
+    overflowing() {
+      return page.eval(`(() => {
+        const out = r => r.left < -.5 || r.right > innerWidth + .5;
+        const clipped = el => { for (let a = el.parentElement; a; a = a.parentElement)
+          if (getComputedStyle(a).overflowX !== 'visible') return !out(a.getBoundingClientRect());
+          return false; };
+        return [...document.querySelectorAll('body *')]
+          .filter(el => el.getClientRects().length && !el.closest('.sheet, .viewer, .toast, .ambient'))
+          .filter(el => { const r = el.getBoundingClientRect(); return r.width && out(r) && !clipped(el); })
+          .map(el => el.id || el.className || el.tagName); })()`);
+    },
     // taille d'un canevas et nombre de ses pixels non transparents (ce qui y est dessiné)
     canvasInk(selector) {
       return page.eval(`(c => { const out = { width: c.width, height: c.height, ink: 0 }; if (!c.width) return out;
@@ -315,7 +352,7 @@ async function connect(wsUrl) {
       return page.eval(`(() => { const t = $('prompt'); t.value = ${JSON.stringify(text)};
         t.dispatchEvent(new Event('input')); })()`);
     },
-    // texte tapé dans le Labo puis « Générer » : attend la demande acceptée (une génération de plus suivie par la
+    // texte tapé dans le Labo puis « Révéler » : attend la demande acceptée (une génération de plus suivie par la
     // page), le Labo affiché
     async generate(text) {
       if (await page.eval(`mode`) !== 'labo') await page.tab('labo');
@@ -343,9 +380,11 @@ async function connect(wsUrl) {
       const { names } = await send('Runtime.globalLexicalScopeNames');
       return page.eval(`(${scanPage})(${JSON.stringify(markers)}, ${JSON.stringify(names)}, ${JSON.stringify(skip)})`);
     },
-    // appui sur un élément (événement click du DOM, comme un toucher) ; échoue s'il est absent ou masqué
+    // appui sur un élément (événement click du DOM, comme un toucher) ; échoue s'il est absent ou masqué. Dans le
+    // champ de création replié, un toucher sur sa ligne le déplie d'abord, comme au doigt
     async click(selector) {
       const ok = await page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
+        if (el && el.closest('#composer.folded') && el.id !== 'composerLine') $('composerLine').click();
         if (!el || el.hidden || el.disabled || !el.getClientRects().length) return false; el.click(); return true; })()`);
       if (!ok) throw new Error(`élément absent, masqué ou désactivé : ${selector}`);
     },

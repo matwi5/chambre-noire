@@ -30,19 +30,6 @@ const post = (url, body = {}) => page.eval(`postJson(${JSON.stringify(url)}, ${J
   .then(async r => ({ status: r.status, body: await r.json() }))`);
 const cancelAll = () => page.eval(`fetch('/api/status').then(r => r.json())
   .then(s => Promise.all(s.queue.filter(e => e.id).map(e => postJson('/api/job/' + e.id + '/cancel', {}))))`);
-const visible = sel => page.eval(`(() => { const el = document.querySelector(${JSON.stringify(sel)});
-  return !!el && !el.hidden && el.getClientRects().length > 0; })()`);
-// éléments visibles qui dépassent de la largeur de la vue (boîtes mesurées) ; un élément rogné par un parent qui tient
-// dans la vue (overflow hidden ou défilant : reflets animés, rangées qui défilent) ne dépasse pas
-const overflowing = () => page.eval(`(() => {
-  const out = r => r.left < -.5 || r.right > innerWidth + .5;
-  const clipped = el => { for (let a = el.parentElement; a; a = a.parentElement)
-    if (getComputedStyle(a).overflowX !== 'visible') return !out(a.getBoundingClientRect());
-    return false; };
-  return [...document.querySelectorAll('body *')]
-    .filter(el => el.getClientRects().length && !el.closest('.sheet, .viewer, .toast, .ambient'))
-    .filter(el => { const r = el.getBoundingClientRect(); return r.width && out(r) && !clipped(el); })
-    .map(el => el.id || el.className || el.tagName); })()`);
 
 test('deux onglets, Labo et Tirages ; ouverture sur le Labo ; plus de page En cours, Créer ni Galerie', async () => {
   assert.deepEqual(await page.eval(`[...$('tabbar').querySelectorAll('button')].map(b => b.dataset.pane)`),
@@ -82,7 +69,7 @@ test('glisser le doigt change d\'onglet hors du champ de création, jamais sur l
 test('rien en cours : pas de carte en cours ; l\'état du moteur ouvre son panneau', async () => {
   await page.tab('labo');
   assert.deepEqual(await page.eval(`[$('runCard').hidden, $('queueChip').hidden]`), [true, true]);
-  assert.equal(await visible('#pileEmpty'), true, 'pile vide : l\'état vide');
+  assert.equal(await page.visible('#pileEmpty'), true, 'pile vide : l\'état vide');
   await page.click('#statusChip');
   await page.waitFor(`$('engineSheet').classList.contains('on')`, { what: 'panneau Moteur' });
   await page.eval(`closeSheet()`);
@@ -101,7 +88,7 @@ test('carte d\'un autre appareil : texte, réglages, sans aperçu ; « +N en att
   assert.equal(await page.eval(`$('runPhase').textContent`), 'Texte → image · 768×512 · 20 étapes');
   assert.match(await page.eval(`$('runEta').textContent`), /^fin vers \d+ h \d\d$/);
   assert.equal(await page.eval(`getComputedStyle($('runFrame')).aspectRatio`), '1.5 / 1');
-  assert.equal(await visible('#runCancel'), true);
+  assert.equal(await page.visible('#runCancel'), true);
   assert.equal(await page.eval(`$('runCard').classList.contains('behind')`), false, 'pile vide : sur le dessus');
   assert.notEqual(await page.eval(`$('runRing').style.strokeDashoffset`), '100', 'anneau de l\'onglet en route');
   await page.waitFor(`fetch('/api/job/${away.id}').then(r => r.json()).then(j => j.preview_version > 0)`,
@@ -109,7 +96,7 @@ test('carte d\'un autre appareil : texte, réglages, sans aperçu ; « +N en att
   await page.eval(`refreshStatus()`);
   assert.deepEqual(await page.eval(`[reveal.pv, !!reveal.img]`), [0, false], 'aperçu d\'un autre appareil montré');
   assert.equal(await page.eval(`$('queueChip').textContent`), '+1 en attente');
-  assert.deepEqual(await overflowing(), [], 'rien ne dépasse à 367 px');
+  assert.deepEqual(await page.overflowing(), [], 'rien ne dépasse à 367 px');
   if (process.env.SHOT_DIR) await page.screenshot(process.env.SHOT_DIR + '/encours-autre.png');
   await page.click('#queueChip');
   await page.waitFor(`openedSheet === $('fileSheet') && $('queueList').textContent.includes('zq5 de cette page')`,
@@ -170,8 +157,8 @@ test('pile non vide : la carte en cours passe juste derrière, au bord de la pil
   const [pile, card] = await page.eval(`[$('pile').getBoundingClientRect().bottom,
     $('runCard').getBoundingClientRect().top]`);
   assert.ok(card >= pile - 30 && card <= pile + 30, `au bord de la pile (${pile} / ${card})`);
-  assert.equal(await visible('#runEta'), true, 'fin prévue');
-  assert.deepEqual(await overflowing(), [], 'rien ne dépasse à 367 px');
+  assert.equal(await page.visible('#runEta'), true, 'fin prévue');
+  assert.deepEqual(await page.overflowing(), [], 'rien ne dépasse à 367 px');
   if (process.env.SHOT_DIR) await page.screenshot(process.env.SHOT_DIR + '/encours-derriere.png');
   bench.release('derriere');
   await bench.idle({ page });

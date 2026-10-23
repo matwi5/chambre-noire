@@ -148,25 +148,48 @@
   select option { background:var(--sheet); color:var(--ink); }
   textarea:focus, select:focus, input.field:focus { outline:2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset:1px; }
 
-  /* ------------------------------------------------------------ compositeur : texte, pastilles de réglages, bouton */
+  /* ------------------------------------------------------------ compositeur : ligne, texte, réglages, bouton */
   .composer { padding:6px 6px 6px; }
-  .composer .intake { padding:10px 8px 4px; }
+  .composer .intake { padding:4px 8px 4px; }
   #composer { scroll-margin-top:calc(64px + env(safe-area-inset-top)); }   /* sous la barre du haut (showLabo) */
+  /* replié : la ligne « Décrire une image… » seule, tenue en bas du Labo au-dessus de la barre d'onglets (88px : sa
+     hauteur 66px, son écart au bas 12px et 10px d'air) ; déplié : la poignée en haut (glissement vers le bas, toucher) */
+  #composer.folded { position:sticky; z-index:5; bottom:calc(88px + env(safe-area-inset-bottom)); padding:0; }
+  #composer.folded > :not(#composerLine), #composer:not(.folded) > #composerLine { display:none; }
+  #composerLine { display:flex; align-items:center; gap:10px; width:100%; min-height:54px; padding:0 18px; border:0;
+    border-radius:inherit; background:none; color:var(--ink3); font-size:17px; text-align:left; cursor:text; }
+  #composerLine span { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #composerLine small { flex:none; color:var(--ink2); font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
+  #composerGrab { display:block; width:100%; height:18px; border:0; padding:0; background:none; cursor:grab; touch-action:none; }
+  #composerGrab::before { content:""; display:block; width:40px; height:4px; margin:4px auto 0; border-radius:2px; background:var(--ink3); }
+  /* dessin actif : le champ prend toute la hauteur du Labo, la pile s'efface ; « Révéler » en bas (148px : barre du
+     haut 64px, barre d'onglets et son écart 78px, haut de main 6px) */
+  #pane-labo:has(#composer.drawing:not(.folded)) .pilezone { display:none; }
+  #composer.drawing:not(.folded) { display:flex; flex-direction:column;
+    min-height:calc(100svh - 148px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  #composer.drawing:not(.folded) .go-row { margin-top:auto; }
   .prompt { display:block; width:100%; min-height:118px; max-height:44svh; border:0; background:transparent; resize:none; padding:12px 14px 10px;
     font-size:17px; line-height:1.45; letter-spacing:-.005em; field-sizing:content; }
   .prompt:focus { outline:none; }
   .prompt::placeholder { color:var(--ink3); }
   .composer:focus-within { border-color:color-mix(in srgb, var(--accent) 45%, var(--line)); }
-  .optrow { display:flex; align-items:center; gap:6px; padding:4px 0 10px 8px; }
-  .opts { flex:1; min-width:0; display:flex; gap:6px; padding-right:8px; overflow-x:auto; scrollbar-width:none; }
+  .optrow { padding:4px 0 10px; }
+  .go-row #promptsBtn { height:auto; }             /* à côté de « Révéler », à sa hauteur */
   #promptsBtn svg { width:15px; height:15px; }
-  .opts::-webkit-scrollbar { display:none; }
+  /* réglages : une case par réglage (Format, Taille, Étapes, Images), autant de colonnes égales que de cases */
+  .setgrid { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0, 1fr); gap:6px; }
+  .setcell { min-width:0; height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+    padding:0 4px; border-radius:var(--r-s); border:1px solid var(--line); background:var(--field); color:var(--ink); cursor:pointer; }
+  .setcell:active { transform:scale(.96); }
+  .setcell small { max-width:100%; overflow:hidden; text-overflow:ellipsis; font-size:10.5px; font-weight:600; color:var(--ink2); white-space:nowrap; }
+  .setcell b { display:flex; align-items:center; gap:5px; max-width:100%; font-size:14px; font-weight:650; white-space:nowrap;
+    font-variant-numeric:tabular-nums; }
   .pill { flex:none; display:inline-flex; align-items:center; gap:7px; height:34px; padding:0 12px; border-radius:var(--r-s); cursor:pointer;
     border:1px solid var(--line); background:var(--field); color:var(--ink); font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; }
   .pill:active { transform:scale(.96); }
   .pill.dim { color:var(--ink2); font-weight:500; }
   .shape { display:inline-block; flex:none; border:1.6px solid currentColor; border-radius:2px; }
-  .pill .shape { opacity:.85; }
+  .setcell .shape { opacity:.85; }
   .go-row { display:flex; gap:8px; align-items:stretch; }
   #go { flex:1; height:54px; font-size:17px; justify-content:center; }
   #go small { font-weight:600; font-size:14px; opacity:.72; margin-left:2px; font-variant-numeric:tabular-nums; }
@@ -401,6 +424,13 @@
   /* ------------------------------------------------------------ pile du Labo : la carte du dessus et, devinées
      dessous, les deux suivantes ; ✕ (Jeter) et ✓ (Garder) sous la pile ; une carte qui part glisse de son côté */
   .pilezone { display:flex; flex-direction:column; gap:12px; overflow-x:clip; }   /* une carte balayée ne fait pas défiler la page */
+  /* hauteur de l'image d'une carte : ce que la vue laisse une fois posés la barre du haut, le texte de la carte, ✓ et ✕,
+     la ligne repliée du champ et la barre d'onglets (388px), moins la carte en cours derrière la pile (82px) et la
+     pastille de la file (48px) quand elles sont là : ✓ et ✕ restent au-dessus de la ligne repliée */
+  .pilezone { --pimg-h:clamp(160px, calc(100svh - 388px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+    - var(--less-run, 0px) - var(--less-chip, 0px)), 420px); }
+  .pilezone:has(#runCard.behind:not([hidden])) { --less-run:82px; }
+  .pilezone:has(#queueChip:not([hidden])) { --less-chip:48px; }
   .pile { order:2; display:grid; padding-bottom:20px; }
   .pile:empty { display:none; }
   .pcard { grid-area:1/1; position:relative; display:flex; flex-direction:column; min-width:0; border-radius:var(--r-m); overflow:hidden;
@@ -416,7 +446,7 @@
   .stamp.drop { right:18px; color:var(--ink); transform:rotate(8deg); opacity:clamp(0, calc(var(--swipe, 0) * -1), 1); }
   .pcard.out-r { transform:translateX(115%) rotate(14deg); opacity:0; }
   .pcard.out-l { transform:translateX(-115%) rotate(-14deg); opacity:0; }
-  .pimg { display:block; width:100%; height:min(52svh, 420px); padding:0; border:0; background:var(--field); cursor:zoom-in; }
+  .pimg { display:block; width:100%; height:var(--pimg-h); padding:0; border:0; background:var(--field); cursor:zoom-in; }
   .pimg img { width:100%; height:100%; object-fit:contain; display:block; }
   .pimg img:not([src]) { visibility:hidden; }
   .plot { position:absolute; left:10px; top:10px; padding:3px 9px; border-radius:var(--r-s); font-size:12.5px; font-weight:700;
@@ -425,7 +455,7 @@
   .pprompt { margin:0; min-height:2.6em; font-size:14.5px; font-weight:600; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
     overflow:hidden; overflow-wrap:anywhere; }
   .pset { margin:0; font-size:12px; color:var(--ink2); overflow-wrap:anywhere; }
-  .pfail { display:grid; justify-items:center; align-content:center; gap:10px; height:calc(min(52svh, 420px) + 64px); padding:20px;
+  .pfail { display:grid; justify-items:center; align-content:center; gap:10px; height:calc(var(--pimg-h) + 64px); padding:20px;
     text-align:center; }
   .pfail .qicon { color:var(--err); }
   .perr { margin:0; font-size:13px; color:var(--err); overflow-wrap:anywhere; }
@@ -566,6 +596,8 @@
   </section>
 
   <section class="card composer gen" id="composer">
+  <button id="composerLine" aria-expanded="true"><span>Décrire une image…</span><small id="lineCount"></small></button>
+  <button id="composerGrab" aria-label="Replier le champ de création"></button>
   <div class="intake">
     <div class="pane-head"><b id="refTitle">Images d'entrée</b><span id="refCount"></span></div>
     <div class="refs" id="refs">
@@ -594,11 +626,11 @@
   </div>
   <textarea id="prompt" class="prompt" rows="4" aria-label="Texte du prompt"></textarea>
   <div class="optrow">
-    <button class="pill" id="promptsBtn" onclick="openPrompts(true)" aria-label="Prompts enregistrés"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h10A1.5 1.5 0 0 1 18.5 5v15.5L12 16.5l-6.5 4V5A1.5 1.5 0 0 1 7 3.5Z"/></svg>Prompts</button>
-    <div class="opts" id="pills"></div>
+    <div class="setgrid" id="setGrid"></div>
   </div>
   <div class="go-row">
-    <button class="btn" id="go"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 3.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7Z"/><path d="M18.5 15c.35 1.8 1.2 2.65 3 3-1.8.35-2.65 1.2-3 3-.35-1.8-1.2-2.65-3-3 1.8-.35 2.65-1.2 3-3Z"/></svg><span id="goLabel">Générer</span><small id="goEta"></small></button>
+    <button class="pill" id="promptsBtn" onclick="openPrompts(true)" aria-label="Prompts enregistrés"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h10A1.5 1.5 0 0 1 18.5 5v15.5L12 16.5l-6.5 4V5A1.5 1.5 0 0 1 7 3.5Z"/></svg>Prompts</button>
+    <button class="btn" id="go"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 3.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7Z"/><path d="M18.5 15c.35 1.8 1.2 2.65 3 3-1.8.35-2.65 1.2-3 3-.35-1.8-1.2-2.65-3-3 1.8-.35 2.65-1.2 3-3Z"/></svg><span id="goLabel">Révéler</span><small id="goEta"></small></button>
   </div>
   </section>
   </div>
@@ -874,9 +906,13 @@ function refreshChoices(){
   $('countOpts').innerHTML = Array.from({length:MAX_VARIANTS}, (_, i)=>i+1).map(k=>{ const on=k===opt.count;
     return `<button class="opt${on?' on':''}" data-k="${k}" aria-pressed="${on}"><b>${k}</b></button>`; }).join('');
   const [rw,rh] = ratioDims(opt.ratio);
-  $('pills').innerHTML = (campMode ? `<button class="pill" data-open>Campagne · ${plan.length} photos</button>` : `<button class="pill" data-open>${shape(rw,rh,16)}${opt.ratio==='image'?'Image':opt.ratio}</button>`)
-    + `<button class="pill" data-open title="${w}×${h}">${resSel().label}</button><button class="pill" data-open>${steps} étapes</button>`
-    + (n>1 ? `<button class="pill" data-open>${n} images</button>` : '') + (pv ? `<button class="pill" data-open>Aperçus</button>` : '');
+  // grille des réglages (chaque case ouvre la feuille) ; campagne : les photos à la place du format, pas de variantes
+  const cell = (k, label, value, title) => `<button class="setcell" data-set="${k}"${title ? ` title="${title}"` : ''}>`
+    + `<small>${label}</small><b>${value}</b></button>`;
+  $('setGrid').innerHTML = (campMode ? cell('format', 'Campagne', plan.length+' photos')
+    : cell('format', 'Format', shape(rw,rh,13)+(opt.ratio==='image'?'Image':opt.ratio)))
+    + cell('taille', 'Taille', resSel().label, `${w}×${h}`) + cell('etapes', 'Étapes', steps)
+    + (campMode ? '' : cell('images', 'Images', n));
   $('estText').textContent = plan ? `${plan.length} photos, chacune à son format · ${steps} étapes`
     : `${w}×${h} · ${steps} étapes${nrefs>1?' · '+nrefs+' références':''}${n>1?' · '+n+' images':''}`;
   if(!E){ estSeconds=estOne=0; campaignEst=[]; $('previewCost').textContent=''; $('estTime').textContent=$('goEta').textContent='…'; return; }
@@ -896,7 +932,7 @@ function refreshChoices(){
   $('campChk').checked=campaignOn;
   $('campChk').addEventListener('change', ()=>{ campaignOn=$('campChk').checked; saveOpt(); renderInputs(); refreshChoices(); });
   $('countOpts').addEventListener('click', e=>{ const b=e.target.closest('[data-k]'); if(!b) return; opt.count=+b.dataset.k; saveOpt(); refreshChoices(); });
-  $('pills').addEventListener('click', e=>{ if(e.target.closest('[data-open]')) openSheet('setSheet'); });
+  $('setGrid').addEventListener('click', e=>{ if(e.target.closest('[data-set]')) openSheet('setSheet'); });
   ['previewChk','mask_mode'].forEach(id=>$(id).addEventListener('change', ()=>{ saveOpt(); refreshChoices(); }));
   renderInputs(); refreshChoices();
   // ancien réglage incognito (mode retiré le 22/10/2026) : l'appareil génère désormais en clair, il en est prévenu ;
@@ -961,10 +997,10 @@ TABS.forEach(b=>b.addEventListener('click',()=>{
   document.body.className='m-'+mode; placeLens(); if(mode==='tirages') loadHistory(); suggestRatio();
   renderQueue(); renderRunCard(); }));
 document.body.className='m-'+mode; placeLens();     // ouverture sur le Labo
-// glisser horizontalement sur la page : onglet voisin, sauf sur le champ de création (dessin, rangées qui défilent,
-// texte en cours de saisie compris), sur la carte en cours et sur la pile (balayage des cartes)
+// glisser horizontalement sur la page : onglet voisin, sauf sur le champ de création déplié (dessin, texte en cours de
+// saisie compris), sur la carte en cours et sur la pile (balayage des cartes)
 (function tabSwipe(){
-  const main=document.querySelector('main'), SKIP='#composer, #pile, #runCard';
+  const main=document.querySelector('main'), SKIP='#composer:not(.folded), #pile, #runCard';
   let t0=null;
   main.addEventListener('touchstart', e=>{
     t0 = e.touches.length===1 && !openedSheet && !e.target.closest(SKIP)
@@ -1060,7 +1096,7 @@ $('inDrop').addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){
 addEventListener('paste', e=>{ const cd=e.clipboardData; if(mode!=='labo' || openedSheet || vIndex>=0 || ivIndex>=0 || !cd) return;
   if(e.target.closest && e.target.closest('textarea, input') && [...cd.types].includes('text/plain')) return;
   const files=[...cd.files].filter(f=>f.type.startsWith('image/'));
-  if(files.length){ e.preventDefault(); addInputFiles(files); } });
+  if(files.length){ e.preventDefault(); openComposer(); addInputFiles(files); } });
 // pendant le dessin, aucune image ne s'ajoute à sa saisie (le tracé appartient à l'image seule) : vrai si l'ajout à list
 // est refusé, avec un message pour la saisie affichée ; list : saisie mise de côté par un changement d'espace
 function refuseWhileDrawing(list=inputImages){
@@ -1079,8 +1115,45 @@ function renderInputs(){ const t=$('inThumbs'); t.innerHTML='';
   inputImages.forEach((im,i)=>{ const d=document.createElement('div'); d.className='thumb';
     d.innerHTML=`<img src="${esc(im.dataUrl)}" alt=""><span>${i+1}</span><button aria-label="Retirer l'image ${i+1}">×</button>`;
     d.querySelector('button').onclick=()=>{ inputImages.splice(i,1); renderInputs(); suggestRatio(); }; t.appendChild(d); });
+  $('lineCount').textContent = !k ? '' : k>1 ? k+' images' : '1 image';   // ligne du champ replié
   renderDrawing(); }
 
+// ------------------------------------------------------------ champ de création replié ou déplié
+// déplié d'office quand le Labo n'a plus rien à trier ni en cours (followLabIdle, depuis renderRunCard) ; replié après
+// « Révéler », par sa poignée (glissement vers le bas ou toucher) et par un toucher sur la pile. Un champ déplié
+// d'office (ou à l'ouverture de la page) auquel on n'a pas touché se replie quand le Labo a de nouveau quelque chose
+// (première pile lue, carte revenue par « Annuler », image d'un autre appareil) ; touché, il reste déplié. Replier ne
+// touche pas la saisie ; la ligne repliée dit le nombre d'images d'entrée.
+// labIdle : dernier état « rien à trier ni en cours » vu (null : pas encore lu dans cet espace) ; autoOpen : déplié
+// d'office et pas touché depuis
+let labIdle=null, autoOpen=true;
+function setComposer(open){ const c=$('composer');
+  if(!open && c.contains(document.activeElement)) document.activeElement.blur();   // (clavier du téléphone fermé)
+  c.classList.toggle('folded', !open); $('composerLine').setAttribute('aria-expanded', open); }
+function openComposer(){ autoOpen=false; setComposer(true); }
+function foldComposer(){ autoOpen=false; setComposer(false); }
+function followLabIdle(idle){ if(idle===labIdle) return; labIdle=idle;
+  if(idle && $('composer').classList.contains('folded')){ setComposer(true); autoOpen=true; }
+  else if(!idle && autoOpen) setComposer(false); }
+['pointerdown', 'focusin', 'input'].forEach(t=>$('composer').addEventListener(t, ()=>{ autoOpen=false; }));
+$('composerLine').onclick=()=>showLabo('composer');
+// une image glissée sur le champ (replié compris) le déplie et rejoint les images d'entrée, comme sur la tuile d'ajout
+// (sinon le navigateur ouvrirait le fichier à la place de la page)
+$('composer').addEventListener('dragover', e=>{ if(![...e.dataTransfer.types].includes('Files')) return;
+  e.preventDefault(); if($('composer').classList.contains('folded')) openComposer(); });
+$('composer').addEventListener('drop', e=>{ if(e.target.closest('#inDrop')) return;   // (la tuile l'ajoute elle-même)
+  const files=[...e.dataTransfer.files]; if(!files.length) return; e.preventDefault(); addInputFiles(files); });
+(function foldGesture(){                           // glissement vers le bas sur la poignée, ou un toucher
+  const grab=$('composerGrab'); let y0=null;
+  grab.addEventListener('pointerdown', e=>{ y0=e.clientY; grab.setPointerCapture(e.pointerId); });
+  grab.addEventListener('pointermove', e=>{ if(y0!==null && e.clientY-y0>40){ y0=null; foldComposer(); } });
+  grab.addEventListener('pointerup', ()=>{ y0=null; }); grab.addEventListener('pointercancel', ()=>{ y0=null; });
+  grab.onclick=foldComposer; })();
+// un toucher sur la pile (ses cartes et leur image, la carte en cours, l'état vide ; pas ✓, ✕ ni les autres boutons)
+// replie le champ ; pas la fin d'un balayage à la souris (swiped : son clic tombe sur la pile quand la carte est partie)
+document.querySelector('.pilezone').addEventListener('click', e=>{
+  if(swiped){ swiped=false; return; }
+  if(!e.target.closest('button:not(.pimg)')) foldComposer(); });
 // ------------------------------------------------------------ dessin
 const canvas=$('paintCanvas'); const ctx=canvas.getContext('2d');
 $('brush').addEventListener('input',e=>$('brushVal').textContent=e.target.value+' px');
@@ -1139,7 +1212,7 @@ function paintedReference(w,h,opaque){ const a=document.createElement('canvas');
   ac.putImageData(im,0,0); const f=document.createElement('canvas'); f.width=w; f.height=h; f.getContext('2d').drawImage(a,0,0,w,h); return f.toDataURL('image/png'); }
 
 // ------------------------------------------------------------ requête & loader
-// champs d'une demande que la saisie ne règle pas (Générer, et Relancer d'une image de la galerie)
+// champs d'une demande que la saisie ne règle pas (Révéler, et Relancer d'une image de la galerie)
 const requestBase = () => ({ cfg:CFG, seed:-1, preview:$('previewChk').checked, preview_interval:PREVIEW_EVERY, ref_images:[],
   init_image:null, mask_image:null, strength:1.0 });
 function buildRequest(){
@@ -1410,7 +1483,7 @@ $('undoBtn').onclick=undoDiscard;
 $('pileNo').onclick=()=>sortTop('discard');
 $('pileYes').onclick=()=>sortTop('keep');
 $('pile').addEventListener('click', e=>{ const card=e.target.closest('.pcard'); if(!card || card.dataset.k!=='0' || flying) return;
-  if(swiped){ swiped=false; return; }              // la fin d'un balayage à la souris n'est pas un clic
+  if(swiped){ swiped=false; e.stopPropagation(); return; }   // la fin d'un balayage à la souris n'est pas un clic
   const top=topEntry(); if(!top) return;
   if(top.fail){ const p=top.fail; if(e.target.closest('[data-again]') && p.req) again(()=>relaunch(keptRequest(p))); return; }
   if(e.target.closest('[data-open]')){ const list=pileView(); openViewer(list.findIndex(x=>pileTag(x)===card.dataset.key), list); } });
@@ -1500,6 +1573,7 @@ function renderRunCard(){
   $('queueChip').hidden=!waiting; $('queueChip').textContent=waiting ? `+${waiting} en attente` : '';
   card.hidden=!now; card.classList.toggle('behind', !!now && (pileFails().length>0 || pileSize()>0));
   $('pileEmpty').hidden=!!now || pileFails().length>0 || pileSize()>0 || !pileRead;   // rien à trier ni en cours
+  if(pileRead) followLabIdle(!now && !pileFails().length && !pileSize());
   if(!now){ if(reveal.key) clearReveal();
     ['runStep', 'runPhase', 'runEta', 'runPrompt'].forEach(id=>$(id).textContent=''); $('runCancel').dataset.id='';
     $('lotBadge').hidden=true; return; }
@@ -1731,9 +1805,9 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
   // demande acceptée : la saisie est prête pour la suivante (refus : rien n'est vidé), avant le retour en haut du Labo
   await launch(body, priv, k=>({w:camp ? camp[k].width : body.width, h:camp ? camp[k].height : body.height,
     thumb:camp ? camp[k].image : thumb, est:camp ? campaignEst[k]||estOne : estOne, stepSec:stepSeconds, vaeSec:vaeSeconds}),
-    ()=>emptyInput(priv, sent));
+    ()=>{ emptyInput(priv, sent); if(priv===inPrivate()) foldComposer(); });   // replié : la carte arrive
 };
-// envoie une demande (Générer, Relancer) partie de l'espace priv ; acceptée, ses générations sont suivies avec la
+// envoie une demande (Révéler, Relancer) partie de l'espace priv ; acceptée, ses générations sont suivies avec la
 // demande (req) et ce que infoOf(k) dit de la k-ième, accepted() est appelée, puis le haut du Labo
 async function launch(body, priv, infoOf, accepted){
   let r, j; try{ r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=await r.json(); }
@@ -1750,7 +1824,7 @@ async function launch(body, priv, infoOf, accepted){
   document.activeElement.blur(); if(priv===inPrivate()) showLabo('top');   // la demande part : on la voit en haut du Labo
   refreshStatus(); }
 // « Relancer » : la même demande avec une graine tirée au hasard, sans toucher la saisie, dans l'espace affiché, comme
-// « Générer » ; mène au Labo. Une génération de la page qui a gardé sa demande la refait (keptRequest : l'image seule,
+// « Révéler » ; mène au Labo. Une génération de la page qui a gardé sa demande la refait (keptRequest : l'image seule,
 // échec compris) ; sinon (Tirages, génération reprise de la file) la demande est reconstruite de l'image (againFrom), une seule image,
 // absente pour un masque (le masque n'est pas gardé avec l'image)
 function keptRequest(p){                          // l'image seule (sa photo d'une campagne)
@@ -1924,7 +1998,7 @@ const dlOf = it => it.private ? privImage(it.id)+'&download=1' : resultUrl(it.na
 function goTab(m){ document.querySelector(`#tabbar [data-pane="${m}"]`).click(); }
 // le Labo affiché, à son haut (la génération en cours) ou à son champ de création (where : 'top', 'composer'), d'où
 // que l'on vienne : un changement d'onglet garde la position de la page d'avant
-function showLabo(where){ if(mode!=='labo') goTab('labo');
+function showLabo(where){ if(mode!=='labo') goTab('labo'); if(where==='composer') openComposer();
   if(where==='top') window.scrollTo({top:0, behavior:'smooth'}); else $('composer').scrollIntoView({block:'start', behavior:'smooth'}); }
 async function loadHistory(){ const priv=inPrivate();   // réponse arrivée après un changement d'espace : ignorée
   try{ const r=await fetch(priv ? '/api/private/history' : '/api/history'); if(!r.ok) throw new Error();
@@ -2188,7 +2262,7 @@ function forgetResult(name){                      // image supprimée : elle qui
   if(p) drop(p); }
 // ------------------------------------------------------------ espace privé : galerie chiffrée sur le Mac, ouverte par un
 // code privé propre à chaque appareil (session du serveur, cookie HttpOnly). Entrée discrète, un cadenas dans l'en-tête
-// des Tirages (rien à côté de Générer à l'arrivée : décision du porteur) ; masquée si le serveur ne le propose pas.
+// des Tirages (rien à côté de Révéler à l'arrivée : décision du porteur) ; masquée si le serveur ne le propose pas.
 // Déverrouillé sur cet appareil, on est « dans l'espace privé » (décision du porteur du 14/10/2026) : thème propre,
 // une seule sortie (le cadenas en haut à droite, qui verrouille). Entrée : le cadenas discret
 // de l'en-tête des Tirages.
@@ -2232,7 +2306,7 @@ function changedSpace(inside){
   // pour cet appareil : l'image reste dans la pile privée)
   if(!inside && discarding && discarding.priv){ clearTimeout(discarding.timer); discarding=null; hideUndo(); }
   if(!inside) [...sorting].forEach(t=>{ if(t[0]==='p') sorting.delete(t); });   // (leur réponse sera ignorée)
-  pileItems=[]; pileRead=false; pileShown=''; renderRunCard(); renderPile(); loadPile();
+  pileItems=[]; pileRead=false; pileShown=''; labIdle=null; renderRunCard(); renderPile(); loadPile();
   histItems=[]; $('histGrid').innerHTML=''; $('histCount').textContent=''; if(mode==='tirages') loadHistory();
   syncThemeColor(); }
 // Saisie propre à chaque espace (texte, images d'entrée, dessin : actif ou non, masque ou annotation, tracé) :

@@ -2,7 +2,7 @@
 // la demande part en texte → image, avec des images en édition, dessin actif en masque ou annotation ; exemple du champ
 // selon la saisie ; Campagne proposée à partir de 2 images), bouton Dessiner (selon le nombre d'images, ajout refusé
 // pendant le dessin, tracé gardé en désactivant et effacé avec son image), geste « Dessiner », collage d'une image,
-// images choisies d'un coup, champs vidés après « Générer », saisie propre à chaque espace (public, privé), variantes
+// images choisies d'un coup, champs vidés après « Révéler », saisie propre à chaque espace (public, privé), variantes
 // avec ou sans images et en dessin, hors campagne.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/saisie.test.mjs
 import { test, before, after } from 'node:test';
@@ -42,13 +42,15 @@ after(async () => {
   if (dir) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-// page neuve (brouillons effacés) sur un onglet
+// page neuve (brouillons effacés) sur un onglet ; pile vidée : le champ de création est déplié
 async function fresh(pane = 'labo') {
   await bench.idle();                              // rien en file : la page rechargée ne reprend rien
   await page.goto(bench.url + '/');
   await page.eval(`localStorage.clear()`);
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('status').className === 'ok' && pileRead`, { what: 'moteur prêt affiché, pile lue' });
+  await page.keepPile();
+  await page.waitFor(`!$('composer').classList.contains('folded')`, { what: 'champ déplié' });
   await page.tab(pane);
 }
 
@@ -126,7 +128,7 @@ async function paint() {
   await page.waitFor(`paintedPixels() > 0`, { what: 'zone peinte' });
 }
 
-// « Générer » ; refuse : 'error' (le Mac répond par une erreur) ou 'unreachable' (Mac injoignable), simulés au niveau
+// « Révéler » ; refuse : 'error' (le Mac répond par une erreur) ou 'unreachable' (Mac injoignable), simulés au niveau
 // du réseau de Chrome. Demande acceptée : suivie par la page, toujours sur le Labo ; refusée : elle reste sur
 // l'onglet
 async function generate({ refuse = null } = {}) {
@@ -368,16 +370,17 @@ test('Campagne : proposée dès 2 images, ignorée sinon ; photos vidées, inter
   assert.equal(await shown(), true, 'à partir de 2 images');
   await page.click('#campChk');
   await page.waitFor(`campaignOn`, { what: 'campagne activée' });
-  assert.match(await page.eval(`$('pills').textContent`), /Campagne · 2 photos/);
+  assert.match(await page.eval(`$('setGrid').textContent`), /Campagne2 photos/);
   // une image retirée : l'interrupteur disparaît, son réglage reste mais la demande part en édition simple
   await page.click('#inThumbs .thumb:last-child button');
   await page.waitFor(`inputImages.length === 1`, { what: 'image retirée' });
   assert.equal(await shown(), false);
-  assert.doesNotMatch(await page.eval(`$('pills').textContent`), /Campagne/);
+  assert.doesNotMatch(await page.eval(`$('setGrid').textContent`), /Campagne/);
   await page.typePrompt('voiture bleue');
   await generate();
   assert.deepEqual(await lastJob(), { mode: 'edit', lot: null });
   assert.equal(await page.eval(`campaignOn`), true, 'réglage gardé');
+  await page.click('#composerLine');               // replié après « Révéler »
   await page.setFiles('#inFiles', photos(2));
   await page.waitFor(`inputImages.length === 2`, { what: 'deux photos' });
   assert.equal(await page.eval(`$('campChk').checked && !!$('campSwitch').getClientRects().length`), true,
@@ -499,6 +502,8 @@ test('espaces : la saisie privée disparaît à « Sortir », la saisie publique
 
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  // replié après le « Révéler » privé, le champ se déplie à la lecture de la pile publique, vide
+  await page.waitFor(`pileRead && !$('composer').classList.contains('folded')`, { what: 'champ public déplié' });
   assert.equal(await value(), 'chapeau public');
   assert.equal(await page.eval(`inputImages.length === 1 && drawOn && ${SHOWN} && paintedPixels() > 0`), true,
     'image, dessin et tracé publics');
