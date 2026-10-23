@@ -43,9 +43,9 @@ async function fresh() {
 // « Générer », refusé par le Mac
 async function refusedGenerate() {
   await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/generate', requestStage: 'Request' }] });
-  await page.eval(`$('toast').textContent = ''`);
+  await page.eval(`$('toastBox').textContent = ''`);
   await page.click('#go');
-  await page.waitFor(`$('toast').textContent.startsWith('Erreur : moteur non prêt')`, { what: 'refus affiché' });
+  await page.waitFor(`$('toastBox').textContent.startsWith('Erreur : moteur non prêt')`, { what: 'refus affiché' });
   await page.send('Fetch.disable');
 }
 
@@ -57,13 +57,13 @@ test('incognito retiré : ancien réglage signalé une fois, brouillon retenu, d
   await page.eval(`localStorage.setItem('qwen-opt', JSON.stringify({ v: 2, ratio: '16:9', incognito: true }))`);
   await page.goto(bench.url + '/');
   await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
-  await page.waitFor(`$('toast').textContent === ${JSON.stringify(INCOG_GONE)}`, { what: 'ancien réglage signalé' });
+  await page.waitFor(`$('toastBox').textContent === ${JSON.stringify(INCOG_GONE)}`, { what: 'ancien réglage signalé' });
   await page.waitFor(`!('incognito' in JSON.parse(localStorage.getItem('qwen-opt')))`,
     { what: 'ancien réglage oublié une fois le message affiché jusqu\'au bout' });
   assert.equal(await page.eval(`JSON.parse(localStorage.getItem('qwen-opt')).ratio`), '16:9', 'autres réglages gardés');
   await page.goto(bench.url + '/');
   await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
-  assert.notEqual(await page.eval(`$('toast').textContent`), INCOG_GONE, 'signalé une seule fois');
+  assert.notEqual(await page.eval(`$('toastBox').textContent`), INCOG_GONE, 'signalé une seule fois');
   assert.deepEqual(await page.eval(`[!!document.getElementById('incog'),
     document.documentElement.classList.contains('incog')]`), [false, false], 'ni bouton ni thème incognito');
   await page.typePrompt('un phare au crépuscule');
@@ -80,7 +80,7 @@ test('incognito retiré : message remplacé avant la fin, réglage gardé pour l
   await fresh();
   await page.eval(`localStorage.setItem('qwen-opt', JSON.stringify({ v: 2, incognito: true }))`);
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('toast').textContent === ${JSON.stringify(INCOG_GONE)}`, { what: 'ancien réglage signalé' });
+  await page.waitFor(`$('toastBox').textContent === ${JSON.stringify(INCOG_GONE)}`, { what: 'ancien réglage signalé' });
   await page.eval(`toast('Image prête')`);           // un autre message le remplace avant la fin
   await new Promise(r => setTimeout(r, 7000));       // au-delà de LONG_TOAST
   assert.equal(await page.eval(`JSON.parse(localStorage.getItem('qwen-opt')).incognito`), true, 'réglage gardé');

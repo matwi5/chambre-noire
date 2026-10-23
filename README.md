@@ -199,8 +199,9 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   sa clé d'envoi dans `tools/push_vapid.pem` et les appareils abonnés dans `tools/push_subscriptions.json` ; supprimer
   ces fichiers désabonne tous les appareils.
 - **Barre d'état** : dans l'application installée, Chrome peint la barre d'état (heure, notifications) d'une couleur
-  unie ; il ne laisse pas encore une application installée dessiner dessous. L'interface lui donne en continu la couleur
-  du haut de l'écran (fond flouté de l'image affichée), pour que l'application semble continuer jusqu'en haut.
+  unie ; il ne laisse pas encore une application installée dessiner dessous. L'interface lui donne la couleur du fond de
+  l'espace affiché (noir chaud, ou vert-noir dans l'espace privé), et dans la visionneuse celle du haut de l'image
+  floutée, pour que l'application semble continuer jusqu'en haut.
 - **Veille** : sur Mac, l'ordinateur ne se met pas en veille tant que l'interface tourne avec `--lan` (l'écran peut
   s'éteindre).
 - **Toujours disponible (Mac)** : pour que l'interface démarre seule à l'ouverture de session, sans fenêtre,
@@ -220,9 +221,10 @@ L'interface a trois onglets, dans la barre du bas : **En cours** (la génératio
 **Créer** (texte → image, édition avec des images d'entrée, ou dessin guidé sur une image) et **Galerie** ; elle s'ouvre
 sur Créer. Sur un grand écran, chaque page est une colonne centrée (la galerie prend toute la largeur). Sur un écran
 tactile, glisser le doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le dessin et sur les rangées qui
-défilent). Elle s'adapte au téléphone comme à l'ordinateur, en thème sombre ou clair selon le système.
-Sur un écran tactile, elle allège ses effets de verre et d'animation pour rester fluide ; ajouter `?lite=1` ou
-`?lite=0` à l'adresse force l'un ou l'autre rendu.
+défilent). Elle s'adapte au téléphone comme à l'ordinateur, toujours sombre, même quand le système est en mode clair :
+lumière inactinique de chambre noire (noir chaud, halo rouge de la lampe, grain léger, textes couleur papier, accent
+ambre, erreurs en rouge vif avec leur icône). Sur un écran tactile, elle allège ses animations pour rester fluide ;
+ajouter `?lite=1` ou `?lite=0` à l'adresse force l'un ou l'autre rendu.
 
 ### Réglages communs
 
@@ -459,7 +461,7 @@ images sont enregistrées. Pour la confidentialité, passez par l'espace privé.
   installé l'application depuis elle.
 - Ensuite, le cadenas demande le code pour **entrer** dans l'espace privé, sur l'appareil où on le touche et seulement
   sur lui. Un code faux est suivi d'une attente d'une seconde. Dans l'espace privé, toute l'application passe en
-  teintes sarcelle sombres : on sait où l'on est.
+  lumière inactinique verte : on sait où l'on est.
 - Le cadenas **Sortir**, en haut à droite, ramène à l'application normale en verrouillant l'espace. Il se verrouille
   aussi seul après 15 minutes sans activité privée sur cet appareil, et à la fermeture ou au rechargement de
   l'application.
@@ -856,6 +858,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── calibrate.py      générations de calibration (lancées par setup.py)
 │   ├── ui/index.html     l'interface
 │   ├── ui/manifest.webmanifest, sw.js, icon-*.png   installation sur le téléphone (application)
+│   ├── ui/PixelifySans.woff2, OFL.txt   police pixel du nom et des titres, et sa licence (servie sans code d'accès)
 │   ├── fix_int8_te.py    correctif de l'encodeur texte int8 (Windows)
 │   ├── make_shortcut.py  crée Chambre noire.lnk (Windows) ou Chambre noire.command (Mac)
 │   ├── make_service.py   Mac : démarrage automatique de l'interface, accessible depuis le Wi-Fi
@@ -947,6 +950,9 @@ Sur Mac : `venv/bin/python tests/run_tests.py --steps 8`.
 - **Encodeur GGUF (Mac)** : Alibaba Qwen, [Qwen/Qwen3-VL-8B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF),
   sous licence Apache 2.0.
 - **Moteur** : [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (licence MIT).
+- **Police pixel** : [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans), © 2021 The Pixelify Sans Project
+  Authors, sous **SIL Open Font License 1.1** ([tools/ui/OFL.txt](tools/ui/OFL.txt)) ; sous-ensemble latin en woff2
+  tiré de Google Fonts, pour le nom de l'application et les titres.
 
 Le code de ce dépôt (interface, lanceur, scripts) est sous **licence MIT**, voir [LICENSE](LICENSE). Les poids du modèle restent soumis à leur
 propre licence et sont téléchargés directement depuis leurs dépôts d'origine.

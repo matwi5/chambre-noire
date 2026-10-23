@@ -202,40 +202,48 @@ PUBLIC_FILES = {
     "/icon-maskable-512.png": ("icon-maskable-512.png", "image/png"),
     "/apple-touch-icon.png": ("apple-touch-icon.png", "image/png"),
     "/logo.svg": ("logo.svg", "image/svg+xml"),
+    # police pixel du nom et des titres (Pixelify Sans, licence OFL : tools/ui/OFL.txt), aussi pour la page du code
+    "/PixelifySans.woff2": ("PixelifySans.woff2", "font/woff2"),
 }
 LOGIN_PAGE = """<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Chambre noire</title>
 <link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
-<meta name="theme-color" content="#0b0a16" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#eceef7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0a08">
 <style>
-:root{color-scheme:dark;--void:#0b0a16;--ink:#f6f4ff;--ink2:rgba(236,233,255,.68);--iris:#8f7cff;--iris2:#b9a9ff;--err:#ff6b7a;
---glass:rgba(255,255,255,.07);--glass-hi:rgba(255,255,255,.15);--field:rgba(8,6,20,.32);--rim:rgba(255,255,255,.14)}
-@media (prefers-color-scheme:light){:root{color-scheme:light;--void:#eceef7;--ink:#15131f;--ink2:rgba(21,19,31,.64);--iris:#6a52ff;
---iris2:#8f7cff;--err:#d93a4a;--glass:rgba(255,255,255,.42);--glass-hi:rgba(255,255,255,.78);--field:rgba(255,255,255,.55);--rim:rgba(255,255,255,.75)}}
+:root{color-scheme:dark;--void:#0d0a08;--surf:#17120f;--field:#100c0a;--line:rgba(241,230,210,.13);--ink:#f1e6d2;
+--ink2:rgba(241,230,210,.68);--accent:#ffa53a;--on-accent:#1c1006;--halo:rgba(190,28,18,.22);--err:#ff4f45;--r-m:6px}
 *{box-sizing:border-box}
 body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:16px;background:var(--void);color:var(--ink);
 font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-body::before{content:"";position:fixed;inset:-20%;z-index:-1;pointer-events:none;
-background:radial-gradient(40% 35% at 20% 18%,rgba(143,124,255,.6),transparent 70%),radial-gradient(38% 32% at 85% 30%,rgba(255,120,190,.35),transparent 70%),
-radial-gradient(45% 40% at 60% 92%,rgba(60,200,255,.3),transparent 70%)}
-form{width:100%;max-width:360px;padding:28px 22px 22px;border-radius:30px;text-align:center;border:1px solid var(--rim);
-background:linear-gradient(180deg,var(--glass-hi),var(--glass));-webkit-backdrop-filter:blur(26px) saturate(185%);backdrop-filter:blur(26px) saturate(185%);
-box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 18px 50px -18px rgba(0,0,0,.6)}
-.logo{display:block;width:52px;height:52px;margin:0 auto 14px;border-radius:23%;
-box-shadow:0 10px 26px -6px rgba(143,124,255,.75)}
-h1{font-size:22px;letter-spacing:-.02em;margin:0 0 6px}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+background:radial-gradient(90% 55% at 50% -8%,var(--halo),transparent 72%)}
+body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.32;background-size:180px;
+background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E\
+%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E\
+%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .9 0 0 0 0 .82 0 0 0 .5 0'/%3E%3C/filter%3E\
+%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E")}
+form{width:100%;max-width:360px;padding:28px 22px 22px;border-radius:var(--r-m);text-align:center;
+border:1px solid var(--line);background:var(--surf);box-shadow:0 18px 40px -22px rgba(0,0,0,.9)}
+.logo{display:block;width:52px;height:52px;margin:0 auto 14px;border-radius:23%;box-shadow:0 0 0 1px var(--line)}
+@font-face{font-family:"Pixelify Sans";src:url(/PixelifySans.woff2) format("woff2");font-weight:400 700;
+font-display:swap}
+h1{font:500 24px/1.3 "Pixelify Sans",system-ui,sans-serif;margin:0 0 6px}
 p{color:var(--ink2);margin:0 0 20px;font-size:14.5px}
-input{width:100%;font:inherit;font-size:24px;font-weight:650;letter-spacing:.16em;text-align:center;padding:14px;border-radius:18px;
-border:1px solid var(--rim);background:var(--field);color:var(--ink);outline:none}
-input:focus{border-color:var(--iris2)}
+input{width:100%;font:inherit;font-size:24px;font-weight:650;letter-spacing:.16em;text-align:center;padding:14px;
+border-radius:var(--r-m);border:1px solid var(--line);background:var(--field);color:var(--ink);outline:none}
+input:focus{border-color:var(--accent)}
 input::placeholder{color:var(--ink2);opacity:.5}
-button{width:100%;margin-top:12px;font:inherit;font-size:17px;font-weight:700;padding:15px;border:0;border-radius:999px;color:#fff;cursor:pointer;
-background:linear-gradient(180deg,color-mix(in srgb,var(--iris2) 70%,var(--iris)),var(--iris));
-box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 10px 26px -8px var(--iris)}
+button{width:100%;margin-top:12px;font:inherit;font-size:17px;font-weight:700;padding:15px;border:0;
+border-radius:var(--r-m);color:var(--on-accent);cursor:pointer;background:var(--accent)}
 button:disabled{opacity:.6}
 #err{color:var(--err);font-size:14px;min-height:21px;margin-top:10px}
+#err:not(:empty)::before{content:"";display:inline-block;width:.95em;height:.95em;margin-right:.4em;
+vertical-align:-.12em;background:currentColor;
+--ico-err:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' \
+shape-rendering='crispEdges'%3E%3Cpath fill-rule='evenodd' \
+d='M1 0h7v1h1v7h-1v1h-7v-1h-1v-7h1zM4 2h1v3h-1zM4 6h1v1h-1z'/%3E\
+%3C/svg%3E");-webkit-mask:var(--ico-err) center/contain no-repeat;mask:var(--ico-err) center/contain no-repeat}
 .shake{animation:shake .4s}
 @keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 @media (prefers-reduced-motion:reduce){.shake{animation:none}}

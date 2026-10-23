@@ -3,9 +3,12 @@
 // affiche les notifications de fin de génération envoyées par l'ordinateur (Web Push).
 const OFFLINE = `<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Chambre noire</title>
-<style>body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#0b0a16;color:#f6f4ff;
-font:16px/1.5 system-ui,sans-serif;text-align:center;padding:24px}p{color:rgba(236,233,255,.68);max-width:320px}
-button{margin-top:12px;height:44px;padding:0 22px;border:0;border-radius:999px;background:#8f7cff;color:#fff;font:inherit;font-weight:600}</style>
+<meta name="theme-color" content="#0d0a08">
+<style>body{margin:0;min-height:100dvh;display:grid;place-items:center;color:#f1e6d2;text-align:center;padding:24px;
+background:radial-gradient(90% 55% at 50% -8%,rgba(190,28,18,.22),transparent 72%) #0d0a08;
+font:16px/1.5 system-ui,sans-serif}p{color:rgba(241,230,210,.68);max-width:320px}
+button{margin-top:12px;height:44px;padding:0 22px;border:0;border-radius:6px;background:#ffa53a;
+color:#1c1006;font:inherit;font-weight:700}</style>
 </head><body><div><h1>Ordinateur injoignable</h1><p>Vérifiez qu'il est allumé, que l'interface tourne et que Tailscale
 est connecté sur ce téléphone.</p><button onclick="location.reload()">Réessayer</button></div></body></html>`;
 

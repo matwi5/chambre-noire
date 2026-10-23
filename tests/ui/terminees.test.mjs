@@ -27,8 +27,8 @@ after(async () => {
 
 const cards = () => page.eval(`[...$('doneList').children].map(c => c.textContent)`);
 const watchToasts = () => page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
-  window.toastWatch = new MutationObserver(() => seenToasts.push($('toast').textContent));
-  toastWatch.observe($('toast'), { childList: true, characterData: true, subtree: true }); })()`);
+  window.toastWatch = new MutationObserver(() => seenToasts.push($('toastBox').textContent));
+  toastWatch.observe($('toastBox'), { childList: true, characterData: true, subtree: true }); })()`);
 const visible = sel => page.eval(`(() => { const el = document.querySelector(${JSON.stringify(sel)});
   return !!el && !el.hidden && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0; })()`);
 // éléments visibles qui dépassent de la largeur de la vue, hors éléments rognés par un parent qui tient dans la vue
@@ -93,7 +93,7 @@ test('ailleurs : « Image prête » mène à En cours ; lot en grille, « Lot pr
   await page.click('#tabbar [data-pane="create"]');
   bench.release('pret');                           // elle finit pendant qu'on est sur Créer
   await page.waitFor(`seenToasts.includes('Image prête')`, { what: 'message « Image prête »' });
-  await page.click('#toast');
+  await page.click('#toastBox');
   await page.waitFor(`mode === 'run'`, { what: 'page En cours après le message' });
   // lot de 3 variantes dont la deuxième échoue (graines 20, 21, 22 ; le faux moteur échoue sur la graine 21)
   await page.eval(`opt.count = 3; saveOpt(); refreshChoices();

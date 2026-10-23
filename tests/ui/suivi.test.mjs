@@ -25,8 +25,8 @@ const post = (page, url, body = {}) =>
   page.eval(`postJson(${JSON.stringify(url)}, ${JSON.stringify(body)}).then(r => r.status)`);
 // toasts affichés depuis l'appel (comme saisie.test.mjs)
 const watchToasts = page => page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
-  window.toastWatch = new MutationObserver(() => seenToasts.push($('toast').textContent));
-  toastWatch.observe($('toast'), { childList: true, characterData: true, subtree: true }); })()`);
+  window.toastWatch = new MutationObserver(() => seenToasts.push($('toastBox').textContent));
+  toastWatch.observe($('toastBox'), { childList: true, characterData: true, subtree: true }); })()`);
 const failures = async page => (await page.eval(`seenToasts`)).filter(t => t.startsWith('Échec'));
 // la console note le 404 du suivi comme une ressource en échec : c'est la réponse attendue, pas une erreur de la page
 const assertNoOtherErrors = page => assert.deepEqual(page.errors.filter(e => !/status of 404/.test(e)), []);

@@ -312,7 +312,7 @@ test('« Éditer » une terminée : image ajoutée à la saisie, brouillon publi
   await page.eval(`goTab('run')`);
   await page.click('#doneList .dcard [data-act="edit"]');
   await page.waitFor(`mode === 'create' && inputImages.length === 1`, { what: 'image ajoutée' });
-  assert.deepEqual(await page.eval(`[$('toast').textContent, $('prompt').value]`),
+  assert.deepEqual(await page.eval(`[$('toastBox').textContent, $('prompt').value]`),
     ['Ajoutée aux images d\'entrée', 'texte public']);
   assert.equal(await draft(), 'texte public');
   page.assertNoErrors();
