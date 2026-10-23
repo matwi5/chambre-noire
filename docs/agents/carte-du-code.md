@@ -60,9 +60,10 @@ Dans l'ordre du fichier :
   `JOURNAL_LOCK` (un `RLock` : journal, tri, lecture des tirages et de la pile), `journal_line` (une ligne lue, ou
   illisible : même jugement à la lecture et à la réécriture), `journal_entries`, `append_journal`, `to_pile` (fin
   d'une génération normale : PNG du dossier de travail vers la pile, sous `S.turn` contre une annulation, puis ligne
-  du journal et entrées, d'un bloc sous `JOURNAL_LOCK`), `delete_output` (effacement complet : PNG, puis
-  `delete_extras` (miniatures et entrées), dossier de travail et lignes du journal par `drop_from_journal`, réécrit
-  dans un fichier temporaire puis remplacé ; une pièce qui résiste n'arrête pas les suivantes), `SORTS` et
+  du journal et entrées, d'un bloc sous `JOURNAL_LOCK` ; PNG et journal en 0o600), `delete_output` (effacement
+  complet : `delete_extras` (miniatures et entrées), dossier de travail et lignes du journal par `drop_from_journal`,
+  réécrit dans un fichier temporaire puis remplacé, et le PNG en dernier, seulement si tout le reste est parti ; une
+  pièce qui résiste n'arrête pas les suivantes), `SORTS` et
   `sort_image` (Garder, Jeter, Supprimer, d'un bloc sous `JOURNAL_LOCK` : le premier geste arrivé l'emporte),
   `read_inputs`, `images_in` (PNG d'un dossier croisés avec le journal), `history()` (les tirages), `pile()`,
   `thumb_jpeg`, `thumbnail` (`outputs/.thumbs/` ; mise en place sous `JOURNAL_LOCK`, jamais pour une image déjà
@@ -307,8 +308,9 @@ invariants ».
   dans `queue`, une entrée complète vue depuis l'espace privé seulement,
   puis `keep_private` chiffre image, miniature (en mémoire), entrées et réglages avec la clé publique notée au
   lancement (`store_private`), dans la pile privée : marque « pile » dans la fiche chiffrée, `S.rev` de l'espace
-  privé augmenté. Une génération privée ne s'arrête pas à la fermeture de la page ; finie, elle est
-  oubliée par `/api/job/<id>/forget` (envoyé par sa page), sinon par `sweep()`, `PRIVATE_JOB_TTL` (24 h) après sa
+  privé augmenté ; annulée ou oubliée pendant ce rangement, elle passe « cancelled » sous `S.turn` et l'image rangée
+  est supprimée (`remove_private_item`). Une génération privée ne s'arrête pas à la fermeture de la page ; finie, elle
+  est oubliée par `/api/job/<id>/forget` (envoyé par sa page), sinon par `sweep()`, `PRIVATE_JOB_TTL` (24 h) après sa
   fin. Une demande `"incognito": true` (mode retiré, d'une page d'avant) est refusée (400) sans rien écrire, journal
   du serveur compris (`/api/generate` est tue). Au lancement sur Mac, `exclude_from_backup` exclut `jobs/` de Time
   Machine.

@@ -86,6 +86,26 @@ class PrivatePileTest(bench.PrivateFilesCheck, bench.BenchCase):
         self.assertEqual(self.sort("discard", item), (404, {"error": "déjà triée"}))
         bench.shutil.rmtree(bench.launch.P("private", "items", "." + item))
 
+    def test_a_generation_cancelled_while_put_away_leaves_no_image(self):
+        """Annulée ou oubliée par sa page pendant son rangement (entre la fin du calcul et « done ») : aucune image ne
+        reste dans la pile privée, ni sur le disque (décision du 23/10/2026)."""
+        real = bench.launch.keep_private
+        for stop in ("cancel_job", "forget_job"):
+            with self.subTest(stop=stop):
+                def stopped_meanwhile(job):
+                    item = real(job)
+                    getattr(bench.launch, stop)(job)    # l'annulation, ou l'oubli, arrive pendant le rangement
+                    return item
+                with mock.patch.object(bench.launch, "keep_private", stopped_meanwhile):
+                    code, job = call("POST", "/api/generate", bench.gen_body("zq8 annulée", private=True),
+                                     private=self.session)
+                    self.assertEqual(code, 202, job)
+                    if stop == "cancel_job":
+                        self.assertEqual(wait_job(job["id"], private=self.session)["status"], "cancelled")
+                    bench.wait_idle()
+                self.assertEqual(self.list("pile"), [])
+                self.assertEqual([p for p in bench.private_entries()[1] if p.startswith("items" + os.sep)], [])
+
     def test_unknown_ids_are_already_sorted(self):
         for item in ("0" * 32, "../space.json", "", None, 3):
             with self.subTest(item=item):

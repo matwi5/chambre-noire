@@ -493,13 +493,15 @@ def sync_fd(fd, full=True):
     os.fsync(fd)
 
 
-def open_private(fp):
-    """Ouvre en écriture binaire un fichier de private/, créé lisible par son seul propriétaire (0o600) : jamais
-    lisible par un autre compte du Mac, même le temps de l'écrire ; un fichier qui existait reprend ces droits."""
-    fd = os.open(fp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0), 0o600)
+def open_private(fp, append=False):
+    """Ouvre en écriture binaire (ou en ajout : append) un fichier lisible par son seul propriétaire (0o600) : fichiers
+    de private/, journal des images ; jamais lisible par un autre compte du Mac, même le temps de l'écrire ; un fichier
+    qui existait reprend ces droits."""
+    flags = os.O_APPEND if append else os.O_TRUNC
+    fd = os.open(fp, os.O_WRONLY | os.O_CREAT | flags | getattr(os, "O_BINARY", 0), 0o600)
     try:
         os.chmod(fp, 0o600)
-        return os.fdopen(fd, "wb")
+        return os.fdopen(fd, "ab" if append else "wb")
     except BaseException:
         os.close(fd)
         raise
@@ -992,10 +994,11 @@ def journal_entries():
 
 
 def append_journal(meta):
-    """Ajoute la ligne d'une image au journal, sous JOURNAL_LOCK."""
+    """Ajoute la ligne d'une image au journal, sous JOURNAL_LOCK ; le journal (des prompts) n'est lisible que par son
+    propriétaire (0o600), un journal d'avant reprend ces droits."""
     with JOURNAL_LOCK:
-        with open(P("outputs", "journal.jsonl"), "a", encoding="utf-8") as f:
-            f.write(json.dumps(meta, ensure_ascii=False) + "\n")
+        with open_private(P("outputs", "journal.jsonl"), append=True) as f:
+            f.write((json.dumps(meta, ensure_ascii=False) + "\n").encode("utf-8"))
 
 
 def to_pile(job, meta):
@@ -1015,6 +1018,7 @@ def to_pile(job, meta):
     with JOURNAL_LOCK:
         os.makedirs(PILE, exist_ok=True)
         dst = os.path.join(PILE, os.path.basename(job["out"]))
+        os.chmod(job["out"], 0o600)             # lisible par le seul propriétaire dès la pile (os.replace le garde)
         with S.turn:
             if job.get("status") == "cancelled":
                 return False
@@ -1032,17 +1036,17 @@ def to_pile(job, meta):
 
 
 def delete_output(fp):
-    """Efface une image (tirage ou image de la pile) et tout ce qui s'y rattache : le PNG, puis ses miniatures, ses
-    images d'entrée, son dossier de travail jobs/<id>/ (identifiant tiré du nom, validé par JOB_ID_RE) et ses lignes
-    du journal. Une pièce déjà absente est sautée (le démarrage ne garde que 20 dossiers de travail) ; une pièce qui
-    résiste n'arrête pas l'effacement des suivantes (le PNG parti, rien ne permettrait d'y revenir) : la première
-    erreur est levée à la fin. Sous JOURNAL_LOCK (sort_image)."""
+    """Efface une image (tirage ou image de la pile) et tout ce qui s'y rattache : ses miniatures, ses images d'entrée,
+    son dossier de travail jobs/<id>/ (identifiant tiré du nom, validé par JOB_ID_RE) et ses lignes du journal, puis le
+    PNG en dernier, seulement si tout le reste est parti (décision du 23/10/2026) : une pièce qui résiste laisse l'image
+    là où elle était, qu'un second geste efface en entier, au lieu d'une ligne du journal (son prompt) que plus rien ne
+    retirerait. Une pièce déjà absente est sautée (le démarrage ne garde que 20 dossiers de travail) ; une pièce qui
+    résiste n'arrête pas les suivantes : la première erreur est levée à la fin. Sous JOURNAL_LOCK (sort_image)."""
     name = os.path.basename(fp)
-    os.remove(fp)
     jid = name[:-4].rsplit("_", 1)[0]
     steps = [lambda: delete_extras(name[:-4]), lambda: drop_from_journal(name)]
     if JOB_ID_RE.fullmatch(jid):
-        steps.insert(1, lambda: shutil.rmtree(P("jobs", jid), ignore_errors=True))
+        steps.insert(1, lambda: remove_tree(P("jobs", jid)))
     error = None
     for step in steps:
         try:
@@ -1051,6 +1055,7 @@ def delete_output(fp):
             error = error or e
     if error:
         raise error
+    os.remove(fp)
 
 
 def drop_from_journal(name):
@@ -1107,7 +1112,16 @@ def delete_extras(stem):
     for th in [os.path.join(THUMBS, stem + ".jpg"), *glob.glob(os.path.join(THUMBS, glob.escape(stem) + "__*.jpg"))]:
         if os.path.exists(th):
             os.remove(th)
-    shutil.rmtree(os.path.join(INPUTS, stem), ignore_errors=True)
+    remove_tree(os.path.join(INPUTS, stem))
+
+
+def remove_tree(d):
+    """Supprime un dossier ; déjà absent, rien ; un fichier qui résiste lève l'erreur (delete_output garde alors le
+    PNG)."""
+    try:
+        shutil.rmtree(d)
+    except FileNotFoundError:
+        pass
 
 
 def read_inputs(d):
@@ -1481,9 +1495,18 @@ def run_job(job):
             job["dims"] = [job["req"]["width"], job["req"]["height"]]
         job["size"] = os.path.getsize(job["out"])
         if job.get("private"):                   # chiffrée dans l'espace privé ; dossier supprimé par worker()
-            job["item"] = keep_private(job)
-            job["status"] = "done"
-            job["phase"] = "terminé"
+            item = keep_private(job)
+            # annulée ou oubliée pendant le rangement : « done » n'écrase pas « cancelled », sous S.turn comme
+            # cancel_job, et l'image rangée est supprimée (décision du 23/10/2026)
+            with S.turn:
+                cancelled = job.get("status") == "cancelled"
+                if not cancelled:
+                    job["item"], job["status"], job["phase"] = item, "done", "terminé"
+            if cancelled:                         # une erreur du disque ici la laisse dans la pile privée, à jeter
+                with PRIVATE_LOCK:
+                    finish_rekey()
+                    remove_private_item(item)
+                return
             with PRIVATE_LOCK:                   # dans la pile privée : après « done », comme to_pile
                 S.rev["private"] += 1
             print(DONE_LINE, flush=True)

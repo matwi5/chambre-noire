@@ -184,13 +184,67 @@ class DiscardTest(bench.BenchCase):
                     self.assertEqual(files("outputs", "journal.jsonl.tmp"), [])
 
 
-    def test_a_failed_piece_does_not_stop_the_others(self):
+    def test_a_failed_piece_keeps_the_image_to_discard_again(self):
+        """Le PNG part en dernier, et seulement si tout le reste est parti (décision du 23/10/2026) : une pièce qui
+        résiste laisse l'image dans la pile, qu'un second Jeter efface en entier ; les autres pièces partent quand
+        même."""
+        cases = {"delete_extras": {"png", "thumbs", "inputs"}, "drop_from_journal": {"png", "journal"},
+                 "remove_tree": {"png", "inputs", "job"}}
+        for failing, left_expected in cases.items():
+            for action in ("discard", "delete"):
+                with self.subTest(failing=failing, action=action):
+                    j = edited_image(self)
+                    if action == "delete":
+                        self.assertEqual(call("POST", "/api/keep", {"name": j["name"]})[0], 200)
+                    with mock.patch.object(bench.launch, failing, side_effect=OSError("pièce verrouillée")):
+                        self.assertEqual(call("POST", "/api/" + action, {"name": j["name"]}),
+                                         (500, {"error": "effacement incomplet"}))
+                    self.assertEqual({k for k, v in pieces(j).items() if v}, left_expected)
+                    self.assertEqual(call("POST", "/api/" + action, {"name": j["name"]}), (200, {"ok": True}))
+                    self.assertEqual(pieces(j), NOTHING)
+
+    def test_a_png_that_resists_stays_to_discard_again(self):
         j = edited_image(self)
-        with mock.patch.object(bench.launch, "delete_extras", side_effect=OSError("vignette verrouillée")):
-            self.assertEqual(call("POST", "/api/discard", {"name": j["name"]}),
-                             (500, {"error": "effacement incomplet"}))
-        left = pieces(j)
-        self.assertEqual({k: v for k, v in left.items() if v}.keys(), {"thumbs", "inputs"}, left)
+        real_remove = os.remove
+
+        def remove(path):
+            if path.endswith(j["name"]):
+                raise PermissionError("fichier ouvert")
+            real_remove(path)
+        with mock.patch.object(bench.launch.os, "remove", remove):
+            self.assertEqual(call("POST", "/api/discard", {"name": j["name"]})[0], 500)
+        self.assertEqual(pile_names(), [j["name"]])
+        self.assertEqual(call("POST", "/api/discard", {"name": j["name"]}), (200, {"ok": True}))
+        self.assertEqual(pieces(j), NOTHING)
+
+    def test_sorting_goes_through_the_access_checks(self):
+        j = edited_image(self)
+        for action in ("keep", "discard"):
+            with self.subTest(action=action):
+                path, body = "/api/" + action, {"name": j["name"]}
+                self.assertEqual(call("POST", path, body, remote=True, cookie=False)[0], 401)
+                self.assertEqual(call("POST", path, body, headers={"Origin": "https://ailleurs.example"})[0], 403)
+                self.assertEqual(call("POST", path, body, headers={"Content-Type": "text/plain"})[0], 415)
+        self.assertEqual(pile_names(), [j["name"]])
+        self.assertTrue(all(pieces(j).values()), pieces(j))
+
+
+@unittest.skipIf(os.name == "nt", "droits Unix")
+class FileModesTest(bench.BenchCase):
+    """Le journal des images (prompts) et les PNG de la pile ne sont lisibles que par le compte du porteur."""
+
+    def test_journal_and_pile_images_are_owner_only(self):
+        j = wait_job(generate("visible")["id"])
+
+        def mode(*p):
+            return os.stat(bench.launch.P(*p)).st_mode & 0o777
+        self.assertEqual(mode("outputs", "journal.jsonl"), 0o600)
+        self.assertEqual(mode("outputs", ".pile", j["name"]), 0o600)
+        os.chmod(bench.launch.P("outputs", "journal.jsonl"), 0o644)   # journal d'avant : remis en 600 au suivant
+        wait_job(generate("second")["id"])
+        self.assertEqual(mode("outputs", "journal.jsonl"), 0o600)
+        self.assertEqual(call("POST", "/api/keep", {"name": j["name"]})[0], 200)
+        self.assertEqual(mode("outputs", j["name"]), 0o600)
 
 
 class ArrivalFailureTest(bench.BenchCase):

@@ -4,6 +4,34 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-23 · Suites du groupe B : effacement PNG en dernier, annulation privée, droits des fichiers, page restaurée
+
+- **Contexte** : compte rendu du groupe B (pile côté serveur) et passe « bogues » du ticket des couleurs ; questions
+  posées au porteur avec une recommandation chacune.
+- **Décision** (porteur, 23/10/2026, réponse « ok pour tes reco ») :
+  - « Page restaurée par « Retour ». Une page restaurée depuis la mémoire du navigateur après le verrouillage réaffiche
+    le contenu privé quelques secondes. On confie la correction au ticket « Trier dans l'espace privé en lumière
+    verte » du groupe E ? » → oui ;
+  - « Suppression privée durcie par la revue du groupe B. `/api/private/delete` reprend d'abord un éventuel changement
+    de code interrompu, puis renomme le dossier avant de l'effacer. […] On garde ? » → oui ;
+  - « Ordre d'effacement de Jeter et Supprimer. […] Faut-il effacer le PNG en dernier ? Un échec laisserait alors
+    l'image visible, et on pourrait la rejeter. Je modifierais la spec en conséquence. » → oui ;
+  - « Dates de la fiche privée. Garder une image privée ne réécrit que sa fiche chiffrée : ses dates de fichier
+    changent, pas celles de l'image. […] » → « (a) » : l'accepter et l'écrire, comme les dates, tailles et nombres
+    de fichiers privés que le README dit déjà visibles sur le disque ;
+  - « Annulation pendant le rangement d'une génération privée. […] On corrige de la même façon ? Une annulation
+    arrivée à ce moment-là ne laisserait alors aucune image. » → oui ;
+  - « Droits des fichiers. Le journal des images (qui contient les prompts) et les PNG de la pile sont créés lisibles
+    par les autres comptes de la Mac (0o644). Les passer en lecture par toi seul (0o600) ? Il faudrait un nouveau
+    ticket Asana, qui couvrirait aussi les tests de refus d'accès de `/api/keep` et `/api/discard` » → oui ;
+  - texte du piège « Verrous » de `CLAUDE.md` proposé par le groupe B → « D'accord pour l'écrire tel quel ? » → oui.
+- **Écarté** : défaire le durcissement de `/api/private/delete` ; effacer le PNG d'abord ; remettre les dates de la
+  fiche ou réécrire toute l'image privée ; laisser la course d'une annulation privée ; garder les droits 0o644.
+- **Conséquences** : remplace, dans « Pile : emplacement des images à trier… » et la spec (section 2), l'ordre « PNG
+  d'abord » : Jeter et Supprimer effacent vignettes, images d'entrée, dossier de travail et ligne du journal, puis le
+  PNG en dernier, et seulement si tout le reste est parti ; le récit 74 de la spec (rien sur le disque ne dit combien
+  d'images privées attendent) devient vrai au contenu près, pas aux dates.
+
 ## 2026-10-23 · Journal du serveur : connexions coupées, refus de génération et suppressions sans trace propre
 
 - **Contexte** : la passe « bogues » des suites du groupe A relève trois traces antérieures à la refonte, dans le
@@ -89,6 +117,9 @@ les messages de commit.
   avant le commit de fusion.
 
 ## 2026-10-22 · Pile : emplacement des images à trier, effacement complet, journaux neutres
+
+_Remplacée en partie le 23/10/2026 (ordre d'effacement : PNG en dernier) par « Suites du groupe B : effacement PNG en
+dernier, annulation privée, droits des fichiers, page restaurée »._
 
 - **Contexte** : rédaction de la spec de la refonte (`docs/specs/2026-10-22_refonte-chambre-noire.md`). Faits lus dans
   `tools/launch.py` : le journal ne fait que s'allonger ; « Supprimer » laisse la ligne du journal (avec le prompt) et
