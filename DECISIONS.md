@@ -4,6 +4,29 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-23 · Suites du groupe A : journal muet sur les réussites, ancien réglage incognito, page hors ligne
+
+- **Contexte** : après la fusion du groupe A (retrait de l'incognito), sa session relève que le journal du serveur
+  (`logs/`) distingue encore une génération privée d'une normale, et qu'un ancien réglage incognito du navigateur est
+  ignoré sans message ; la session du groupe F relève que la page « Ordinateur injoignable » de `tools/ui/sw.js` garde
+  les anciennes couleurs, hors du périmètre de la spec.
+- **Décision** (porteur, 23/10/2026, réponse « ok pour tes reco » aux recommandations) :
+  - « Page « Ordinateur injoignable » : on l'ajoute au ticket des couleurs du groupe C ? » → oui (recommandation :
+    « Oui ») ;
+  - « Le journal du serveur trahit encore les générations privées » (« [job] PNG enregistré : <chemin>… » et
+    « [calibration] … » écrites pour une génération normale seulement ; `POST /api/generate` suivi de `/api/result`
+    et `/api/thumb` pour une normale seulement) → « (b) » : une même ligne pour toutes les réussites (« [job]
+    génération terminée », sans chemin ni durée), plus de ligne de calibration, et le journal du serveur ne garde plus
+    que les requêtes en erreur (4xx, 5xx) ;
+  - « Ancien réglage incognito resté dans le navigateur » → oui : un message affiché une seule fois au chargement
+    (« L'incognito n'existe plus : vos images sont enregistrées. Pour la confidentialité, passez par l'espace
+    privé. »), puis le réglage est effacé.
+- **Écarté** : garder le détail des réussites ou la trace des requêtes réussies dans `logs/` ; ignorer l'ancien réglage
+  sans message ; laisser la page hors ligne aux anciennes couleurs.
+- **Conséquences** : la session du groupe A fait les deux changements du journal et du message comme mise à jour du
+  ticket « Refuser l'incognito au serveur et rendre neutres les échecs du journal » ; la page hors ligne entre dans le
+  ticket « Passer l'interface en lumière inactinique, sombre seulement » (groupe C).
+
 ## 2026-10-22 · Icône de l'application : le paysage en carrés sous la lumière inactinique
 
 - **Contexte** : groupe F de la refonte (ticket « Choisir et intégrer la nouvelle icône pixel ») ; le porteur avait
