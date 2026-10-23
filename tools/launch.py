@@ -718,7 +718,11 @@ def private_items(private_key, pile):
             continue
         if isinstance(meta, dict) and bool(meta.pop("pile", False)) == pile:
             # time est à la seconde : deux images d'un lot finies la même seconde se départagent par leur dossier
-            items.append(((meta.get("time") or 0, os.stat(d).st_mtime_ns), {**meta, "id": item, "private": True}))
+            try:
+                finished = os.stat(d).st_mtime_ns
+            except FileNotFoundError:           # jetée ou supprimée pendant la lecture
+                continue
+            items.append(((meta.get("time") or 0, finished), {**meta, "id": item, "private": True}))
     return [it for _, it in sorted(items, key=lambda x: x[0], reverse=True)]
 
 
@@ -745,12 +749,23 @@ def replace_synced(tmp, fp, data, full=True):
         raise
 
 
+def remove_private_item(item):
+    """Supprime le dossier d'une image privée (Jeter, /api/private/delete), renommé d'abord en dossier caché (purgé au
+    démarrage) : un effacement coupé ne laisse pas une image sans fiche, que ni la pile ni les tirages ne montreraient
+    plus. Sous PRIVATE_LOCK, après finish_rekey() : un changement de code interrompu en rangerait sinon la copie
+    rechiffrée à sa place."""
+    hidden = os.path.join(PRIVATE, "items", "." + item)
+    os.rename(os.path.join(PRIVATE, "items", item), hidden)
+    S.rev["private"] += 1
+    shutil.rmtree(hidden)
+
+
 def sort_private(action, private_key, item):
     """Garder (keep) ou Jeter (discard) une image de la pile privée avec la clé d'une session : (code, réponse). Sous
     PRIVATE_LOCK, après finish_rekey() ; 404 « déjà triée » si l'image n'est pas (ou plus) dans la pile : le premier
     geste arrivé l'emporte. Garder déchiffre la fiche (meta), en retire la marque « pile » et la rescelle avec la clé
     publique de space.json (fichier temporaire private/meta.tmp mis sur le disque, puis remplacement atomique) ; image,
-    vignette et entrées restent telles quelles. Jeter supprime le dossier de l'image, comme /api/private/delete.
+    vignette et entrées restent telles quelles. Jeter supprime le dossier de l'image (remove_private_item).
     StaleKey si la clé n'est plus celle de l'espace ; une fiche illisible lève InvalidTag ou ValueError."""
     with PRIVATE_LOCK:
         finish_rekey()
@@ -759,15 +774,10 @@ def sort_private(action, private_key, item):
         meta = json.loads(raw) if raw else None
         if not (isinstance(meta, dict) and meta.get("pile")):
             return 404, {"error": "déjà triée"}
-        d = os.path.join(PRIVATE, "items", item)
         if action == "discard":
-            # renommé d'abord en dossier caché (purgé au démarrage) : un effacement coupé ne laisse pas une image
-            # sans fiche, que ni la pile ni les tirages ne montreraient plus
-            hidden = os.path.join(PRIVATE, "items", "." + item)
-            os.rename(d, hidden)
-            S.rev["private"] += 1
-            shutil.rmtree(hidden)
+            remove_private_item(item)
             return 200, {"ok": True}
+        d = os.path.join(PRIVATE, "items", item)
         del meta["pile"]
         # fsync seul : le F_FULLFSYNC de sync_dir(d) met aussi le fichier temporaire sur le disque
         replace_synced(os.path.join(PRIVATE, META_TMP), os.path.join(d, "meta"),
@@ -926,6 +936,21 @@ def image_path(name):
     return output_path(name) or pile_path(name)
 
 
+def on_image(name, use):
+    """use(chemin) sur un tirage ou une image de la pile, ou None si elle n'existe pas (ou plus) : une image gardée
+    entre la recherche et la lecture (passée de la pile aux tirages) est cherchée une seconde fois, plutôt qu'un 404
+    pour une image qui existe."""
+    for _ in range(2):
+        fp = image_path(name)
+        if not fp:
+            return None
+        try:
+            return use(fp)
+        except FileNotFoundError:
+            pass
+    return None
+
+
 # journal des images et tri : l'arrivée d'une image dans la pile avec sa ligne (to_pile), Garder, Jeter et Supprimer
 # (vérification, déplacement ou effacements, réécriture du journal), comme la lecture des tirages et de la pile, se
 # font chacun d'un bloc sous ce verrou ; le premier geste arrivé l'emporte. RLock : ces blocs appellent des fonctions
@@ -972,7 +997,13 @@ def to_pile(job, meta):
     jamais une ligne du journal (son prompt) sans image. Le passage dans la pile et le statut « done » se font sous
     S.turn, comme une annulation (cancel_job) : une génération annulée entre-temps n'arrive pas dans la pile, False
     (run_job la jette). jobs/ et outputs/ sont sous ROOT, sur le même disque : os.replace déplace sans copier (un
-    outputs/ sur un autre disque ferait échouer la génération)."""
+    outputs/ sur un autre disque ferait échouer la génération). Le PNG est mis sur le disque avant d'être déplacé :
+    une coupure ne laisse pas dans la pile un fichier vide derrière un renommage écrit."""
+    try:                                        # fsync seul : le F_FULLFSYNC de sync_dir(PILE) suit le déplacement
+        with open(job["out"], "rb") as f:
+            sync_fd(f.fileno(), full=False)
+    except OSError:                             # Windows (fsync d'un fichier ouvert en lecture) : os.replace tranche
+        pass
     with JOURNAL_LOCK:
         os.makedirs(PILE, exist_ok=True)
         dst = os.path.join(PILE, os.path.basename(job["out"]))
@@ -1028,15 +1059,8 @@ def drop_from_journal(name):
         kept = [line for line in lines if (journal_line(line) or ("",))[0] != name]
         if len(kept) == len(lines):
             return
-        try:
-            write_synced(fp + ".tmp", b"".join(kept))
-            os.replace(fp + ".tmp", fp)
-        except BaseException:
-            try:
-                os.remove(fp + ".tmp")
-            except OSError:
-                pass
-            raise
+        # fsync seul : le F_FULLFSYNC de sync_dir met aussi le fichier temporaire sur le disque
+        replace_synced(fp + ".tmp", fp, b"".join(kept), full=False)
         sync_dir(P("outputs"))
 
 
@@ -2082,10 +2106,14 @@ class H(BaseHTTPRequestHandler):
                 return self._send(403, {"error": "espace privé verrouillé"})
             item = body.get("id")
             with PRIVATE_LOCK:                  # jamais pendant un changement de code (l'image y serait recopiée)
-                if not (isinstance(item, str) and ITEM_RE.fullmatch(item) and os.path.isdir(os.path.join(PRIVATE, "items", item))):
-                    return self._send(404, {"error": "image privée inconnue"})
-                shutil.rmtree(os.path.join(PRIVATE, "items", item))
-                S.rev["private"] += 1
+                try:
+                    finish_rekey()
+                    if not (isinstance(item, str) and ITEM_RE.fullmatch(item)
+                            and os.path.isdir(os.path.join(PRIVATE, "items", item))):
+                        return self._send(404, {"error": "image privée inconnue"})
+                    remove_private_item(item)
+                except (OSError, ValueError):   # changement de code en cours de réparation, disque, space.json
+                    return self._send(500, {"error": "image privée non supprimée : réessayez dans un instant"})
             return self._send(200, {"ok": True})
         if action in ("keep", "discard"):       # Garder, Jeter une image de la pile privée, session exigée
             session = self._private_session(touch=True)
@@ -2233,14 +2261,11 @@ class H(BaseHTTPRequestHandler):
         if path.startswith("/api/private/"):
             return self._private_get(path, q)
         if path == "/api/result":                 # un tirage ou une image de la pile
-            fp = image_path(q.get("name"))
-            if not fp:
+            found = on_image(q.get("name"), lambda fp: (os.path.basename(fp), open(fp, "rb").read()))
+            if not found:                         # inconnue, ou jetée entre-temps
                 return self._send(404, {"error": "fichier inconnu"})
-            extra = {"Content-Disposition": f'attachment; filename="{os.path.basename(fp)}"'} if q.get("download") else None
-            try:
-                data = open(fp, "rb").read()
-            except FileNotFoundError:             # gardée ou jetée entre-temps
-                return self._send(404, {"error": "fichier inconnu"})
+            name, data = found
+            extra = {"Content-Disposition": f'attachment; filename="{name}"'} if q.get("download") else None
             return self._send(200, data, "image/png", extra)
         if path == "/api/history":
             return self._send(200, history())
@@ -2276,15 +2301,12 @@ class H(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "image d'entrée inconnue"})
             return self._send(200, data, "image/png", extra)
         if path == "/api/thumb":
-            fp = image_path(q.get("name"))
-            if not fp:
-                return self._send(404, {"error": "fichier inconnu"})
             try:       # l'envoi reste hors du try : une connexion coupée n'est pas une miniature impossible
-                data = open(thumbnail(fp), "rb").read()
-            except FileNotFoundError:             # gardée ou jetée entre-temps
-                return self._send(404, {"error": "fichier inconnu"})
+                data = on_image(q.get("name"), lambda fp: open(thumbnail(fp), "rb").read())
             except Exception as e:
                 return self._send(500, {"error": f"miniature impossible : {e}"})
+            if data is None:                      # inconnue, ou jetée entre-temps
+                return self._send(404, {"error": "fichier inconnu"})
             return self._send(200, data, "image/jpeg")
         self._send(404, {"error": "not found"})
 
@@ -2487,8 +2509,10 @@ def main():
         pass
     if sys.platform == "darwin":
         exclude_from_backup(P("jobs"))
-    for fp in glob.glob(P("outputs", "*.png")):        # images antérieures à la conservation des entrées : reprises
-        stem = os.path.basename(fp)[:-4]                # depuis leur dossier de travail tant qu'il existe
+    # tirages antérieurs à la conservation des entrées, et images de la pile dont les entrées n'ont pas pu être
+    # gardées (to_pile) : reprises depuis leur dossier de travail tant qu'il existe
+    for fp in glob.glob(P("outputs", "*.png")) + glob.glob(os.path.join(PILE, "*.png")):
+        stem = os.path.basename(fp)[:-4]
         if not os.path.isdir(os.path.join(INPUTS, stem)):
             try:
                 save_inputs(P("jobs", stem.rsplit("_", 1)[0]), fp)

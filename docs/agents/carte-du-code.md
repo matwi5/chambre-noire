@@ -46,8 +46,9 @@ Dans l'ordre du fichier :
   (fiches déchiffrées de la pile ou des tirages privés, séparés par la marque « pile » de la fiche, la plus récente
   d'abord), `space_public` (clé de la session encore celle de l'espace, sinon `StaleKey`), `replace_synced` (fichier
   temporaire mis sur le disque puis `os.replace`), `sort_private` (Garder : fiche rescellée sans la marque par
-  `META_TMP` puis `os.replace` ; Jeter : dossier renommé en dossier caché, puis supprimé ; sous `PRIVATE_LOCK` après
-  `finish_rekey()`) ; prompts privés : `private_prompts` (`private/prompts`, scellé à l'étiquette `prompts`) ;
+  `META_TMP` puis `os.replace` ; Jeter : `remove_private_item`, dossier renommé en dossier caché, puis supprimé, comme
+  `/api/private/delete` ; sous `PRIVATE_LOCK` après `finish_rekey()`) ; prompts privés : `private_prompts`
+  (`private/prompts`, scellé à l'étiquette `prompts`) ;
   changement de code : `rekey_space` (tout dans `private/.rekey/`, bascule par `os.replace` de `space.json` ; restes
   `prompts.tmp` et `META_TMP` d'une panne supprimés d'abord, scellés avec l'ancienne clé) et `finish_rekey` (termine ou
   abandonne un changement interrompu, au démarrage et sous `PRIVATE_LOCK` avant toute ouverture ou écriture) ;
@@ -55,6 +56,7 @@ Dans l'ordre du fichier :
 - **Galerie, pile et journal** : `input_files`, `save_inputs` (entrées copiées vers `outputs/.inputs/<image>/`),
   `PILE` (`outputs/.pile/`, images à trier), `JOB_ID_RE`, `image_in` (nom validé dans un dossier), `output_path` (un
   tirage), `pile_path` (une image de la pile), `image_path` (l'un ou l'autre : image, vignette et entrées servies),
+  `on_image` (lecture d'une image par `image_path`, cherchée une seconde fois si elle vient d'être gardée),
   `JOURNAL_LOCK` (un `RLock` : journal, tri, lecture des tirages et de la pile), `journal_line` (une ligne lue, ou
   illisible : même jugement à la lecture et à la réécriture), `journal_entries`, `append_journal`, `to_pile` (fin
   d'une génération normale : PNG du dossier de travail vers la pile, sous `S.turn` contre une annulation, puis ligne
