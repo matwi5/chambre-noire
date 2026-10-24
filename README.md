@@ -316,8 +316,11 @@ une fois lâchée au-delà du tiers de sa largeur ou après un geste vif ; en de
 5 secondes ; **Annuler** la remet sur le dessus, et
 l'image n'est effacée du Mac (image, vignette, images d'entrée, dossier de travail, ligne du journal) qu'à la fin du
 bandeau. Fermer ou recharger la page pendant ce temps la laisse dans la pile ; jeter une autre image envoie tout de
-suite l'effacement de la précédente (un seul bandeau à la fois). Si un autre appareil a déjà trié l'image, Garder (**✓**
-ou
+suite l'effacement de la précédente (un seul bandeau à la fois). Après un tri, ✓, ✕ et les boutons de la visionneuse
+ignorent un nouvel appui tant que l'image suivante n'est pas affichée (0,3 s au moins) : un double appui ne trie jamais
+une image qu'on n'a pas vue. Dans l'espace privé, un Jeter en attente est abandonné dès l'appui sur « Sortir » : l'image
+reste dans la pile privée, même si la sortie échoue. Si un
+autre appareil a déjà trié l'image, Garder (**✓** ou
 balayage à droite) dit « Déjà triée » et la carte s'en va (un Jeter n'a rien à effacer). Un appui sur l'image l'ouvre en
 grand dans la visionneuse, qui parcourt la pile :
 **Garder** et **Jeter** y remplacent **Supprimer**, puis elle passe à l'image suivante ; **Télécharger**, **Partager**,

@@ -5,8 +5,10 @@
 // l'image ; la visionneuse de la pile (Garder, Jeter, image suivante ; vrai mode et images d'entrée) ; carte d'échec en
 // tête (message, Relancer, ✕) ; un second ✓ pendant le départ d'une carte ne trie rien de plus ; état vide ; message
 // « Image prête » sur les Tirages, qui mène au Labo ; pile privée par ses routes (« Sortir » pendant le chargement
-// d'une image : rien de privé demandé ensuite) ; balayage de la carte du dessus au doigt et à la souris (seuil, geste
-// vif, tampons, échec qui ne part qu'à gauche, pile redessinée sous le doigt, clic qui ouvre la visionneuse).
+// d'une image : rien de privé demandé ensuite ; Jeter privé abandonné dès l'appui sur « Sortir », tri privé ignoré
+// pendant la sortie) ; balayage de la carte du dessus au doigt et à la souris (seuil, geste vif, tampons, échec qui ne
+// part qu'à gauche, pile redessinée sous le doigt, clic qui ouvre la visionneuse) ; après un tri, ✓, ✕ et la
+// visionneuse ignorent un double appui jusqu'à l'image suivante affichée (0,3 s au moins).
 //   venv/bin/python tests/check.py --quick --ui tests/ui/pile.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -180,6 +182,7 @@ test('balayage au doigt : la carte suit et penche, « Garder » à droite ; trop
 });
 
 test('geste vif : sous le seuil mais rapide, la carte part', async () => {
+  await page.waitFor(`!sortBusy()`, { what: 'tri précédent fini, carte suivante affichée' });
   await page.eval(`sorts.length = 0`);
   await page.swipe(CARD, 80);                        // 80 px, sous le tiers (≈ 115 px), en un geste rapide
   await page.waitFor(`sorts.some(s => s.url.endsWith('/api/keep'))`, { what: 'Garder envoyé' });
@@ -279,8 +282,8 @@ test('deux ✕ de suite : le premier Jeter part tout de suite, un seul bandeau p
   await page.made('zp4 deux');
   await page.eval(`sorts.length = 0`);
   await page.click('#pileNo');                      // zp4 deux
-  await page.waitFor(`!$('undoBar').hidden && ${TOP} === 'zp4 un'`,
-    { what: 'premier bandeau' });
+  await page.waitFor(`!$('undoBar').hidden && ${TOP} === 'zp4 un' && !sortHeld`,
+    { what: 'premier bandeau, carte suivante vue' });
   await page.click('#pileNo');                      // zp4 un : le Jeter de zp4 deux part
   await page.waitFor(`sorts.filter(s => s.url.endsWith('/discard')).length === 1`, { what: 'premier Jeter envoyé' });
   await waitUntil(async () => !(await inPile('zp4 deux')), { what: 'zp4 deux effacée' });
@@ -331,6 +334,29 @@ test('✓ puis une autre carte sur le dessus avant le départ : un second ✓ ne
   page.assertNoErrors();
 });
 
+test('double appui sur Jeter dans la visionneuse, et ✕ juste après un envol : la seconde image ne part pas',
+  async () => {
+    // décision du 24/10/2026 : Garder et Jeter bloqués jusqu'à l'image suivante affichée, 300 ms au moins
+    for (const p of ['zp16 a', 'zp16 b', 'zp16 c']) await page.made(p);
+    await page.click('#pile [data-k="0"] [data-open]');
+    await page.waitFor(`$('viewer').classList.contains('on') && vList.length === 3`, { what: 'visionneuse' });
+    await page.eval(`sorts.length = 0; sortFromViewer('discard'); sortFromViewer('discard')`);   // double appui
+    await new Promise(r => setTimeout(r, 1000));
+    assert.equal(await discards(), 0, 'Jeter de la première envoyé par le second appui');
+    assert.deepEqual(await page.eval(`[vList.length, vList[vIndex].prompt]`), [2, 'zp16 b'], 'seconde image triée');
+    await page.click('#undoBtn');
+    await page.eval(`closeViewer()`);
+    await page.waitFor(`${TOP} === 'zp16 c'`, { what: 'carte remise' });
+    // ✕ puis un second ✕ juste après la fin de l'envol (220 ms) : la carte suivante ne part pas
+    await page.eval(`sorts.length = 0; $('pileNo').click(); setTimeout(() => $('pileNo').click(), 250)`);
+    await new Promise(r => setTimeout(r, 1000));
+    assert.equal(await discards(), 0, 'Jeter envoyé par le second ✕');
+    assert.equal(await page.eval(`discarding && pileView().length`), 2, 'deux cartes encore dans la pile');
+    await page.click('#undoBtn');
+    await clear();
+    page.assertNoErrors();
+  });
+
 test('lot : une carte par image, marquée « rang/taille »', async () => {
   await page.eval(`opt.count = 3; saveOpt(); refreshChoices()`);
   await page.generate('zp6 lot');
@@ -353,8 +379,8 @@ test('visionneuse de la pile : Garder, Jeter, image suivante ; ni Supprimer ni �
   assert.equal(await page.visible('#vDelete'), false);
   assert.equal(await page.eval(`!!$('vKeep')`), false);
   await page.eval(`sortFromViewer('keep')`);
-  await page.waitFor(`vList.length === 2 && vList[vIndex].prompt === 'zp7 b'`,
-    { what: 'image suivante après Garder' });
+  await page.waitFor(`vList.length === 2 && vList[vIndex].prompt === 'zp7 b' && !sortHeld`,
+    { what: 'image suivante après Garder, affichée' });
   await waitUntil(() => kept('zp7 c'), { what: 'zp7 c gardée' });
   await page.eval(`sortFromViewer('discard')`);
   await page.waitFor(`vList.length === 1 && vList[vIndex].prompt === 'zp7 a' && !$('undoBar').hidden`,
@@ -447,6 +473,54 @@ test('espace privé : pile privée par ses routes ; un Jeter en attente à la so
   page.assertNoErrors();
 });
 
+test('espace privé : un Jeter en attente est abandonné dès l\'appui sur « Sortir », pas à la réponse du Mac',
+  async () => {
+    assert.equal(await page.eval(`postJson('/api/private/unlock', { code: ${JSON.stringify(CODE)} })
+      .then(r => r.status)`), 200);
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
+    await page.made('zp17 secrete');
+    await page.eval(`sorts.length = 0`);
+    await page.click('#pileNo');
+    await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
+    // la réponse du Mac à « Sortir » se fait attendre ; une image privée demandée pendant ce temps est notée
+    const privateAfter = [];
+    paused = p => { if (p.request.url.includes('/api/private/lock')) held.push(p.requestId);
+      else { privateAfter.push(p.request.url); page.send('Fetch.continueRequest', { requestId: p.requestId })
+        .catch(() => {}); } };
+    await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/private/lock' },
+      { urlPattern: '*/api/private/image*' }, { urlPattern: '*/api/private/thumb*' }] });
+    try {
+      await page.click('#privExit');
+      await waitUntil(() => held.length > 0, { what: 'sortie demandée' });
+      assert.deepEqual(await page.eval(`[discarding, $('undoBar').hidden]`), [null, true], 'Jeter encore en attente');
+      await new Promise(r => setTimeout(r, 300));
+      assert.deepEqual(privateAfter, [], 'image privée demandée pendant la sortie (carte remise par l\'abandon)');
+      // ✓ ou ✕ pendant la sortie : aucun tri privé ne part
+      await page.eval(`sortBusy() || sortTop('keep')`);
+      await new Promise(r => setTimeout(r, 600));
+      assert.equal(await page.eval(`sorts.length`), 0, 'tri privé envoyé pendant la sortie');
+      // un Jeter privé qui arriverait à sa fin pendant l'aller-retour ne part pas non plus (garde leavingPrivate)
+      await page.eval(`(() => { const d = { tag: 'pzz', priv: true, body: { id: 'zz' } }; discarding = d;
+        commitDiscard(d); })()`);
+      assert.equal(await discards(), 0, 'Jeter privé envoyé pendant la sortie');
+    } finally {
+      paused = null;
+      for (const id of held.splice(0)) await page.send('Fetch.continueRequest', { requestId: id }).catch(() => {});
+      await page.send('Fetch.disable');
+    }
+    await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+    assert.equal(await discards(), 0);
+    assert.equal(await page.eval(`postJson('/api/private/unlock', { code: ${JSON.stringify(CODE)} })
+      .then(r => r.status)`), 200);
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`inPrivate() && pileItems.some(it => it.prompt === 'zp17 secrete')`,
+      { what: 'image privée encore dans sa pile' });
+    await page.click('#privExit');
+    await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+    page.assertNoErrors();
+  });
+
 test('espace privé : une pile privée lue pendant la sortie n\'arrive pas dans la pile publique', async () => {
   assert.equal(await page.eval(`postJson('/api/private/unlock', { code: ${JSON.stringify(CODE)} })
     .then(r => r.status)`), 200);
@@ -460,7 +534,7 @@ test('espace privé : une pile privée lue pendant la sortie n\'arrive pas dans 
   await page.releaseFetch();
   await page.eval(`lateRead`);                     // la lecture et sa suite (json, rendu), finies
   assert.equal(await page.eval(`pileItems.some(it => it.private)`), false, 'image privée dans la pile publique');
-  assert.deepEqual(await page.leaks(['zp11 secrete']), [], 'prompt privé resté dans la page');
+  assert.deepEqual(await page.leaks(['zp11 secrete', 'zp17 secrete']), [], 'prompt privé resté dans la page');
   page.assertNoErrors();
 });
 

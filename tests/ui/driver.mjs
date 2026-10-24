@@ -280,6 +280,8 @@ async function connect(wsUrl) {
         await loadPile(); let n = 0;
         for (let it; (it = pileView()[0]); n++) {
           if (pileFails().length) throw new Error('carte d\\'échec en tête de la pile');
+          while (sortBusy()) await new Promise(r => setTimeout(r, 25));   // ✓ ignoré pendant un tri et SORT_GAP
+          if (!(it = pileView()[0])) break;               // la pile a pu changer pendant l'attente
           const k = pileKey(it); $('pileYes').click();
           for (let t = 0; await onMac(k); t++) {
             if (t > 400) throw new Error('image non gardée : ' + k);

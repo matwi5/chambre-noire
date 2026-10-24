@@ -1453,9 +1453,24 @@ function flyOut(dir, go){ const c=$('pile').querySelector('[data-k="0"]'); flyin
   if(!c){ flying=false; return go(); }
   c.style.transform=''; c.classList.add('out-'+dir);   // (depuis là où le balayage l'a laissée)
   setTimeout(()=>{ flying=false; go(); }, 220); }
+// après un tri (✓, ✕, ou Garder et Jeter de la visionneuse), les suivants attendent que l'image suivante soit
+// affichée, SORT_GAP ms au moins : un double appui ne trie jamais l'image suivante sans l'avoir vue, et un Jeter
+// n'envoie jamais celui d'avant sans son bandeau (décision du 24/10/2026) ; 3 s au plus si l'image ne vient pas
+// (une image en échec ne bloque pas le tri pour toujours)
+const SORT_GAP=300, SORT_HOLD_MAX=3000;
+let sortHeld=false;
+const sortBusy=()=>flying || sortHeld;           // un tri en cours ou son attente : ✓, ✕ et la visionneuse l'ignorent
+function holdSort(shown){ sortHeld=true; const t0=performance.now();   // (minuteur : une page cachée n'a plus
+  const wait=()=>{ const t=performance.now()-t0;                       // d'images d'animation, mais ses minuteurs)
+    if(t>=SORT_HOLD_MAX || t>=SORT_GAP && shown()) sortHeld=false; else setTimeout(wait, 50); };
+  setTimeout(wait, SORT_GAP); }
 // vrai si la carte part (un échec ne part qu'à gauche, retiré de la page)
-function sortTop(action){ if(flying) return false; const top=topEntry(); if(!top) return false;
-  if(top.fail){ if(action!=='discard') return false; flyOut('l', ()=>drop(top.fail)); return true; }
+function sortTop(action){ if(sortBusy()) return false; const top=topEntry(); if(!top) return false;
+  if(top.fail && action!=='discard') return false;   // ✓ sur un échec : rien ne part, rien n'attend
+  // la carte suivante affichée : envol fini et son image posée (ou la pile vide)
+  holdSort(()=>{ const img=$('pile').querySelector('[data-k="0"] img');
+    return !flying && (!img || !!img.getAttribute('src')); });
+  if(top.fail){ flyOut('l', ()=>drop(top.fail)); return true; }
   const it=top.it; flyOut(action==='keep' ? 'r' : 'l', ()=>action==='keep' ? keepItem(it) : discardItem(it)); return true; }
 // envoie Garder ou Jeter (route) d'une image de l'espace priv ; l'image reste hors de la pile affichée jusqu'à la
 // réponse, puis la pile est relue. Déjà triée ailleurs (404) : dit pour Garder, tu pour un Jeter (elle est partie)
@@ -1471,21 +1486,22 @@ function sendSort(route, priv, tag, body, done){
     .finally(()=>{ sorting.delete(tag); if(priv===inPrivate()){ renderPile(); loadPile(); } }); }
 // Garder : l'image passe dans les Tirages de son espace
 function keepItem(it){ const priv=!!it.private;
-  if(priv!==inPrivate()) return;                   // espace changé pendant l'animation : rien ne part
+  // espace changé, ou « Sortir » demandé, pendant l'animation : rien ne part
+  if(priv!==inPrivate() || priv && leavingPrivate) return;
   sendSort('keep', priv, pileTag(it), pileBody(it), ()=>log('gardée : '+it.name, priv)); }
 // Jeter : l'image quitte l'écran, le bandeau Annuler paraît ; l'effacement ne part qu'à sa fin. Un seul bandeau à la
 // fois : un nouveau Jeter envoie tout de suite celui d'avant
 function discardItem(it){ const tag=pileTag(it);
-  if(!!it.private!==inPrivate() || (discarding && discarding.tag===tag)) return;
+  if(!!it.private!==inPrivate() || it.private && leavingPrivate || (discarding && discarding.tag===tag)) return;
   if(discarding) commitDiscard(discarding);
   const d={tag, priv:!!it.private, body:pileBody(it)};
   d.timer=setTimeout(()=>commitDiscard(d), DISCARD_MS); discarding=d; sorting.add(tag);
   $('undoBar').hidden=false; document.body.classList.add('undoing'); renderPile(); }
 // fin du bandeau (ou nouveau Jeter) : la demande part dans l'espace où le geste a commencé ; cet espace fermé entre-temps
-// (sortie de l'espace privé), elle est abandonnée et l'image reste dans sa pile
+// ou en train de l'être (sortie de l'espace privé, leavingPrivate), elle est abandonnée et l'image reste dans sa pile
 function commitDiscard(d){ if(d!==discarding) return; clearTimeout(d.timer); discarding=null; hideUndo();
   sorting.delete(d.tag);
-  if(d.priv && !inPrivate()) return;
+  if(d.priv && (!inPrivate() || leavingPrivate)) return;
   sendSort('discard', d.priv, d.tag, d.body, ()=>log('jetée', d.priv)); }
 function undoDiscard(){ const d=discarding; if(!d) return; clearTimeout(d.timer); discarding=null; sorting.delete(d.tag);
   hideUndo(); renderPile(); }
@@ -1537,9 +1553,11 @@ let swiped=false, dropSwipe=()=>{};
     if(!((far || quick) && sortTop(g0.dx>0 ? 'keep' : 'discard'))) place(g0.c, 0); };
   $('pile').addEventListener('pointerup', end); $('pile').addEventListener('pointercancel', end); })();
 // Garder ou Jeter depuis la visionneuse ouverte sur la pile : elle passe à l'image suivante, ou se ferme
-function sortFromViewer(action){ const it=vList[vIndex]; if(!it || !it.pile) return;
+function sortFromViewer(action){ const it=vList[vIndex]; if(!it || !it.pile || sortBusy()) return;
   const list=vList.filter(x=>pileTag(x)!==pileTag(it)), at=Math.min(vIndex, list.length-1);
-  if(list.length) openViewer(at, list); else closeViewer();
+  // image suivante affichée, ou visionneuse fermée entre-temps (l'image attendue n'y arrivera plus)
+  if(list.length){ openViewer(at, list); holdSort(()=>vIndex<0 || !!$('vImg').getAttribute('src')); }
+  else closeViewer();
   if(action==='keep') keepItem(it); else discardItem(it); }
 // fin d'une génération de la page (ou d'un lot, une fois plus rien d'actif dans le lot), quand la page affichée n'est pas
 // le Labo : un message qui y mène quand on le touche ; rien pour une annulée, ni pour une génération de l'autre espace
@@ -2388,9 +2406,14 @@ async function privUnlock(){ if(!$('puCode').value) return;
 // effacée (applyPrivate, à la sortie), en plus de ce que changedSpace retire à toute sortie (résultats, grille,
 // visionneuse, aperçus)
 // leavingPrivate : « Sortir » demandé, réponse du Mac attendue ; aucun aperçu privé n'est demandé entre-temps (une
-// requête servie après la fermeture de la session répondrait 404)
+// requête servie après la fermeture de la session répondrait 404), et aucun Jeter privé ne part (commitDiscard)
 let leavingPrivate=false;
-async function privLock(){ erasePrivate=true; leavingPrivate=true; abortPrivateLoads();
+async function privLock(){ erasePrivate=true; leavingPrivate=true;
+  // Jeter privé en attente : abandonné dès l'appui, pas à la réponse du Mac (son bandeau pourrait finir entre-temps) ;
+  // l'image reste dans la pile privée, même si la sortie échoue (le doute garde l'image, décision du 24/10/2026).
+  // Avant abortPrivateLoads : la pile redessinée par l'abandon n'a plus de chargement privé qui survive à la sortie
+  if(discarding && discarding.priv) undoDiscard();
+  abortPrivateLoads();
   const r=await postJson('/api/private/lock', {}).catch(()=>null); leavingPrivate=false;
   if(!r || !r.ok){ erasePrivate=false; pileShown=''; reveal.pv=0; renderPile();   // rien n'est effacé ; images de la
     // pile et aperçu redemandés (la visionneuse, elle, attend l'image suivante)

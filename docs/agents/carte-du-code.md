@@ -226,12 +226,14 @@ dernier bloc, après le HTML.
     `renderPile` (carte du dessus et deux devinées dessous : `pileCard`, `failCard`, chacune marquée par `pileTag` ;
     état vide, compte, pastille de l'onglet ; redessinée seulement si elle change, `pileShown`), `topEntry` (ce que
     montre la carte du dessus, retrouvé par son nom), `sortTop` (✓, ✕ et balayage ; `flyOut`, un départ à la fois :
-    `flying`, vrai jusqu'au tri, même si la pile est redessinée entre-temps), `pileSwipe` (balayage de
+    `flying`, vrai jusqu'au tri, même si la pile est redessinée entre-temps ; puis `holdSort` : `sortHeld` jusqu'à
+    l'image suivante affichée, `SORT_GAP` ms au moins, aussi pour la visionneuse), `pileSwipe` (balayage de
     la carte du dessus par Pointer Events, doigt et souris : seuil au tiers de la largeur ou geste vif ; `swiped` :
     la fin d'un balayage n'ouvre pas la visionneuse, oublié au prochain appui dans la zone de la pile),
     `sendSort` (envoi de Garder ou Jeter, « Déjà triée » sur un 404 de Garder), `keepItem`, `discardItem` (Jeter :
     bandeau `#undoBar`, `discarding`), `commitDiscard` (à la fin du bandeau, `DISCARD_MS`, ou au Jeter suivant ;
-    abandonné si l'espace où il a commencé est fermé), `undoDiscard`, `sortFromViewer` (Garder et Jeter de la
+    abandonné si l'espace où il a commencé est fermé ou en train de l'être, `leavingPrivate` ; `privLock` abandonne
+    un Jeter privé en attente dès l'appui sur « Sortir »), `undoDiscard`, `sortFromViewer` (Garder et Jeter de la
     visionneuse, puis l'image suivante). Garder et Jeter visent une image par `pileKey` (nom, identifiant d'une
     privée), jamais par l'objet affiché.
   - « notifications » : `pushSubscribe`, `askNotifications`.
@@ -258,7 +260,8 @@ dernier bloc, après le HTML.
     `putInput`, `swapInput`, `emptyInput` (vidage après « Révéler », dans l'espace d'où la demande est partie) ; un
     ajout d'image asynchrone (Éditer, Dessiner) va dans la saisie de l'espace où il a commencé. `openPrivSheet`,
     `privCreate`, `privUnlock`, `privLock` (sortie appliquée dès la réponse du Mac : `spaceEpoch` écarte une réponse de
-    `/api/status` demandée avant ; `leavingPrivate` : aucun aperçu privé demandé pendant la fermeture),
+    `/api/status` demandée avant ; `leavingPrivate` : aucun aperçu privé demandé ni Jeter privé envoyé pendant la
+    fermeture),
     `privChangeCode`, `privReset`.
 
 Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
