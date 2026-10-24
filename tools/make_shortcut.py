@@ -15,7 +15,22 @@ def drop_old():
             os.remove(os.path.join(root, old))
 
 
-if os.name == "nt":
+def mac_command():
+    """Texte de « Chambre noire.command » (macOS)."""
+    return ("#!/bin/zsh\n"
+            "# Chambre noire : interface sur http://127.0.0.1:7860/ (fermer la fenêtre pour arrêter)\n"
+            'cd "$(dirname "$0")"\n'
+            "# interface déjà lancée (service de tools/make_service.py, ou autre fenêtre) : y entrer par un jeton à\n"
+            "# usage unique, sans taper le code d'accès (curl répond 0 dès que le serveur répond, même 401)\n"
+            "# (sans exec : si l'entrée échoue, l'adresse simple s'ouvre, où le code est demandé)\n"
+            "if curl -s -o /dev/null --max-time 2 http://127.0.0.1:7860/api/status; then\n"
+            "  venv/bin/python tools/launch.py --enter || open http://127.0.0.1:7860/\n"
+            "  exit 0\n"
+            "fi\n"
+            'exec venv/bin/python tools/launch.py "$@"\n')
+
+
+def windows():
     import win32com.client
     sh = win32com.client.Dispatch("WScript.Shell")
     lnk = sh.CreateShortCut(os.path.join(root, "Chambre noire.lnk"))
@@ -27,17 +42,21 @@ if os.name == "nt":
     lnk.Save()
     drop_old()
     print("raccourci écrit :", os.path.join(root, "Chambre noire.lnk"))
-elif sys.platform == "darwin":
+
+
+def mac():
     path = os.path.join(root, "Chambre noire.command")
     with open(path, "w", encoding="utf-8") as f:
-        f.write("#!/bin/zsh\n"
-                "# Chambre noire : interface sur http://127.0.0.1:7860/ (fermer la fenêtre pour arrêter)\n"
-                'cd "$(dirname "$0")"\n'
-                "# interface déjà lancée (service de tools/make_service.py, ou autre fenêtre) : l'ouvrir simplement\n"
-                'if curl -s -o /dev/null --max-time 2 http://127.0.0.1:7860/api/status; then open http://127.0.0.1:7860/; exit 0; fi\n'
-                'exec venv/bin/python tools/launch.py "$@"\n')
+        f.write(mac_command())
     os.chmod(path, 0o755)
     drop_old()
     print("raccourci écrit :", path)
-else:
-    sys.exit("raccourci non géré sur ce système : lancez venv/bin/python tools/launch.py")
+
+
+if __name__ == "__main__":
+    if os.name == "nt":
+        windows()
+    elif sys.platform == "darwin":
+        mac()
+    else:
+        sys.exit("raccourci non géré sur ce système : lancez venv/bin/python tools/launch.py")

@@ -1,9 +1,12 @@
 // Test de fumée de l'interface, dans la vue du téléphone : chaque écran principal s'ouvre sans erreur de console
 // (Labo, avec la génération en cours, et Tirages), et le panneau Moteur dit quelle version du code est servie. Code
 // d'accès redemandé (cookie effacé, réponse 401 de /api/status) : la page se recharge une fois sur la page du code.
+// Entrée par le jeton (launch.py --enter) : la page de redirection, ouverte comme un fichier, ouvre l'interface.
 //   venv/bin/python tests/check.py --ui   (tous les fichiers ; --quick --ui tests/ui/smoke.test.mjs pour celui-ci)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { startBench, launchChrome, waitUntil } from './driver.mjs';
 
 let bench, chrome, page;
@@ -101,4 +104,23 @@ test('code d\'accès redemandé : la page se recharge une fois sur la page du co
   // (les réponses 401, et elles seules, sont notées en erreur par Chrome)
   page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/status of 401 \(Unauthorized\)/.test(e)));
   page.assertNoErrors();
+});
+
+test('entrée par le jeton : la page d\'entrée ouvre l\'interface sans le code, une seule fois', async () => {
+  const alone = await launchChrome();              // profil à part, sans cookie d'accès
+  try {
+    const p = await alone.phonePage();
+    await p.send('Network.clearBrowserCookies');
+    const file = await bench.enter();              // comme launch.py --enter : un fichier, pas l'adresse
+    const target = fs.readFileSync(file, 'utf8').match(/content="0;url=([^"]+)"/)[1];
+    await p.goto(pathToFileURL(file).href);
+    await waitUntil(() => p.eval(`location.pathname === '/' && $('lamp').classList.contains('ok')`).catch(() => false),
+      { what: 'interface ouverte par la page d\'entrée' });
+    assert.equal(fs.existsSync(file), false, 'page d\'entrée restée après usage');
+    await p.send('Network.clearBrowserCookies');
+    await p.goto(target);                          // jeton déjà servi : page du code
+    await p.waitFor(`!!document.getElementById('c')`, { what: 'page du code d\'accès' });
+  } finally {
+    await alone.close();
+  }
 });

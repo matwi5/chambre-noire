@@ -33,6 +33,7 @@
 //   await page.cancelRun()                       // « Annuler » de la carte en cours, confirmé
 //   await page.canvasInk('#revealCanvas')        // { width, height, ink } : pixels non transparents d'un canevas
 //   await bench.api('/api/pile')                 // réponse JSON d'une route du banc (le Mac, avec le cookie d'accès)
+//   await bench.enter()                          // page d'entrée (jeton à usage unique), comme launch.py --enter
 //   await page.launch('texte', { private: true })   // génération demandée hors de l'interface (autre appareil)
 //   await page.leaks(['mot', 'id'])              // marqueurs restés dans la page (texte, attributs, champs, mémoire)
 //   const bench = await startBench({ relay: true }); await bench.login(page);   // comme le téléphone par Tailscale :
@@ -110,16 +111,22 @@ function python() {
   return found || 'python3';
 }
 
-// processus Python à part, qui écrit une ligne au démarrage et s'arrête à la fermeture de son entrée standard
+// processus Python à part, qui écrit une ligne au démarrage et s'arrête à la fermeture de son entrée standard ;
+// ask(texte) lui envoie une ligne et rend la ligne qu'il répond (réponses dans l'ordre des demandes : deux demandes
+// simultanées reçoivent chacune la leur ; un processus arrêté fait échouer les demandes en attente)
 async function startPython(script, args, what) {
   const proc = spawn(python(), [path.join(HERE, script), ...args], { cwd: ROOT, stdio: ['pipe', 'pipe', 'inherit'] });
   const killer = () => proc.kill();
   process.on('exit', killer);
-  const first = await within(new Promise((resolve, reject) => {
-    const rl = readline.createInterface({ input: proc.stdout });
-    rl.once('line', line => resolve(line));
-    proc.once('exit', code => reject(new Error(`${what} arrêté au démarrage (code ${code})`)));
-  }), START_TIMEOUT, `${what} : démarrage`).catch(e => { killer(); process.off('exit', killer); throw e; });
+  const rl = readline.createInterface({ input: proc.stdout });
+  const waiting = [];                                // { resolve, reject } par ligne attendue, la première d'abord
+  rl.on('line', line => waiting.shift()?.resolve(line));
+  const fail = e => { while (waiting.length) waiting.shift().reject(e); };
+  proc.stdin.on('error', e => fail(new Error(`${what} : écriture impossible (${e.message})`)));
+  proc.once('exit', code => fail(new Error(`${what} arrêté (code ${code})`)));
+  const nextLine = () => new Promise((resolve, reject) => waiting.push({ resolve, reject }));
+  const first = await within(nextLine(), START_TIMEOUT, `${what} : démarrage`)
+    .catch(e => { killer(); process.off('exit', killer); throw e; });
   async function stop() {
     process.off('exit', killer);
     if (proc.exitCode !== null) return;
@@ -127,7 +134,13 @@ async function startPython(script, args, what) {
     proc.stdin.end();
     await Promise.race([gone, pause(10000).then(() => proc.kill())]);
   }
-  return { first, stop, pid: proc.pid };
+  function ask(text) {
+    if (proc.exitCode !== null || proc.stdin.destroyed) return Promise.reject(new Error(`${what} arrêté`));
+    const reply = nextLine();
+    proc.stdin.write(text + '\n');
+    return within(reply, EVAL_TIMEOUT, `${what} : réponse à « ${text} »`);
+  }
+  return { first, stop, ask, pid: proc.pid };
 }
 
 // serveur du banc ; sans relais, les pages de chrome.phonePage() y sont connectées (cookie du code d'accès) ; relay :
@@ -173,6 +186,8 @@ export async function startBench({ relay = false } = {}) {
     // libère les générations dont le prompt porte HOLD=<name> (HOLD seul : 'hold') ; voir tests/fake_sdcli.py
     release(name = 'hold') { fs.writeFileSync(path.join(hold, name), ''); },
     async api(route) { return (await macFetch(route)).json(); },
+    // jeton et page d'entrée du banc, comme launch.py --enter : chemin de la page de redirection vers /entrer
+    async enter() { return JSON.parse(await server.ask('entrer')).entry; },
     async stop() { if (directBench === entry) directBench = null; await relayed?.stop(); await server.stop(); },
   };
 }

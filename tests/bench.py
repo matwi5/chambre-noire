@@ -66,6 +66,7 @@ def start():
     launch.PILE = launch.P("outputs", ".pile")
     launch.PUSH_KEY, launch.PUSH_SUBS = launch.P("tools", "push_vapid.pem"), launch.P("tools", "push_subscriptions.json")
     launch.ACCESS_FILE = launch.P("tools", "access_code.txt")
+    launch.ENTRY_TOKEN, launch.ENTRY_PAGE = launch.P("tools", "entry_token"), launch.P("tools", "entry.html")
     launch.PROMPTS_FILE = launch.P("tools", "saved_prompts.json")
     launch.PRIVATE = launch.P("private")
     launch.SCRYPT_N = 2 ** 10                       # dérivation du code privé rapide au banc (2**18 en vrai)
@@ -135,8 +136,15 @@ def call(method, path, body=None, remote=False, cookie=True, headers=None, priva
     return call_full(method, path, body, remote, cookie, headers, private, wifi)[:2]
 
 
-def call_full(method, path, body=None, remote=False, cookie=True, headers=None, private=None, wifi=False):
-    """Comme call(), avec en plus les en-têtes de la réponse : (code, réponse, en-têtes)."""
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Une redirection est rendue telle quelle (code 3xx, Location), pas suivie."""
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def call_full(method, path, body=None, remote=False, cookie=True, headers=None, private=None, wifi=False, follow=True):
+    """Comme call(), avec en plus les en-têtes de la réponse : (code, réponse, en-têtes). follow=False : une redirection
+    est rendue telle quelle (303 et Location de /entrer), pas suivie."""
     h = {"Content-Type": "application/json"} if method == "POST" else {}
     cookies = []
     if remote:
@@ -155,7 +163,8 @@ def call_full(method, path, body=None, remote=False, cookie=True, headers=None, 
     # un appareil du Wi-Fi arrive d'une autre adresse que 127.0.0.1 : le serveur ne voit plus d'adresse locale
     with mock.patch.object(launch, "LOCAL_CLIENTS", ()) if wifi else contextlib.nullcontext():
         try:
-            with urllib.request.urlopen(req, timeout=30) as r:
+            opener = urllib.request.build_opener() if follow else urllib.request.build_opener(_NoRedirect)
+            with opener.open(req, timeout=30) as r:
                 code, raw, hdrs = r.status, r.read(), r.headers
         except urllib.error.HTTPError as e:
             code, raw, hdrs = e.code, e.read(), e.headers

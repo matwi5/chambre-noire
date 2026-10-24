@@ -4,6 +4,32 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-25 · Choix retenus par Claude pour l'entrée du Mac par jeton (délégation du porteur)
+
+- **Contexte** : ticket G2 « Entrer depuis le Mac sans taper le code, par un jeton à usage unique », sa revue
+  Standards/Spec et sa passe « bogues » ; choix faits par Claude sous la délégation du porteur (« Choix confiés à
+  Claude jusqu'à la fin du parcours de la refonte », plus bas).
+- **Choix retenus** (question → recommandation retenue) :
+  - Réponse à une entrée refusée (Wi-Fi, relais, jeton mauvais, vieux ou déjà servi) ? → la page du code, pas un
+    simple 403 ; un navigateur qui a déjà le cookie est renvoyé vers `/` sans toucher au jeton (historique,
+    autocomplétion, second onglet) ;
+  - Jeton de plus de 60 s ? → effacé quel que soit le jeton présenté, âge pris sur le fichier ouvert et en valeur
+    absolue (un fichier daté dans le futur est refusé) ;
+  - Deux requêtes simultanées ? → un verrou (`ENTRY_LOCK`) entoure l'écriture, la lecture, la vérification et
+    l'effacement dans un même processus ; un jeton servi est retenu en mémoire (`ENTRY_USED`) et refusé ensuite, même
+    si son fichier n'a pas pu être effacé ;
+  - Fichiers du jeton et de la page ? → créés de façon exclusive en 0o600 sous un nom tiré au hasard, puis remplacés
+    d'un coup ; ignorés par git, temporaires compris ;
+  - Ce que reçoit le navigateur ? → l'adresse `file://` de la page de redirection, jamais l'adresse qui porte le
+    jeton ; limite écrite dans le README : un ordinateur qui ouvre les `.html` dans un éditeur n'affiche aucun
+    navigateur, recours par l'adresse et le code ;
+  - Entrée impossible à écrire, ou `--enter` qui échoue ? → le lancement ouvre l'adresse simple (le code est alors
+    demandé), le raccourci macOS aussi (`--enter || open http://127.0.0.1:7860/`) ;
+  - Raccourci ? → `tools/make_shortcut.py` découpé en fonctions pour être testé ; le README dit de le relancer après
+    une mise à jour (consigne pour tout utilisateur du dépôt).
+- **Écarté** : donner au navigateur l'adresse qui porte le jeton ; laisser un navigateur déjà connecté sur la page du
+  code ; laisser le porteur sans navigateur ouvert quand l'entrée échoue.
+
 ## 2026-10-25 · Choix retenus par Claude pour le code d'accès demandé au Mac (délégation du porteur)
 
 - **Contexte** : ticket G1 « Demander le code d'accès sur le Mac aussi », sa revue Standards/Spec et sa passe

@@ -2,9 +2,12 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
 
   Windows : venv\Scripts\python.exe tools\launch.py [--port 7860] [--backend vulkan|cuda|cpu] [--model q4|q8] [--no-browser]
   macOS   : venv/bin/python tools/launch.py [--port 7860] [--model q4|q8] [--no-browser]
+  Entrée dans l'interface déjà lancée, sans taper le code : venv/bin/python tools/launch.py --enter [--port 7860]
 
 - L'interface écoute sur 127.0.0.1:<port> et sert tools/ui/index.html. Tout appareil, le Mac lui-même compris, saisit
-  une fois le code d'accès de tools/access_code.txt, créé au premier lancement, avec ou sans --lan. Avec --lan, elle
+  une fois le code d'accès de tools/access_code.txt, créé au premier lancement, avec ou sans --lan ; sur l'ordinateur,
+  le lancement (hors --no-browser) et --enter ouvrent le navigateur par une entrée à usage unique (tools/entry.html,
+  qui redirige vers GET /entrer?jeton=… : jeton de tools/entry_token, une minute, une fois). Avec --lan, elle
   écoute aussi sur le Wi-Fi (téléphone, tablette) ; sur macOS, le Mac ne se met pas en veille tant que le lanceur
   tourne.
 - Chaque génération lance sd-cli (rechargement quasi instantané grâce à --mmap et au cache disque),
@@ -45,7 +48,7 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
 Aucun droit administrateur, aucune modification système : tout reste dans ce dossier.
 """
 import argparse, base64, datetime, errno, glob, hashlib, hmac, io, json, math, os, re, secrets, shutil, socket
-import subprocess, sys, threading, time, uuid, webbrowser
+import pathlib, subprocess, sys, threading, time, uuid, webbrowser
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlsplit
 try:
@@ -195,6 +198,17 @@ def default_backend(cfg):
 
 ACCESS_FILE = P("tools", "access_code.txt")
 ACCESS_COOKIE = "qwen_access"
+# entrée depuis l'ordinateur sans taper le code (launch.py --enter, GET /entrer) : jeton à usage unique, valable
+# ENTRY_TTL s, et page de redirection qui le porte ; tous deux lisibles par le seul compte, jamais suivis par git
+ENTRY_TOKEN = P("tools", "entry_token")
+ENTRY_PAGE = P("tools", "entry.html")
+ENTRY_TTL = 60
+# un jeton ne sert qu'une fois, même à deux requêtes simultanées, et ne s'écrit pas pendant sa lecture : dans un même
+# processus seulement. launch.py --enter en est un autre : chacun de ses deux fichiers est remplacé d'un coup, mais pas
+# la paire ; deux --enter rapprochés gardent le dernier jeton, et l'onglet resté sur l'ancien, s'il a déjà le cookie,
+# est renvoyé vers / (_enter), sinon il reçoit la page du code
+ENTRY_LOCK = threading.Lock()
+ENTRY_USED = set()                              # empreintes des jetons servis : refusés même si leur fichier reste
 LOCAL_CLIENTS = ("127.0.0.1", "::1")
 # fichiers de tools/ui servis sans code d'accès pour l'installation sur le téléphone (rien de personnel)
 PUBLIC_FILES = {
@@ -1316,6 +1330,102 @@ def setup_access():
     S.access_token = access_token(S.access_code)
 
 
+def access_cookie_header():
+    """Cookie d'accès posé après le code (/api/login) ou le jeton d'entrée (/entrer). Lax et non Strict : Chrome Android
+    compte l'ouverture de l'application installée (écran d'accueil) comme une arrivée d'un autre site et n'enverrait
+    pas un cookie Strict, d'où le code redemandé à chaque ouverture. Lax n'est envoyé d'un autre site que pour
+    l'ouverture d'une page (GET, sans effet) ; les POST restent protégés par _post_refused."""
+    return f"{ACCESS_COOKIE}={S.access_token}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax"
+
+
+def write_owner_only(path, text):
+    """Écrit text dans path sans qu'un autre compte puisse le lire, même un instant : fichier temporaire au nom tiré au
+    hasard, créé en 0o600 par création exclusive (O_EXCL : jamais un lien symbolique suivi), à côté, puis remplacement
+    atomique (un ancien fichier, quels que soient ses droits, disparaît d'un coup). Pas replace_synced : son temporaire
+    a un nom fixe, ouvert sans O_EXCL (un lien posé à sa place serait suivi), et il sert l'espace privé, qu'on ne
+    touche pas ici ; pas de fsync non plus : un jeton d'entrée perdu à une coupure se refait."""
+    tmp = f"{path}.{secrets.token_hex(8)}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def make_entry(port):
+    """Jeton d'entrée tiré au hasard (128 bits, tools/entry_token) et page de redirection vers
+    http://127.0.0.1:<port>/entrer?jeton=<jeton> (tools/entry.html) ; renvoie le chemin de la page. Le navigateur
+    ouvre ce fichier : le jeton ne passe jamais sur une ligne de commande, que ps montre aux autres comptes."""
+    token = secrets.token_urlsafe(16)
+    url = f"http://127.0.0.1:{port}/entrer?jeton={token}"
+    with ENTRY_LOCK:                             # pas de jeton à moitié remplacé pendant un /entrer du même processus
+        write_owner_only(ENTRY_TOKEN, token + "\n")
+        write_owner_only(ENTRY_PAGE, '<!doctype html><html lang="fr"><head><meta charset="utf-8">'
+                         '<meta name="referrer" content="no-referrer">'
+                         f'<meta http-equiv="refresh" content="0;url={url}"><title>Chambre noire</title></head>'
+                         '<body><p>Ouverture de Chambre noire…</p></body></html>\n')
+    return ENTRY_PAGE
+
+
+def open_entry(port):
+    """Ouvre l'interface dans le navigateur par la page de redirection (son chemin), jamais par l'adresse qui porte le
+    jeton (launch.py --enter, et main() au lancement). Le système ouvre ce fichier .html avec son application
+    habituelle : un éditeur réglé pour les .html l'ouvrirait à la place du navigateur (recours : l'adresse et le
+    code)."""
+    webbrowser.open(pathlib.Path(make_entry(port)).as_uri())
+
+
+def open_browser(port):
+    """Navigateur ouvert au lancement : par l'entrée à usage unique ; si elle ne peut pas s'écrire (dossier en lecture
+    seule, disque plein), par l'adresse simple, sans jeton, où le code est demandé (une ligne neutre au journal)."""
+    try:
+        open_entry(port)
+    except (OSError, ValueError):
+        print("[launch] entrée sans code impossible : le code d'accès sera demandé", flush=True)
+        webbrowser.open(f"http://127.0.0.1:{port}/")
+
+
+def remove_entry():
+    """Efface le jeton et sa page ; un fichier qui résiste (tenu ouvert sous Windows) reste, sans erreur : un jeton
+    servi est de toute façon refusé ensuite (ENTRY_USED)."""
+    for path in (ENTRY_TOKEN, ENTRY_PAGE):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def use_entry_token(token):
+    """Vrai si token est le jeton d'entrée en cours : il est alors effacé, page de redirection comprise (usage unique).
+    Un jeton de plus de ENTRY_TTL s est effacé et refusé ; un mauvais jeton n'efface rien (un autre compte effacerait
+    sinon le jeton du porteur avant son navigateur). Comparaison en temps constant, en octets."""
+    with ENTRY_LOCK:
+        try:
+            with open(ENTRY_TOKEN, encoding="utf-8") as f:
+                # âge du fichier lu, pas d'un autre : un --enter qui le remplace entre-temps garde son jeton neuf
+                age = time.time() - os.fstat(f.fileno()).st_mtime
+                expected = f.read().strip()
+        except (OSError, ValueError):
+            return False
+        if abs(age) > ENTRY_TTL:
+            remove_entry()
+            return False
+        if not expected or not hmac.compare_digest(token.encode(), expected.encode()):
+            return False
+        used = hashlib.sha256(expected.encode()).hexdigest()
+        if used in ENTRY_USED:                   # déjà servi, fichier resté (effacement refusé)
+            return False
+        ENTRY_USED.add(used)
+        remove_entry()
+        return True
+
+
 def cookie_value(header, name):
     """Valeur du cookie name dans un en-tête Cookie, ou None. Découpé à la main sur « ; » : SimpleCookie perd tout
     l'en-tête sur une seule paire mal formée, ou lève CookieError, et l'ordinateur partage ses cookies avec tout serveur
@@ -2025,7 +2135,7 @@ def public(job):
     return d
 
 
-QUIET_ROUTES = ("/api/status", "/api/job/", "/api/private/", "/api/lot/", "/api/generate")
+QUIET_ROUTES = ("/api/status", "/api/job/", "/api/private/", "/api/lot/", "/api/generate", "/entrer")
 REQUEST_PATH_RE = re.compile(r'"[A-Z]+ ([^ ?#]*)')   # chemin de la ligne de requête, sans ce qui suit « ? »
 
 
@@ -2336,18 +2446,41 @@ class H(BaseHTTPRequestHandler):
             return self._send(403, {"error": "code privé incorrect"})
         return self._send_private(200, {"ok": True}, token)   # code : cookie effacé (toutes les sessions sont fermées)
 
+    def _send_login(self):
+        """Page du code d'accès ; pour l'ordinateur lui-même (_local), avec la phrase qui dit comment entrer."""
+        return self._send(200, LOGIN_PAGE.replace("<!--mac-->", LOGIN_MAC if self._local() else ""),
+                          "text/html; charset=utf-8")
+
+    def _enter(self, query):
+        """GET /entrer?jeton=… (page de redirection de launch.py --enter) : depuis l'ordinateur lui-même seulement
+        (_local, qui exclut une requête relayée et le Wi-Fi), bon jeton de moins de ENTRY_TTL s → cookie d'accès et
+        303 vers / ; refusée, un navigateur qui a déjà le cookie (adresse rouverte depuis l'historique, onglet d'un
+        --enter plus ancien) est renvoyé vers / sans toucher au jeton, les autres reçoivent la page du code. Route tue
+        par le journal (QUIET_ROUTES) : le jeton n'y va jamais."""
+        entered = self._local() and S.access_token and use_entry_token(parse_qs(query).get("jeton", [""])[0])
+        if not entered and not self._allowed():
+            return self._send_login()
+        self.send_response(303)
+        self.send_header("Location", "/")
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        if entered:
+            self.send_header("Set-Cookie", access_cookie_header())
+        self.end_headers()
+
     def do_GET(self):
         if not self._host_ok():
             return self._send(403, {"error": "nom d'hôte refusé"})
         sweep()
         path, _, query = self.path.partition("?")
+        if path == "/entrer":      # avant _allowed : le jeton d'entrée tient lieu de code (launch.py --enter)
+            return self._enter(query)
         if path in PUBLIC_FILES:   # manifeste, icônes, service worker : demandés par le navigateur sans le cookie d'accès
             name, ctype = PUBLIC_FILES[path]
             return self._send(200, open(P("tools", "ui", name), "rb").read(), ctype)
         if not self._allowed():
             if path in ("/", "/index.html"):
-                page = LOGIN_PAGE.replace("<!--mac-->", LOGIN_MAC if self._local() else "")
-                return self._send(200, page, "text/html; charset=utf-8")
+                return self._send_login()
             return self._send(401, {"error": "code d'accès requis"})
         if path in ("/", "/index.html"):
             return self._send(200, open(P("tools", "ui", "index.html"), "rb").read(), "text/html; charset=utf-8")
@@ -2473,11 +2606,7 @@ class H(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
-            # Lax et non Strict : Chrome Android compte l'ouverture de l'application installée (écran d'accueil) comme une
-            # arrivée d'un autre site et n'enverrait pas un cookie Strict, d'où le code redemandé à chaque ouverture.
-            # Lax n'est envoyé d'un autre site que pour l'ouverture d'une page (GET, sans effet) ; les POST restent
-            # protégés par _post_refused.
-            self.send_header("Set-Cookie", f"{ACCESS_COOKIE}={S.access_token}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax")
+            self.send_header("Set-Cookie", access_cookie_header())
             self.end_headers()
             self.wfile.write(body)
             return
@@ -2655,9 +2784,14 @@ def main():
                     help="q4 (Q4_K_M, par défaut), q8 (Q8_0, plus fidèle, setup.py --q8) ; uc-q4, uc-q8 : variante "
                          "communautaire (setup.py --uc)")
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--enter", action="store_true",
+                    help="ouvre l'interface déjà lancée sans taper le code (jeton à usage unique), sans serveur")
     ap.add_argument("--lan", action="store_true", default=bool(cfg.get("lan")),
                     help="accessible aussi depuis le Wi-Fi (téléphone), avec le code d'accès ; Mac maintenu éveillé")
     a = ap.parse_args()
+    if a.enter:                                  # raccourci, interface déjà lancée : seulement la page d'entrée
+        open_entry(a.port)
+        return
     S.ui_port = a.port
     setup_state(cfg, a.backend, a.model)
     S.started = code_version()
@@ -2714,8 +2848,8 @@ def main():
         print(f"[launch] depuis le Wi-Fi : {' ou '.join(S.lan_urls)} — code d'accès dans tools/access_code.txt", flush=True)
     else:                                       # le Mac aussi demande le code : où le lire, jamais le code lui-même
         print("[launch] code d'accès dans tools/access_code.txt", flush=True)
-    if not a.no_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    if not a.no_browser:                         # par la page d'entrée : le Mac aussi demande le code
+        threading.Timer(1.0, lambda: open_browser(a.port)).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

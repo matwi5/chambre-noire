@@ -130,9 +130,21 @@ Double-cliquer sur **`Chambre noire.lnk`** sous Windows (on peut l'épingler à 
 ou sur **`Chambre noire.command`** sur Mac (on peut le glisser dans le Dock).
 
 Une fenêtre noire (Windows) ou de Terminal (Mac) s'ouvre : c'est le moteur, **laissez-la ouverte**. Le navigateur
-s'ouvre ensuite sur **http://127.0.0.1:7860/**. Pour arrêter, fermez cette fenêtre. Le premier lancement crée le
-**code d'accès** dans `tools/access_code.txt`, même sans `--lan` : l'ordinateur lui-même le demande, une fois par
-navigateur (la page du code le rappelle sur l'ordinateur), comme tout autre appareil.
+s'ouvre ensuite sur **http://127.0.0.1:7860/**. Pour arrêter, fermez cette fenêtre. Le premier lancement crée le **code
+d'accès** dans `tools/access_code.txt`, même sans `--lan` : l'ordinateur lui-même le demande, comme tout autre appareil.
+Il n'y a pourtant rien à taper : le lancement (sauf avec `--no-browser`) ouvre le navigateur par une **entrée à usage
+unique**, qui pose la connexion pour un an. `tools/launch.py --enter` écrit un jeton tiré au hasard
+(`tools/entry_token`) et une page qui redirige vers `http://127.0.0.1:7860/entrer?jeton=…` (`tools/entry.html`),
+lisibles par votre seul compte, puis ouvre cette page : le jeton ne sert qu'une fois, pendant une minute, ne contient
+pas le code et ne passe sur aucune ligne de commande (que les autres comptes du Mac peuvent voir). Un onglet ouvert plus
+tard à la main sur `http://127.0.0.1:7860/` demande le code (la page du code dit, sur l'ordinateur, où le trouver), une
+fois par navigateur ; une adresse d'entrée rouverte par un navigateur déjà connecté mène simplement à l'interface. La
+page d'entrée est un fichier `.html` : si votre ordinateur ouvre les `.html` dans un éditeur plutôt que le navigateur,
+aucun navigateur n'apparaît ; ouvrez alors `http://127.0.0.1:7860/` et saisissez le code de `tools/access_code.txt`. Si
+la page d'entrée ne peut pas s'écrire, le lancement ouvre cette adresse simple. Sous Windows, le raccourci lance
+`tools\launch.py`, qui ouvre lui-même l'entrée ; si l'interface tourne déjà, ce second lancement ne peut pas ouvrir le
+port : ouvrez l'adresse et saisissez le code. Les droits réservés à votre compte (0o600) n'ont pas d'effet sous
+Windows : c'est le dossier de votre compte qui protège ces fichiers.
 
 Équivalent en ligne de commande, depuis le dossier du projet :
 
@@ -144,16 +156,18 @@ Sur Mac : `venv/bin/python tools/launch.py`.
 
 Options : `--port 7860` (changer de port), `--model q4|q8` (modèle Q4_K_M par défaut, Q8_0 s'il a été installé par
 `setup.py --q8`), `--backend vulkan|cuda|cpu` (Windows : forcer un moteur ; par défaut CUDA s'il est installé, sinon
-Vulkan ; sur Mac, le moteur est toujours Metal), `--no-browser`. Pour lancer Q8_0 par le raccourci, ajoutez
-`"model": "q8"` dans `tools/config.local.json` (réglages propres à la machine, non suivis par git, lus par-dessus
-`tools/config.json`). La **lampe d'état** en haut à droite dit l'état du moteur d'un regard : ambre fixe, prêt ;
-ambre pulsée, un calcul en cours ou une file non vide (quand le système demande de réduire les animations, un anneau
-fixe, point creux, à la place du point plein) ; grise, connexion ; rouge avec l'icône d'erreur, moteur indisponible
-(fichiers manquants) ou Mac injoignable ; point plein et anneau en vert dans l'espace privé, l'erreur reste rouge. Un
-appui ouvre le panneau **Moteur** (état, moteur, modèle, calibration des estimations, version du code servi, « Ouvrir
-depuis le téléphone » sur l'ordinateur, entrée de l'espace privé, journal) : la ligne **Version** dit quel commit
-tourne (utile pour savoir si un correctif est en ligne sur le téléphone), et **Serveur** « à relancer » apparaît quand
-`tools/launch.py` ou `tools/estimate.py` a changé depuis le lancement du serveur (le reste est en ligne sans relance).
+Vulkan ; sur Mac, le moteur est toujours Metal), `--no-browser`, `--enter` (entrer dans l'interface déjà lancée sans
+taper le code, par l'entrée à usage unique décrite plus haut, sans ouvrir de serveur). Pour lancer Q8_0 par le
+raccourci, ajoutez `"model": "q8"` dans `tools/config.local.json` (réglages propres à la machine, non suivis par git,
+lus par-dessus `tools/config.json`). La **lampe d'état** en haut à droite dit l'état du moteur d'un regard : ambre fixe,
+prêt ; ambre pulsée, un calcul en cours ou une file non vide (quand le système demande de réduire les animations, un
+anneau fixe, point creux, à la place du point plein) ; grise, connexion ; rouge avec l'icône d'erreur, moteur
+indisponible (fichiers manquants) ou Mac injoignable ; point plein et anneau en vert dans l'espace privé, l'erreur reste
+rouge. Un appui ouvre le panneau **Moteur** (état, moteur, modèle, calibration des estimations, version du code servi,
+« Ouvrir depuis le téléphone » sur l'ordinateur, entrée de l'espace privé, journal) : la ligne **Version** dit quel
+commit tourne (utile pour savoir si un correctif est en ligne sur le téléphone), et **Serveur** « à relancer » apparaît
+quand `tools/launch.py` ou `tools/estimate.py` a changé depuis le lancement du serveur (le reste est en ligne sans
+relance).
 
 Par défaut, l'interface n'écoute que sur `127.0.0.1` : elle n'est pas accessible depuis le réseau.
 
@@ -164,18 +178,19 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
 
 - **Code d'accès** : au premier lancement, avec ou sans `--lan`, un code est créé dans `tools/access_code.txt`
   (lisible par votre seul compte). Sur l'ordinateur, la partie **Ouvrir depuis le téléphone** du panneau Moteur (un
-  appui sur la lampe d'état, en haut à droite) l'affiche avec l'adresse à taper sur le téléphone
-  (par exemple `http://Nom-du-Mac.local:7860`). Le téléphone le demande une fois, puis le retient un an. Tout appareil,
-  l'ordinateur lui-même compris, doit le saisir : un autre compte ouvert sur le même Mac ne peut rien faire par
-  l'adresse `127.0.0.1` sans le connaître. Limite acceptée : le navigateur de l'ordinateur envoie ce cookie, comme
-  tout cookie, à tous les ports de `127.0.0.1` ; un autre compte qui ferait tourner son propre serveur sur un port
-  local et y attirerait votre navigateur pourrait donc le recevoir. Sur l'ordinateur, la page du code dit où le
-  trouver. Pour en changer, supprimez le fichier et relancez (chaque appareil le redemande alors) ; un appareil déjà
-  connecté le reste tant que le code ne change pas. Quand le code est redemandé à une page ouverte (cookie effacé,
-  code changé, onglet ouvert avant), elle se recharge une fois sur la page du code ; dans l'espace privé, la marque de
-  l'onglet est gardée et l'espace est reverrouillé une fois le code saisi. Un fichier `tools/access_code.txt`
-  illisible (droits, encodage, dossier à sa place) arrête le lancement avec un message, sans être écrasé :
-  supprimez-le pour qu'un nouveau code soit créé.
+  appui sur la lampe d'état, en haut à droite) l'affiche avec l'adresse à taper sur le téléphone (par exemple
+  `http://Nom-du-Mac.local:7860`). Le téléphone le demande une fois, puis le retient un an. Tout appareil, l'ordinateur
+  lui-même compris, doit le saisir : un autre compte ouvert sur le même Mac ne peut rien faire par l'adresse `127.0.0.1`
+  sans le connaître. Limite acceptée : le navigateur de l'ordinateur envoie ce cookie, comme tout cookie, à tous les
+  ports de `127.0.0.1` ; un autre compte qui ferait tourner son propre serveur sur un port local et y attirerait votre
+  navigateur pourrait donc le recevoir. Sur l'ordinateur, le lancement et le raccourci entrent sans le taper (entrée à
+  usage unique, voir « Lancement ») ; un onglet ouvert à la main le demande, et la page du code dit où le trouver. Pour
+  en changer, supprimez le fichier et relancez (chaque appareil le redemande alors) ; un appareil déjà connecté le reste
+  tant que le code ne change pas. Quand le code est redemandé à une page ouverte (cookie effacé, code changé, onglet
+  ouvert avant), elle se recharge une fois sur la page du code ; dans l'espace privé, la marque de l'onglet est gardée
+  et l'espace est reverrouillé une fois le code saisi. Un fichier `tools/access_code.txt` illisible (droits, encodage,
+  dossier à sa place) arrête le lancement avec un message, sans être écrasé : supprimez-le pour qu'un nouveau code soit
+  créé.
 - **Adresses acceptées** : l'interface ne répond qu'aux adresses `127.0.0.1`, `localhost` et à celles affichées par le
   panneau **Ouvrir depuis le téléphone** (nom `.local` et adresse IP de l'ordinateur au démarrage) ; tout autre nom est
   refusé, même sans `--lan`. Si l'adresse IP de l'ordinateur change, l'ancienne est refusée jusqu'au redémarrage de
@@ -235,7 +250,9 @@ le service de l'ancien nom de l'application (`com.matwi5.qwen-image-local`), s'i
 est dans `logs/service.log`, lisible par votre seul compte (relancer `make_service.py` l'applique à un service déjà
 installé, journal existant compris) ; au lancement, l'interface ferme aussi aux autres comptes ses dossiers
 `outputs/`, `jobs/` et `logs/`. Le
-raccourci `Chambre noire.command` ouvre alors simplement l'interface déjà lancée.
+raccourci `Chambre noire.command` entre alors dans l'interface déjà lancée par l'entrée à usage unique
+(`tools/launch.py --enter`), sans taper le code ; après une mise à jour de l'application, relancer
+`tools/make_shortcut.py` le met à jour.
 
 ## Utilisation
 
@@ -891,7 +908,11 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   dernière utilisation en secondes ; `types` : les prompts types de `tools/prompt_types.json`, sans `used`, qu'aucune
   route ne modifie), `POST /api/prompts {"title", "text", "usage"}` (création) ou `{"id", "title", "text"}`
   (modification du titre et du texte), `POST /api/prompts/delete {"id"}`, `POST /api/prompts/used {"id"}` (le met en
-  tête) ; 404 pour un `id` inconnu ; accès : `POST /api/login {"code"}` pose le cookie d'accès (`qwen_access`,
+  tête) ; 404 pour un `id` inconnu ; accès : `GET /entrer?jeton=…` (page de `tools/launch.py --enter`), depuis
+  l'ordinateur lui-même seulement (ni le Wi-Fi ni le relais de Tailscale) : avec le jeton de `tools/entry_token` de
+  moins d'une minute, efface le jeton et sa page, pose le cookie d'accès et renvoie vers `/` (303) ; un jeton de plus
+  d'une minute est effacé ; un mauvais jeton n'efface rien ; refusée, elle sert la page du code ; jamais écrite au
+  journal du serveur ; `POST /api/login {"code"}` pose le cookie d'accès (`qwen_access`,
   HttpOnly, un an ; 403 après une seconde si le code est faux) ; sans ce cookie, toute route répond 401 et `/` sert la
   page du code, pour l'ordinateur lui-même aussi, avec ou sans `--lan` ; seuls le manifeste, le service worker, les
   icônes, le logo et la police pixel sont servis sans lui ; espace privé (`private/`, voir `DECISIONS.md`
@@ -987,6 +1008,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── config.local.json réglages propres à la machine, lus par-dessus config.json (facultatif, non versionné)
 │   ├── calibration.json  mesures de durée de la machine (créé à l'usage, non versionné)
 │   ├── access_code.txt   code d'accès de tous les appareils, le Mac compris (créé au premier lancement, non versionné)
+│   ├── entry_token, entry.html   entrée à usage unique de launch.py --enter : jeton (une minute) et sa page (non versionnés)
 │   ├── push_vapid.pem, push_subscriptions.json   notifications : clé d'envoi et appareils abonnés (non versionnés)
 │   ├── prompt_types.json    prompts types livrés avec l'application (lecture seule)
 │   └── saved_prompts.json   prompts enregistrés, communs à tous les appareils (créé à l'usage, non versionné)

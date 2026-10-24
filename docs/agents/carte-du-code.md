@@ -26,13 +26,20 @@ Dans l'ordre du fichier :
   de `launch.py` et `estimate.py`, relus toutes les `VERSION_TTL` s ; git seulement s'il y a un `.git`, jamais après un
   échec, sauf un délai dépassé ; `S.started` : la même chose au lancement, posé par `main()`), `engine_tag`,
   `default_backend`.
-- **Accès** : `ACCESS_FILE`, `ACCESS_COOKIE`, `LOCAL_CLIENTS`, `PUBLIC_FILES` (manifeste, icônes, logo, police pixel,
-  service worker, servis sans cookie), `LOGIN_PAGE`, `LOGIN_MAC` (phrase de l'ordinateur, à la place de `<!--mac-->`
-  pour une requête `_local`). Plus bas : `normalize_code`, `access_token`, `read_access_code` (lecture et validation,
-  sans création ; aussi pour `tests/run_tests.py`), `load_access_code` (création exclusive en 0o600 ; un fichier
-  illisible n'est jamais écrasé), `setup_access` (code et empreinte posés dans `S` par `main()`, avec ou sans `--lan` ;
-  arrêt sur un fichier illisible), `cookie_value` (un cookie de l'en-tête, découpé à la main, pour `_allowed` et
-  `_private_token`), `lan_address`, `tailscale_hosts`, `tailscale_serve_url`.
+- **Accès** : `ACCESS_FILE`, `ACCESS_COOKIE`, `ENTRY_TOKEN`, `ENTRY_PAGE`, `ENTRY_TTL`, `ENTRY_LOCK`, `ENTRY_USED`
+  (entrée à usage unique de `--enter`), `LOCAL_CLIENTS`, `PUBLIC_FILES` (manifeste, icônes, logo, police pixel, service
+  worker, servis sans cookie), `LOGIN_PAGE`, `LOGIN_MAC` (phrase de l'ordinateur, à la place de `<!--mac-->` pour une
+  requête `_local`). Plus bas : `normalize_code`, `access_token`, `read_access_code` (lecture et validation, sans
+  création ; aussi pour `tests/run_tests.py`), `load_access_code` (création exclusive en 0o600 ; un fichier illisible
+  n'est jamais écrasé), `setup_access` (code et empreinte posés dans `S` par `main()`, avec ou sans `--lan` ; arrêt sur
+  un fichier illisible), `access_cookie_header` (cookie posé par `/api/login` et `/entrer`), `write_owner_only` (fichier
+  en 0o600 dès sa création, remplacement atomique), `make_entry` (jeton de 128 bits et page de redirection),
+  `open_entry` (le navigateur ouvre le chemin de la page, jamais l'adresse au jeton), `open_browser` (au lancement :
+  `open_entry`, ou l'adresse simple si la page ne s'écrit pas), `remove_entry` (un fichier qui résiste reste, sans
+  erreur), `use_entry_token` (sous `ENTRY_LOCK` : bon jeton de moins de `ENTRY_TTL` s effacé avec sa page, jeton périmé
+  effacé, mauvais jeton sans effet ; jeton servi refusé même si son fichier reste, `ENTRY_USED` ; âge lu sur le fichier
+  ouvert), `cookie_value` (un cookie de l'en-tête, découpé à la main, pour `_allowed` et `_private_token`),
+  `lan_address`, `tailscale_hosts`, `tailscale_serve_url`.
 - **Notifications** (Web Push, `pywebpush`) : `push_vapid` (clé `tools/push_vapid.pem` créée au premier usage),
   `push_subscriptions` (`tools/push_subscriptions.json`, sous `PUSH_LOCK`), puis `notify_job` (génération hors lot,
   terminée ou en échec), `notify_lot` (une seule par lot) et `push_notify` (envoi dans un thread, à chaque abonnement ;
@@ -103,19 +110,23 @@ Dans l'ordre du fichier :
   connexion coupée, `cut_connection`, donne une ligne neutre, sans pile d'appels), `class H` : `log_request` (n'écrit
   que les requêtes en erreur), `log_message` (tait les routes de `QUIET_ROUTES` d'après leur chemin, par
   `quiet_request`), `_send` ; contrôles dans l'ordre `_host_ok` (liste blanche de `Host`), `_post_refused` (POST :
-  `Sec-Fetch-Site`, `Origin`, `Content-Type: application/json`), `_allowed` (tout appareil, le Mac compris, présente
-  le cookie d'accès) ; `_proxied`, `_local`, `_secure` (espace privé : adresse source locale et `Host` local ou nom
-  HTTPS de `tailscale serve`) ; sessions privées : `_private_token`, `_private_session`, `_in_private` (l'appareil est
-  dans l'espace privé : session et requête sûre ; espace de `/api/status`), `_send_private`, `_open_session` ; routes
-  privées : `_private_get`, `_private_post` ; toutes les autres routes : `do_GET`, `do_POST` (une suite de
-  `if path == …`).
+  `Sec-Fetch-Site`, `Origin`, `Content-Type: application/json`), `_allowed` (tout appareil, le Mac compris, présente le
+  cookie d'accès) ; `_proxied`, `_local`, `_secure` (espace privé : adresse source locale et `Host` local ou nom HTTPS
+  de `tailscale serve`) ; sessions privées : `_private_token`, `_private_session`, `_in_private` (l'appareil est dans
+  l'espace privé : session et requête sûre ; espace de `/api/status`), `_send_private`, `_open_session` ; routes
+  privées : `_private_get`, `_private_post` ; `_send_login` (page du code), `_enter` (`GET /entrer`, après `_host_ok` et
+  avant `_allowed`, `_local` seulement ; refusée, un navigateur déjà connecté est renvoyé vers `/`) ; toutes les autres
+  routes : `do_GET`, `do_POST` (une suite de `if path == …`).
 - **Démarrage** : `exclude_from_backup` (Mac : `jobs/` hors de Time Machine), `setup_state`, `restrict_new_files`
-  (masque 0o077 posé en tête de `main()` et de `tools/calibrate.py` : tout fichier créé ensuite, sd-cli compris, pour
-  le seul compte du serveur), `close_folders` (dossiers du serveur créés avant le masque, fermés en 0o700 au
-  lancement), `main()` (options, code d'accès par `setup_access` à chaque lancement, `--lan`, Tailscale, ménage de
-  `jobs/`, PNG cachés rendus par `restore_hidden_images`, threads). Le banc n'exécute pas `main()` : il pose lui-même
-  `S.access_code` (`ACCESS_CODE`), et `call()` envoie le cookie d'accès pour le Mac aussi ; le pilote d'interface
-  connecte chaque page de `chrome.phonePage()` au banc direct (un banc relayé : `bench.login(page)`).
+  (masque 0o077 posé en tête de `main()` et de `tools/calibrate.py` : tout fichier créé ensuite, sd-cli compris, pour le
+  seul compte du serveur), `close_folders` (dossiers du serveur créés avant le masque, fermés en 0o700 au lancement),
+  `main()` (options ; `--enter` : `open_entry` puis sortie, sans serveur ; code d'accès par `setup_access` à chaque
+  lancement, `--lan`, Tailscale, ménage de `jobs/`, PNG cachés rendus par `restore_hidden_images`, threads ; navigateur
+  ouvert par `open_browser`, hors `--no-browser`). Le banc n'exécute pas `main()` : il pose lui-même `S.access_code`
+  (`ACCESS_CODE`), et `call()` envoie le cookie d'accès pour le Mac aussi ; le pilote d'interface connecte chaque page
+  de `chrome.phonePage()` au banc direct (un banc relayé : `bench.login(page)`) ; `bench.enter()` du pilote demande à
+  `tests/ui/serve.py` un jeton et sa page, comme `--enter`. `tools/make_shortcut.py` :
+  `mac_command` (texte de `Chambre noire.command` : interface déjà lancée, `launch.py --enter`), `mac`, `windows`.
 
 `tools/estimate.py` : modèle de coût des durées (`predict`, `ref_px`, `prefix_cache`, `make_sample`, `class Store`
 pour `tools/calibration.json`).
