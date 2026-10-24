@@ -1070,7 +1070,10 @@ async function refreshStatus(){
     else setLamp('err', 'Moteur indisponible');
     applyPrivate(s.private); if(inPrivate()) adoptPrivate();
     const rev=s.rev ?? 0; if(rev!==pileRev) loadPile(rev);   // pile de l'espace changée (ici ou ailleurs)
-    if(mode==='tirages' && rev!==histRev) loadHistory(rev);   // tirages affichés : relus de même
+    // tirages affichés : relus de même, sauf si la lecture de ce rev est déjà en cours (une lecture plus lente que le
+    // rythme de l'état serait sinon dépassée à chaque fois, jamais appliquée) ou pendant « Sortir » (rien de privé
+    // n'est demandé à une session qui se ferme, voir leavingPrivate)
+    if(mode==='tirages' && rev!==histRev && rev!==histAsk && !leavingPrivate) loadHistory(rev);
     facts('engineFacts', [['État', s.sd_ready ? (busy ? 'génération en cours' : 'prêt') : (s.detail||'non prêt')], ['Moteur', s.backend], ['Modèle', s.model],
       ['File d\'attente', s.queued ? s.queued+' en attente' : ''], ['Estimations', !s.estimates ? '' : calibrated ? 'calibrées sur '+s.estimates.samples+' mesure'+(s.estimates.samples>1?'s':'') : 'non calibrées'],
       ['Version', fmtVersion(s.version)], ['Serveur', staleServer(s)]]); }
@@ -2067,13 +2070,19 @@ function showLabo(where){ if(mode!=='labo') goTab('labo'); if(where==='composer'
 // Les Tirages se relisent seuls : à l'affichage de la page, et quand rev (pile et tirages de l'espace, /api/status)
 // change pendant qu'elle est affichée (image gardée ou tirage supprimé, ici ou sur un autre appareil) ; histRev : rev
 // de la dernière lecture réussie ; histSeq : une réponse dépassée par une lecture plus récente est ignorée ; histShown :
-// la grille n'est redessinée que si les tirages ont changé (rev change aussi quand une image arrive dans la pile)
-let histRev=null, histSeq=0, histShown='';
-async function loadHistory(rev){ const priv=inPrivate(), seq=++histSeq;   // réponse arrivée après un changement d'espace : ignorée
+// la grille n'est redessinée que si les tirages ont changé (rev change aussi quand une image arrive dans la pile) ;
+// histAsk : rev de la lecture en cours (null : aucune, ou lecture sans rev)
+let histRev=null, histSeq=0, histShown='', histAsk=null;
+async function loadHistory(rev){ const priv=inPrivate(), seq=++histSeq; histAsk=rev ?? null;   // réponse arrivée après un changement d'espace : ignorée
   try{ const r=await fetch(priv ? '/api/private/history' : '/api/history'); if(!r.ok) throw new Error();
     const items=(await r.json()).map(it=>it.private ? {...it, name:privName(it.id)} : it);
-    if(priv!==inPrivate() || seq!==histSeq) return; histItems=items; if(rev!==undefined) histRev=rev; }
+    if(priv!==inPrivate() || seq!==histSeq) return;
+    // visionneuse ouverte sur les Tirages : elle suit la nouvelle liste (rang, voisines), l'image vue y restant
+    const at=vIndex>=0 && vList===histItems ? items.findIndex(x=>x.name===vList[vIndex].name) : -1;
+    histItems=items; if(rev!==undefined) histRev=rev;
+    if(at>=0){ vList=items; vIndex=at; $('vCount').textContent=`${at+1} / ${items.length}`; } }
   catch(e){ if(priv===inPrivate() && seq===histSeq) $('histCount').textContent='indisponible'; return; }
+  finally{ if(seq===histSeq) histAsk=null; }      // finie ou en échec : la suivante peut partir
   renderGallery(); }
 function renderGallery(){
   const grid=$('histGrid'), key=histItems.map(it=>it.name+'@'+it.time).join('|');
@@ -2311,9 +2320,12 @@ async function deleteItem(it){
   forgetResult(it.name); return true; }
 function removeFromViewer(gone){                  // images supprimées : hors de la galerie et de la liste de la visionneuse
   const names=new Set(gone.map(x=>x.name)), keep=x=>!names.has(x.name);
-  const list=vList.filter(keep), at=Math.min(vIndex, list.length-1);
+  const fromHist=vList===histItems, list=vList.filter(keep), at=Math.min(vIndex, list.length-1);
+  // lecture des Tirages partie avant la suppression : ignorée à son arrivée (elle ramènerait l'image supprimée)
+  histSeq++; histAsk=null;
   histItems=histItems.filter(keep); renderGallery();
-  if(list.length) openViewer(at, list); else closeViewer(); }
+  // ouverte sur les Tirages : elle reste sur leur liste, que les lectures suivantes mettent à jour
+  if(list.length) openViewer(at, fromHist ? histItems : list); else closeViewer(); }
 // images du même lot qu'it, par rang : celles de la pile pour une image de la pile, sinon celles des Tirages
 function lotMembers(it){ if(!it || !it.lot) return [];
   return (it.pile ? vList : histItems).filter(x=>x.lot && x.lot.id===it.lot.id).sort((a, b)=>a.lot.rank-b.lot.rank); }
@@ -2378,7 +2390,7 @@ function changedSpace(inside){
   if(!inside && discarding && discarding.priv){ clearTimeout(discarding.timer); discarding=null; hideUndo(); }
   if(!inside) [...sorting].forEach(t=>{ if(t[0]==='p') sorting.delete(t); });   // (leur réponse sera ignorée)
   pileItems=[]; pileRead=false; pileShown=''; labIdle=null; renderRunCard(); renderPile(); loadPile();
-  histItems=[]; histRev=null; histShown=''; $('histGrid').innerHTML=''; $('histCount').textContent='';
+  histItems=[]; histRev=null; histAsk=null; histShown=''; $('histGrid').innerHTML=''; $('histCount').textContent='';
   if(mode==='tirages') loadHistory();
   syncThemeColor(); }
 // Saisie propre à chaque espace (texte, images d'entrée, dessin : actif ou non, masque ou annotation, tracé) :

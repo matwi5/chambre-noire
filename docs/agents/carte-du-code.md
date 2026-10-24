@@ -247,8 +247,10 @@ dernier bloc, après le HTML.
     `savePrompt`.
   - « galerie et visionneuse » : `histItems`, `vList` (ce que parcourt la visionneuse : les Tirages ou la pile),
     `loadHistory` (à l'affichage des Tirages, et quand `rev` change pendant qu'ils sont affichés : `histRev`, retenu
-    après une lecture réussie ; `histSeq` : une réponse dépassée est ignorée), `renderGallery` (redessinée seulement si
-    les tirages changent, `histShown` ; état vide avec le logo et « Aller au Labo »), `openViewer`, `stepViewer`,
+    après une lecture réussie ; `histAsk` : rev de la lecture en cours, pas relancée pour le même ; `histSeq` : une
+    réponse dépassée est ignorée ; rien pendant « Sortir » ; visionneuse ouverte recalée sur la liste relue),
+    `renderGallery` (redessinée seulement si les tirages changent, `histShown` ; état vide avec le logo et « Aller au
+    Labo »), `openViewer`, `stepViewer`,
     `closeViewer` et `emptyViewer` (contenu vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace
     privé), gestes : `zoomable` (pincer, molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les
     images d'entrée).
