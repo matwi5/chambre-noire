@@ -515,7 +515,12 @@ images sont enregistrées. Pour la confidentialité, passez par l'espace privé.
   passe en lumière inactinique verte : on sait où l'on est.
 - **Sortir**, en haut à droite à côté de la lampe, ramène à l'application normale en verrouillant l'espace (la ligne
   **Espace privé** n'est pas dans le panneau Moteur tant qu'on est dedans). L'espace se verrouille aussi seul après 15
-  minutes sans activité privée sur cet appareil, et à la fermeture ou au rechargement de l'application.
+  minutes sans activité privée sur cet appareil, et à la fermeture ou au rechargement de l'application. Une page
+  fermée dans l'espace et retrouvée par le bouton « Retour » du navigateur efface tout de suite l'affichage et la
+  saisie privés, puis reverrouille l'espace sur le Mac avant de relire son état (au cas où le verrouillage de la
+  fermeture ne serait pas arrivé) : « Espace privé verrouillé à la fermeture de la page ». Tant que le Mac n'a pas
+  accepté ce verrouillage, la page reste hors de l'espace (lampe « Mac injoignable »), et le renvoie si on la ferme
+  de nouveau ; retaper le code privé rouvre l'espace normalement.
 - Dans l'espace privé, **toute génération est privée** (texte → image, édition, dessin) : son image, ses images
   d'entrée, sa miniature, son prompt et ses réglages sont chiffrés sur le Mac. Le texte tapé n'est pas retenu par le
   navigateur. Une génération privée lancée va jusqu'au bout et est rangée chiffrée même si l'espace se verrouille avant

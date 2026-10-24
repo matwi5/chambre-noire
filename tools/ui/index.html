@@ -1050,9 +1050,17 @@ let spaceEpoch=0;
 // lampe d'état de l'en-tête : classes ok (moteur prêt), busy (calcul ou file non vide), err (moteur indisponible, Mac
 // injoignable), aucune pendant la connexion ; l'état dit en mots pour le lecteur d'écran et au survol
 function setLamp(cls, label){ const b=$('lamp'); b.className='lamp '+cls; b.setAttribute('aria-label', label); b.title=label; }
+// relock : l'espace privé est à reverrouiller sur le Mac avant de lire son état (page restaurée par « Retour », voir
+// pageshow) ; tant que le Mac ne l'a pas accepté, aucun état n'est appliqué : il pourrait dire l'espace encore ouvert
+let relock=false;
+async function relockSpace(){ const r=await postJson('/api/private/lock', {}).catch(()=>null);
+  if(r && r.ok){ relock=false; spaceEpoch++; } }   // un état demandé avant le verrouillage n'est pas appliqué
 async function refreshStatus(){
+  if(relock) await relockSpace();
   const epoch=spaceEpoch;
-  try{ const s=await (await fetch('/api/status')).json();
+  // reverrouillage pas encore accepté (le Mac n'a pas répondu) : affiché comme un Mac injoignable, aucun état lu
+  try{ if(relock) throw new Error('espace privé pas encore reverrouillé');
+    const s=await (await fetch('/api/status')).json();
     if(epoch!==spaceEpoch) return refreshStatus();
     queueState=s.queue||[]; queueAt=Date.now();
     // adresse et code d'accès pour le téléphone : envoyés seulement quand la page est ouverte sur le Mac
@@ -2419,6 +2427,8 @@ async function privPost(path, body, btn, err){
   btn.disabled=true; $(err).textContent='';
   try{ const r=await postJson(path, body), j=await r.json().catch(()=>({}));
     if(!r.ok){ $(err).textContent=j.error ? j.error.charAt(0).toUpperCase()+j.error.slice(1)+'.' : 'Erreur '+r.status; return false; }
+    // code privé retapé : la session ouverte remplace celle qui restait à reverrouiller (refreshStatus la fermerait)
+    if(/\/(create|unlock)$/.test(path)) relock=false;
     return true; }
   catch(e){ $(err).textContent='Serveur injoignable.'; return false; }
   finally{ btn.disabled=false; await refreshStatus(); } }
@@ -2460,7 +2470,20 @@ document.querySelectorAll('.privsheet input').forEach(inp=>inp.addEventListener(
   const all=[...inp.closest('.privsheet').querySelectorAll('input')].filter(x=>x.offsetParent), k=all.indexOf(inp);
   if(k<all.length-1) all[k+1].focus(); else inp.closest('.privsheet').querySelector('.btn:not(.secondary)').click(); }));
 // page fermée ou rechargée : l'espace se verrouille (la session de cet appareil est fermée sur le Mac)
-addEventListener('pagehide', ()=>{ if(privState.unlocked) fetch('/api/private/lock', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}', keepalive:true}).catch(()=>{}); });
+// (relock : la page a quitté l'espace mais le Mac n'a pas encore accepté son verrouillage, voir pageshow)
+addEventListener('pagehide', ()=>{ if(privState.unlocked || relock) fetch('/api/private/lock', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}', keepalive:true}).catch(()=>{}); });
+// page restaurée par « Retour » depuis la mémoire du navigateur (bfcache), fermée dans l'espace privé : l'affichage
+// privé s'efface tout de suite, saisie privée comprise, comme après « Sortir », et le champ perd le curseur (les touches
+// suivantes iraient dans la saisie publique) ; la page reverrouille l'espace avant de lire son état (relock), le
+// verrouillage de la fermeture a pu se perdre (décision du porteur du 24/10/2026). Fermée hors de l'espace, elle oublie
+// aussi la saisie privée mise de côté par une fermeture du Mac : rien de privé ne reste en mémoire
+addEventListener('pageshow', async e=>{ if(!e.persisted) return;
+  const was=inPrivate();
+  if(was){ erasePrivate=true; relock=true; spaceEpoch++; applyPrivate({...privState, unlocked:false});
+    document.activeElement?.blur(); toast('Espace privé verrouillé à la fermeture de la page'); }
+  else asideInput=null;
+  await refreshStatus();
+  if(was && !inPrivate()) resumeOwn(queueState); });   // générations publiques de ce navigateur, file relue
 // application installable sur le téléphone (le navigateur n'accepte le service worker qu'en HTTPS ou sur le Mac)
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{});
   // notification touchée, application déjà ouverte : le service worker la ramène et demande le Labo

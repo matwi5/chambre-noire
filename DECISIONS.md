@@ -4,6 +4,30 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-24 · Page restaurée par « Retour » : saisie privée effacée, espace reverrouillé
+
+- **Contexte** : ticket « Trier dans l'espace privé en lumière verte » du groupe E (page restaurée depuis la mémoire
+  du navigateur après le verrouillage, spec section 12, ajout du 23/10/2026) ; deux choix touchant la confidentialité
+  posés au porteur dans la session du groupe.
+- **Décision** (porteur, 24/10/2026) :
+  - « Ticket E3, page restaurée par « Retour » après la fermeture de la page dans l'espace privé. À la fermeture, la
+    page a verrouillé l'espace. Au retour, l'affichage privé est effacé tout de suite (c'est ta décision du 23/10).
+    Que devient le texte et les images que tu avais tapés dans l'espace privé ? » Options : « Effacés, comme Sortir
+    (Recommandé) : Fermer la page vaut « Sortir » : la saisie privée est effacée de la page. Un message dit « Espace
+    privé verrouillé à la fermeture de la page ». Rien de privé ne reste en mémoire. » ; « Gardés en mémoire : Comme
+    la fermeture par le Mac après 15 minutes : la saisie privée reste en mémoire de la page (jamais dans le
+    navigateur), et revient si tu rentres dans l'espace depuis cette même page. » → « Effacés, comme Sortir
+    (Recommandé) » ;
+  - « Même cas. Le verrouillage envoyé à la fermeture de la page peut ne pas arriver au Mac (réseau coupé à ce
+    moment-là). Au retour, la page redemande l'état au Mac : s'il dit l'espace encore ouvert, la page y rentrerait et
+    réafficherait tout le privé. On fait quoi ? » Options : « Reverrouiller au retour (Recommandé) : Au retour, la
+    page renvoie d'abord « verrouiller » au Mac, puis redemande l'état : l'espace reste fermé, il faut retaper le
+    code privé. C'est ce que promet le README (« se verrouille à la fermeture de l'application »). » ; « Suivre le
+    Mac : La page redemande seulement l'état : si le verrouillage n'est pas arrivé, elle rentre dans l'espace privé
+    sans code. » → « Reverrouiller au retour (Recommandé) ».
+- **Écarté** : garder la saisie privée en mémoire après la fermeture de la page ; rentrer dans l'espace au retour si
+  le verrouillage de la fermeture n'est pas arrivé.
+
 ## 2026-10-24 · Cadrage réécrit pour le Labo et les Tirages, état vide des Tirages avec le logo
 
 - **Contexte** : avant de lancer le groupe E, deux points qui demandaient le porteur : le texte de `BRIEF.md`

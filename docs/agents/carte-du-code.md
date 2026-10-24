@@ -270,7 +270,10 @@ dernier bloc, après le HTML.
     `privCreate`, `privUnlock`, `privLock` (sortie appliquée dès la réponse du Mac : `spaceEpoch` écarte une réponse de
     `/api/status` demandée avant ; `leavingPrivate` : aucun aperçu privé demandé ni Jeter privé envoyé pendant la
     fermeture),
-    `privChangeCode`, `privReset`.
+    `privChangeCode`, `privReset` ; page restaurée par « Retour » (écouteur `pageshow`, `persisted`) après une
+    fermeture dans l'espace : sortie appliquée tout de suite, saisie privée effacée (`erasePrivate`), puis `relock` :
+    `refreshStatus` reverrouille d'abord par `relockSpace` et n'applique aucun état tant que le Mac ne l'a pas accepté
+    (`pagehide` renvoie aussi le verrouillage tant que `relock` tient ; un code retapé, `privPost`, le lève).
 
 Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
 « Dessiner », « Reprendre » (texte, images d'entrée, dessin et réglages : `resumeFrom`), « Relancer » (`againFrom`) et
