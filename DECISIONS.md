@@ -4,6 +4,36 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-24 · Suites du groupe D : deux cas de Jeter, méthode des groupes E et G
+
+- **Contexte** : compte rendu du groupe D (revue de sécurité : deux constats sur Jeter) et enquête sur sa durée
+  (≈ 6 h, dont 46 % d'attente des revues et 29 % de contrôles) ; questions posées au porteur avec une recommandation.
+- **Décision** (porteur, 24/10/2026, réponse « ok pour tes reco ») :
+  - « Double appui sur « Jeter » dans la visionneuse. Le second appui tombe sur l'image suivante et envoie tout de
+    suite la suppression de la première, sans ses 5 s d'« Annuler ». Même risque sur ✓ et ✕ de la pile, entre 220 et
+    300 ms. On bloque le bouton jusqu'à ce que l'image suivante soit affichée (300 ms au moins) ? » → oui ;
+  - « Jeter privé pendant « Sortir ». Si tu sors de l'espace privé pendant les 5 s d'« Annuler », la suppression peut
+    partir quand même. On l'abandonne dès le début de la sortie ? L'image resterait alors dans la pile privée, selon
+    ton principe « le doute garde l'image ». » → oui ; les deux corrections faites dans la discussion principale, sur
+    `dev`, avant le groupe E ;
+  - « Passe « bogues » seulement sur les tickets sensibles par leur contenu (espace privé, suppression, contrôle
+    d'accès) : E3, G1, G2, mais pas E1 ni E2. Et l'avis de `check.py` comparé à la base de la branche du groupe, pas
+    à `main`. D'accord ? » → oui ;
+  - « Corriger les constats Standards/Spec pendant que la passe « bogues » tourne, au lieu de l'attendre sans rien
+    faire. Rien ne change dans les règles : le commit reste après les deux revues. D'accord ? » → oui ;
+  - « Aller plus loin : commiter avant la revue et commencer le ticket suivant pendant qu'elle tourne, les correctifs
+    arrivant dans un commit à part. Gain d'environ une heure de plus, mais c'est contraire à ta règle « un commit par
+    ticket, après sa revue ». » → recommandation « Non, on garde la règle » acceptée ;
+  - « Un petit ticket d'outillage fait ici, sur `dev`, avant de lancer E. `check.py --ui` lancerait les fichiers
+    d'interface sur 2 ou 3 Chrome en parallèle : environ 40 % de temps en moins par contrôle complet, selon
+    l'estimation de l'enquête. L'avis « zone sensible » serait comparé à la base de la branche du groupe. D'accord ? »
+    → oui ;
+  - « Est-ce que j'arrête les sessions A, B, C et F et que je supprime leurs worktrees ? Leurs branches sont
+    fusionnées, rien ne serait perdu, et la liste de tes sessions serait plus lisible. » (et D, ajouté ensuite) →
+    oui.
+- **Écarté** : passe « bogues » sur tout ticket où `check.py` affiche l'avis ; attendre la passe « bogues » sans rien
+  faire ; commit avant la revue ; garder les sessions terminées.
+
 ## 2026-10-24 · Code d'accès demandé aussi au Mac, entrée par un jeton à usage unique
 
 - **Contexte** : le porteur a répondu « b » à la question reposée sur l'accès local (entrée du 23/10 ci-dessous) : le
