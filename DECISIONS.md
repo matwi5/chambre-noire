@@ -4,6 +4,34 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-24 · Marque de l'onglet posée dès l'entrée dans l'espace, refus clair du verrouillage
+
+- **Contexte** : revue Standards/Spec et passe « bogues » des suites du groupe E ; deux constats touchant l'espace
+  privé posés au porteur avec une recommandation chacun.
+- **Décision** (porteur, 24/10/2026, réponse « ok pour tes reco ») :
+  - « La marque qui fait reverrouiller l'espace au chargement suivant n'est posée qu'au moment où la page se ferme
+    (`pagehide`). Or un téléphone ferme souvent une application restée en arrière-plan sans prévenir la page. Dans ce
+    cas, ni la marque ni le verrouillage ne partent, et l'onglet rechargé rentre dans l'espace sans code s'il le fait
+    dans les 15 minutes. Chrome sur Android le fait par exemple pour libérer de la mémoire. A) (Recommandé) Poser la
+    marque dès l'entrée dans l'espace, et la retirer quand tu sors ou quand le Mac accepte le verrouillage. Ça couvre
+    aussi l'onglet fermé sans prévenir. Le coût est de même nature que ce que tu as déjà accepté : la marque, toujours
+    sans donnée privée, est présente pendant tout le temps passé dans l'espace, pas seulement après la fermeture.
+    B) La poser aussi quand l'application passe en arrière-plan (changement d'application, écran verrouillé), tant
+    que tu es dans l'espace. Ça couvre presque les mêmes cas, avec une marque posée un peu plus tard. C) Garder la
+    marque seulement à la fermeture, comme aujourd'hui. » → A ;
+  - « Refus durable du verrouillage. Aujourd'hui, toute réponse du Mac qui n'est pas un « oui » vaut « pas encore » :
+    la page réessaie et n'affiche rien. Comme la marque survit au rechargement, un refus qui dure bloque l'onglet
+    (lampe rouge, rien d'affiché) jusqu'à sa fermeture. Le cas le plus probable est un serveur relancé sans le module
+    de chiffrement : il répond « espace privé indisponible ». A) (Recommandé) Prendre comme « verrouillé » un refus
+    clair venant du Mac lui-même : une erreur de la famille 4xx (comme « accès refusé »), ou « espace privé
+    indisponible ». Dans les deux cas, l'espace ne peut de toute façon pas être ouvert. Continuer de réessayer sur
+    une coupure réseau ou une panne sans réponse claire, par exemple celle du relais Tailscale, pour ne jamais
+    rentrer dans une session peut-être encore ouverte. B) Garder le blocage tel quel. » → A.
+- **Écarté** : la marque posée seulement à la fermeture ou au passage en arrière-plan ; un onglet bloqué par un refus
+  durable ; toute réponse HTTP prise pour un verrouillage accepté.
+- **Limite connue** : une application tuée puis relancée depuis l'écran d'accueil repart sans marque (mémoire de
+  l'onglet vide) ; seule la fermeture de l'espace par le Mac au bout de 15 minutes protège ce cas, comme avant.
+
 ## 2026-10-24 · Suites du groupe E : verrouillage à la fermeture, lampe sans animation, notification et feuilles
 
 - **Contexte** : compte rendu du groupe E (questions de confidentialité et d'ergonomie laissées ouvertes par sa
