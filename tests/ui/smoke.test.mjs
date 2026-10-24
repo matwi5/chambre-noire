@@ -83,25 +83,40 @@ test('code d\'accès redemandé : la page se recharge une fois sur la page du co
   await page.send('Network.clearBrowserCookies');   // cookie effacé, ou code changé sur le Mac
   await page.eval(`void refreshStatus()`);
   await loginShown();
-  // interface servie à cette adresse, dont l'état répond encore 401 : elle ne se recharge plus
+  // interface rechargée sur /?reauth, dont l'état répond encore 401 avant toute réponse : elle ne se recharge plus
   await bench.login(page);
-  await page.goto(bench.url + '/?reauth');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'interface ouverte' });
-  await page.eval(`window.zqSameDocument = true`);
   const h = await page.holdRequests(['*/api/status'], () => true);
   try {
-    await page.eval(`void refreshStatus()`);
+    await page.goto(bench.url + '/?reauth');
+    await page.eval(`window.zqSameDocument = true`);
     await waitUntil(() => h.held.length > 0, { what: 'état demandé' });
     for (const r of h.take()) await page.send('Fetch.fulfillRequest', { requestId: r.requestId, ...UNAUTHORIZED });
     await page.waitFor(`$('lamp').classList.contains('err')`, { what: 'réponse 401 lue' });
-    await new Promise(r => setTimeout(r, 500));
-    assert.equal(await page.eval(`window.zqSameDocument === true`), true, 'page rechargée une seconde fois');
+    // (reauthing est posé avant tout rechargement : faux, aucun n'est parti)
+    assert.deepEqual(await page.eval(`[window.zqSameDocument === true, reauthing, location.search]`),
+      [true, false, '?reauth'], 'page rechargée une seconde fois');
   } finally {
     await h.release();
   }
   await bench.login(page);
   await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'interface rouverte' });
   // (les réponses 401, et elles seules, sont notées en erreur par Chrome)
+  page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/status of 401 \(Unauthorized\)/.test(e)));
+  page.assertNoErrors();
+});
+
+test('code d\'accès redemandé de nouveau après une réponse du Mac : la page se recharge encore une fois', async () => {
+  await page.goto(bench.url + '/?reauth');         // interface rechargée après un premier 401, code saisi depuis
+  await page.eval(`window.zqSameDocument = true; void goTab('tirages')`);
+  await page.waitFor(`$('lamp').classList.contains('ok') && location.search === ''`,
+    { what: 'état lu, « ?reauth » retiré de l\'adresse' });
+  assert.deepEqual(await page.eval(`[window.zqSameDocument === true, mode, location.pathname]`), [true, 'tirages', '/'],
+    'page rechargée ou état perdu en retirant « ?reauth »');
+  await page.send('Network.clearBrowserCookies');   // le code est redemandé plus tard : rechargement une fois
+  await page.eval(`void refreshStatus()`);
+  await loginShown();
+  await bench.login(page);
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'interface rouverte' });
   page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/status of 401 \(Unauthorized\)/.test(e)));
   page.assertNoErrors();
 });

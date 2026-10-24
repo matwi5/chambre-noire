@@ -1,5 +1,5 @@
 """Comportement de base de l'API locale, sur le banc à faux moteur (voir bench.py)."""
-import hashlib, io, os, subprocess, unittest
+import hashlib, io, os, subprocess, threading, unittest
 from unittest import mock
 
 import bench
@@ -251,6 +251,32 @@ class AccessCodeFileTest(bench.BenchCase):
         self.assertEqual(raced, [self.path], "création du fichier sans os.open exclusif")
         self.assertEqual(code, "abcd-efgh")
         self.assertEqual(self.content(), b"abcd-efgh\n")
+
+    def test_code_file_still_empty_under_another_launch_is_kept(self):
+        open(self.path, "w").close()                       # créé (O_EXCL) par un autre lancement, pas encore écrit
+        def write_later():
+            with open(self.path, "w", encoding="utf-8") as f:
+                f.write("abcd-efgh\n")
+        writer = threading.Timer(0.2, write_later)
+        writer.start()
+        try:
+            code = bench.launch.load_access_code()
+        finally:
+            writer.join()
+        self.assertEqual(code, "abcd-efgh", "code de l'autre lancement effacé pendant son écriture")
+        self.assertEqual(self.content(), b"abcd-efgh\n")
+
+    def test_code_file_left_empty_by_another_launch_stops_without_asking_to_delete_it(self):
+        real_open = os.open
+
+        def other_launch_first(path, flags, mode=0o777, **kw):   # un autre lancement le crée, et n'écrit pas
+            if path == self.path and flags & os.O_EXCL:
+                open(path, "w").close()
+            return real_open(path, flags, mode, **kw)
+        with mock.patch.object(bench.launch.os, "open", other_launch_first), self.assertRaises(SystemExit) as stop:
+            bench.launch.setup_access()                    # (2 s d'attente de son écriture)
+        self.assertNotIn("supprimez", str(stop.exception.code))
+        self.assertTrue(os.path.exists(self.path), "fichier de l'autre lancement effacé")
 
 
 class GenerationTest(bench.BenchCase):

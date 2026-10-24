@@ -1102,10 +1102,14 @@ function relockSpace(){
     .finally(()=>{ relocking=null; })); }
 // code d'accès redemandé par le Mac (401 : cookie effacé ou périmé, code changé, onglet ouvert avant la mise en service
 // du code) : la page se recharge une seule fois, sur la page du code ; « ?reauth » dans l'adresse empêche une boucle
-// si l'interface, rechargée, reçoit encore 401 (la page du code, le code accepté, revient sur « / »)
+// si l'interface, rechargée, reçoit encore 401 avant toute réponse du Mac (la page du code, le code accepté, revient
+// sur « / »). Retiré de l'adresse au premier état lu (dropReauth, sans recharger ni toucher à l'état de la page) : un
+// 401 plus tard recharge de nouveau
 let reauthing=false;
-function reauth(){ if(reauthing || /[?&]reauth\b/.test(location.search)) return; reauthing=true;
+function reauth(){ if(reauthing || new URLSearchParams(location.search).has('reauth')) return; reauthing=true;
   location.replace('/?reauth'); }
+function dropReauth(){ const u=new URL(location.href); if(!u.searchParams.has('reauth')) return;
+  u.searchParams.delete('reauth'); history.replaceState(history.state, '', u.pathname+u.search+u.hash); }
 async function refreshStatus(){
   if(relock && !entering) await relockSpace();
   const epoch=spaceEpoch;
@@ -1114,6 +1118,7 @@ async function refreshStatus(){
     const reply=await fetch('/api/status');
     if(reply.status===401){ reauth(); throw new Error('code d\'accès requis'); }
     const s=await reply.json();
+    if(reply.ok) dropReauth();                      // le Mac a répondu : la garde anti-boucle a servi
     // espace quitté pendant l'attente, ou verrouillage devenu nécessaire (page fermée pendant une entrée) : relu
     if(epoch!==spaceEpoch || relock) return refreshStatus();
     queueState=s.queue||[]; queueAt=Date.now();

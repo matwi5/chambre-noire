@@ -1290,29 +1290,47 @@ def read_access_code():
     return code if len(normalize_code(code)) >= 6 else None
 
 
+class AccessPending(Exception):
+    """Fichier du code créé par un autre lancement, encore vide ou incomplet au bout de l'attente."""
+
+
+def wait_access_code():
+    """Code de tools/access_code.txt relu pendant 2 s au plus : un autre lancement peut l'avoir créé à l'instant
+    (O_EXCL) sans l'avoir encore écrit ; None s'il reste absent ou trop court."""
+    for _ in range(40):
+        code = read_access_code()
+        if code:
+            return code
+        time.sleep(0.05)
+    return None
+
+
 def load_access_code():
     """Code d'accès de tous les appareils, le Mac compris : créé au premier lancement, avec ou sans --lan, gardé dans
     tools/access_code.txt (0o600). Un fichier illisible n'est jamais écrasé (OSError, ValueError : setup_access
-    arrête le lancement) ; un fichier lisible mais trop court est remplacé."""
+    arrête le lancement) ; un fichier lisible mais trop court est remplacé, s'il l'est encore après l'attente d'un
+    autre lancement qui l'écrirait (wait_access_code) : un fichier vide n'est jamais effacé sous ce lancement-là."""
     code = read_access_code()
     if code:
         return code
-    try:
-        os.remove(ACCESS_FILE)                       # trop court : remplacé par un nouveau code
-    except FileNotFoundError:
-        pass
+    if os.path.exists(ACCESS_FILE):
+        code = wait_access_code()                    # peut-être en cours d'écriture par un autre lancement
+        if code:
+            return code
+        try:
+            os.remove(ACCESS_FILE)                   # resté trop court : remplacé par un nouveau code
+        except FileNotFoundError:
+            pass
     alphabet = "abcdefghjkmnpqrstuvwxyz23456789"          # sans caractères ambigus (0/o, 1/l/i)
     raw = "".join(secrets.choice(alphabet) for _ in range(8))
     code = raw[:4] + "-" + raw[4:]
     try:                                             # création exclusive, d'emblée en 0o600
         fd = os.open(ACCESS_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:                          # créé entre-temps par un autre lancement : son code est gardé
-        for _ in range(40):
-            other = read_access_code()
-            if other:
-                return other
-            time.sleep(0.05)                         # (encore en cours d'écriture)
-        raise ValueError("code d'accès en cours d'écriture par un autre lancement")
+        code = wait_access_code()
+        if code:
+            return code
+        raise AccessPending()
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(code + "\n")
     return code
@@ -1320,10 +1338,12 @@ def load_access_code():
 
 def setup_access():
     """Code d'accès chargé ou créé, et empreinte du cookie qui le prouve : posés par main() à chaque lancement, avec ou
-    sans --lan (le Mac lui-même demande le code). Fichier illisible : arrêt, avec un message qui ne cite pas son
-    contenu."""
+    sans --lan (le Mac lui-même demande le code). Fichier illisible, ou encore en cours d'écriture par un autre
+    lancement : arrêt, avec un message qui ne cite pas son contenu."""
     try:
         S.access_code = load_access_code()
+    except AccessPending:                            # pas « supprimez-le » : ce serait perdre le code de l'autre
+        sys.exit("[launch] un autre lancement crée tools/access_code.txt : patientez, puis relancez.")
     except (OSError, ValueError):
         sys.exit("[launch] tools/access_code.txt est illisible : supprimez-le, puis relancez (un nouveau code d'accès "
                  "sera créé, que chaque appareil redemandera).")

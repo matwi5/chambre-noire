@@ -142,8 +142,8 @@ fois par navigateur ; une adresse d'entrée rouverte par un navigateur déjà co
 page d'entrée est un fichier `.html` : si votre ordinateur ouvre les `.html` dans un éditeur plutôt que le navigateur,
 aucun navigateur n'apparaît ; ouvrez alors `http://127.0.0.1:7860/` et saisissez le code de `tools/access_code.txt`. Si
 la page d'entrée ne peut pas s'écrire, le lancement ouvre cette adresse simple. Sous Windows, le raccourci lance
-`tools\launch.py`, qui ouvre lui-même l'entrée ; si l'interface tourne déjà, ce second lancement ne peut pas ouvrir le
-port : ouvrez l'adresse et saisissez le code. Les droits réservés à votre compte (0o600) n'ont pas d'effet sous
+`tools\launch.py`, qui ouvre lui-même l'entrée ; si l'interface tourne déjà, ne relancez pas le raccourci : ouvrez
+l'adresse et saisissez le code. Les droits réservés à votre compte (0o600) n'ont pas d'effet sous
 Windows : c'est le dossier de votre compte qui protège ces fichiers.
 
 Équivalent en ligne de commande, depuis le dossier du projet :
@@ -190,7 +190,8 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   ouvert avant), elle se recharge une fois sur la page du code ; dans l'espace privé, la marque de l'onglet est gardée
   et l'espace est reverrouillé une fois le code saisi. Un fichier `tools/access_code.txt` illisible (droits, encodage,
   dossier à sa place) arrête le lancement avec un message, sans être écrasé : supprimez-le pour qu'un nouveau code soit
-  créé.
+  créé. Deux premiers lancements simultanés gardent le même code ; si l'autre n'a pas fini de l'écrire au bout de
+  2 s, le lancement s'arrête en demandant de patienter, puis de relancer.
 - **Adresses acceptées** : l'interface ne répond qu'aux adresses `127.0.0.1`, `localhost` et à celles affichées par le
   panneau **Ouvrir depuis le téléphone** (nom `.local` et adresse IP de l'ordinateur au démarrage) ; tout autre nom est
   refusé, même sans `--lan`. Si l'adresse IP de l'ordinateur change, l'ancienne est refusée jusqu'au redémarrage de

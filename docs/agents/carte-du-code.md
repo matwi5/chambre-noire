@@ -31,9 +31,11 @@ Dans l'ordre du fichier :
   worker, servis sans cookie), `LOGIN_PAGE`, `LOGIN_MAC` (phrase de l'ordinateur, à la place de `<!--mac-->` pour une
   requête `_local`). Plus bas : `normalize_code`, `access_token`, `read_access_code` (lecture et validation, sans
   création ; aussi pour `tests/run_tests.py`), `load_access_code` (création exclusive en 0o600 ; un fichier illisible
-  n'est jamais écrasé), `setup_access` (code et empreinte posés dans `S` par `main()`, avec ou sans `--lan` ; arrêt sur
-  un fichier illisible), `access_cookie_header` (cookie posé par `/api/login` et `/entrer`), `write_owner_only` (fichier
-  en 0o600 dès sa création, remplacement atomique), `make_entry` (jeton de 128 bits et page de redirection),
+  n'est jamais écrasé ; un fichier vide ou trop court relu 2 s par `wait_access_code` avant d'être remplacé : un autre
+  lancement l'écrit peut-être), `setup_access` (code et empreinte posés dans `S` par `main()`, avec ou sans `--lan` ;
+  arrêt sur un fichier illisible, ou encore vide sous un autre lancement : `AccessPending`), `access_cookie_header`
+  (cookie posé par `/api/login` et `/entrer`), `write_owner_only` (fichier en 0o600 dès sa création, remplacement
+  atomique), `make_entry` (jeton de 128 bits et page de redirection),
   `open_entry` (le navigateur ouvre le chemin de la page, jamais l'adresse au jeton), `open_browser` (au lancement :
   `open_entry`, ou l'adresse simple si la page ne s'écrit pas), `remove_entry` (un fichier qui résiste reste, sans
   erreur), `use_entry_token` (sous `ENTRY_LOCK` : bon jeton de moins de `ENTRY_TTL` s effacé avec sa page, jeton périmé
@@ -177,7 +179,8 @@ dernier bloc, après le HTML.
     n'est pas vide ; met à jour `queueState`, la lampe par `setLamp` (classes `ok`, `busy`, `err`, aucune pendant la
     connexion), l'onglet Labo, la carte en cours, la file et l'espace privé par `applyPrivate`, et le panneau Moteur,
     version servie comprise : `fmtVersion`, `staleServer`) ; sur un 401 (code d'accès redemandé), `reauth` recharge
-    une fois la page sur `/?reauth`, la page du code (`reauthing`, et l'adresse empêchent une boucle).
+    une fois la page sur `/?reauth`, la page du code (`reauthing`, et l'adresse empêchent une boucle ; `dropReauth`
+    retire `?reauth` par `history.replaceState` au premier état lu, pour qu'un 401 plus tard recharge de nouveau).
   - « champ de création replié ou déplié » : `setComposer`, `openComposer`, `foldComposer`, `followLabIdle` (appelé
     par `renderRunCard` : déplié d'office quand le Labo n'a plus rien à trier ni en cours ; replié quand il a de
     nouveau quelque chose si on n'y a pas touché depuis, `autoOpen` ; `labIdle`, remis à `null` par `changedSpace`),
