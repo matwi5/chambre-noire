@@ -9,18 +9,23 @@
 // troisième sort de l'espace pendant qu'un aperçu privé est révélé sur le canevas de la carte en cours, que
 // page.leaks ne fouille pas : il en lit les pixels. Les deux derniers simulent le retour par « Retour » sur une page
 // fermée dans l'espace (pageshow persisted) : affichage et saisie privés effacés, espace reverrouillé avant tout état
-// lu, même si le Mac ne répond pas d'abord.
+// lu, même si le Mac ne répond pas d'abord. Les suivants : effacement dès la fermeture (pagehide), champs de code
+// compris ; page rechargée après une fermeture dans l'espace dont le verrouillage s'est perdu (marque de l'onglet,
+// sessionStorage) ; code retapé pendant un reverrouillage en route, ou après un reverrouillage sans réponse ; mémoire
+// de l'onglet refusée.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/etancheite.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome } from './driver.mjs';
+import { startBench, launchChrome, waitUntil } from './driver.mjs';
 
 let bench, chrome, page, kept;                     // kept : images privées que le premier test laisse
+let navigated = false;                             // nouveau document chargé (Page.frameNavigated)
 
 before(async () => {
   bench = await startBench();
   chrome = await launchChrome();
   page = await chrome.phonePage();
+  page.on('Page.frameNavigated', p => { if (!p.frame.parentId) navigated = true; });
   await page.goto(bench.url + '/');
   await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
 });
@@ -42,12 +47,7 @@ const generate = extra => page.eval(`postJson('/api/generate', { width: 512, hei
 const WORDS = ['zqE0pile', 'zqE1edition', 'zqE2lot', 'zqE3resultat', 'zqE4file', 'zqE5titre', 'zqE5texte',
   'zqE6saisie', 'zqE7supprimee', 'zqE8vignette', 'zqE9saisie'];
 
-async function enter() {
-  const exists = await page.eval(`fetch('/api/status').then(r => r.json()).then(s => s.private.exists)`);
-  assert.equal(await post(exists ? '/api/private/unlock' : '/api/private/create', { code: CODE }), 200);
-  await page.eval(`refreshStatus()`);
-  await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
-}
+const enter = () => page.enterPrivate(CODE);
 
 // parcours privé : tout ce qui affiche une donnée privée est ouvert au moins une fois ; renvoie les marqueurs
 async function privateTour() {
@@ -224,8 +224,10 @@ test('« Retour », Mac injoignable au reverrouillage : la page ne rentre pas da
   const sent = await page.eval(`zqLocks`);
   await page.eval(`dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))`);
   assert.equal(await page.eval(`zqLocks`), sent + 1, 'verrouillage renvoyé à la fermeture');
-  // le Mac répond de nouveau et le code privé est retapé : l'espace s'ouvre, sans être refermé par le reverrouillage
+  // de retour sur la page, le Mac répond de nouveau et le code privé est retapé : l'espace s'ouvre, sans être
+  // refermé par le reverrouillage
   await page.eval(`window.fetch = zqFetch`);
+  await page.eval(restored);
   await page.eval(`($('puCode').value = ${JSON.stringify(CODE)}, privUnlock())`);
   assert.equal(await page.eval(`inPrivate()`), true, 'espace rouvert par le code');
   assert.equal(await page.eval(`fetch('/api/status').then(r => r.json()).then(s => s.private.unlocked)`), true);
@@ -245,5 +247,431 @@ test('« Retour » vers une page fermée hors de l\'espace : la saisie privée m
   assert.notDeepEqual(await scan(['zqE13aside'], true), [], 'saisie privée mise de côté (prémisse)');
   await page.eval(`${restored}; refreshStatus()`);
   assert.deepEqual(await scan(['zqE13aside'], true), [], 'saisie privée restée en mémoire après le retour');
+  page.assertNoErrors();
+});
+
+// champs de code des feuilles privées, tels que la page les désigne (PRIV_CODES : ceux qu'elle vide)
+const fields = `[...document.querySelectorAll(PRIV_CODES)]`;
+const fillCodes = value => page.eval(`${fields}.forEach(i => i.value = ${JSON.stringify(value)})`);
+const codes = `${fields}.map(i => i.value).join('')`;
+const MARK = `(() => { try { return sessionStorage.getItem(RELOCK_MARK); } catch (e) { return 'refusé'; } })()`;
+const macUnlocked = () => page.eval(`fetch('/api/status').then(r => r.json()).then(s => s.private.unlocked)`);
+const isLock = p => p.request.url.includes('/api/private/lock');
+
+test('fermeture de la page dans l\'espace privé : tout est effacé dès pagehide, champs de code compris', async () => {
+  const markers = await privateScreen('zqE14');
+  // (les champs désignés comprennent ceux de l'entrée et de la création)
+  assert.equal(await page.eval(`$('puCode').matches(PRIV_CODES) && $('pcCode').matches(PRIV_CODES)`), true);
+  await fillCodes('zqE14code');
+  // dès l'événement de fermeture (page gardée pour un « Retour ») : même effacement que « Sortir »
+  assert.deepEqual(await page.eval(`(() => { dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+    return [inPrivate(), document.documentElement.classList.contains('priv'), pileItems.length, $('prompt').value,
+      ${codes}]; })()`), [false, false, 0, '', ''], 'affichage, saisie ou code privés gardés à la fermeture');
+  assert.deepEqual(await scan([...markers, 'zqE14code'], true), [], 'données privées restées dans la page fermée');
+  assert.equal(await page.eval(MARK), '1', 'marque de l\'onglet posée');
+  // « Retour » : champ de code rempli entre-temps (restauré par le navigateur), vidé ; message, reverrouillage
+  await fillCodes('zqE14code');
+  await page.eval(restored);
+  assert.equal(await page.eval(codes), '', 'champ de code restauré');
+  assert.equal(await page.eval(`$('toastBox').textContent`), 'Espace privé verrouillé à la fermeture de la page');
+  await page.waitFor(`!relock`, { what: 'reverrouillage accepté' });
+  assert.equal(await macUnlocked(), false);
+  assert.equal(await page.eval(MARK), null, 'marque effacée une fois le verrouillage accepté');
+  page.assertNoErrors();
+});
+
+test('page rechargée après une fermeture dans l\'espace, verrouillage perdu : reverrouillée avant tout état',
+  async () => {
+    await privateScreen('zqE15');
+    // le verrouillage de la fermeture n'arrive pas au Mac (réseau coupé) : sa session reste ouverte
+    await page.eval(`(() => { const f = window.fetch;
+      window.fetch = (u, ...a) => String(u) === '/api/private/lock' ? Promise.reject(new TypeError('coupé'))
+        : f(u, ...a); })()`);
+    // verrouillage retenu ; toute autre requête privée ou de l'état (/api/status) du nouveau document est notée
+    const seen = [];
+    const h = await page.holdRequests(['*/api/private/*', '*/api/status'],
+      p => isLock(p) || (navigated && seen.push(p.request.url), false));
+    try {
+      navigated = false;
+      await page.goto(bench.url + '/');            // rechargement : nouvelle page, même onglet
+      await waitUntil(async () => h.held.length > 0 || await page.eval(`inPrivate()`),
+        { what: 'reverrouillage demandé, ou page dans l\'espace' });
+      assert.deepEqual(await page.eval(`[inPrivate(), relock, ${MARK}]`), [false, true, '1'],
+        'page rentrée dans l\'espace sans code, ou marque perdue');
+      assert.deepEqual(seen, [], 'état demandé avant le reverrouillage');
+      assert.equal(await macUnlocked(), true, 'session du Mac encore ouverte (prémisse)');
+    } finally {
+      await h.release();
+    }
+    await page.waitFor(`!relock`, { what: 'reverrouillage accepté' });
+    assert.equal(await macUnlocked(), false);
+    assert.deepEqual(await page.eval(`[inPrivate(), ${MARK}]`), [false, null]);
+    page.assertNoErrors();
+  });
+
+test('reverrouillage en route quand le code privé est retapé : l\'entrée l\'attend, l\'espace reste ouvert',
+  async () => {
+    await privateScreen('zqE16');
+    // ordre vu par la page : réponse du verrouillage (« verrou »), envoi du code (« code »)
+    await page.eval(`(() => { const f = window.zqFetch = window.fetch; window.zqOrder = [];
+      window.fetch = (u, ...a) => { const k = String(u); if (k === '/api/private/unlock') zqOrder.push('code');
+        const r = f(u, ...a); if (k === '/api/private/lock') r.then(() => zqOrder.push('verrou'), () => {});
+        return r; }; })()`);
+    const h = await page.holdRequests(['*/api/private/lock'], () => true);
+    try {
+      await page.eval(restored);                   // « Retour » : reverrouillage envoyé, sa réponse se fait attendre
+      await waitUntil(() => h.held.length > 0, { what: 'reverrouillage envoyé' });
+      await page.eval(`void (window.zqEntry = ($('puCode').value = ${JSON.stringify(CODE)}, privUnlock()))`);
+    } finally {
+      await h.release();                           // le Mac accepte le verrouillage ; l'entrée va jusqu'au bout
+    }
+    await page.eval(`zqEntry`);
+    await page.eval(`window.fetch = zqFetch`);
+    assert.deepEqual(await page.eval(`zqOrder.slice(0, 2)`), ['verrou', 'code'],
+      'code envoyé avant la fin du reverrouillage');
+    assert.deepEqual(await page.eval(`[inPrivate(), relock]`), [true, false], 'espace refermé par le reverrouillage');
+    assert.equal(await macUnlocked(), true);
+    await page.click('#privExit');
+    await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+    await bench.idle();
+    page.assertNoErrors();
+  });
+
+test('reverrouillage sans réponse, code retapé : aucun verrouillage ne part pendant l\'entrée', async () => {
+  await privateScreen('zqE17');
+  // le Mac ne reçoit aucun verrouillage (réseau coupé pour lui seul) : relock reste vrai
+  await page.eval(`(() => { const f = window.zqFetch = window.fetch; window.zqLocks = 0;
+    window.fetch = (u, ...a) => String(u) === '/api/private/lock' ? (zqLocks++, Promise.reject(new TypeError('coupé')))
+      : f(u, ...a); })()`);
+  await page.eval(restored);
+  await page.eval(`refreshStatus()`);
+  assert.equal(await page.eval(`relock`), true, 'reverrouillage pas accepté (prémisse)');
+  // le code part (sa réponse retenue) ; une interrogation de l'état tombe pendant l'aller-retour
+  const h = await page.holdRequests(['*/api/private/unlock'], () => true);
+  try {
+    await page.eval(`void (window.zqEntry = ($('puCode').value = ${JSON.stringify(CODE)}, privUnlock()))`);
+    await waitUntil(() => h.held.length > 0, { what: 'code envoyé' });
+    const sent = await page.eval(`zqLocks`);
+    await page.eval(`refreshStatus()`);
+    assert.equal(await page.eval(`zqLocks`), sent, 'verrouillage lancé pendant l\'entrée');
+  } finally {
+    await h.release();
+  }
+  await page.eval(`zqEntry`);
+  await page.eval(`window.fetch = zqFetch`);
+  assert.deepEqual(await page.eval(`[inPrivate(), relock]`), [true, false], 'espace ouvert par le code');
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+  await bench.idle();
+  page.assertNoErrors();
+});
+
+test('mémoire de l\'onglet refusée par le navigateur : la page se charge et fonctionne comme sans marque', async () => {
+  const { identifier } = await page.send('Page.addScriptToEvaluateOnNewDocument', { source: `Object.defineProperty(
+    window, 'sessionStorage', { get() { throw new DOMException('refusé', 'SecurityError'); } })` });
+  try {
+    await page.goto(bench.url + '/');
+    await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+    assert.equal(await page.eval(`relock`), false);
+    await enter();
+    await page.eval(`dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))`);
+    await page.eval(restored);
+    await page.waitFor(`!relock`, { what: 'reverrouillage accepté' });
+    assert.equal(await page.eval(`inPrivate()`), false);
+  } finally {
+    await page.send('Page.removeScriptToEvaluateOnNewDocument', { identifier });
+  }
+  page.assertNoErrors();
+});
+
+// appels de fetch de la page notés (zqCalls : adresses) ; verrouillages comptés (zqLocks) ; zqDone : réponse du code
+// reçue ; zqAfter : interrogations de l'état parties après elle
+const watchFetch = () => page.eval(`(() => { const f = window.zqFetch = window.fetch;
+  Object.assign(window, { zqCalls: [], zqLocks: 0, zqDone: false, zqAfter: 0 });
+  window.fetch = (u, ...a) => { const k = String(u); zqCalls.push(k);
+    if (k === '/api/private/lock') zqLocks++;
+    if (k === '/api/status' && zqDone) zqAfter++;
+    const r = f(u, ...a); if (k === '/api/private/unlock') r.then(() => { zqDone = true; }, () => {});
+    return r; }; })()`);
+const hide = `dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))`;
+// « Retour » sur la page fermée : reverrouillage accepté, espace fermé sur le Mac, marque effacée
+async function backLocked() {
+  await page.eval(`window.fetch = zqFetch`);
+  await page.eval(restored);
+  await page.waitFor(`!relock`, { what: 'reverrouillage accepté' });
+  assert.equal(await macUnlocked(), false, 'espace encore ouvert sur le Mac');
+  assert.equal(await page.eval(MARK), null);
+}
+
+test('page fermée juste après l\'acceptation du code, état pas encore relu : verrouillée, marque posée', async () => {
+  await page.goto(bench.url + '/');
+  await page.waitFor(`$('lamp').classList.contains('ok') && !relock`, { what: 'page prête, hors de l\'espace' });
+  await watchFetch();
+  const h = await page.holdRequests(['*/api/status'], () => true);   // l'état relu se fait attendre
+  try {
+    await page.eval(`void (window.zqEntry = ($('puCode').value = ${JSON.stringify(CODE)}, privUnlock()))`);
+    await page.waitFor(`zqDone && zqAfter > 0`, { what: 'code accepté, état demandé' });
+    assert.equal(await page.eval(`inPrivate()`), false, 'état pas encore relu (prémisse)');
+    const sent = await page.eval(`zqLocks`);
+    await page.eval(hide);
+    assert.deepEqual(await page.eval(`[zqLocks - ${sent}, relock, ${MARK}]`), [1, true, '1'],
+      'fermeture sans verrouillage ni marque');
+  } finally {
+    await h.release();
+  }
+  await page.eval(`zqEntry`);
+  await backLocked();
+  page.assertNoErrors();
+});
+
+test('page fermée pendant l\'envoi du code : verrouillée, code annulé, aucune session ouverte après la fermeture',
+  async () => {
+    await page.goto(bench.url + '/');
+    await page.waitFor(`$('lamp').classList.contains('ok') && !relock`, { what: 'page prête, hors de l\'espace' });
+    await watchFetch();
+    const h = await page.holdRequests(['*/api/private/unlock'], () => true);
+    try {
+      await page.eval(`void (window.zqEntry = ($('puCode').value = ${JSON.stringify(CODE)}, privUnlock()))`);
+      await waitUntil(() => h.held.length > 0, { what: 'code envoyé' });
+      const sent = await page.eval(`zqLocks`);
+      await page.eval(hide);
+      assert.deepEqual(await page.eval(`[zqLocks - ${sent}, relock, ${MARK}]`), [1, true, '1'],
+        'fermeture sans verrouillage ni marque');
+    } finally {
+      await h.release();                           // le code retenu part, s'il n'a pas été annulé à la fermeture
+    }
+    await page.eval(`zqEntry`);
+    assert.equal(await page.eval(`inPrivate()`), false, 'entrée réussie après la fermeture');
+    assert.equal(await macUnlocked(), false, 'session ouverte sur le Mac par un code parti avant la fermeture');
+    assert.deepEqual(await page.eval(`[relock, ${MARK}]`), [true, '1'], 'marque levée après la fermeture');
+    await backLocked();
+    page.assertNoErrors();
+  });
+
+test('rechargement avec marque, premier reverrouillage perdu : les générations de ce navigateur reviennent ensuite',
+  async () => {
+    await page.goto(bench.url + '/');
+    await page.waitFor(`$('lamp').classList.contains('ok') && !relock`, { what: 'page prête' });
+    await page.generate('HOLD=zqE18 zqE18 publique en cours');
+    const own = await page.eval(`pageJobs.at(-1).id`);
+    await enter();
+    // le verrouillage de la fermeture se perd, puis le premier reverrouillage de la page rechargée aussi
+    await page.eval(`(() => { const f = window.fetch;
+      window.fetch = (u, ...a) => String(u) === '/api/private/lock' ? Promise.reject(new TypeError('coupé'))
+        : f(u, ...a); })()`);
+    let first = true;
+    const h = await page.holdRequests(['*/api/private/lock'], p => isLock(p) && first);
+    try {
+      await page.goto(bench.url + '/');
+      await waitUntil(() => h.held.length > 0, { what: 'premier reverrouillage' });
+      first = false;
+      for (const r of h.take()) await page.send('Fetch.failRequest', { requestId: r.requestId,
+        errorReason: 'ConnectionRefused' });
+      await page.waitFor(`!relock`, { what: 'reverrouillage suivant accepté', timeout: 30000 });
+      await page.waitFor(`pageJobs.some(p => p.id === ${JSON.stringify(own)})`,
+        { what: 'génération publique de ce navigateur reprise' });
+    } finally {
+      await h.release();
+      bench.release('zqE18');
+      await bench.idle();
+    }
+    page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/ERR_CONNECTION_REFUSED/.test(e)));
+    page.assertNoErrors();
+  });
+
+test('fermeture dans l\'espace : aucune relecture publique au moment de pagehide, refaite au retour', async () => {
+  await privateScreen('zqE19');
+  await page.tab('tirages');
+  await watchFetch();
+  await page.eval(hide);
+  const reads = `zqCalls.filter(u => u === '/api/pile' || u.startsWith('/api/history') || u.startsWith('/api/job/'))`;
+  assert.deepEqual(await page.eval(reads), [], 'relecture publique lancée à la fermeture');
+  await page.eval(restored);
+  await page.waitFor(`!relock && zqCalls.includes('/api/pile') && zqCalls.some(u => u.startsWith('/api/history'))`,
+    { what: 'pile et Tirages publics relus au retour' });
+  await page.eval(`window.fetch = zqFetch`);
+  await page.tab('labo');
+  page.assertNoErrors();
+});
+
+test('marque posée dès l\'entrée : onglet tué sans pagehide puis rechargé, reverrouillé avant tout état ; levée par '
+  + '« Sortir » et par la fermeture du Mac', async () => {
+  await page.goto(bench.url + '/');
+  await page.waitFor(`$('lamp').classList.contains('ok') && !relock`, { what: 'page prête, hors de l\'espace' });
+  await enter();
+  assert.equal(await page.eval(MARK), '1', 'marque posée à l\'entrée');
+  // l'onglet est tué en arrière-plan : ni pagehide ni verrouillage (écouteur de la page court-circuité)
+  await page.eval(`addEventListener('pagehide', e => e.stopImmediatePropagation(), true)`);
+  const seen = [];
+  const h = await page.holdRequests(['*/api/private/*', '*/api/status'],
+    p => isLock(p) || (navigated && seen.push(p.request.url), false));
+  try {
+    navigated = false;
+    await page.goto(bench.url + '/');
+    await waitUntil(async () => h.held.length > 0 || await page.eval(`inPrivate()`),
+      { what: 'reverrouillage demandé, ou page dans l\'espace' });
+    assert.deepEqual(await page.eval(`[inPrivate(), relock, ${MARK}]`), [false, true, '1'],
+      'page rentrée dans l\'espace sans code, ou marque perdue');
+    assert.deepEqual(seen, [], 'état demandé avant le reverrouillage');
+    assert.equal(await macUnlocked(), true, 'session du Mac encore ouverte (prémisse)');
+  } finally {
+    await h.release();
+  }
+  await page.waitFor(`!relock`, { what: 'reverrouillage accepté' });
+  assert.deepEqual([await macUnlocked(), await page.eval(MARK)], [false, null]);
+  // « Sortir » accepté : marque levée
+  await enter();
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+  assert.equal(await page.eval(MARK), null, 'marque restée après « Sortir »');
+  // fermeture par le Mac (15 minutes sans requête privée : l'espace est au repos) : levée à l'état lu
+  await enter();
+  await page.privateIdle();
+  assert.equal(await post('/api/private/lock', {}), 200);
+  await page.eval(`refreshStatus()`);
+  await page.waitFor(`!inPrivate()`, { what: 'espace fermé par le Mac' });
+  assert.equal(await page.eval(MARK), null, 'marque restée après la fermeture par le Mac');
+  page.assertNoErrors();
+});
+
+// réponses données au verrouillage à la place du Mac (Fetch.fulfillRequest) : celle du Mac sans module de chiffrement,
+// et deux pannes sans réponse claire du Mac (relais Tailscale, erreur interne)
+const UNAVAILABLE = { responseCode: 503, responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+  body: Buffer.from(JSON.stringify({ error: 'espace privé indisponible : bibliothèque cryptography non installée' }))
+    .toString('base64') };
+const BAD_GATEWAY = { responseCode: 502, responseHeaders: [{ name: 'Content-Type', value: 'text/plain' }],
+  body: Buffer.from('Bad Gateway').toString('base64') };
+const INTERNAL = { responseCode: 500, responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+  body: Buffer.from('{"error":"erreur interne"}').toString('base64') };
+const answerLock = async (h, reply) => {
+  await waitUntil(() => h.held.length > 0, { what: 'verrouillage envoyé' });
+  for (const r of h.take()) await page.send('Fetch.fulfillRequest', { requestId: r.requestId, ...reply });
+};
+
+test('reverrouillage : un refus clair du Mac vaut verrouillé (onglet débloqué) ; une panne sans réponse claire non',
+  async () => {
+    await enter();
+    // verrouillages retenus tant que hold ; sinon (fermeture réelle sur le Mac, faite par le test) ils passent
+    let hold = true;
+    const h = await page.holdRequests(['*/api/private/lock'], () => hold);
+    const lockMac = async () => { hold = false; assert.equal(await post('/api/private/lock', {}), 200); hold = true; };
+    try {
+      await page.eval(restored);
+      await waitUntil(() => h.held.length > 0, { what: 'verrouillage envoyé' });
+      await lockMac();                             // l'espace est fermé sur le Mac ; la page attend sa réponse
+      for (const reply of [BAD_GATEWAY, INTERNAL]) {
+        await answerLock(h, reply);
+        await page.waitFor(`!relocking && $('lamp').classList.contains('err')`, { what: 'réponse lue' });
+        assert.deepEqual(await page.eval(`[relock, ${MARK}, inPrivate()]`), [true, '1', false],
+          `reverrouillage tenu pour accepté sur une réponse ${reply.responseCode} sans refus du Mac`);
+        await page.eval(`void refreshStatus()`);   // nouvel essai
+      }
+      await answerLock(h, UNAVAILABLE);
+      await page.waitFor(`!relock && $('lamp').classList.contains('ok')`, { what: 'onglet débloqué, état lu' });
+      assert.equal(await page.eval(MARK), null);
+      // « Sortir » refusé de même par le Mac : la sortie est appliquée
+      await enter();
+      await page.privateIdle();
+      await page.click('#privExit');
+      await waitUntil(() => h.held.length > 0, { what: 'sortie demandée' });
+      await lockMac();
+      await answerLock(h, UNAVAILABLE);
+      await page.waitFor(`!inPrivate() && $('toastBox').textContent === ${JSON.stringify('Sorti de l\'espace privé')}`,
+        { what: 'sortie appliquée' });
+    } finally {
+      await h.release();
+    }
+    // (les réponses données à la place du Mac, et elles seules, sont notées en erreur par Chrome)
+    page.errors.splice(0, page.errors.length, ...page.errors.filter(e =>
+      !/status of 50[023] \(.*\) \(http:\/\/[^/]+\/api\/private\/lock\)$/.test(e)));
+    page.assertNoErrors();
+  });
+
+test('code accepté, état relu en échec, page fermée : traitée comme dans l\'espace (verrouillée, marquée)',
+  async () => {
+  await page.goto(bench.url + '/');
+  await page.waitFor(`$('lamp').classList.contains('ok') && !relock`, { what: 'page prête, hors de l\'espace' });
+  await watchFetch();
+  const h = await page.holdRequests(['*/api/status'], () => true);   // coupure brève : l'état relu échoue
+  try {
+    await page.eval(`void (window.zqEntry = ($('puCode').value = ${JSON.stringify(CODE)}, privUnlock()))`);
+    await page.waitFor(`zqDone && zqAfter > 0`, { what: 'code accepté, état demandé' });
+    await waitUntil(() => h.held.length > 0, { what: 'état demandé' });
+    for (const r of h.take()) await page.send('Fetch.failRequest', { requestId: r.requestId,
+      errorReason: 'ConnectionRefused' });
+    await page.eval(`zqEntry`);
+    assert.deepEqual(await page.eval(`[inPrivate(), relock, entering]`), [false, false, false], 'prémisse');
+    const sent = await page.eval(`zqLocks`);
+    await page.eval(hide);
+    assert.deepEqual(await page.eval(`[zqLocks - ${sent}, relock, hidInPrivate, ${MARK}]`), [1, true, true, '1'],
+      'fermeture sans verrouillage alors que la session est ouverte');
+  } finally {
+    await h.release();
+  }
+  await backLocked();
+  assert.equal(await page.eval(`inPrivate()`), false, 'rentrée dans l\'espace sans code');
+  page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/ERR_CONNECTION_REFUSED/.test(e)));
+  page.assertNoErrors();
+});
+
+test('état servi avant la fermeture, reçu après : jamais appliqué (l\'espace reste à reverrouiller)', async () => {
+  await page.goto(bench.url + '/');
+  await page.waitFor(`$('lamp').classList.contains('ok') && !relock`, { what: 'page prête, hors de l\'espace' });
+  await watchFetch();
+  // le code est accepté ; l'état relu ensuite est servi par le Mac (espace ouvert) mais sa réponse se fait attendre
+  await page.holdFetch(`u => u === '/api/status' && zqDone`);
+  await page.eval(`void (window.zqEntry = ($('puCode').value = ${JSON.stringify(CODE)}, privUnlock()))`);
+  await page.waitFor(`zqDone && zqAfter > 0`, { what: 'code accepté, état demandé' });
+  await page.eval(hide);                           // fermée pendant l'entrée : verrouillage et marque
+  await page.releaseFetch();
+  await page.eval(`zqEntry`);
+  assert.deepEqual(await page.eval(`[inPrivate(), relock, pileItems.some(it => it.private)]`), [false, true, false],
+    'état d\'avant le verrouillage appliqué');
+  await backLocked();
+  page.assertNoErrors();
+});
+
+test('page fermée puis revenue avant la réponse du code : entrée refusée, à retaper', async () => {
+  await page.goto(bench.url + '/');
+  await page.waitFor(`$('lamp').classList.contains('ok') && !relock`, { what: 'page prête, hors de l\'espace' });
+  await watchFetch();
+  await page.eval(`openPrivSheet('privUnlockSheet')`);
+  await page.holdFetch(`u => u === '/api/private/unlock'`);
+  await page.eval(`void (window.zqEntry = ($('puCode').value = ${JSON.stringify(CODE)}, privUnlock()))`);
+  await page.waitFor(`zqCalls.includes('/api/private/unlock')`, { what: 'code envoyé' });
+  await page.eval(hide);
+  await page.eval(`window.fetch = zqFetch`);
+  await page.eval(restored);
+  await page.releaseFetch();
+  await page.eval(`zqEntry`);
+  assert.deepEqual(await page.eval(`[openedSheet === $('privUnlockSheet'), $('puErr').textContent, inPrivate()]`),
+    [true, 'Page fermée pendant l\'envoi : retapez le code.', false]);
+  await page.waitFor(`!relock`, { what: 'reverrouillage accepté' });
+  assert.equal(await macUnlocked(), false);
+  await page.eval(`closeSheet()`);
+  page.assertNoErrors();
+});
+
+test('« Sortir » en attente quand la page se ferme : rien n\'est redessiné ni annoncé à la réponse du Mac',
+  async () => {
+  await enter();
+  await page.privateIdle();
+  await watchFetch();
+  const h = await page.holdRequests(['*/api/private/lock'], () => true);
+  try {
+    await page.click('#privExit');
+    await waitUntil(() => h.held.length > 0, { what: 'sortie demandée' });
+    await page.eval(hide);                         // fermée pendant l'attente (son verrouillage est retenu aussi)
+    await page.eval(`zqCalls.length = 0; toast('zq')`);
+    await answerLock(h, BAD_GATEWAY);              // le Mac ne répond pas clairement à « Sortir »
+    await page.waitFor(`!leavingPrivate`, { what: 'réponse de « Sortir » lue' });
+    assert.deepEqual(await page.eval(`[$('toastBox').textContent, zqCalls.filter(u => u === '/api/pile')]`),
+      ['zq', []], 'sortie refusée annoncée ou pile relue sur une page fermée');
+  } finally {
+    await h.release();
+  }
+  await backLocked();
+  page.errors.splice(0, page.errors.length, ...page.errors.filter(e =>
+    !/status of 502 \(.*\) \(http:\/\/[^/]+\/api\/private\/lock\)$/.test(e)));
   page.assertNoErrors();
 });

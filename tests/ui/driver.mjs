@@ -22,6 +22,10 @@
 //   await page.pasteImage()                      // une image de 64×64 collée dans le champ du Labo (Cmd+V)
 //   await page.made('texte')                     // « Révéler » puis l'image attendue dans la pile affichée
 //   await page.holdFetch(`u => u === '/api/status'`); …; await page.releaseFetch()   // réponses retenues
+//   const h = await page.holdRequests(['*/api/private/lock'], p => true); …; await h.release()   // requêtes retenues
+//                                                // avant le Mac (Fetch.enable) ; h.held, h.free(match), h.take(match)
+//   await page.enterPrivate('code')              // dans l'espace privé (créé la première fois), vu par la page,
+//                                                // puis au repos ; await page.privateIdle() : espace au repos
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
 //   await page.viewPile('texte')                 // visionneuse ouverte sur l'image de la pile à ce prompt
 //   await page.openQueue()                       // feuille de la file ouverte par la pastille « +N en attente »
@@ -221,6 +225,7 @@ async function connect(wsUrl) {
   await Promise.all([send('Runtime.enable'), send('Log.enable'), send('Page.enable')]);
 
   let held = null;                                   // fin du balayage tenu (page.release)
+  let holding = null, holdHook = false;              // requêtes retenues en cours (page.holdRequests), écouteur posé
   const page = {
     send, on, errors,
     // évalue une expression dans la page (promesse attendue) et renvoie sa valeur (JSON) ; échoue après timeout ms
@@ -230,6 +235,60 @@ async function connect(wsUrl) {
         userGesture: true }), timeout, `dans la page : ${expression}`);
       if (r.exceptionDetails) throw new Error(`dans la page : ${r.exceptionDetails.exception?.description || r.exceptionDetails.text}\n  ${expression}`);
       return r.result.value;
+    },
+    // requêtes retenues avant d'atteindre le Mac (Fetch.enable sur les adresses patterns, motifs de Fetch) : keep(p)
+    // dit pour chacune (p.request.url) si elle est retenue (vrai : dans held, { requestId, url }) ou part tout de
+    // suite. free(match) laisse partir les retenues dont l'adresse vérifie match, take(match) les retire de held
+    // (le test y répond lui-même : Fetch.fulfillRequest, failRequest) ; release() laisse partir les autres et coupe
+    // l'interception. Une seule retenue à la fois ; sans retenue en cours, l'écouteur ne fait rien (un test peut
+    // poser le sien)
+    async holdRequests(patterns, keep) {
+      if (!holdHook) {
+        holdHook = true;
+        on('Fetch.requestPaused', p => { if (!holding) return;
+          if (!holding.closing && holding.keep(p)) holding.held.push({ requestId: p.requestId, url: p.request.url });
+          else send('Fetch.continueRequest', { requestId: p.requestId }).catch(() => {}); });
+      }
+      const h = holding = { held: [], keep,
+        take(match = () => true) { const out = h.held.filter(r => match(r.url));
+          h.held = h.held.filter(r => !out.includes(r)); return out; },
+        async free(match) { for (const r of h.take(match))
+          await send('Fetch.continueRequest', { requestId: r.requestId }).catch(() => {}); },
+        // (pendant la libération, une requête interceptée part aussitôt ; l'écouteur reste branché jusqu'à la fin)
+        async release() { h.closing = true; await h.free(); await send('Fetch.disable');
+          if (holding === h) holding = null; } };
+      await send('Fetch.enable', { patterns: patterns.map(urlPattern => ({ urlPattern })) });
+      return h;
+    },
+    // entrée dans l'espace privé avec ce code (l'espace est créé s'il n'existe pas) ; la page la voit à son
+    // interrogation suivante de /api/status, demandée tout de suite. settle : attendre ensuite l'espace au repos
+    // (privateIdle) ; false pour un test qui retient lui-même les lectures de l'entrée
+    async enterPrivate(code, { settle = true } = {}) {
+      await page.countPrivate();
+      const exists = await page.eval(`fetch('/api/status').then(r => r.json()).then(s => s.private.exists)`);
+      const route = exists ? '/api/private/unlock' : '/api/private/create';
+      const status = await page.eval(`postJson('${route}', { code: ${JSON.stringify(code)} }).then(r => r.status)`);
+      if (status !== 200) throw new Error(`entrée dans l'espace privé refusée : ${status}`);
+      await page.eval(`refreshStatus()`);
+      await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
+      if (settle) await page.privateIdle();
+    },
+    // requêtes privées de la page en route (fetch vers /api/private/), comptées dans __privInflight à partir de
+    // l'appel (une fois par page)
+    countPrivate() {
+      return page.eval(`(() => { if (window.__privFetch) return; const f = window.__privFetch = window.fetch;
+        window.__privInflight = 0;
+        window.fetch = (u, ...a) => { if (!String(u).startsWith('/api/private/')) return f(u, ...a);
+          __privInflight++; return f(u, ...a).finally(() => { __privInflight--; }); }; })()`);
+    },
+    // espace privé au repos : pile privée lue, aucune requête privée en route (comptées depuis countPrivate, que
+    // enterPrivate pose), aucune image privée en chargement. À attendre avant de fermer l'espace sans « Sortir »
+    // (le Mac, une fermeture de la page) : une requête servie après la fermeture répondrait 403, ce que la page ne peut
+    // pas savoir
+    async privateIdle() {
+      await page.countPrivate();
+      await page.waitFor(`!__privInflight && pileRead && !secretLoads.size && ![...document.querySelectorAll('img')]
+        .some(i => secretUrl(i.getAttribute('src')) && !i.complete)`, { what: 'espace privé au repos' });
     },
     async goto(url) {
       const loaded = new Promise(r => on('Page.loadEventFired', r));

@@ -145,12 +145,13 @@ Options : `--port 7860` (changer de port), `--model q4|q8` (modèle Q4_K_M par d
 Vulkan ; sur Mac, le moteur est toujours Metal), `--no-browser`. Pour lancer Q8_0 par le raccourci, ajoutez
 `"model": "q8"` dans `tools/config.local.json` (réglages propres à la machine, non suivis par git, lus par-dessus
 `tools/config.json`). La **lampe d'état** en haut à droite dit l'état du moteur d'un regard : ambre fixe, prêt ;
-ambre pulsée, un calcul en cours ou une file non vide ; grise, connexion ; rouge avec l'icône d'erreur, moteur
-indisponible (fichiers manquants) ou Mac injoignable. Un appui ouvre le panneau **Moteur** (état, moteur, modèle,
-calibration des estimations, version du code servi, « Ouvrir depuis le téléphone » sur l'ordinateur, entrée de
-l'espace privé, journal) : la ligne **Version** dit quel commit tourne (utile pour savoir si un correctif est en ligne
-sur le téléphone), et **Serveur** « à relancer » apparaît quand `tools/launch.py` ou `tools/estimate.py` a changé
-depuis le lancement du serveur (le reste est en ligne sans relance).
+ambre pulsée, un calcul en cours ou une file non vide (quand le système demande de réduire les animations, un anneau
+fixe, point creux, à la place du point plein) ; grise, connexion ; rouge avec l'icône d'erreur, moteur indisponible
+(fichiers manquants) ou Mac injoignable ; point plein et anneau en vert dans l'espace privé, l'erreur reste rouge. Un
+appui ouvre le panneau **Moteur** (état, moteur, modèle, calibration des estimations, version du code servi, « Ouvrir
+depuis le téléphone » sur l'ordinateur, entrée de l'espace privé, journal) : la ligne **Version** dit quel commit
+tourne (utile pour savoir si un correctif est en ligne sur le téléphone), et **Serveur** « à relancer » apparaît quand
+`tools/launch.py` ou `tools/estimate.py` a changé depuis le lancement du serveur (le reste est en ligne sans relance).
 
 Par défaut, l'interface n'écoute que sur `127.0.0.1` : elle n'est pas accessible depuis le réseau.
 
@@ -193,7 +194,8 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   sans `--lan`, elles sont refusées. Sur iPhone, Safari → Partager → **Sur l'écran d'accueil** fonctionne aussi en HTTP.
 - **Notification de fin de génération** : à la fin de chaque génération (ou en cas d'échec), l'ordinateur envoie une
   notification au téléphone, même si l'application y est fermée ou en arrière-plan ; la toucher ouvre l'application
-  sur le Labo, devant la pile, qu'elle soit fermée ou déjà ouverte (elle y passe alors sans se recharger).
+  sur le Labo, devant la pile, qu'elle soit fermée ou déjà ouverte (elle y passe alors sans se recharger ; un panneau
+  où l'on a commencé à taper, la modification d'un prompt par exemple, reste ouvert par-dessus).
   L'autorisation est demandée au premier appui sur **Révéler** ; l'interrupteur **Notification en fin de génération**
   du panneau Réglages les coupe. Elles ne passent que par l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du
   Wi-Fi), ou sur l'ordinateur lui-même. Le message transite chiffré par le service de notification du navigateur
@@ -335,7 +337,8 @@ reste qu'en mémoire de la page. Une génération annulée n'y
 laisse rien. Pile vide : « Rien à trier », en pixels, au-dessus du champ de création. L'onglet **Labo** porte le nombre
 d'images à trier. Quand une génération de la page finit pendant qu'on est sur les
 Tirages, un message le dit (« Image prête », « Lot prêt · 3 images », avec « , 1 en échec » s'il y en a, « Échec de la
-génération », « Échec du lot ») et mène au Labo quand on le touche ; rien pour une génération annulée. Partager et
+génération », « Échec du lot ») et mène au Labo quand on le touche (un panneau où l'on a commencé à taper reste
+ouvert) ; rien pour une génération annulée. Partager et
 Copier ne sont proposés que là où le navigateur les permet : sur l'ordinateur lui-même, ou sur le téléphone par
 l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du Wi-Fi).
 
@@ -515,12 +518,27 @@ images sont enregistrées. Pour la confidentialité, passez par l'espace privé.
   passe en lumière inactinique verte : on sait où l'on est.
 - **Sortir**, en haut à droite à côté de la lampe, ramène à l'application normale en verrouillant l'espace (la ligne
   **Espace privé** n'est pas dans le panneau Moteur tant qu'on est dedans). L'espace se verrouille aussi seul après 15
-  minutes sans activité privée sur cet appareil, et à la fermeture ou au rechargement de l'application. Une page
-  fermée dans l'espace et retrouvée par le bouton « Retour » du navigateur efface tout de suite l'affichage et la
-  saisie privés, puis reverrouille l'espace sur le Mac avant de relire son état (au cas où le verrouillage de la
-  fermeture ne serait pas arrivé) : « Espace privé verrouillé à la fermeture de la page ». Tant que le Mac n'a pas
-  accepté ce verrouillage, la page reste hors de l'espace (lampe « Mac injoignable »), et le renvoie si on la ferme
-  de nouveau ; retaper le code privé rouvre l'espace normalement.
+  minutes sans activité privée sur cet appareil, et à la fermeture ou au rechargement de l'application, y compris
+  pendant l'envoi du code privé. Dès qu'une page se ferme dans l'espace, tout le privé en est effacé (affichage, images,
+  saisie, champs de code), comme avec Sortir, même si le navigateur la garde en mémoire pour un « Retour ». Retrouvée
+  par le bouton « Retour », elle reverrouille l'espace sur le Mac avant de relire son état (au cas où le verrouillage de
+  la fermeture ne serait pas arrivé) : « Espace privé verrouillé à la fermeture de la page ». Rechargée ou rouverte dans
+  le même onglet, elle fait de même avant de lire ou d'afficher quoi que ce soit, même si le téléphone a fermé
+  l'application en arrière-plan sans prévenir la page : l'onglet garde pour cela une marque « dans l'espace privé »
+  (mémoire de l'onglet du navigateur, effacée avec l'onglet, sans aucune donnée privée), posée dès l'entrée dans
+  l'espace et retirée à la sortie, à la fermeture de l'espace par le Mac, ou quand le Mac a accepté le verrouillage ;
+  un autre onglet ouvert hors de l'espace ne reverrouille pas à son chargement. L'espace est commun à tous les onglets
+  du navigateur (même session) : un onglet ouvert pendant qu'on est dans l'espace y entre aussi et prend la marque, et
+  le fermer ou le recharger referme l'espace pour tous. Un simple rechargement dans l'espace referme donc l'espace. Un
+  refus clair du Mac lui-même (accès refusé, ou « espace privé indisponible » quand le serveur tourne sans le module de
+  chiffrement) vaut verrouillage : l'espace ne peut de toute façon pas être ouvert. Sur une coupure du réseau ou une
+  panne sans réponse claire du Mac (relais Tailscale, erreur interne), la page réessaie : tant que le Mac n'a pas
+  accepté ce verrouillage, elle reste hors de l'espace (lampe « Mac injoignable »), et le renvoie si on la ferme de
+  nouveau ; après un rechargement, la ligne « Espace privé » du panneau Moteur n'apparaît qu'une fois le verrouillage
+  accepté (l'état du Mac n'est pas lu avant). Retaper le code privé rouvre l'espace normalement (l'entrée attend la fin
+  d'un verrouillage encore en route, qui sinon refermerait l'espace juste ouvert) ; une page fermée pendant l'envoi du
+  code annule cet envoi, et revenue, elle demande de retaper le code. Une application tuée puis relancée depuis l'écran
+  d'accueil repart sans marque : seule la fermeture de l'espace par le Mac au bout de 15 minutes protège ce cas.
 - Dans l'espace privé, **toute génération est privée** (texte → image, édition, dessin) : son image, ses images
   d'entrée, sa miniature, son prompt et ses réglages sont chiffrés sur le Mac. Le texte tapé n'est pas retenu par le
   navigateur. Une génération privée lancée va jusqu'au bout et est rangée chiffrée même si l'espace se verrouille avant

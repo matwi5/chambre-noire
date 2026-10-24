@@ -174,8 +174,10 @@ dernier bloc, après le HTML.
     Dessiner, effacé avec son image), `drawWith` (une image seule dans la saisie, dessin actif, tracé vierge),
     `exportMask`, `paintedReference`.
   - « requête & loader » : `requestBase` (champs qu'aucun réglage ne fixe, communs avec « Relancer »), `buildRequest` ;
-    « messages et confirmations » : `toast` (un message `go` touché mène au Labo par `toLabo`, comme une
-    notification touchée, application ouverte), `ask` et `answer` (feuille `#askSheet`, jamais `confirm()`).
+    « messages et confirmations » : `toast` (un message `go` touché mène au Labo par `toLabo`, comme une notification
+    touchée, application ouverte ; `toLabo` laisse ouverte une feuille qui a une saisie en cours, `sheetTyped` : un
+    événement `input` de l'utilisateur dans un champ de texte (`TEXT_FIELD`, pas un interrupteur) de la feuille depuis
+    son ouverture, remis à faux par `closeSheet`), `ask` et `answer` (feuille `#askSheet`, jamais `confirm()`).
   - « affichage des images » : `showImage` (toute image qui change d'adresse : vidée, puis remplie une fois l'image
     chargée et décodée à part, miniature d'abord ; `img.want` : adresse attendue, une image arrivée trop tard est
     ignorée ; `keep` : l'aperçu d'avant reste jusqu'au suivant ; `once` : aperçu servi une fois ; `decoded` : image déjà
@@ -269,13 +271,34 @@ dernier bloc, après le HTML.
     `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,
     `putInput`, `swapInput`, `emptyInput` (vidage après « Révéler », dans l'espace d'où la demande est partie) ; un
     ajout d'image asynchrone (Éditer, Dessiner) va dans la saisie de l'espace où il a commencé. `openPrivSheet`,
-    `privCreate`, `privUnlock`, `privLock` (sortie appliquée dès la réponse du Mac : `spaceEpoch` écarte une réponse de
-    `/api/status` demandée avant ; `leavingPrivate` : aucun aperçu privé demandé ni Jeter privé envoyé pendant la
-    fermeture),
-    `privChangeCode`, `privReset` ; page restaurée par « Retour » (écouteur `pageshow`, `persisted`) après une
-    fermeture dans l'espace : sortie appliquée tout de suite, saisie privée effacée (`erasePrivate`), puis `relock` :
-    `refreshStatus` reverrouille d'abord par `relockSpace` et n'applique aucun état tant que le Mac ne l'a pas accepté
-    (`pagehide` renvoie aussi le verrouillage tant que `relock` tient ; un code retapé, `privPost`, le lève).
+    `privCreate`, `privUnlock`, `privLock` (un second appui pendant l'attente ne fait rien ; vignettes privées des
+    Tirages pas encore chargées vidées avant l'envoi ; sortie appliquée dès la réponse du Mac, ou son refus clair,
+    `lockAccepted`, rien de redessiné ni d'annoncé si la page a été fermée entre-temps : `spaceEpoch` écarte une réponse
+    de `/api/status` demandée avant ; `leavingPrivate` (`exiting()` : dans l'espace, sortie en attente) : aucune image
+    privée ni aperçu demandés ou posés, quel que soit le chemin qui redessine (`preload` les refuse : entrée `gone` ;
+    `renderQueue`, `renderGallery`, `openLot`, `openViewer` ne redessinent rien, la seconde tentative d'une vignette
+    privée des Tirages est abandonnée, aussi après la sortie), aucune pile ni Tirages privés lus ou dessinés
+    (`loadPile`, `loadHistory`), même partis avant l'appui, ni pile redessinée à la réponse d'un tri (`sendSort`),
+    aucune génération privée de la page interrogée (`pollJobs`) ni suivie ou adoptée, même par un suivi parti avant
+    l'appui (`followQueue`, `adopted`), ni Jeter privé envoyé pendant la fermeture), `privChangeCode`, `privReset` ;
+    marque de l'onglet (`RELOCK_MARK`, `markRelock`) posée dès que la page sait l'espace ouvert (code accepté par
+    `privPost`, état lu qui le dit ouvert dans `refreshStatus`), copiée en mémoire (`marked`) et levée par `liftRelock`
+    quand l'état lu le dit fermé (fermeture par le Mac, espace supprimé), quand « Sortir » est accepté ou quand le Mac
+    accepte le reverrouillage ; fermeture de la page (`pagehide` : `pageHidden` jusqu'à `pageshow`, `hides` compté) dans
+    l'espace, pendant une entrée (`entering`) ou marquée (`marked`) : code en route annulé (`entryAbort`), verrouillage
+    envoyé (`keepalive`), puis tout le privé effacé comme à « Sortir » (`closePrivateHere` : `erasePrivate`, `relock`,
+    `applyPrivate` ; `hiding` : sans relecture publique, refaite par `pageshow`), `hidInPrivate` noté, champs de code
+    vidés (`clearPrivCodes`, champs `PRIV_CODES`, aussi à `pageshow`) et marque reposée (filet) ; page restaurée par «
+    Retour » (`pageshow`, `persisted`) : même sortie si elle n'a pas eu lieu, message, puis `relock` : `refreshStatus`
+    reverrouille d'abord par `relockSpace` (une seule promesse en route, `relocking` ; `LOCK_POST`, `fetch` et non
+    `postJson`, encore indéfini à la première interrogation ; `lockAccepted` : oui du Mac, 4xx, ou 503 « espace privé
+    indisponible » ; une coupure, un autre 5xx ou un 500 font réessayer) et n'applique aucun état tant que le Mac ne l'a
+    pas accepté (un état reçu alors que `relock` est devenu vrai est relu) ; page rechargée (onglet tué compris) :
+    `relock` lu dans la marque au chargement, même parcours (la reprise du chargement, `resume`, attend aussi le
+    reverrouillage, et reprend après le premier accepté : `resumeLater`). `relock` et la marque ne se lèvent que par
+    `liftRelock`, jamais pendant une fermeture (`pageHidden`). Un code retapé (`privPost`, création ou entrée) attend
+    d'abord le reverrouillage restant, puis `entering`, du départ du code jusqu'à l'état relu, empêche d'en lancer un ;
+    il lève `relock` ; la page fermée depuis (`hides`), il renvoie faux et demande de retaper le code.
 
 Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
 « Dessiner », « Reprendre » (texte, images d'entrée, dessin et réglages : `resumeFrom`), « Relancer » (`againFrom`) et
@@ -390,7 +413,10 @@ invariants ».
   clé, `qwen-prompt` (`DRAFT_KEY`), où un texte privé n'est jamais écrit, même quand la demande est refusée
   (`tests/ui/brouillons.test.mjs`). La demande gardée par la page (`req` de `pageJobs`, images en data URL, privée
   comprise, pour « Reprendre » et « Relancer ») vit en mémoire de la page seulement, jamais dans `localStorage`
-  (`saveOwn` n'écrit que des identifiants).
+  (`saveOwn` n'écrit que des identifiants). La seule écriture du navigateur liée à l'espace privé est la marque de
+  l'onglet dans `sessionStorage` (`RELOCK_MARK`, valeur `1`, sans aucune donnée privée : « dans l'espace, à
+  reverrouiller au chargement suivant », posée dès l'entrée), toujours dans un `try` (stockage refusé : la page se
+  charge sans marque) ; n'y ajouter rien d'autre (`tests/ui/etancheite.test.mjs`).
 - **Visionneuse et images affichées** : la visionneuse parcourt `vList`, jamais `histItems` directement (la galerie
   peut être rechargée pendant qu'elle est ouverte). `#paintImg` (image du dessin) passe aussi par `showImage`, avec
   l'image décodée par `toEntry` (`decoded`) ; `tests/check.py` la surveille (`IMAGE_IDS`). La couleur de la barre

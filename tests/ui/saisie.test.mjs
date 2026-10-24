@@ -461,14 +461,11 @@ test('Saisie : rien n\'est vidé quand le Mac refuse la demande ou est injoignab
 const CODE = 'code-du-banc-1';
 const post = (url, body = {}) => page.eval(`postJson(${JSON.stringify(url)}, ${JSON.stringify(body)}).then(r => r.status)`);
 // entrée dans l'espace privé (créé la première fois) ; la page le voit à son interrogation suivante de /api/status
-async function enterPrivate() {
-  const exists = await page.eval(`privState.exists`);
-  assert.equal(await post(exists ? '/api/private/unlock' : '/api/private/create', { code: CODE }), 200);
-  await page.eval(`refreshStatus()`);
-  await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
-}
-// fermeture de l'espace par le Mac (15 minutes sans requête privée) : la session est fermée sans passer par « Sortir »
+const enterPrivate = () => page.enterPrivate(CODE);
+// fermeture de l'espace par le Mac (15 minutes sans requête privée) : la session est fermée sans passer par « Sortir ».
+// Le Mac ne ferme qu'un espace au repos (page.privateIdle)
 async function closedByMac() {
+  await page.privateIdle();
   assert.equal(await post('/api/private/lock'), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`!inPrivate()`, { what: 'hors de l\'espace privé' });

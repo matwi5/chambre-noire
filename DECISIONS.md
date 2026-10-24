@@ -4,6 +4,36 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-24 · Choix retenus par Claude pour les suites du groupe E (délégation du porteur)
+
+- **Contexte** : correctifs des suites du groupe E après la revue Standards/Spec et deux passes « bogues » ; choix
+  faits par Claude, une partie avant la délégation (déclarés au tableau de bord), le reste sous la délégation du
+  porteur (« Choix confiés à Claude jusqu'à la fin du parcours de la refonte », ci-dessous).
+- **Choix retenus** (question → recommandation retenue) :
+  - Une sortie de l'espace privé refusée par le Mac laisse-t-elle la pile privée telle quelle ? → non : elle est
+    relue (sinon un « Sortir » appuyé avant la première lecture, puis refusé, la laissait vide) ;
+  - Nom de la marque de l'onglet ? → `relock`, valeur `1`, sans aucune donnée privée ;
+  - Qu'est-ce qu'une « saisie en cours » qu'une notification ne ferme pas ? → un champ de texte de la feuille où
+    l'utilisateur a tapé (frappe, collage, dictée) depuis son ouverture ; un interrupteur ou un champ rempli par la
+    page ne compte pas ;
+  - Une fermeture de la page hors de l'espace oublie-t-elle la saisie privée mise de côté après une fermeture par le
+    Mac ? → oui, comme au retour, plus tôt ;
+  - Une fermeture de la page pendant l'envoi du code privé ? → traitée comme une fermeture dans l'espace : envoi du
+    code annulé, verrouillage, marque, saisie privée oubliée, message au retour ; une page revenue avant la réponse
+    refuse l'entrée (« Page fermée pendant l'envoi : retapez le code. ») ;
+  - Une page fermée pendant le reverrouillage qui précède l'envoi du code ? → le code ne part pas, à retaper ;
+  - « Sortir » refusé clairement par le Mac (4xx, 503 « espace privé indisponible ») ? → sortie appliquée, même règle
+    que le reverrouillage ;
+  - Une page marquée dont l'état n'a pas pu être relu ? → traitée à sa fermeture comme peut-être dans l'espace
+    (verrouillage, marque) ;
+  - Après un rechargement marqué dont le verrouillage échoue, la ligne « Espace privé » reste-t-elle visible ? → non :
+    elle n'apparaît qu'une fois le verrouillage accepté (aucun état appliqué avant), comportement écrit dans le
+    README ;
+  - Regrouper les gardes de « Sortir » en une seule porte sur les adresses privées ? → pas dans ce parcours : piste
+    notée.
+- **Écarté** : rentrer dans l'espace sur une réponse arrivée après une fermeture ; appliquer une partie de l'état
+  avant le reverrouillage accepté.
+
 ## 2026-10-24 · Choix confiés à Claude jusqu'à la fin du parcours de la refonte
 
 - **Contexte** : suites du groupe E en cours, groupe G (code d'accès demandé aussi sur le Mac) restant ; chaque choix

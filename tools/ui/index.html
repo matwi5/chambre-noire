@@ -87,6 +87,10 @@
     -webkit-mask:var(--ico-err) center / contain no-repeat; mask:var(--ico-err) center / contain no-repeat; }
   .lamp:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
   @keyframes lamp-pulse { 50% { opacity:.35; } }
+  /* animations réduites : la pulsation ne distingue plus le calcul, un anneau fixe (point creux) le remplace ; « prêt »
+     garde le point plein (vert dans l'espace privé : --accent) */
+  @media (prefers-reduced-motion: reduce) {
+    .lamp.ok.busy::after { animation:none; background:none; box-shadow:inset 0 0 0 2.5px var(--accent), 0 0 6px 1px var(--accent); } }
 
   /* ------------------------------------------------------------ barre d'onglets flottante, repère qui glisse */
   .tabbar { position:fixed; z-index:30; left:50%; bottom:calc(12px + env(safe-area-inset-bottom)); transform:translateX(-50%);
@@ -1026,10 +1030,17 @@ document.body.className='m-'+mode; placeLens();     // ouverture sur le Labo
 })();
 
 // ------------------------------------------------------------ panneaux du bas : un seul ouvert à la fois
-let openedSheet=null;
+// sheetTyped : saisie en cours dans la feuille ouverte (un événement input venu de l'utilisateur dans un champ de
+// texte depuis son ouverture : frappe, collage ou dictée ; ni un interrupteur, ni un curseur, ni un champ rempli par
+// la page) : toLabo ne la ferme pas
+const TEXT_FIELD='textarea, input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])'
+  +':not([type=color]):not([type=button]):not([type=submit])';
+let openedSheet=null, sheetTyped=false;
 function openSheet(id){ closeSheet(); openedSheet=$(id); openedSheet.classList.add('on'); $('scrim').classList.add('on'); }
-function closeSheet(){ if(askResolve){ const r=askResolve; askResolve=null; r(false); }
+function closeSheet(){ if(askResolve){ const r=askResolve; askResolve=null; r(false); } sheetTyped=false;
   if(!openedSheet) return; openedSheet.classList.remove('on'); $('scrim').classList.remove('on'); openedSheet=null; }
+document.addEventListener('input', e=>{
+  if(e.isTrusted && openedSheet && openedSheet.contains(e.target) && e.target.matches(TEXT_FIELD)) sheetTyped=true; }, true);
 addEventListener('keydown', e=>{ if(e.key==='Escape' && openedSheet){ closeSheet(); e.preventDefault(); } });
 // glisser le panneau vers le bas pour le fermer
 document.querySelectorAll('.sheet').forEach(sh=>{ let y0=null, dy=0;
@@ -1050,24 +1061,59 @@ let spaceEpoch=0;
 // lampe d'état de l'en-tête : classes ok (moteur prêt), busy (calcul ou file non vide), err (moteur indisponible, Mac
 // injoignable), aucune pendant la connexion ; l'état dit en mots pour le lecteur d'écran et au survol
 function setLamp(cls, label){ const b=$('lamp'); b.className='lamp '+cls; b.setAttribute('aria-label', label); b.title=label; }
-// relock : l'espace privé est à reverrouiller sur le Mac avant de lire son état (page restaurée par « Retour », voir
-// pageshow) ; tant que le Mac ne l'a pas accepté, aucun état n'est appliqué : il pourrait dire l'espace encore ouvert
-let relock=false;
-async function relockSpace(){ const r=await postJson('/api/private/lock', {}).catch(()=>null);
-  if(r && r.ok){ relock=false; spaceEpoch++; } }   // un état demandé avant le verrouillage n'est pas appliqué
+// relock : l'espace privé est à reverrouiller sur le Mac avant de lire son état (page fermée dans l'espace : restaurée
+// par « Retour », voir pageshow, ou rechargée) ; tant que le Mac ne l'a pas accepté, aucun état n'est appliqué : il
+// pourrait dire l'espace encore ouvert. Marque de l'onglet (RELOCK_MARK, sessionStorage : effacée avec l'onglet, une
+// seule valeur, aucune donnée privée ; seule écriture du navigateur liée à l'espace privé) : posée dès que la page sait
+// l'espace ouvert (code accepté, état lu qui le dit ouvert) et à la fermeture de la page tant que relock tient, lue au
+// chargement suivant de l'onglet, levée (liftRelock) par « Sortir » accepté, par un état lu qui dit l'espace fermé et
+// quand le Mac accepte le verrouillage. marked : sa copie en mémoire (stockage refusé compris), qui fait traiter la
+// page comme peut-être dans l'espace à sa fermeture. Stockage absent ou refusé : sans marque au chargement suivant
+const RELOCK_MARK='relock';
+function markRelock(on){ marked=!!on;
+  try{ if(on) sessionStorage.setItem(RELOCK_MARK, '1'); else sessionStorage.removeItem(RELOCK_MARK); }catch(e){} }
+let relock=(()=>{ try{ return sessionStorage.getItem(RELOCK_MARK)==='1'; }catch(e){ return false; } })(), marked=relock;
+// relocking : le verrouillage en route (une seule promesse) ; entering : création ou entrée en cours (le code est
+// parti) : aucun verrouillage n'est lancé, il arriverait après et refermerait l'espace qu'elle ouvre. (fetch et non
+// postJson : au chargement, la première interrogation passe ici avant que postJson soit défini)
+let relocking=null, entering=false, entryAbort=null;
+const LOCK_POST={method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'};
+// pageHidden : page fermée (entre pagehide et pageshow) ; hides : nombre de fermetures. Pendant une fermeture, relock
+// et la marque peuvent se poser mais jamais se lever (liftRelock) : une réponse arrivée après la fermeture ne rouvre
+// pas le chargement suivant sans code
+let pageHidden=false, hides=0;
+function liftRelock(){ if(pageHidden) return; relock=false; markRelock(false); }
+// resumeLater : reprise du chargement (resume) en attente du premier reverrouillage accepté
+let resumeLater=null;
+// verrouillage tenu pour accepté : oui du Mac, ou refus clair de sa part (décision du 24/10/2026) : une erreur 4xx,
+// ou 503 avec son corps JSON « espace privé indisponible » (serveur sans le module de chiffrement) ; une coupure
+// réseau, un 5xx sans ce corps (relais Tailscale) ou un 500 ne le sont pas : on réessaie, aucun état n'est appliqué
+async function lockAccepted(r){ if(!r) return false; if(r.ok || r.status>=400 && r.status<500) return true;
+  if(r.status!==503) return false;
+  const j=await r.json().catch(()=>null);
+  return !!j && typeof j.error==='string' && j.error.startsWith('espace privé indisponible'); }
+function relockSpace(){
+  return relocking || (relocking=(async ()=>{ const r=await fetch('/api/private/lock', LOCK_POST).catch(()=>null);
+    if(await lockAccepted(r)){ spaceEpoch++; liftRelock();   // un état demandé avant n'est pas appliqué
+      if(!relock && resumeLater){ const f=resumeLater; resumeLater=null; f(); } } })()
+    .finally(()=>{ relocking=null; })); }
 async function refreshStatus(){
-  if(relock) await relockSpace();
+  if(relock && !entering) await relockSpace();
   const epoch=spaceEpoch;
   // reverrouillage pas encore accepté (le Mac n'a pas répondu) : affiché comme un Mac injoignable, aucun état lu
   try{ if(relock) throw new Error('espace privé pas encore reverrouillé');
     const s=await (await fetch('/api/status')).json();
-    if(epoch!==spaceEpoch) return refreshStatus();
+    // espace quitté pendant l'attente, ou verrouillage devenu nécessaire (page fermée pendant une entrée) : relu
+    if(epoch!==spaceEpoch || relock) return refreshStatus();
     queueState=s.queue||[]; queueAt=Date.now();
     // adresse et code d'accès pour le téléphone : envoyés seulement quand la page est ouverte sur le Mac
     $('phone').hidden=!s.phone; if(s.phone) facts('phoneFacts', [['Adresse', s.phone.urls[0]], ...s.phone.urls.slice(1).map(u=>['ou', u]), ['Code', s.phone.code, 'code']]);
     const modelTag = s.model_version ? ' · '+s.model_version.toUpperCase() : '', busy=!!(s.busy || s.queued);
     if(s.sd_ready){ applyEstimates(s.estimates); setLamp(busy ? 'ok busy' : 'ok', (busy ? 'Calcul en cours' : 'Moteur prêt')+modelTag); }
     else setLamp('err', 'Moteur indisponible');
+    // marque de l'onglet : posée tant que le Mac dit l'espace ouvert pour cet appareil, levée quand il le dit fermé
+    // (sortie, fermeture par le Mac après 15 minutes, espace supprimé)
+    if(s.private){ if(s.private.unlocked) markRelock(true); else liftRelock(); }
     applyPrivate(s.private); if(inPrivate()) adoptPrivate();
     const rev=s.rev ?? 0; if(rev!==pileRev) loadPile(rev);   // pile de l'espace changée (ici ou ailleurs)
     // tirages affichés : relus de même, sauf si la lecture de ce rev est déjà en cours (une lecture plus lente que le
@@ -1269,8 +1315,9 @@ const LONG_TOAST = 6500;                         // ms : message d'erreur, ou lo
 function toast(msg, kind, go){ const t=$('toastBox'); t.textContent=msg; t.className='toast mat on'+(kind?' '+kind:'')+(go?' go':'');
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('on'), kind==='err' || kind==='long' ? LONG_TOAST : 3000); }
 // le Labo sur la pile, à l'écran et pas sous une vue ni une feuille : message « Image prête » touché, ou notification
-// touchée alors que l'application était déjà ouverte (sw.js le demande à la page)
-function toLabo(){ if(ivIndex>=0) closeInputs(); if(vIndex>=0) closeViewer(); closeSheet(); showLabo('top'); }
+// touchée alors que l'application était déjà ouverte (sw.js le demande à la page). Une feuille qui a une saisie en
+// cours (sheetTyped : un prompt en cours de modification, par exemple) reste ouverte, le Labo passe dessous
+function toLabo(){ if(ivIndex>=0) closeInputs(); if(vIndex>=0) closeViewer(); if(!sheetTyped) closeSheet(); showLabo('top'); }
 $('toastBox').onclick=()=>{ const t=$('toastBox'); if(!t.classList.contains('go')) return; t.classList.remove('on', 'go'); toLabo(); };
 function ask(title, text, yes, danger){
   $('askTitle').textContent=title; $('askText').textContent=text; $('askYes').textContent=yes; $('askYes').classList.toggle('danger-fill', !!danger);
@@ -1288,7 +1335,11 @@ const ready=new Map(), READY_MAX=10;              // adresse → { el : Image, i
 // sortie de l'espace (abortPrivateLoads : gone, rien n'est plus montré d'eux)
 const secretLoads=new Set();
 const FADE_MS=350;                                // fondu de fermeture de .viewer (CSS, 0,3 s)
-function preload(url){ let e=ready.get(url);
+// « Sortir » en attente du Mac (leavingPrivate) : aucune image de l'espace (secretUrl) n'est demandée ni posée, quel
+// que soit le chemin qui redessine (pile, fin ou échec d'une génération, visionneuse) : entrée abandonnée (gone) ; si
+// la sortie est refusée, privLock redessine
+function preload(url){ if(secretUrl(url) && leavingPrivate) return { url, gone:true, im:null, p:Promise.resolve(null) };
+  let e=ready.get(url);
   if(e) ready.delete(url);                        // la plus récente en dernier : les plus anciennes partent d'abord
   else { const im=new Image(); im.decoding='async'; im.src=url;
     e={ el:im, url, im:undefined, p:im.decode().then(()=>im, ()=>null) };
@@ -1425,12 +1476,16 @@ const pileKey = it => it.private ? it.id : it.name;
 const pileTag = it => (it.private ? 'p' : 'n')+pileKey(it);
 const pileBody = it => it.private ? {id:it.id} : {name:it.name};
 // rev : celui de /api/status qui a demandé la lecture, retenu une fois la lecture réussie (sinon la suivante la refait)
-async function loadPile(rev){ const priv=inPrivate(), at=Date.now(), seq=++pileSeq;   // espace noté avant l'attente
+// « Sortir » en attente du Mac (leavingPrivate) : la pile privée n'est pas demandée, et une lecture partie avant n'est
+// pas dessinée (ses images seraient demandées à une session qui se ferme)
+async function loadPile(rev){ const priv=inPrivate(), at=Date.now();   // espace noté avant l'attente
+  if(priv && leavingPrivate) return; const seq=++pileSeq;
   let items;
   try{ const r=await fetch(pileApi('pile', priv)); if(!r.ok) return;
     items=(await r.json()).map(it=>({...it, pile:true, ...(it.private ? {name:privName(it.id)} : {})})); }
   catch(e){ return; }
-  if(priv!==inPrivate() || seq!==pileSeq) return;  // réponse d'un espace quitté, ou dépassée par une plus récente
+  // réponse d'un espace quitté ou en train de l'être, ou dépassée par une plus récente
+  if(priv!==inPrivate() || priv && leavingPrivate || seq!==pileSeq) return;
   pileItems=items; pileRead=true; if(rev!==undefined) pileRev=rev;
   // générations finies de la page dont l'image a quitté la pile (triée ici ou ailleurs) : plus rien à garder d'elles
   // (leur demande ne sert plus) ; celles finies pendant la lecture attendent la suivante, celles d'un lot qui tourne
@@ -1513,7 +1568,10 @@ function sendSort(route, priv, tag, body, done){
     else if(r.status===404){ if(route==='keep') toast('Déjà triée'); }
     else toast((route==='keep' ? 'Garder' : 'Jeter')+' impossible : '+((await r.json().catch(()=>({}))).error||'erreur '+r.status), 'err'); })
     .catch(()=>{ if(priv===inPrivate()){ pileRev=null; toast('Mac injoignable : image laissée dans la pile', 'err'); } })
-    .finally(()=>{ sorting.delete(tag); if(priv===inPrivate()){ renderPile(); loadPile(); } }); }
+    // pendant « Sortir » (leavingPrivate), la pile privée n'est pas redessinée : une image revenue (tri refusé) serait
+    // redemandée à une session qui se ferme ; si la sortie échoue, privLock redessine et relit la pile
+    .finally(()=>{ sorting.delete(tag); if(priv===inPrivate() && !(priv && leavingPrivate)){ renderPile(); loadPile(); }
+    }); }
 // Garder : l'image passe dans les Tirages de son espace
 function keepItem(it){ const priv=!!it.private;
   // espace changé, ou « Sortir » demandé, pendant l'animation : rien ne part
@@ -1792,7 +1850,7 @@ function queueCard(c, own){
   return `<div class="qcard${page ? ' own' : ''}"><div class="qmain">${pic}<div class="qtxt"><b>${esc(e.prompt||'')}</b>`
     + `<span>${esc([lot ? lotLabel(lot, mode) : '', settings].filter(Boolean).join(' · '))}</span><span>${esc(when)}</span></div><div class="qacts">${acts.join('')}</div></div>`
     + (c.lot ? lotCases(c, lot, page, toggle) : '')+(open ? lotSubs(c) : '')+'</div>'; }
-function renderQueue(){
+function renderQueue(){ if(exiting()) return;      // « Sortir » en attente : rien de la file privée redessiné
   const q=queueState, cards=queueCards(), n=q.filter(e=>e.status==='queued').length, own=new Set(ownIds());
   const total=q.reduce((t, e)=>t+entryLeft(e), 0)+(q.length ? q.at(-1).ahead||0 : 0);
   const keys=new Set(cards.map(c=>c.key));         // lots sans carte : plus rien d'eux en mémoire
@@ -1829,6 +1887,7 @@ async function pollJobs(){
   if(polling) return; polling=true;
   try{ while(pageJobs.some(isActive)){ await sleep(1000); let ended=false;
       for(const p of pageJobs.filter(isActive)){ let r;
+        if(p.private && leavingPrivate) continue;  // « Sortir » en attente : rien n'est demandé à la session qui se ferme
         try{ r=await fetch('/api/job/'+p.id); }catch(e){ continue; }              // serveur injoignable : on réessaie
         if(!pageJobs.includes(p)) continue;        // sortie de l'espace pendant l'appel : elle n'est plus suivie
         // privée « inconnue » : espace fermé (la page ne le sait pas encore) ou oubliée par la page qui l'a lancée ;
@@ -1929,13 +1988,17 @@ async function relaunch(req){
   await launch(body, priv, k=>{ const [w, h]=dims(k), c=E ? cost(k) : {};
     return {w, h, est:est(k), stepSec:c.step, vaeSec:c.vae, thumb:camp ? camp[k].image : body.init_image || body.ref_images[0] || null}; }); }
 // suit les entrées de la file pas encore suivies dont la génération est active et de l'espace affiché ; info : ce
-// qui s'ajoute aux réglages tirés de l'entrée (adopted)
+// qui s'ajoute aux réglages tirés de l'entrée (adopted : générations privées, qui ne sont plus demandées pendant
+// « Sortir », leavingPrivate : le suivi /api/job/ d'une génération privée irait à une session qui se ferme)
 const following=new Set();
 async function followQueue(entries, info){
   for(const e of entries.filter(e=>e.id && !following.has(e.id) && !pageJobs.some(p=>p.id===e.id))){
+    if(info.adopted && leavingPrivate) return;
     following.add(e.id);
     try{ const r=await fetch('/api/job/'+e.id); if(!r.ok) continue; const j=await r.json();
-      if(!isActive({j}) || !!j.private!==inPrivate() || pageJobs.some(p=>p.id===j.id)) continue;
+      // (« Sortir » appuyé pendant le suivi : la génération privée n'est pas adoptée)
+      if(!isActive({j}) || !!j.private!==inPrivate() || info.adopted && leavingPrivate || pageJobs.some(p=>p.id===j.id))
+        continue;
       if(!j.private) log('reprise de la génération '+j.id);
       // prompt complet du suivi (la file n'en a que le début ; serveur pas encore relancé : l'extrait)
       track(j, {prompt:j.prompt||e.prompt, est:e.estimate, w:e.width, h:e.height, steps:e.steps, ...info}); }
@@ -1948,7 +2011,10 @@ function resumeOwn(queue){ const own=new Set(ownIds()); return followQueue(queue
 // (l'espace n'a qu'un propriétaire ; aucun identifiant privé n'est écrit dans le navigateur pour les reconnaître)
 function adoptPrivate(){ return followQueue(queueState.filter(e=>e.kind==='private'), {adopted:true}); }
 (async function resume(){                          // après un rechargement : le Labo repart de la file
-  try{ const s=await (await fetch('/api/status')).json(); await resumeOwn(s.queue||[]); }catch(e){} })();
+  // (page rechargée après une fermeture dans l'espace : aucun état lu avant le reverrouillage, voir relock)
+  // (reverrouillage pas encore accepté : la reprise attend le premier accepté, resumeLater)
+  try{ if(relock) await relockSpace(); if(relock){ resumeLater=resume; return; }
+    const s=await (await fetch('/api/status')).json(); await resumeOwn(s.queue||[]); }catch(e){} })();
 // ------------------------------------------------------------ notifications de fin de génération (Web Push, envoyées par
 // l'ordinateur même si l'application est fermée ; HTTPS ou ordinateur lui-même seulement)
 const canPush = !!(window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window);
@@ -2073,10 +2139,11 @@ function showLabo(where){ if(mode!=='labo') goTab('labo'); if(where==='composer'
 // la grille n'est redessinée que si les tirages ont changé (rev change aussi quand une image arrive dans la pile) ;
 // histAsk : rev de la lecture en cours (null : aucune, ou lecture sans rev)
 let histRev=null, histSeq=0, histShown='', histAsk=null;
-async function loadHistory(rev){ const priv=inPrivate(), seq=++histSeq; histAsk=rev ?? null;   // réponse arrivée après un changement d'espace : ignorée
+async function loadHistory(rev){ const priv=inPrivate(); if(priv && leavingPrivate) return;   // (comme loadPile)
+  const seq=++histSeq; histAsk=rev ?? null;   // réponse arrivée après un changement d'espace : ignorée
   try{ const r=await fetch(priv ? '/api/private/history' : '/api/history'); if(!r.ok) throw new Error();
     const items=(await r.json()).map(it=>it.private ? {...it, name:privName(it.id)} : it);
-    if(priv!==inPrivate() || seq!==histSeq) return;
+    if(priv!==inPrivate() || priv && leavingPrivate || seq!==histSeq) return;
     // visionneuse ouverte sur les Tirages : elle suit la nouvelle liste (rang, voisines), l'image vue y restant
     const at=vIndex>=0 && vList===histItems ? items.findIndex(x=>x.name===vList[vIndex].name) : -1;
     histItems=items; if(rev!==undefined) histRev=rev;
@@ -2084,7 +2151,7 @@ async function loadHistory(rev){ const priv=inPrivate(), seq=++histSeq; histAsk=
   catch(e){ if(priv===inPrivate() && seq===histSeq) $('histCount').textContent='indisponible'; return; }
   finally{ if(seq===histSeq) histAsk=null; }      // finie ou en échec : la suivante peut partir
   renderGallery(); }
-function renderGallery(){
+function renderGallery(){ if(exiting()) return;    // « Sortir » en attente : aucune vignette privée posée
   const grid=$('histGrid'), key=histItems.map(it=>it.name+'@'+it.time).join('|');
   $('histCount').textContent = histItems.length ? histItems.length+' image'+(histItems.length>1?'s':'') : '';
   if(key===histShown && grid.childElementCount) return;   // mêmes tirages : vignettes gardées, rien ne clignote
@@ -2094,14 +2161,16 @@ function renderGallery(){
   histItems.forEach(it=>{ if(it.lot) inLot[it.lot.id]=(inLot[it.lot.id]||0)+1; });
   histItems.forEach((it, i)=>{ const b=document.createElement('button'); b.dataset.name=it.name; b.setAttribute('aria-label', it.prompt||it.name);
     const im=document.createElement('img'); im.loading='lazy'; im.decoding='async'; im.alt='';
-    im.onerror=()=>{ if(!im.dataset.retry){ im.dataset.retry=1; setTimeout(()=>{ im.src=thumbOf(it)+'&retry=1'; }, 700); } };   // coupure passagère : une seconde tentative
+    // coupure passagère : une seconde tentative, sauf pour une vignette privée pendant ou après la sortie de l'espace
+    im.onerror=()=>{ if(!im.dataset.retry){ im.dataset.retry=1; setTimeout(()=>{ const u=thumbOf(it);
+      if(!(secretUrl(u) && (exiting() || !inPrivate()))) im.src=u+'&retry=1'; }, 700); } };
     im.src=thumbOf(it); b.appendChild(im);
     if(it.mode && it.mode!=='t2i'){ const sp=document.createElement('span'); sp.textContent=MODE_LABELS[it.mode]||it.mode; b.appendChild(sp); }
     // repère des images d'un lot (rang sur la taille du lot), tant qu'il en reste au moins deux dans la galerie
     if(it.lot && inLot[it.lot.id]>1){ const lb=document.createElement('b'); lb.className='lotb'; lb.textContent=`${it.lot.rank}/${it.lot.size}`; b.appendChild(lb); }
     b.onclick=()=>openViewer(i, histItems); grid.appendChild(b); });
 }
-function openViewer(i, list=vList){
+function openViewer(i, list=vList){ if(exiting()) return;   // « Sortir » en attente : rien de privé n'est posé
   const it=list[i]; if(!it) return; clearTimeout(vEmpty); vList=list; vIndex=i; resetZoom();
   const v=$('viewer'), img=$('vImg');
   // la miniature en attendant l'image ; une fois l'image là, sa première image d'entrée est chargée en avance
@@ -2330,6 +2399,7 @@ function removeFromViewer(gone){                  // images supprimées : hors d
 function lotMembers(it){ if(!it || !it.lot) return [];
   return (it.pile ? vList : histItems).filter(x=>x.lot && x.lot.id===it.lot.id).sort((a, b)=>a.lot.rank-b.lot.rank); }
 function openLot(){                               // « Voir le lot » : ses images côte à côte, un appui en ouvre une en grand
+  if(exiting()) return;                            // (« Sortir » en attente : rien de privé n'est posé)
   const items=lotMembers(vList[vIndex]); if(!items.length) return; const n=items.length, s=n>1 ? 's' : '';
   $('lotTitle').textContent = isCampaignLot(items[0].lot, items[0].mode) ? `Campagne de ${n} photo${s}` : `Lot de ${n} image${s}`;
   const g=$('lotSheetGrid');                       // chaque vignette à la forme de son image (une campagne en mélange plusieurs)
@@ -2367,6 +2437,9 @@ function applyPrivate(p){ if(!p) return; const was=inPrivate(); privState=p;
 // de la file (adoptPrivate, à chaque état reçu). En sortant, les générations privées de la page la quittent, celle en
 // cours comprise (elle continue sur le Mac et sera rangée dans l'espace) ; les publiques reviennent, avec l'image de
 // celles qui ont fini entre-temps et celles de ce navigateur reprises après un rechargement fait dans l'espace privé
+// hiding : sortie appliquée à la fermeture de la page (pagehide) : rien n'est relu de l'espace public (pile, Tirages,
+// reprise des générations), pageshow le relit au retour
+let hiding=false;
 function changedSpace(inside){
   swapInput();
   // prompts enregistrés : ceux de l'espace quitté ne restent ni à l'écran ni en mémoire de la page
@@ -2384,14 +2457,14 @@ function changedSpace(inside){
     // file privée reçue avant la sortie : elle ne s'affiche pas en attendant /api/status (carte, pastille, feuille)
     queueState=queueState.filter(e=>e.kind!=='private'); queueHtml=''; $('queueList').innerHTML='';
     openLots.clear(); lotCancels.clear();          // identifiants de lots (privés compris) des cartes de la file
-    resumeOwn(queueState); }
+    if(!hiding) resumeOwn(queueState); }
   // pile : celle de l'espace où l'on arrive ; un Jeter privé qui attend son bandeau est abandonné (l'espace est fermé
   // pour cet appareil : l'image reste dans la pile privée)
   if(!inside && discarding && discarding.priv){ clearTimeout(discarding.timer); discarding=null; hideUndo(); }
   if(!inside) [...sorting].forEach(t=>{ if(t[0]==='p') sorting.delete(t); });   // (leur réponse sera ignorée)
-  pileItems=[]; pileRead=false; pileShown=''; labIdle=null; renderRunCard(); renderPile(); loadPile();
+  pileItems=[]; pileRead=false; pileShown=''; labIdle=null; renderRunCard(); renderPile(); if(!hiding) loadPile();
   histItems=[]; histRev=null; histAsk=null; histShown=''; $('histGrid').innerHTML=''; $('histCount').textContent='';
-  if(mode==='tirages') loadHistory();
+  if(mode==='tirages' && !hiding) loadHistory();
   syncThemeColor(); }
 // Saisie propre à chaque espace (texte, images d'entrée, dessin : actif ou non, masque ou annotation, tracé) :
 // celle de l'espace affiché est dans les champs, celle de l'autre espace est mise de côté en mémoire de la page
@@ -2437,13 +2510,25 @@ $('privEntry').onclick=()=>openPrivSheet(!privState.exists ? 'privCreateSheet' :
 // envoi d'une feuille : bouton grisé pendant l'envoi (la dérivation du code prend un temps), message d'erreur sous les champs
 async function privPost(path, body, btn, err){
   btn.disabled=true; $(err).textContent='';
-  try{ const r=await postJson(path, body), j=await r.json().catch(()=>({}));
+  const entry=/\/(create|unlock)$/.test(path), h0=hides, CLOSED='Page fermée pendant l\'envoi : retapez le code.';
+  try{ // création ou entrée : le reverrouillage restant passe d'abord (en route : attendu), puis le code part seul
+    if(entry && relock) await relockSpace();
+    if(entry && hides!==h0) return false;          // page fermée entre-temps : le code ne part pas
+    // entering : du départ du code jusqu'à l'état relu (finally) ; une fermeture pendant ce temps verrouille (pagehide)
+    // entryAbort : le code en route est annulé à la fermeture de la page (pagehide), avant son verrouillage : il
+    // n'ouvre pas, après lui, une session que plus rien ne fermerait
+    if(entry){ entering=true; entryAbort=new AbortController(); }
+    const r=await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body),
+      signal:entry ? entryAbort.signal : undefined}), j=await r.json().catch(()=>({}));
+    if(entry) entryAbort=null;
+    if(entry && hides!==h0){ $(err).textContent=CLOSED; return false; }   // fermée puis revenue : à retaper
     if(!r.ok){ $(err).textContent=j.error ? j.error.charAt(0).toUpperCase()+j.error.slice(1)+'.' : 'Erreur '+r.status; return false; }
-    // code privé retapé : la session ouverte remplace celle qui restait à reverrouiller (refreshStatus la fermerait)
-    if(/\/(create|unlock)$/.test(path)) relock=false;
+    // code privé retapé : la session ouverte remplace celle qui restait à reverrouiller (refreshStatus la fermerait),
+    // sauf si la page a été fermée depuis le départ du code (elle reste à reverrouiller)
+    if(entry){ liftRelock(); markRelock(true); }                    // espace ouvert : marque de l'onglet posée dès l'entrée
     return true; }
-  catch(e){ $(err).textContent='Serveur injoignable.'; return false; }
-  finally{ btn.disabled=false; await refreshStatus(); } }
+  catch(e){ $(err).textContent=entry && hides!==h0 ? CLOSED : 'Serveur injoignable.'; return false; }
+  finally{ if(entry) entryAbort=null; btn.disabled=false; try{ await refreshStatus(); }finally{ if(entry) entering=false; } } }
 async function privCreate(){ const c=$('pcCode').value;
   if(c.length<8) return $('pcErr').textContent='8 caractères au moins.';
   if(c!==$('pcCode2').value) return $('pcErr').textContent='Les deux codes diffèrent.';
@@ -2457,18 +2542,27 @@ async function privUnlock(){ if(!$('puCode').value) return;
 // leavingPrivate : « Sortir » demandé, réponse du Mac attendue ; aucun aperçu privé n'est demandé entre-temps (une
 // requête servie après la fermeture de la session répondrait 404), et aucun Jeter privé ne part (commitDiscard)
 let leavingPrivate=false;
-async function privLock(){ erasePrivate=true; leavingPrivate=true;
+function exiting(){ return inPrivate() && leavingPrivate; }   // dans l'espace, « Sortir » en attente du Mac
+async function privLock(){ if(leavingPrivate) return;   // second appui pendant l'attente : rien de plus
+  erasePrivate=true; leavingPrivate=true;
   // Jeter privé en attente : abandonné dès l'appui, pas à la réponse du Mac (son bandeau pourrait finir entre-temps) ;
   // l'image reste dans la pile privée, même si la sortie échoue (le doute garde l'image, décision du 24/10/2026).
   // Avant abortPrivateLoads : la pile redessinée par l'abandon n'a plus de chargement privé qui survive à la sortie
   if(discarding && discarding.priv) undoDiscard();
   abortPrivateLoads();
-  const r=await postJson('/api/private/lock', {}).catch(()=>null); leavingPrivate=false;
-  if(!r || !r.ok){ erasePrivate=false; pileShown=''; reveal.pv=0; renderPile();   // rien n'est effacé ; images de la
-    // pile et aperçu redemandés (la visionneuse, elle, attend l'image suivante)
+  // vignettes privées des Tirages pas encore chargées (chargement différé : un défilement les demanderait)
+  document.querySelectorAll('#histGrid img').forEach(i=>{
+    if(!i.complete && secretUrl(i.getAttribute('src'))) i.removeAttribute('src'); });
+  const r=await postJson('/api/private/lock', {}).catch(()=>null), ok=await lockAccepted(r); leavingPrivate=false;
+  // page fermée pendant l'attente (pagehide) : déjà sortie et effacée, rien n'est redessiné ni annoncé
+  if(!inPrivate()){ if(ok) liftRelock(); return; }
+  if(!ok){ erasePrivate=false; pileShown=''; histShown=''; reveal.pv=0; renderPile(); loadPile(); renderGallery();
+    // images de la pile et aperçu redemandés, pile relue (une lecture arrivée pendant la sortie n'a pas été dessinée ;
+    // la visionneuse, elle, attend l'image suivante)
     return toast('Sortie impossible : '+(r ? 'erreur '+r.status : 'Mac injoignable'), 'err'); }
   // sortie appliquée dès la réponse, sans attendre /api/status : la page ne demande plus rien de l'espace (une carte de
   // la pile redessinée entre-temps réclamerait sa miniature privée à une session fermée)
+  liftRelock();                                    // sortie acceptée : marque de l'onglet levée
   if(inPrivate()){ spaceEpoch++; applyPrivate({...privState, unlocked:false}); }
   await refreshStatus(); resumeOwn(queueState); toast('Sorti de l\'espace privé'); }   // (la file publique, relue)
 async function privChangeCode(){ const n=$('pkNew').value;
@@ -2481,19 +2575,41 @@ async function privReset(){ if($('prWord').value.trim()!=='SUPPRIMER') return $(
 document.querySelectorAll('.privsheet input').forEach(inp=>inp.addEventListener('keydown', e=>{ if(e.key!=='Enter' || e.isComposing) return; e.preventDefault();
   const all=[...inp.closest('.privsheet').querySelectorAll('input')].filter(x=>x.offsetParent), k=all.indexOf(inp);
   if(k<all.length-1) all[k+1].focus(); else inp.closest('.privsheet').querySelector('.btn:not(.secondary)').click(); }));
-// page fermée ou rechargée : l'espace se verrouille (la session de cet appareil est fermée sur le Mac)
+// champs de code des feuilles privées (création, entrée, changement de code : les champs de mot de passe) : vidés à
+// la fermeture de la page et à son retour par « Retour » (le navigateur les restaurerait remplis)
+const PRIV_CODES='.privsheet input[type=password]';
+const clearPrivCodes = () => document.querySelectorAll(PRIV_CODES).forEach(i=>i.value='');
+// sortie de l'espace appliquée par la page seule, comme « Sortir » (affichage, images déchiffrées, saisie privée
+// effacés), l'espace restant à reverrouiller sur le Mac avant de lire son état (relock)
+function closePrivateHere(){ erasePrivate=true; relock=true; spaceEpoch++; applyPrivate({...privState, unlocked:false}); }
+// page fermée ou rechargée : l'espace se verrouille (la session de cet appareil est fermée sur le Mac) ; dans l'espace,
+// tout le privé est effacé dès la fermeture, sans attendre un éventuel « Retour » (décision du 24/10/2026), et la
+// marque de l'onglet fait reverrouiller le chargement suivant si ce verrouillage se perd. Hors de l'espace, la saisie
+// privée mise de côté par une fermeture du Mac est oubliée aussi
 // (relock : la page a quitté l'espace mais le Mac n'a pas encore accepté son verrouillage, voir pageshow)
-addEventListener('pagehide', ()=>{ if(privState.unlocked || relock) fetch('/api/private/lock', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}', keepalive:true}).catch(()=>{}); });
+// (entering : code parti ou accepté, état pas encore relu : la session peut être ouverte, elle est verrouillée aussi)
+let hidInPrivate=false;                            // page fermée dans l'espace : son retour le dit (pageshow)
+addEventListener('pagehide', ()=>{ pageHidden=true; hides++; if(entryAbort) entryAbort.abort();
+  // peut-être dans l'espace : ouvert, à reverrouiller, entrée en cours, ou marqué (code accepté, état pas encore lu)
+  if(privState.unlocked || relock || entering || marked)
+    fetch('/api/private/lock', {...LOCK_POST, keepalive:true}).catch(()=>{});
+  clearPrivCodes();
+  // effacement sans relecture publique (hiding : pile, Tirages et reprise relus au retour, pageshow)
+  if(inPrivate()){ hidInPrivate=true; hiding=true; try{ closePrivateHere(); }finally{ hiding=false; } }
+  else { asideInput=null; if(entering || marked){ hidInPrivate=true; relock=true; } }
+  if(relock) markRelock(true); });
 // page restaurée par « Retour » depuis la mémoire du navigateur (bfcache), fermée dans l'espace privé : l'affichage
-// privé s'efface tout de suite, saisie privée comprise, comme après « Sortir », et le champ perd le curseur (les touches
-// suivantes iraient dans la saisie publique) ; la page reverrouille l'espace avant de lire son état (relock), le
-// verrouillage de la fermeture a pu se perdre (décision du porteur du 24/10/2026). Fermée hors de l'espace, elle oublie
-// aussi la saisie privée mise de côté par une fermeture du Mac : rien de privé ne reste en mémoire
+// et la saisie privés ont été effacés dès pagehide ; le retour refait cet effacement (pagehide a pu ne pas avoir lieu),
+// le champ perd le curseur (les touches suivantes iraient dans la saisie publique) et un message le dit ; la page
+// reverrouille l'espace avant de lire son état (relock), le verrouillage de la fermeture a pu se perdre (décision du
+// porteur du 24/10/2026). Fermée hors de l'espace, elle oublie aussi la saisie privée mise de côté par une fermeture
+// du Mac : rien de privé ne reste en mémoire
 addEventListener('pageshow', async e=>{ if(!e.persisted) return;
-  const was=inPrivate();
-  if(was){ erasePrivate=true; relock=true; spaceEpoch++; applyPrivate({...privState, unlocked:false});
-    document.activeElement?.blur(); toast('Espace privé verrouillé à la fermeture de la page'); }
+  pageHidden=false; clearPrivCodes();
+  const was=inPrivate() || hidInPrivate, erased=hidInPrivate && !inPrivate(); hidInPrivate=false;
+  if(was){ closePrivateHere(); document.activeElement?.blur(); toast('Espace privé verrouillé à la fermeture de la page'); }
   else asideInput=null;
+  if(erased){ loadPile(); if(mode==='tirages') loadHistory(); }   // relectures publiques sautées à pagehide
   await refreshStatus();
   if(was && !inPrivate()) resumeOwn(queueState); });   // générations publiques de ce navigateur, file relue
 // application installable sur le téléphone (le navigateur n'accepte le service worker qu'en HTTPS ou sur le Mac)

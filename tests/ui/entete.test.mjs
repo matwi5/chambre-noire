@@ -1,7 +1,8 @@
 // En-tête, dans la vue du téléphone : réduit au logo, au nom et à la lampe d'état (grise pendant la connexion, ambre
 // fixe moteur prêt, ambre pulsée pendant un calcul, rouge Mac injoignable), dont le toucher ouvre la feuille du moteur
-// avec « Ouvrir depuis le téléphone » (sur le Mac) et la ligne « Espace privé » au cadenas ; dans l'espace privé,
-// « Sortir » à côté de la lampe. Le cas « pas le Mac » (sans « Ouvrir depuis le téléphone ») est dans relais.test.mjs.
+// avec « Ouvrir depuis le téléphone » (sur le Mac) et la ligne « Espace privé » au cadenas ; dans l'espace privé, «
+// Sortir » à côté de la lampe ; animations réduites : un anneau fixe pendant un calcul, ambre ou vert. Le cas « pas le
+// Mac » (sans « Ouvrir depuis le téléphone ») est dans relais.test.mjs.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/entete.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,6 +22,7 @@ after(async () => {
   await bench?.stop();
 });
 
+const CODE = 'code-du-banc-1';
 const lamp = () => page.eval(`({ cls: [...$('lamp').classList].filter(c => c !== 'lamp').sort().join(' '),
   label: $('lamp').getAttribute('aria-label'), pulse: getComputedStyle($('lamp'), '::after').animationName })`);
 
@@ -104,11 +106,7 @@ test('en-tête à 367 px : nom, lampe et « Sortir » sur une ligne, en public e
   assert.equal(exit, null, 'pas de « Sortir » dans l\'espace public');
   assert.ok(brand[1] <= lampBox[0] + .5 && lampBox[1] <= await page.eval(`innerWidth`), 'lampe à droite du nom');
   assert.deepEqual(await page.overflowing(), []);
-  const code = 'code-du-banc-1';
-  assert.equal(await page.eval(`postJson('/api/private/create', { code: ${JSON.stringify(code)} })
-    .then(r => r.status)`), 200);
-  await page.eval(`refreshStatus()`);
-  await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
+  await page.enterPrivate(CODE);
   [brand, lampBox, exit] = await boxes();
   assert.ok(brand[1] <= lampBox[0] + .5 && lampBox[1] <= exit[0] + .5, 'nom, lampe puis « Sortir »');
   assert.ok(exit[1] <= await page.eval(`innerWidth`), '« Sortir » dans la vue');
@@ -123,5 +121,37 @@ test('en-tête à 367 px : nom, lampe et « Sortir » sur une ligne, en public e
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.equal(await page.visible('#privExit'), false);
+  page.assertNoErrors();
+});
+
+test('animations réduites : pendant un calcul, un anneau fixe au lieu du point plein, ambre ou vert', async () => {
+  await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+  // point de la lampe : fond et ombre calculés, et la teinte de l'espace affiché (--accent) en rgb ; lus deux images
+  // plus tard (animations réduites : chaque changement de style passe encore par une transition de 0,01 ms)
+  const dot = () => page.eval(`(async () => { await new Promise(r => requestAnimationFrame(() =>
+    requestAnimationFrame(r))); const s = getComputedStyle($('lamp'), '::after');
+    const t = document.createElement('i'); t.style.color = 'var(--accent)'; document.body.append(t);
+    const accent = getComputedStyle(t).color; t.remove();
+    return { fill: s.backgroundColor === accent, ring: s.boxShadow.includes('inset') && s.boxShadow.includes(accent),
+      pulse: s.animationName }; })()`);
+  // /api/status reçue avec un calcul en cours (busy), le temps d'une interrogation
+  const busy = () => page.eval(`(async () => { const f = window.fetch;
+    window.fetch = (u, ...a) => String(u) !== '/api/status' ? f(u, ...a)
+      : f(u, ...a).then(r => r.json()).then(s => new Response(JSON.stringify({ ...s, busy: true })));
+    try { await refreshStatus(); } finally { window.fetch = f; } })()`);
+  try {
+    for (const space of ['public', 'privé']) {
+      if (space === 'privé') await page.enterPrivate(CODE);
+      await page.eval(`refreshStatus()`);
+      assert.deepEqual(await dot(), { fill: true, ring: false, pulse: 'none' }, `prêt : point plein (${space})`);
+      await busy();
+      assert.equal(await page.eval(`$('lamp').classList.contains('busy')`), true);
+      assert.deepEqual(await dot(), { fill: false, ring: true, pulse: 'none' }, `calcul : anneau fixe (${space})`);
+    }
+  } finally {
+    await page.send('Emulation.setEmulatedMedia', { features: [] });
+  }
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   page.assertNoErrors();
 });

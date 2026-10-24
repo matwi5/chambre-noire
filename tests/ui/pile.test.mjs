@@ -1,31 +1,27 @@
 // Pile du Labo, dans la vue du téléphone : les images terminées de l'espace, lues du Mac (partagées entre appareils,
-// gardées au rechargement), la dernière sur le dessus et deux devinées dessous, une carte par image d'un lot
-// (« 2/3 ») ; ✓ garde (l'image passe dans les Tirages), ✕ jette après un bandeau « Annuler » de 5 s (rien n'est envoyé
-// avant, ni à la fermeture de la page ; un seul bandeau à la fois) ; « Déjà triée » quand une autre page a trié
-// l'image ; la visionneuse de la pile (Garder, Jeter, image suivante ; vrai mode et images d'entrée) ; carte d'échec en
-// tête (message, Relancer, ✕) ; un second ✓ pendant le départ d'une carte ne trie rien de plus ; état vide ; message
-// « Image prête » sur les Tirages, qui mène au Labo ; pile privée par ses routes (✕ et ✓ privés, un Garder qui arrive
-// seul dans les Tirages privés affichés ; « Sortir » pendant le chargement
-// d'une image : rien de privé demandé ensuite ; Jeter privé abandonné dès l'appui sur « Sortir », tri privé ignoré
-// pendant la sortie) ; balayage de la carte du dessus au doigt et à la souris (seuil, geste vif, tampons, échec qui ne
-// part qu'à gauche, pile redessinée sous le doigt, clic qui ouvre la visionneuse) ; après un tri, ✓, ✕ et la
-// visionneuse ignorent un double appui jusqu'à l'image suivante affichée (0,3 s au moins).
+// gardées au rechargement), la dernière sur le dessus et deux devinées dessous, une carte par image d'un lot (« 2/3 »)
+// ; ✓ garde (l'image passe dans les Tirages), ✕ jette après un bandeau « Annuler » de 5 s (rien n'est envoyé avant, ni
+// à la fermeture de la page ; un seul bandeau à la fois) ; « Déjà triée » quand une autre page a trié l'image ; la
+// visionneuse de la pile (Garder, Jeter, image suivante ; vrai mode et images d'entrée) ; carte d'échec en tête
+// (message, Relancer, ✕) ; un second ✓ pendant le départ d'une carte ne trie rien de plus ; état vide ; message « Image
+// prête » sur les Tirages, qui mène au Labo ; pile privée par ses routes (✕ et ✓ privés, un Garder qui arrive seul dans
+// les Tirages privés affichés ; « Sortir » juste après l'entrée, pile privée pas encore lue, ou pendant le chargement
+// d'une image : rien de privé demandé ensuite, ni par un Garder refusé ni par une génération privée arrivée dans la
+// file pendant la sortie ; Jeter privé abandonné dès l'appui sur « Sortir », tri privé ignoré pendant la sortie) ;
+// balayage de la carte du dessus au doigt et à la souris (seuil, geste vif, tampons, échec qui ne part qu'à gauche,
+// pile redessinée sous le doigt, clic qui ouvre la visionneuse) ; après un tri, ✓, ✕ et la visionneuse ignorent un
+// double appui jusqu'à l'image suivante affichée (0,3 s au moins).
 //   venv/bin/python tests/check.py --quick --ui tests/ui/pile.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startBench, launchChrome, waitUntil } from './driver.mjs';
 
 let bench, chrome, page;
-// requêtes retenues par Fetch.enable (test de la sortie pendant un chargement) : paused les note, held les garde
-let paused = null;
-const held = [];
 
 before(async () => {
   bench = await startBench();
   chrome = await launchChrome();
   page = await chrome.phonePage();
-  page.on('Fetch.requestPaused', p => paused ? paused(p)
-    : page.send('Fetch.continueRequest', { requestId: p.requestId }).catch(() => {}));
   await page.goto(bench.url + '/');
   await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   await page.eval(`opt.steps = 'low'; opt.res = 'low'; saveOpt(); refreshChoices()`);   // générations courtes
@@ -54,6 +50,13 @@ const discards = () => page.eval(`sorts.filter(s => s.url.endsWith('/discard')).
 const watchToasts = () => page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
   window.toastWatch = new MutationObserver(() => seenToasts.push($('toastBox').textContent));
   toastWatch.observe($('toastBox'), { childList: true, characterData: true, subtree: true }); })()`);
+// toute adresse privée donnée à une image à partir de l'appel (attachée ou non : Chrome charge une image détachée,
+// et sert sans requête une image déjà chargée par la page), notée dans srcAfter ; la surveillance n'est posée qu'une
+// fois par page (srcWatched), chaque appel vide la liste
+const watchPrivateSrc = () => page.eval(`(() => { window.srcAfter = []; if (window.srcWatched) return;
+  window.srcWatched = true; const d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+  Object.defineProperty(HTMLImageElement.prototype, 'src', { configurable: true, get: d.get,
+    set(v) { if (String(v).includes('/api/private/')) srcAfter.push(String(v)); d.set.call(this, v); } }); })()`);
 // toutes les images de la pile affichée gardées, pour repartir d'une pile vide
 async function clear() {
   await bench.idle({ page });
@@ -515,27 +518,20 @@ test('espace privé : ✕ jette par la route privée après le bandeau ; un Gard
 
 test('espace privé : un Jeter en attente est abandonné dès l\'appui sur « Sortir », pas à la réponse du Mac',
   async () => {
-    assert.equal(await page.eval(`postJson('/api/private/unlock', { code: ${JSON.stringify(CODE)} })
-      .then(r => r.status)`), 200);
-    await page.eval(`refreshStatus()`);
-    await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
+    await page.enterPrivate(CODE);
     await page.made('zp17 secrete');
     await page.eval(`sorts.length = 0`);
     await page.click('#pileNo');
     await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
     // la réponse du Mac à « Sortir » se fait attendre ; une image privée demandée pendant ce temps est notée
-    const privateAfter = [];
-    paused = p => { if (p.request.url.includes('/api/private/lock')) held.push(p.requestId);
-      else { privateAfter.push(p.request.url); page.send('Fetch.continueRequest', { requestId: p.requestId })
-        .catch(() => {}); } };
-    await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/private/lock' },
-      { urlPattern: '*/api/private/image*' }, { urlPattern: '*/api/private/thumb*' }] });
+    const x = await exitHeld({ noting: true });
     try {
       await page.click('#privExit');
-      await waitUntil(() => held.length > 0, { what: 'sortie demandée' });
+      await waitUntil(() => x.locking(), { what: 'sortie demandée' });
       assert.deepEqual(await page.eval(`[discarding, $('undoBar').hidden]`), [null, true], 'Jeter encore en attente');
       await new Promise(r => setTimeout(r, 300));
-      assert.deepEqual(privateAfter, [], 'image privée demandée pendant la sortie (carte remise par l\'abandon)');
+      assert.deepEqual(x.after.filter(u => /\/(image|thumb)/.test(u)), [],
+        'image privée demandée pendant la sortie (carte remise par l\'abandon)');
       // ✓ ou ✕ pendant la sortie : aucun tri privé ne part
       await page.eval(`sortBusy() || sortTop('keep')`);
       await new Promise(r => setTimeout(r, 600));
@@ -545,16 +541,11 @@ test('espace privé : un Jeter en attente est abandonné dès l\'appui sur « So
         commitDiscard(d); })()`);
       assert.equal(await discards(), 0, 'Jeter privé envoyé pendant la sortie');
     } finally {
-      paused = null;
-      for (const id of held.splice(0)) await page.send('Fetch.continueRequest', { requestId: id }).catch(() => {});
-      await page.send('Fetch.disable');
+      await endExitHeld(x);
     }
-    await page.waitFor(`!inPrivate()`, { what: 'sorti' });
     assert.equal(await discards(), 0);
-    assert.equal(await page.eval(`postJson('/api/private/unlock', { code: ${JSON.stringify(CODE)} })
-      .then(r => r.status)`), 200);
-    await page.eval(`refreshStatus()`);
-    await page.waitFor(`inPrivate() && pileItems.some(it => it.prompt === 'zp17 secrete')`,
+    await page.enterPrivate(CODE);
+    await page.waitFor(`pileItems.some(it => it.prompt === 'zp17 secrete')`,
       { what: 'image privée encore dans sa pile' });
     await page.click('#privExit');
     await page.waitFor(`!inPrivate()`, { what: 'sorti' });
@@ -578,42 +569,251 @@ test('espace privé : une pile privée lue pendant la sortie n\'arrive pas dans 
   page.assertNoErrors();
 });
 
+// « Sortir » à réponse retenue (page.holdRequests) : le verrouillage est retenu, un Garder privé aussi tant que keep
+// et pas keepDone ; quand noting, toute autre requête privée (pile, Tirages, images) est notée dans after, et un suivi
+// /api/job/<id> seulement si id est dans x.privateIds (les générations privées du test : celles d'une génération
+// publique ne sont pas privées)
+async function exitHeld({ keep = false, noting = false } = {}) {
+  const x = { after: [], noting, keepDone: false, privateIds: new Set() };
+  x.locking = () => x.h.held.some(r => r.url.includes('/api/private/lock'));
+  x.h = await page.holdRequests(['lock', 'keep', 'pile', 'history', 'image*', 'thumb*', 'input*']
+    .map(r => '*/api/private/' + r)
+    .concat(['*/api/job/*']), p => { const u = p.request.url;
+    if (u.includes('/api/private/lock') || keep && !x.keepDone && u.endsWith('/api/private/keep')) return true;
+    const job = /\/api\/job\/([0-9a-f]+)/.exec(u);
+    if (x.noting && (!job || x.privateIds.has(job[1]))) x.after.push(u);
+    return false; });
+  return x;
+}
+// la réponse du Mac à « Sortir » arrive : sortie appliquée
+async function endExitHeld(x) {
+  await x.h.release();
+  await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+}
+// dans l'espace privé, pile privée lue
+async function enterPile() {
+  await page.enterPrivate(CODE);
+  await page.waitFor(`pileRead`, { what: 'pile privée lue' });
+}
+
+test('espace privé : « Sortir » juste après l\'entrée, pile privée pas encore lue : rien de privé demandé ensuite',
+  async () => {
+    // les lectures de la pile privée lancées à l'entrée ne répondent qu'une fois « Sortir » appuyé, avant la réponse
+    // du Mac (machine chargée) ; pileReads : chaque lecture lancée par la page, pour attendre sa fin
+    await page.holdFetch(`u => u === '/api/private/pile'`);
+    await page.eval(`(() => { const f = window.loadPileOrig = loadPile; window.pileReads = [];
+      window.loadPile = (...a) => { const p = f(...a); pileReads.push(p); return p; }; })()`);
+    let x = null;
+    try {
+      await page.enterPrivate(CODE, { settle: false });   // (ses lectures de la pile sont retenues)
+      await page.waitFor(`pileReads.length > 0`, { what: 'pile demandée' });
+      // la réponse du Mac à « Sortir » se fait attendre ; une requête privée partie pendant ce temps est notée
+      x = await exitHeld({ noting: true });
+      await watchPrivateSrc();
+      await page.click('#privExit');
+      await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+      await page.eval(`refreshStatus()`);          // état lu pendant la sortie (il dit l'espace encore ouvert)
+      await page.releaseFetch();
+      await page.eval(`Promise.all(pileReads)`);   // lectures de la pile finies (réponse, rendu)
+      assert.deepEqual(x.after, [], 'requête privée partie pendant la sortie');
+      assert.deepEqual(await page.eval(`srcAfter`), [], 'adresse privée donnée à une image pendant la sortie');
+    } finally {
+      await page.releaseFetch();
+      if (x) await endExitHeld(x);
+      await page.eval(`window.loadPileOrig && (window.loadPile = loadPileOrig)`);
+    }
+    page.assertNoErrors();
+  });
+
+test('espace privé : un Garder privé refusé pendant « Sortir » ne redessine pas la pile privée',
+  async () => {
+    await enterPile();
+    await page.made('zp22 secrete gardee');
+    await page.made('zp22 secrete suivante');
+    const x = await exitHeld({ keep: true });
+    try {
+      await page.click('#pileYes');                // Garder la carte du dessus : sa réponse se fait attendre
+      await waitUntil(() => x.h.held.some(r => r.url.endsWith('/keep')), { what: 'Garder envoyé' });
+      await watchPrivateSrc();
+      x.noting = true;
+      await page.click('#privExit');
+      await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+      // le Mac refuse le Garder : l'image revient dans la pile (sa carte serait redessinée, ses images redemandées)
+      x.keepDone = true;
+      for (const r of x.h.take(u => u.endsWith('/keep'))) await page.send('Fetch.fulfillRequest', {
+        requestId: r.requestId, responseCode: 503,
+        responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+        body: Buffer.from('{"error":"moteur occupé"}').toString('base64') });
+      await page.waitFor(`!sorting.size`, { what: 'réponse du Garder reçue' });
+      assert.deepEqual(x.after, [], 'requête privée partie pendant la sortie');
+      assert.deepEqual(await page.eval(`srcAfter`), [], 'adresse privée donnée à une image pendant la sortie');
+    } finally {
+      await endExitHeld(x);
+    }
+    page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/503/.test(e)));   // le refus du Mac
+    page.assertNoErrors();
+  });
+
+test('espace privé : une génération privée arrivée dans la file pendant « Sortir » n\'est pas suivie', async () => {
+  await enterPile();
+  const x = await exitHeld({ noting: true });
+  try {
+    await page.click('#privExit');
+    await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+    // lancée d'un autre appareil pendant l'aller-retour (le Mac a encore la session) ; l'état lu ensuite la montre
+    const { id } = await page.launch('HOLD=zp23 zp23 secrete en file', { private: true });
+    x.privateIds.add(id);
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`queueState.some(e => e.id === ${JSON.stringify(id)}) && !following.size`,
+      { what: 'génération privée dans la file reçue, suivi fini' });
+    assert.deepEqual(x.after, [], 'requête privée partie pendant la sortie');
+  } finally {
+    await endExitHeld(x);
+    bench.release('zp23');
+    await bench.idle();
+  }
+  page.assertNoErrors();
+});
+
+test('espace privé : un suivi de génération privée revenu pendant « Sortir » ne l\'adopte pas', async () => {
+  await enterPile();
+  // le suivi d'une génération privée de la file (adoption) part avant « Sortir » ; sa réponse n'arrive que pendant
+  let follow = true;
+  const x = await exitHeld();
+  const lockOrFollow = x.h.keep;
+  x.h.keep = p => lockOrFollow(p) || follow && p.request.url.includes('/api/job/');
+  try {
+    const { id } = await page.launch('HOLD=zp24 zp24 secrete suivie', { private: true });
+    x.privateIds.add(id);
+    await page.eval(`refreshStatus()`);
+    await waitUntil(() => x.h.held.some(r => r.url.includes('/api/job/')), { what: 'suivi demandé' });
+    follow = false;
+    x.noting = true;
+    await page.click('#privExit');
+    await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+    await x.h.free(u => u.includes('/api/job/'));
+    await page.waitFor(`!following.size`, { what: 'réponse du suivi reçue' });
+    assert.equal(await page.eval(`pageJobs.some(p => p.id === ${JSON.stringify(id)})`), false,
+      'génération privée adoptée pendant la sortie');
+    assert.deepEqual(x.after, [], 'requête privée partie pendant la sortie');
+  } finally {
+    await endExitHeld(x);
+    bench.release('zp24');
+    await bench.idle();
+  }
+  page.assertNoErrors();
+});
+
+test('espace privé : une génération de la page qui finit pendant « Sortir » : rien de privé demandé ni posé',
+  async () => {
+    await enterPile();
+    await page.generate('HOLD=zp25 zp25 secrete qui finit');
+    const id = await page.eval(`pageJobs.at(-1).id`);
+    // tours du suivi des générations de la page (pollJobs : une attente d'une seconde par tour), comptés
+    await page.eval(`(() => { const t = window.zqSetTimeout = window.setTimeout; window.zqPolls = 0;
+      window.setTimeout = (f, ms, ...a) => { if (new Error().stack.includes('pollJobs')) zqPolls++;
+        return t(f, ms, ...a); }; })()`);
+    const x = await exitHeld();
+    x.privateIds.add(id);
+    try {
+      await watchPrivateSrc();
+      x.noting = true;
+      await page.click('#privExit');
+      await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+      bench.release('zp25');                       // elle finit sur le Mac pendant l'aller-retour
+      await bench.idle();
+      const polls = await page.eval(`zqPolls`);
+      // un tour complet du suivi pendant la sortie, ou son arrêt (plus rien d'actif à suivre)
+      await page.waitFor(`!polling || zqPolls >= ${polls + 2}`, { what: 'un tour du suivi pendant la sortie' });
+      // la pile redessinée pendant la sortie (par une fin, un échec ou une génération disparue) : ses images ne sont
+      // pas demandées
+      await page.eval(`pileShown = ''; renderPile()`);
+      assert.deepEqual(x.after, [], 'requête privée partie pendant la sortie');
+      assert.deepEqual(await page.eval(`srcAfter`), [], 'adresse privée donnée à une image pendant la sortie');
+    } finally {
+      await page.eval(`window.setTimeout = zqSetTimeout`);   // minuteur de la page rendu
+      await endExitHeld(x);
+    }
+    page.assertNoErrors();
+  });
+
+test('espace privé : pendant « Sortir », ni Tirages, ni file, ni « Voir le lot », ni visionneuse privés ; un second '
+  + 'appui ne relance rien', async () => {
+  await enterPile();
+  await page.tab('tirages');
+  await page.waitFor(`[...$('histGrid').querySelectorAll('img')].some(i => i.src.includes('/api/private/'))`,
+    { what: 'Tirages privés affichés' });
+  // une vignette privée des Tirages pas encore chargée (chargement différé, Tirages cachés)
+  await page.tab('labo');
+  await page.eval(`(() => { const im = document.createElement('img'); im.id = 'zqLazy'; im.loading = 'lazy';
+    im.src = thumbOf(histItems.find(it => it.private)); $('histGrid').append(im); })()`);
+  assert.equal(await page.eval(`$('zqLazy').complete`), false, 'vignette pas encore chargée (prémisse)');
+  const x = await exitHeld({ noting: true });
+  try {
+    await watchPrivateSrc();
+    // feuille de la file ouverte (ses cartes ne sont dessinées qu'alors), repère posé à la place de ses cartes
+    await page.eval(`openSheet('fileSheet'); $('queueList').innerHTML = '<i id="zqMark"></i>'; queueHtml = 'zq'`);
+    await page.eval(`(() => { const f = window.zqFetch = window.fetch; window.zqLockCalls = 0;
+      window.fetch = (u, ...a) => (String(u) === '/api/private/lock' && zqLockCalls++, f(u, ...a)); })()`);
+    await page.click('#privExit');
+    await page.click('#privExit');                 // second appui pendant l'attente
+    await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+    assert.equal(await page.eval(`zqLockCalls`), 1, 'second verrouillage envoyé par un second appui');
+    assert.equal(await page.eval(`$('zqLazy').hasAttribute('src')`), false, 'vignette différée encore à charger');
+    // vignette des Tirages en échec : sa seconde tentative (minuteur de 0,7 s, joué tout de suite ici)
+    await page.eval(`(() => { const t = window.setTimeout; window.setTimeout = f => { f(); return 0; };
+      try { const im = $('histGrid').querySelector('img'); delete im.dataset.retry; im.onerror(); }
+      finally { window.setTimeout = t; } })()`);
+    await page.tab('tirages');                     // les Tirages ouverts pendant la sortie
+    await page.eval(`histShown = ''; renderGallery()`);   // et redessinés (par une suppression, par exemple)
+    await page.eval(`renderQueue()`);              // la file redessinée (son état relu pendant la sortie)
+    // visionneuse ouverte sur une image privée qui a des images d'entrée
+    await page.eval(`openViewer(0, [{ private: true, pile: true, id: 'zq3', name: 'prive_zq3',
+      inputs: ['init.png'] }])`);
+    assert.equal(await page.eval(`$('viewer').classList.contains('on')`), false,
+      'visionneuse ouverte pendant la sortie');
+    // « Voir le lot » d'une image privée de la pile
+    await page.eval(`(() => { const lot = n => ({ private: true, pile: true, id: 'zq' + n, name: 'prive_zq' + n,
+      lot: { id: 'zqL', rank: n, size: 2 } }); vList = [lot(1), lot(2)]; vIndex = 0; openLot(); })()`);
+    assert.deepEqual(await page.eval(`[!!$('zqMark'), openedSheet === $('fileSheet')]`), [true, true],
+      'file ou « Voir le lot » redessinés pendant la sortie');
+    assert.deepEqual(x.after, [], 'requête privée partie pendant la sortie');
+    assert.deepEqual(await page.eval(`srcAfter`), [], 'adresse privée donnée à une image pendant la sortie');
+  } finally {
+    await page.eval(`window.zqFetch && (window.fetch = zqFetch); vList = []; vIndex = -1; closeSheet(); closeViewer()`);
+    await endExitHeld(x);
+    await page.tab('labo');
+  }
+  page.assertNoErrors();
+});
+
 test('espace privé : « Sortir » pendant le chargement d\'une image de la pile : rien de privé demandé ensuite',
   async () => {
-    assert.equal(await page.eval(`postJson('/api/private/unlock', { code: ${JSON.stringify(CODE)} })
-      .then(r => r.status)`), 200);
-    await page.eval(`refreshStatus()`);
-    await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
+    await page.enterPrivate(CODE);
     // images privées retenues en route (miniature et image) ; notées avant ou après l'appui sur « Sortir »
     const seen = [];
     let out = false;
-    paused = p => { seen.push({ url: p.request.url, out }); held.push(p.requestId); };
-    await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/private/thumb*' },
-      { urlPattern: '*/api/private/image*' }] });
+    const h = await page.holdRequests(['*/api/private/thumb*', '*/api/private/image*'],
+      p => (seen.push({ url: p.request.url, out }), true));
+    const fail = async () => { for (const r of h.take()) await page.send('Fetch.failRequest',
+      { requestId: r.requestId, errorReason: 'Aborted' }).catch(() => {}); };
     try {
       await page.made('zp15 secrete en route');
       await waitUntil(() => seen.length > 0, { what: 'image privée demandée' });
       // la pile redessinée pendant le chargement : l'image de l'ancienne carte, détachée, l'attend encore
       await page.eval(`pileShown = ''; renderPile()`);
       out = true;
-      // toute adresse privée donnée à une image après l'appui (attachée ou non : Chrome charge une image détachée)
-      await page.eval(`(() => { window.srcAfter = [];
-        const d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
-        Object.defineProperty(HTMLImageElement.prototype, 'src', { configurable: true, get: d.get,
-          set(v) { if (String(v).includes('/api/private/')) srcAfter.push(String(v)); d.set.call(this, v); } }); })()`);
+      await watchPrivateSrc();
       await page.click('#privExit');
       await page.waitFor(`!inPrivate()`, { what: 'sorti' });
       // les chargements retenus échouent (abandonnés par la page) : une image qui les attendait ne redemande rien
       for (let k = 0; k < 2; k++) {
         await new Promise(r => setTimeout(r, 400));
-        for (const id of held.splice(0)) await page.send('Fetch.failRequest', { requestId: id, errorReason: 'Aborted' })
-          .catch(() => {});
+        await fail();
       }
     } finally {
-      paused = null;
-      for (const id of held.splice(0)) await page.send('Fetch.failRequest', { requestId: id, errorReason: 'Aborted' })
-        .catch(() => {});
-      await page.send('Fetch.disable');
+      await fail();
+      await h.release();
     }
     assert.deepEqual(seen.filter(r => r.out).map(r => r.url), [], 'image privée demandée après « Sortir »');
     assert.deepEqual(await page.eval(`srcAfter`), [], 'adresse privée donnée à une image après « Sortir »');

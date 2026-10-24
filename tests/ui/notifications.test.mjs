@@ -1,7 +1,8 @@
 // Toucher une notification de fin de génération mène au Labo, sur la pile : application fermée, le service worker
 // (tools/ui/sw.js) l'ouvre à l'adresse de la notification ; déjà ouverte, il ramène sa fenêtre et la page passe au
-// Labo, sans recharger. Le service worker est chargé seul dans Node (un toucher de notification ne se rejoue pas dans
-// Chrome sans écran), la page dans la vue du téléphone ; le vrai toucher se valide sur le téléphone.
+// Labo, sans recharger (une feuille qui a une saisie en cours reste ouverte). Le service worker est chargé seul dans
+// Node (un toucher de notification ne se rejoue pas dans Chrome sans écran), la page dans la vue du téléphone ; le vrai
+// toucher se valide sur le téléphone.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/notifications.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -91,3 +92,39 @@ test('page : le message du service worker mène des Tirages au Labo, feuille et 
   assert.equal(await page.eval(`$('pane-labo').classList.contains('active')`), true);
   page.assertNoErrors();
 });
+
+test('page : une feuille où du texte est tapé reste ouverte, le Labo passe dessous ; sinon elle se ferme',
+  async () => {
+    // « Image prête » touché, ou message du service worker
+    const ready = () => page.eval(`(() => { toast('Image prête', null, true); $('toastBox').click(); })()`);
+    for (const go of [fromWorker, ready]) {
+      await page.tab('tirages');
+      await page.eval(`editPrompt({ title: '', text: 'zqN texte', usage: 't2i' })`);
+      await page.waitFor(`openedSheet === $('promptEditSheet') && document.activeElement === $('peTitle')`,
+        { what: 'feuille d\'enregistrement d\'un prompt' });
+      await go();
+      await page.waitFor(`mode === 'labo'`, { what: 'Labo' });
+      assert.equal(await page.eval(`openedSheet`), null, 'feuille sans saisie fermée');
+      await page.tab('tirages');
+      await page.eval(`editPrompt({ title: '', text: 'zqN texte', usage: 't2i' })`);
+      await page.waitFor(`document.activeElement === $('peTitle')`, { what: 'curseur dans le titre' });
+      await page.send('Input.insertText', { text: 'zqN titre en cours' });   // tapé, pas encore enregistré
+      await go();
+      await page.waitFor(`mode === 'labo'`, { what: 'Labo sous la feuille' });
+      assert.deepEqual(await page.eval(`[openedSheet === $('promptEditSheet'), $('promptEditSheet').classList
+        .contains('on'), $('peTitle').value]`), [true, true, 'zqN titre en cours'], 'saisie en cours gardée');
+      await page.eval(`closeSheet()`);
+    }
+    // un interrupteur basculé (Réglages) n'est pas une saisie en cours : la feuille se ferme
+    await page.tab('tirages');
+    await page.eval(`openSheet('setSheet')`);
+    const before = await page.eval(`($('previewChk').focus(), $('previewChk').checked)`);
+    for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent',
+      { type, key: ' ', code: 'Space', windowsVirtualKeyCode: 32, text: type === 'keyDown' ? ' ' : undefined });
+    assert.equal(await page.eval(`$('previewChk').checked`), !before, 'interrupteur basculé au clavier (prémisse)');
+    await fromWorker();
+    await page.waitFor(`mode === 'labo'`, { what: 'Labo' });
+    assert.equal(await page.eval(`openedSheet`), null, 'feuille des Réglages restée ouverte');
+    await page.eval(`$('previewChk').click()`);   // réglage rendu
+    page.assertNoErrors();
+  });
