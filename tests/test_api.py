@@ -18,6 +18,13 @@ class AccessTest(bench.BenchCase):
         self.assertEqual((code, hdrs["Content-Type"], raw[:4]), (200, "font/woff2", b"wOF2"))
         self.assertEqual(hdrs["Cache-Control"], "no-store")
 
+    def test_login_page_says_where_to_find_the_code(self):
+        # plus de bouton « Téléphone » dans l'en-tête : le code est dans la feuille de la lampe d'état, sur le Mac
+        page = bytes(call("GET", "/", remote=True, cookie=False)[1]).decode()
+        self.assertIn("touchez la lampe d'état, en haut à droite de l'interface", page)
+        self.assertIn("« Ouvrir depuis le téléphone »", page)
+        self.assertNotIn("« Téléphone »", page)
+
     def test_post_without_json_content_type_is_refused(self):
         self.assertEqual(call("POST", "/api/generate", gen_body(), headers={"Content-Type": "text/plain"})[0], 415)
 

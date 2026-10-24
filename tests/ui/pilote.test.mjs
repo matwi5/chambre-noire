@@ -18,7 +18,7 @@ before(async () => {
   chrome = await launchChrome();
   page = await chrome.phonePage();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
 });
 
 after(async () => {
@@ -52,7 +52,7 @@ test('page.leaks : un marqueur laissé dans l\'état global ou caché dans la pa
 });
 
 test('bench.disk : une image enregistrée est vue, rien quand rien n\'est écrit', async () => {
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   const disk = bench.disk();
   assert.deepEqual(disk.written(), []);
   await page.generate('zp1 disque');

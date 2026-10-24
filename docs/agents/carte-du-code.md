@@ -127,7 +127,8 @@ dernier bloc, après le HTML.
   bandeau Annuler `undo`), « liste de la file (feuille de la file du Labo) » (cartes de la file), « prompts
   enregistrés », « espace privé », « messages et confirmations »,
   « typographie » (police pixel `--pixel`, chasse fixe `--mono`, déclaration `@font-face`), « téléphone (html.lite) ».
-- **HTML** : en-tête (état du moteur `#statusChip`, qui ouvre `#engineSheet`) ; onglets `#pane-labo` (Labo : la
+- **HTML** : en-tête (logo, nom, lampe d'état `#lamp`, qui ouvre `#engineSheet`, puis « Sortir » `#privExit` dans
+  l'espace privé) ; onglets `#pane-labo` (Labo : la
   pastille « +N en attente » `#queueChip`, la carte en cours `#runCard` (cadre `#runFrame` et son canevas
   `#revealCanvas`, rang dans un lot `#lotBadge`, étape `#runStep`, phase `#runPhase`, fin prévue `#runEta`, annulation
   `#runCancel`, prompt `#runPrompt`, avancement `#runBar`), la pile `#pile`, ses boutons ✕ `#pileNo` et ✓ `#pileYes`,
@@ -141,7 +142,9 @@ dernier bloc, après le HTML.
   s'efface), `#pane-tirages` (Tirages, grille `#histGrid`) ; barre d'onglets `#tabbar` (icônes en pixels ;
   onglet Labo : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vSort` : Garder et Jeter une image de
   la pile) ; bandeau Annuler `#undoBar` ; images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`,
-  `#engineSheet`, `#lotSheet`, la file `#fileSheet` (`#queueNote`, `#queueList`), `#promptSheet`, `#promptEditSheet` et
+  `#engineSheet` (feuille de la lampe : état `#engineFacts`, « Ouvrir depuis le téléphone » `#phone` sur le Mac
+  seulement, ligne « Espace privé » au cadenas `#privEntry`, journal `#log`), `#lotSheet`, la file `#fileSheet`
+  (`#queueNote`, `#queueList`), `#promptSheet`, `#promptEditSheet` et
   celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`, `#privCodeSheet`…).
 - **JavaScript**, sections dans l'ordre :
   - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
@@ -154,8 +157,9 @@ dernier bloc, après le HTML.
   - « onglets & statut » : `TABS`, changement d'onglet (`mode`, `goTab`, `showLabo`), `tabSwipe` (glissement
     d'onglet, jamais depuis le champ de création déplié ni la pile) ; « panneaux du bas » : `openSheet`, `closeSheet`
     (un seul ouvert, `openedSheet`) ; `refreshStatus()` (interroge `/api/status` toutes les 5 s, 2 s tant que la file
-    n'est pas vide ; met à jour `queueState`, l'onglet Labo, la carte en cours, la file et l'espace privé par
-    `applyPrivate`, et le panneau Moteur, version servie comprise : `fmtVersion`, `staleServer`).
+    n'est pas vide ; met à jour `queueState`, la lampe par `setLamp` (classes `ok`, `busy`, `err`, aucune pendant la
+    connexion), l'onglet Labo, la carte en cours, la file et l'espace privé par `applyPrivate`, et le panneau Moteur,
+    version servie comprise : `fmtVersion`, `staleServer`).
   - « champ de création replié ou déplié » : `setComposer`, `openComposer`, `foldComposer`, `followLabIdle` (appelé
     par `renderRunCard` : déplié d'office quand le Labo n'a plus rien à trier ni en cours ; replié quand il a de
     nouveau quelque chose si on n'y a pas touché depuis, `autoOpen` ; `labIdle`, remis à `null` par `changedSpace`),
@@ -170,7 +174,8 @@ dernier bloc, après le HTML.
     Dessiner, effacé avec son image), `drawWith` (une image seule dans la saisie, dessin actif, tracé vierge),
     `exportMask`, `paintedReference`.
   - « requête & loader » : `requestBase` (champs qu'aucun réglage ne fixe, communs avec « Relancer »), `buildRequest` ;
-    « messages et confirmations » : `toast`, `ask` et `answer` (feuille `#askSheet`, jamais `confirm()`).
+    « messages et confirmations » : `toast` (un message `go` touché mène au Labo par `toLabo`, comme une
+    notification touchée, application ouverte), `ask` et `answer` (feuille `#askSheet`, jamais `confirm()`).
   - « affichage des images » : `showImage` (toute image qui change d'adresse : vidée, puis remplie une fois l'image
     chargée et décodée à part, miniature d'abord ; `img.want` : adresse attendue, une image arrivée trop tard est
     ignorée ; `keep` : l'aperçu d'avant reste jusqu'au suivant ; `once` : aperçu servi une fois ; `decoded` : image déjà
@@ -241,9 +246,14 @@ dernier bloc, après le HTML.
     bouton, filtre `promptUsage` sur la catégorie de la saisie, `inputKind`), `renderPrompts`, `usePrompt`,
     `savePrompt`.
   - « galerie et visionneuse » : `histItems`, `vList` (ce que parcourt la visionneuse : les Tirages ou la pile),
-    `loadHistory`, `renderGallery`, `openViewer`, `stepViewer`, `closeViewer` et `emptyViewer` (contenu
-    vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace privé), gestes : `zoomable` (pincer,
-    molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les images d'entrée).
+    `loadHistory` (à l'affichage des Tirages, et quand `rev` change pendant qu'ils sont affichés : `histRev`, retenu
+    après une lecture réussie ; `histAsk` : rev de la lecture en cours, pas relancée pour le même ; `histSeq` : une
+    réponse dépassée est ignorée ; rien pendant « Sortir » ; visionneuse ouverte recalée sur la liste relue),
+    `renderGallery` (redessinée seulement si les tirages changent, `histShown` ; état vide avec le logo et « Aller au
+    Labo »), `openViewer`, `stepViewer`,
+    `closeViewer` et `emptyViewer` (contenu vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace
+    privé), gestes : `zoomable` (pincer, molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les
+    images d'entrée).
   - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;
     « Reprendre » : `resumeFrom` (saisie remplacée, confirmation si elle n'est pas vide), `resumeImages` (images
@@ -262,15 +272,18 @@ dernier bloc, après le HTML.
     `privCreate`, `privUnlock`, `privLock` (sortie appliquée dès la réponse du Mac : `spaceEpoch` écarte une réponse de
     `/api/status` demandée avant ; `leavingPrivate` : aucun aperçu privé demandé ni Jeter privé envoyé pendant la
     fermeture),
-    `privChangeCode`, `privReset`.
+    `privChangeCode`, `privReset` ; page restaurée par « Retour » (écouteur `pageshow`, `persisted`) après une
+    fermeture dans l'espace : sortie appliquée tout de suite, saisie privée effacée (`erasePrivate`), puis `relock` :
+    `refreshStatus` reverrouille d'abord par `relockSpace` et n'applique aucun état tant que le Mac ne l'a pas accepté
+    (`pagehide` renvoie aussi le verrouillage tant que `relock` tient ; un code retapé, `privPost`, le lève).
 
 Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
 « Dessiner », « Reprendre » (texte, images d'entrée, dessin et réglages : `resumeFrom`), « Relancer » (`againFrom`) et
 « Supprimer » → `viewerAction('edit' | 'mask' | 'resume' | 'again' | 'delete')` ; « Garder » et « Jeter » → ✓
 `#pileYes` et ✕ `#pileNo`, ou balayage de la carte (`pileSwipe`), puis `sortTop` ; dans la visionneuse, `sortFromViewer`
 ; « Annuler » → `undoDiscard` ; carte d'échec, « Relancer » → `data-again` dans l'écouteur de `#pile` ; « Annuler » de
-la carte en cours → `#runCancel` ; « +N en attente » → `openQueue` ; cadenas des Tirages → `#privEntry`, « Sortir »
-→ `privLock` ; pastille d'état du haut → `#statusChip`.
+la carte en cours → `#runCancel` ; « +N en attente » → `openQueue` ; ligne « Espace privé » de la feuille de la lampe
+→ `#privEntry`, « Sortir » → `privLock` ; lampe d'état du haut → `#lamp`.
 
 Deux boucles suivent les générations sans se synchroniser : `pollJobs` (`/api/job/<id>`, chaque seconde) et
 `refreshStatus` (`/api/status`, toutes les 2 à 5 s). Une réponse de l'une peut arriver avant celle de l'autre :
@@ -317,7 +330,9 @@ invariants ».
   quitte alors `S.lots`, ce qui empêche un doublon quand une génération annulée en file passe ensuite.
 - **Notifications** : `notify_job` part de `worker()`, dans un thread, à la fin d'un job hors lot terminé ou en échec,
   vers chaque abonnement de `tools/push_subscriptions.json`. Le service worker (`tools/ui/sw.js`) n'affiche la
-  notification que si aucune fenêtre de l'application n'est visible. Tester sans réseau : `bench.capture_push()`, ou
+  notification que si aucune fenêtre de l'application n'est visible ; touchée, elle ouvre l'application à son adresse
+  (le Labo), ou, déjà ouverte, ramène sa fenêtre et lui envoie le message `{go: 'labo'}`, que la page applique par
+  `toLabo` sans se recharger (`tests/ui/notifications.test.mjs`). Tester sans réseau : `bench.capture_push()`, ou
   intercepter `requests.post` et déchiffrer avec `http_ece`.
 - **Prompts enregistrés** : titre et texte seulement, jamais de réglages ; `used` (secondes) ordonne la liste.
   Choisir un prompt enregistré met à jour son `used`, dans chaque espace. Le banc lit `tools/prompt_types.json` du dépôt
@@ -351,8 +366,8 @@ invariants ».
   requête privée. Sans `cryptography` (`HAVE_CRYPTO`), routes en 503 et interface masquée. Le banc repointe `PRIVATE`
   et abaisse `SCRYPT_N`. Changer le code rechiffre tout dans `private/.rekey/` ; la bascule est le `os.replace` de
   `space.json`. Côté interface, déverrouillé = « dans l'espace privé » (`inPrivate()`, classe `html.priv`) : aucun
-  bouton ne le signale à l'arrivée (entrée : cadenas `#privEntry` des Tirages ; sortie : `#privExit`), décision du
-  porteur.
+  bouton ne le signale à l'arrivée (entrée : ligne au cadenas `#privEntry` de la feuille de la lampe ; sortie :
+  `#privExit`), décision du porteur.
 - **Génération privée** (`"private": true`, session exigée) : pendant le calcul, dossier `jobs/private_<id>/`
   supprimé en fin de job (et au démarrage), `sd-cli.log` vers `os.devnull`, identifiant de 128 bits (comme celui de
   son lot), dans les journaux rien que les lignes communes à toutes les générations (`DONE_LINE`, échecs neutres) ;

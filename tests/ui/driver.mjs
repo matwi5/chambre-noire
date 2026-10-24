@@ -4,7 +4,7 @@
 //   const bench = await startBench();            // serveur du banc sur un port libre, dossier temporaire
 //   const chrome = await launchChrome();         // profil temporaire, supprimé par chrome.close()
 //   const page = await chrome.phonePage();       // vue du téléphone du porteur : 367×760, densité 2,5, tactile
-//   await page.goto(bench.url + '/'); await page.waitFor(`$('status').className==='ok'`);
+//   await page.goto(bench.url + '/'); await page.waitFor(`$('lamp').classList.contains('ok')`);
 //   …; page.assertNoErrors(); await chrome.close(); await bench.stop();
 //   bench.release('nom')                         // libère les générations HOLD=nom du faux moteur
 //   bench.dir                                    // dossier temporaire du banc (outputs/, jobs/…) : ce qu'il écrit

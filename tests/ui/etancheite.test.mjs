@@ -7,7 +7,9 @@
 // et des lots privés, mots des prompts privés, routes /api/private/ et noms prive_….
 // Les deux premiers tests se suivent : le second rouvre l'espace et les Tirages que le premier a remplis. Le
 // troisième sort de l'espace pendant qu'un aperçu privé est révélé sur le canevas de la carte en cours, que
-// page.leaks ne fouille pas : il en lit les pixels.
+// page.leaks ne fouille pas : il en lit les pixels. Les deux derniers simulent le retour par « Retour » sur une page
+// fermée dans l'espace (pageshow persisted) : affichage et saisie privés effacés, espace reverrouillé avant tout état
+// lu, même si le Mac ne répond pas d'abord.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/etancheite.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,7 +22,7 @@ before(async () => {
   chrome = await launchChrome();
   page = await chrome.phonePage();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
 });
 
 after(async () => {
@@ -166,5 +168,82 @@ test('« Sortir » pendant la révélation d\'une génération privée : son can
   assert.equal(await page.eval(`inPrivate()`), false, 'réponse d\'avant la sortie : l\'espace rouvert dans la page');
   assert.deepEqual(await scan(['zqE10revelee'], true), [], 'données privées revenues dans la page');
   await bench.idle();
+  page.assertNoErrors();
+});
+
+// page restaurée depuis la mémoire du navigateur (« Retour », bfcache) : Chrome sans écran ne la rejoue pas de façon
+// fiable, l'événement pageshow (persisted) est simulé ; le verrouillage de la fermeture (pagehide) n'a pas eu lieu,
+// comme quand il se perd : c'est le reverrouillage du retour qui ferme l'espace
+const restored = `dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))`;
+// espace ouvert, une image privée dans la pile affichée et une saisie privée ; renvoie les marqueurs privés
+async function privateScreen(word) {
+  await enter();
+  await page.tab('labo');
+  assert.equal(await generate(`{ mode: 't2i', prompt: '${word}pile' }`), 202);
+  await page.eval(`refreshStatus()`);
+  await page.waitFor(`pileItems.some(it => it.prompt === '${word}pile') && (img => img && img.complete
+    && img.naturalWidth > 0)($('pile').querySelector('[data-k="0"] img'))`, { what: 'image privée dans la pile',
+    timeout: 30000 });
+  await page.typePrompt(`${word}saisie`);
+  const ids = await page.eval(`pileItems.map(it => it.id)`);
+  return [...ids, `${word}pile`, `${word}saisie`, '/api/private/', 'prive_'];
+}
+
+test('« Retour » vers une page de l\'espace privé : affichage et saisie privés effacés, espace reverrouillé',
+  async () => {
+  const markers = await privateScreen('zqE11');
+  // dès l'événement, avant toute réponse du Mac : plus rien de l'espace à l'écran, et le champ (qui avait le curseur)
+  // l'a perdu : les touches suivantes n'iraient pas dans la saisie publique sans qu'on le voie
+  await page.eval(`openComposer(); $('prompt').focus()`);
+  await page.waitFor(`document.activeElement === $('prompt')`, { what: 'curseur dans le champ privé' });
+  assert.deepEqual(await page.eval(`(() => { ${restored}; return [inPrivate(),
+    document.documentElement.classList.contains('priv'), pileItems.length, $('prompt').value,
+    document.activeElement === $('prompt')]; })()`), [false, false, 0, '', false]);
+  assert.equal(await page.eval(`$('toastBox').textContent`), 'Espace privé verrouillé à la fermeture de la page');
+  await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.private.unlocked)`,
+    { what: 'espace reverrouillé sur le Mac' });
+  await page.eval(`refreshStatus()`);
+  assert.equal(await page.eval(`inPrivate()`), false);
+  assert.deepEqual(await scan(markers, true), [], 'données privées restées dans la page (saisie comprise)');
+  page.assertNoErrors();
+});
+
+test('« Retour », Mac injoignable au reverrouillage : la page ne rentre pas dans l\'espace resté ouvert', async () => {
+  await privateScreen('zqE12');
+  // le verrouillage n'arrive pas au Mac : sa session reste ouverte tant que la page ne l'a pas fermée
+  await page.eval(`(() => { const f = window.zqFetch = window.fetch; window.zqLocks = 0;
+    window.fetch = (u, ...a) => String(u) === '/api/private/lock' ? (zqLocks++, Promise.reject(new TypeError('coupé')))
+      : f(u, ...a); })()`);
+  await page.eval(restored);
+  await page.eval(`refreshStatus()`);
+  assert.equal(await page.eval(`fetch('/api/status').then(r => r.json()).then(s => s.private.unlocked)`), true,
+    'session du Mac encore ouverte');
+  assert.deepEqual(await page.eval(`[inPrivate(), pileItems.length, $('lamp').classList.contains('err')]`),
+    [false, 0, true], 'page rentrée dans l\'espace sans code');
+  // refermée avant que le Mac ait accepté le verrouillage : elle le renvoie, comme une page fermée dans l'espace
+  const sent = await page.eval(`zqLocks`);
+  await page.eval(`dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))`);
+  assert.equal(await page.eval(`zqLocks`), sent + 1, 'verrouillage renvoyé à la fermeture');
+  // le Mac répond de nouveau et le code privé est retapé : l'espace s'ouvre, sans être refermé par le reverrouillage
+  await page.eval(`window.fetch = zqFetch`);
+  await page.eval(`($('puCode').value = ${JSON.stringify(CODE)}, privUnlock())`);
+  assert.equal(await page.eval(`inPrivate()`), true, 'espace rouvert par le code');
+  assert.equal(await page.eval(`fetch('/api/status').then(r => r.json()).then(s => s.private.unlocked)`), true);
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+  await bench.idle();
+  page.assertNoErrors();
+});
+
+test('« Retour » vers une page fermée hors de l\'espace : la saisie privée mise de côté est oubliée', async () => {
+  await enter();
+  await page.typePrompt('zqE13aside');
+  // fermeture par le Mac (15 minutes) : la saisie privée reste en mémoire de la page pour le retour dans l'espace
+  assert.equal(await post('/api/private/lock', {}), 200);
+  await page.eval(`refreshStatus()`);
+  await page.waitFor(`!inPrivate()`, { what: 'espace fermé par le Mac' });
+  assert.notDeepEqual(await scan(['zqE13aside'], true), [], 'saisie privée mise de côté (prémisse)');
+  await page.eval(`${restored}; refreshStatus()`);
+  assert.deepEqual(await scan(['zqE13aside'], true), [], 'saisie privée restée en mémoire après le retour');
   page.assertNoErrors();
 });

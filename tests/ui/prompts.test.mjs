@@ -39,7 +39,7 @@ async function saveCurrent(title, text) {
 
 test('espaces : les prompts privés ne se voient que dans l\'espace privé, les publics que dehors', async () => {
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   await openPrompts([]);
   await saveCurrent('Public', 'un prompt public');
   await page.waitFor(`openedSheet === $('promptSheet')`, { what: 'retour à la liste' });
@@ -89,7 +89,7 @@ const usages = list => page.eval(`[...$('${list}').querySelectorAll('.prow')]
 
 test('catégories : feuille ouverte sur celle de la saisie, « Tous » à un geste, nouveau prompt dedans', async () => {
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   await openPrompts([]);
   assert.equal(await filter(), 't2i', 'sans image : Créer');
   assert.deepEqual([...new Set(await usages('typeList'))], ['t2i']);

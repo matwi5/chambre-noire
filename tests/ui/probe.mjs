@@ -2,7 +2,7 @@
 // écran par le pilote (driver.mjs), ouvre l'interface dans la vue du téléphone, évalue une expression (ou un module),
 // imprime le résultat en JSON, puis ferme tout.
 //
-//   node tests/ui/probe.mjs --eval "$('status').textContent"
+//   node tests/ui/probe.mjs --eval "$('lamp').ariaLabel"
 //   node tests/ui/probe.mjs --width 1280 --shot /tmp/vue.png --eval "document.title"
 //   node tests/ui/probe.mjs --private --eval "inPrivate()"          # dans l'espace privé (créé pour l'occasion)
 //   node tests/ui/probe.mjs --script /tmp/verif.mjs                 // export default async (page, bench) => valeur
@@ -29,7 +29,7 @@ try {
   const page = await chrome.phonePage();
   if (opt.width) await page.send('Emulation.setDeviceMetricsOverride', { ...PHONE, width: Number(opt.width) });
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   if (opt.private) {
     await page.eval(`postJson('/api/private/create', { code: 'code-de-la-sonde' })`);
     await page.eval(`refreshStatus()`);

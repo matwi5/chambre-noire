@@ -31,11 +31,16 @@ self.addEventListener("push", (e) => {
   })());
 });
 
-self.addEventListener("notificationclick", (e) => {   // toucher la notification : ramène l'application, ou l'ouvre
+// toucher la notification : le Labo, sur la pile, devant l'image terminée. Application déjà ouverte : sa fenêtre est
+// ramenée et la page passe au Labo (message « go », sans recharger : la page garde ses générations suivies) ; sinon
+// elle s'ouvre à l'adresse de la notification, qui arrive sur le Labo
+self.addEventListener("notificationclick", (e) => {
   e.notification.close();
   e.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    if (wins.length) return wins[0].focus();
-    return self.clients.openWindow(e.notification.data && e.notification.data.url || "/");
+    const win = wins.find((w) => w.focused) || wins[0];
+    if (!win) return self.clients.openWindow(e.notification.data && e.notification.data.url || "/");
+    win.postMessage({ go: "labo" });
+    await win.focus().catch(() => {});   // refusé par le navigateur : la page est quand même passée au Labo
   })());
 });

@@ -4,7 +4,8 @@
 // avant, ni à la fermeture de la page ; un seul bandeau à la fois) ; « Déjà triée » quand une autre page a trié
 // l'image ; la visionneuse de la pile (Garder, Jeter, image suivante ; vrai mode et images d'entrée) ; carte d'échec en
 // tête (message, Relancer, ✕) ; un second ✓ pendant le départ d'une carte ne trie rien de plus ; état vide ; message
-// « Image prête » sur les Tirages, qui mène au Labo ; pile privée par ses routes (« Sortir » pendant le chargement
+// « Image prête » sur les Tirages, qui mène au Labo ; pile privée par ses routes (✕ et ✓ privés, un Garder qui arrive
+// seul dans les Tirages privés affichés ; « Sortir » pendant le chargement
 // d'une image : rien de privé demandé ensuite ; Jeter privé abandonné dès l'appui sur « Sortir », tri privé ignoré
 // pendant la sortie) ; balayage de la carte du dessus au doigt et à la souris (seuil, geste vif, tampons, échec qui ne
 // part qu'à gauche, pile redessinée sous le doigt, clic qui ouvre la visionneuse) ; après un tri, ✓, ✕ et la
@@ -26,7 +27,7 @@ before(async () => {
   page.on('Fetch.requestPaused', p => paused ? paused(p)
     : page.send('Fetch.continueRequest', { requestId: p.requestId }).catch(() => {}));
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   await page.eval(`opt.steps = 'low'; opt.res = 'low'; saveOpt(); refreshChoices()`);   // générations courtes
   await watchSorts();
 });
@@ -266,7 +267,7 @@ test('rechargement pendant le bandeau : rien n\'est envoyé, l\'image est encore
   await page.click('#pileNo');
   await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'page rechargée' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'page rechargée' });
   await page.waitFor(`pileItems.some(it => it.prompt === 'zp3 doute')`, { what: 'image dans la pile rechargée' });
   await new Promise(r => setTimeout(r, 5500));      // au-delà du délai : rien n'est parti avant le rechargement
   assert.equal(await inPile('zp3 doute'), true, 'image effacée malgré la fermeture de la page');
@@ -470,6 +471,45 @@ test('espace privé : pile privée par ses routes ; un Jeter en attente à la so
   await page.waitFor(`!inPrivate()`, { what: 'sorti' });
   assert.equal(await inPile('zp11 secrete garde'), false, 'rien de privé dans la pile publique');
   await clear();
+  page.assertNoErrors();
+});
+
+test('espace privé : ✕ jette par la route privée après le bandeau ; un Garder arrive seul dans les Tirages privés',
+  async () => {
+  const privPile = () => page.eval(`fetch('/api/private/pile').then(r => r.json()).then(l => l.map(it => it.prompt))`);
+  const exists = await page.eval(`privState.exists`);
+  assert.equal(await page.eval(`postJson(${JSON.stringify(exists ? '/api/private/unlock' : '/api/private/create')},
+    { code: ${JSON.stringify(CODE)} }).then(r => r.status)`), 200);
+  await page.eval(`refreshStatus()`);
+  await page.waitFor(`inPrivate() && pileRead`, { what: 'dans l\'espace privé, pile privée lue' });
+  await clear();
+  await page.made('zp20 privee jetee');
+  await page.made('zp20 privee gardee');
+  await page.eval(`sorts.length = 0`);
+  await page.click('#pileYes');                    // le dessus, « gardee », passe aux Tirages privés
+  await page.waitFor(`sorts.length === 1 && !sortBusy() && pileView().length === 1`, { what: 'gardée' });
+  await page.click('#pileNo');                     // puis « jetee », après son bandeau
+  await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
+  await page.waitFor(`sorts.some(s => s.url.endsWith('/api/private/discard'))`,
+    { what: 'Jeter envoyé par la route privée à la fin du bandeau', timeout: 10000 });
+  await waitUntil(async () => !(await privPile()).includes('zp20 privee jetee'), { what: 'jetée du Mac' });
+  assert.deepEqual(await page.eval(`sorts.map(s => s.url)`), ['/api/private/keep', '/api/private/discard']);
+  // Tirages privés affichés : une image gardée ailleurs (même espace) y arrive sans les relire à la main
+  await page.tab('tirages');
+  await page.waitFor(`histItems.some(it => it.prompt === 'zp20 privee gardee')`, { what: 'Tirages privés' });
+  await page.tab('labo');
+  await page.made('zp20 privee ailleurs');
+  await page.tab('tirages');
+  await page.eval(`loadHistory()`);                 // Tirages lus avant le Garder : c'est rev qui doit les relire
+  const id = await page.eval(`pileItems.find(it => it.prompt === 'zp20 privee ailleurs').id`);
+  assert.equal(await page.eval(`postJson('/api/private/keep', { id: ${JSON.stringify(id)} }).then(r => r.status)`),
+    200);
+  await page.waitFor(`[...$('histGrid').querySelectorAll('button[data-name]')]
+    .some(b => b.getAttribute('aria-label') === 'zp20 privee ailleurs')`, { what: 'tirage privé arrivé seul' });
+  await page.tab('labo');
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+  assert.equal(await kept('zp20 privee gardee'), false, 'rien de privé dans les Tirages publics');
   page.assertNoErrors();
 });
 
