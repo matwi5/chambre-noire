@@ -4,6 +4,41 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-24 · Suites du groupe E : verrouillage à la fermeture, lampe sans animation, notification et feuilles
+
+- **Contexte** : compte rendu du groupe E (questions de confidentialité et d'ergonomie laissées ouvertes par sa
+  session) ; questions posées au porteur avec une recommandation chacune.
+- **Décision** (porteur, 24/10/2026, réponse « ok pour tes reco ») :
+  - « Rechargement normal après un verrouillage perdu. Si le verrouillage envoyé à la fermeture n'arrive pas au Mac
+    (réseau coupé), une page rechargée ou rouverte normalement dans les 15 minutes rentre encore dans l'espace sans
+    code. Ce défaut existait avant le groupe E. A) Reverrouiller à tout chargement qui suit une fermeture dans
+    l'espace. La page laisse une marque « cet onglet était dans l'espace privé » dans la mémoire de l'onglet du
+    navigateur (`sessionStorage`, effacée à la fermeture de l'onglet, sans aucune donnée privée). Coût : quelqu'un qui
+    ouvre les outils de développement du navigateur pourrait voir que l'espace a servi. B) Reverrouiller à chaque
+    chargement, sans aucune marque. Coût : ouvrir l'application dans un deuxième onglet fait sortir le premier de
+    l'espace privé. C) Laisser comme aujourd'hui. Je penche pour A : le cas B est plus gênant au quotidien, et la
+    marque ne dit rien de ce qu'il y a dans l'espace. » → A ;
+  - « Champ de code restauré. Une feuille privée restée ouverte à la fermeture revient par « Retour » avec son champ
+    de code rempli. Je recommande de vider ces champs au retour. » → oui ;
+  - « Course au reverrouillage. Si un verrouillage est encore en route quand tu retapes le code privé, il arrive après
+    et referme l'espace que tu viens d'ouvrir. Il n'y a pas de fuite, mais l'espace paraît se refermer seul. Je
+    recommande que l'entrée attende la fin du verrouillage. » → oui ;
+  - « Effacer dès la fermeture plutôt qu'au retour. Tant que le navigateur garde la page en mémoire pour un éventuel
+    « Retour », il garde aussi les images privées déchiffrées et la saisie. Effacer dès `pagehide` (l'événement de
+    fermeture de la page), en gardant l'effacement au retour, change ta décision du 23/10 (« au retour »). Je
+    recommande oui. » → oui : la décision du 23/10 est complétée (effacement à la fermeture, et encore au retour) ;
+  - « Avec « réduire les animations » activé sur le téléphone, la lampe ne pulse plus : « Calcul en cours » et
+    « Prêt » ont alors la même couleur. Je recommande un aspect fixe différent pendant le calcul (par exemple un
+    anneau au lieu d'un point plein). » → oui ;
+  - « Toucher une notification ferme n'importe quelle feuille ouverte, y compris une modification de prompt pas
+    encore enregistrée. Je recommande de passer au Labo sans fermer une feuille qui a une saisie en cours. » → oui ;
+  - « Elle a rendu son compte rendu mais apparaît encore dans la liste des sessions. Est-ce que je l'arrête et
+    supprime son worktree ? Sa branche est fusionnée, rien ne serait perdu. » → oui.
+  Faites dans la discussion principale, sur `dev`, avant le groupe G, avec une passe « bogues » (espace privé).
+- **Écarté** : reverrouiller à chaque chargement sans marque (un deuxième onglet ferait sortir le premier) ; laisser
+  le rechargement rentrer sans code ; effacer seulement au retour ; la même lampe pour « Prêt » et « Calcul » quand
+  les animations sont réduites ; une notification qui ferme une saisie en cours.
+
 ## 2026-10-24 · Page restaurée par « Retour » : saisie privée effacée, espace reverrouillé
 
 - **Contexte** : ticket « Trier dans l'espace privé en lumière verte » du groupe E (page restaurée depuis la mémoire
@@ -164,6 +199,9 @@ les messages de commit.
   les fichiers déjà créés gardent leurs droits, seuls les nouveaux sont pour le seul porteur.
 
 ## 2026-10-23 · Suites du groupe B : effacement PNG en dernier, annulation privée, droits des fichiers, page restaurée
+
+_Complétée le 24/10/2026 (page restaurée) par « Suites du groupe E : verrouillage à la fermeture, lampe sans
+animation, notification et feuilles » : l'affichage privé est aussi effacé dès la fermeture de la page (`pagehide`)._
 
 - **Contexte** : compte rendu du groupe B (pile côté serveur) et passe « bogues » du ticket des couleurs ; questions
   posées au porteur avec une recommandation chacune.
