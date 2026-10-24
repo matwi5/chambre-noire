@@ -4,6 +4,22 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-24 · Avis « zone sensible » limité au travail de la branche, notification qui ramène au Labo
+
+- **Contexte** : ticket d'outillage fait sur `dev` (`237c7d6`) ; texte de `CLAUDE.md` (section « Vérifications ») et
+  point du groupe E restés en suspens soumis au porteur.
+- **Décision** (porteur, 24/10/2026, réponse « 1 oui, 2 oui ») :
+  - « Texte de `CLAUDE.md` (section Vérifications) à remplacer. Ce paragraphe remplace celui qui commence par
+    « `--quick` (en local, jamais en CI)… » » (paragraphe proposé, écrit tel quel dans `CLAUDE.md`) « Deux points à
+    valider en connaissance de cause : La CI GitHub n'affichera plus jamais cet avis. La phrase « C'est un indice… »
+    étend à tous les groupes la règle que tu as fixée pour E et G seulement : la passe « bogues » ne tourne que sur
+    les tickets jugés sensibles au découpage. » → oui ;
+  - « Notifications (ticket E1, groupe E). Toucher une notification devrait-il ramener au Labo même quand
+    l'application est déjà ouverte ? Aujourd'hui, le fichier qui reçoit les notifications (`sw.js`) n'ouvre le Labo
+    que si l'application est fermée. ➡️ Je recommande oui : je l'ajoute à E1 par un commentaire « mise à jour du
+    porteur ». » → oui ; commentaire ajouté au ticket E1.
+- **Écarté** : un avis « zone sensible » en CI ; une passe « bogues » décidée par l'avis plutôt qu'au découpage.
+
 ## 2026-10-24 · Suites du groupe D : deux cas de Jeter, méthode des groupes E et G
 
 - **Contexte** : compte rendu du groupe D (revue de sécurité : deux constats sur Jeter) et enquête sur sa durée
