@@ -312,8 +312,6 @@
   .hist-head { display:flex; align-items:center; gap:10px; margin:2px 4px 12px; }
   .hist-head h2 { font-size:26px; letter-spacing:-.025em; margin:0; }
   .hist-head span { color:var(--ink2); font-size:14px; margin-top:4px; font-variant-numeric:tabular-nums; }
-  .hist-head .btn-icon { width:40px; height:40px; margin-left:auto; }
-  .hist-head .btn-icon svg { width:19px; height:19px; }
   .hgrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; }
   @media (min-width: 700px) { .hgrid { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; } }
   .hgrid > button { position:relative; padding:0; border:0; border-radius:var(--r-s); overflow:hidden; aspect-ratio:1; background:var(--field); cursor:pointer;
@@ -327,6 +325,10 @@
   .hgrid b.lotb { position:absolute; right:6px; top:6px; background:var(--badge); color:var(--ink); font-size:10.5px; font-weight:700;
     padding:2px 7px; border-radius:var(--r-s); font-variant-numeric:tabular-nums; pointer-events:none; }
   .hempty { grid-column:1 / -1; display:grid; justify-items:center; gap:14px; color:var(--ink2); font-size:15px; padding:56px 20px; text-align:center; }
+  .hempty p { margin:0; }
+  /* état vide : le logo (paysage en carrés), agrandi et atténué ; vert dans l'espace privé, comme celui de l'en-tête */
+  .hempty img { width:96px; height:96px; border-radius:23%; opacity:.45; }
+  .priv .hempty img { filter:hue-rotate(115deg) saturate(.8); }
 
   /* ------------------------------------------------------------ visionneuse plein écran */
   .viewer { position:fixed; inset:0; z-index:35; display:flex; flex-direction:column; background:var(--shade); overscroll-behavior:contain;
@@ -645,7 +647,7 @@
   </div>
 
   <div class="pane" id="pane-tirages">
-    <div class="hist-head"><h2>Tirages</h2><span id="histCount"></span><button class="btn-icon mat" onclick="loadHistory()" aria-label="Actualiser les tirages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg></button></div>
+    <div class="hist-head"><h2>Tirages</h2><span id="histCount"></span></div>
     <div class="hgrid" id="histGrid"></div>
   </div>
 
@@ -1060,6 +1062,7 @@ async function refreshStatus(){
     else setLamp('err', 'Moteur indisponible');
     applyPrivate(s.private); if(inPrivate()) adoptPrivate();
     const rev=s.rev ?? 0; if(rev!==pileRev) loadPile(rev);   // pile de l'espace changée (ici ou ailleurs)
+    if(mode==='tirages' && rev!==histRev) loadHistory(rev);   // tirages affichés : relus de même
     facts('engineFacts', [['État', s.sd_ready ? (busy ? 'génération en cours' : 'prêt') : (s.detail||'non prêt')], ['Moteur', s.backend], ['Modèle', s.model],
       ['File d\'attente', s.queued ? s.queued+' en attente' : ''], ['Estimations', !s.estimates ? '' : calibrated ? 'calibrées sur '+s.estimates.samples+' mesure'+(s.estimates.samples>1?'s':'') : 'non calibrées'],
       ['Version', fmtVersion(s.version)], ['Serveur', staleServer(s)]]); }
@@ -2053,15 +2056,23 @@ function goTab(m){ document.querySelector(`#tabbar [data-pane="${m}"]`).click();
 // que l'on vienne : un changement d'onglet garde la position de la page d'avant
 function showLabo(where){ if(mode!=='labo') goTab('labo'); if(where==='composer') openComposer();
   if(where==='top') window.scrollTo({top:0, behavior:'smooth'}); else $('composer').scrollIntoView({block:'start', behavior:'smooth'}); }
-async function loadHistory(){ const priv=inPrivate();   // réponse arrivée après un changement d'espace : ignorée
+// Les Tirages se relisent seuls : à l'affichage de la page, et quand rev (pile et tirages de l'espace, /api/status)
+// change pendant qu'elle est affichée (image gardée ou tirage supprimé, ici ou sur un autre appareil) ; histRev : rev
+// de la dernière lecture réussie ; histSeq : une réponse dépassée par une lecture plus récente est ignorée ; histShown :
+// la grille n'est redessinée que si les tirages ont changé (rev change aussi quand une image arrive dans la pile)
+let histRev=null, histSeq=0, histShown='';
+async function loadHistory(rev){ const priv=inPrivate(), seq=++histSeq;   // réponse arrivée après un changement d'espace : ignorée
   try{ const r=await fetch(priv ? '/api/private/history' : '/api/history'); if(!r.ok) throw new Error();
-    const items=(await r.json()).map(it=>it.private ? {...it, name:privName(it.id)} : it); if(priv!==inPrivate()) return; histItems=items; }
-  catch(e){ if(priv===inPrivate()) $('histCount').textContent='indisponible'; return; }
+    const items=(await r.json()).map(it=>it.private ? {...it, name:privName(it.id)} : it);
+    if(priv!==inPrivate() || seq!==histSeq) return; histItems=items; if(rev!==undefined) histRev=rev; }
+  catch(e){ if(priv===inPrivate() && seq===histSeq) $('histCount').textContent='indisponible'; return; }
   renderGallery(); }
 function renderGallery(){
-  const g=$('histGrid'); g.innerHTML='';
+  const grid=$('histGrid'), key=histItems.map(it=>it.name+'@'+it.time).join('|');
   $('histCount').textContent = histItems.length ? histItems.length+' image'+(histItems.length>1?'s':'') : '';
-  if(!histItems.length){ g.innerHTML='<div class="hempty">Aucune image pour l\'instant.<button class="btn" onclick="goTab(\'labo\')">Aller au Labo</button></div>'; return; }
+  if(key===histShown && grid.childElementCount) return;   // mêmes tirages : vignettes gardées, rien ne clignote
+  histShown=key; grid.innerHTML='';
+  if(!histItems.length){ grid.innerHTML='<div class="hempty"><img src="/logo.svg" alt=""><p>Aucun tirage pour l\'instant</p><button class="btn" onclick="goTab(\'labo\')">Aller au Labo</button></div>'; return; }
   const inLot={};                                  // images de chaque lot encore dans la galerie
   histItems.forEach(it=>{ if(it.lot) inLot[it.lot.id]=(inLot[it.lot.id]||0)+1; });
   histItems.forEach((it, i)=>{ const b=document.createElement('button'); b.dataset.name=it.name; b.setAttribute('aria-label', it.prompt||it.name);
@@ -2071,7 +2082,7 @@ function renderGallery(){
     if(it.mode && it.mode!=='t2i'){ const sp=document.createElement('span'); sp.textContent=MODE_LABELS[it.mode]||it.mode; b.appendChild(sp); }
     // repère des images d'un lot (rang sur la taille du lot), tant qu'il en reste au moins deux dans la galerie
     if(it.lot && inLot[it.lot.id]>1){ const lb=document.createElement('b'); lb.className='lotb'; lb.textContent=`${it.lot.rank}/${it.lot.size}`; b.appendChild(lb); }
-    b.onclick=()=>openViewer(i, histItems); g.appendChild(b); });
+    b.onclick=()=>openViewer(i, histItems); grid.appendChild(b); });
 }
 function openViewer(i, list=vList){
   const it=list[i]; if(!it) return; clearTimeout(vEmpty); vList=list; vIndex=i; resetZoom();
@@ -2359,7 +2370,8 @@ function changedSpace(inside){
   if(!inside && discarding && discarding.priv){ clearTimeout(discarding.timer); discarding=null; hideUndo(); }
   if(!inside) [...sorting].forEach(t=>{ if(t[0]==='p') sorting.delete(t); });   // (leur réponse sera ignorée)
   pileItems=[]; pileRead=false; pileShown=''; labIdle=null; renderRunCard(); renderPile(); loadPile();
-  histItems=[]; $('histGrid').innerHTML=''; $('histCount').textContent=''; if(mode==='tirages') loadHistory();
+  histItems=[]; histRev=null; histShown=''; $('histGrid').innerHTML=''; $('histCount').textContent='';
+  if(mode==='tirages') loadHistory();
   syncThemeColor(); }
 // Saisie propre à chaque espace (texte, images d'entrée, dessin : actif ou non, masque ou annotation, tracé) :
 // celle de l'espace affiché est dans les champs, celle de l'autre espace est mise de côté en mémoire de la page

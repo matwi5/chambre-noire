@@ -246,9 +246,12 @@ dernier bloc, après le HTML.
     bouton, filtre `promptUsage` sur la catégorie de la saisie, `inputKind`), `renderPrompts`, `usePrompt`,
     `savePrompt`.
   - « galerie et visionneuse » : `histItems`, `vList` (ce que parcourt la visionneuse : les Tirages ou la pile),
-    `loadHistory`, `renderGallery`, `openViewer`, `stepViewer`, `closeViewer` et `emptyViewer` (contenu
-    vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace privé), gestes : `zoomable` (pincer,
-    molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les images d'entrée).
+    `loadHistory` (à l'affichage des Tirages, et quand `rev` change pendant qu'ils sont affichés : `histRev`, retenu
+    après une lecture réussie ; `histSeq` : une réponse dépassée est ignorée), `renderGallery` (redessinée seulement si
+    les tirages changent, `histShown` ; état vide avec le logo et « Aller au Labo »), `openViewer`, `stepViewer`,
+    `closeViewer` et `emptyViewer` (contenu vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace
+    privé), gestes : `zoomable` (pincer, molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les
+    images d'entrée).
   - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;
     « Reprendre » : `resumeFrom` (saisie remplacée, confirmation si elle n'est pas vide), `resumeImages` (images

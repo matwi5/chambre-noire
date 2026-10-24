@@ -469,6 +469,9 @@ et Tirages, pile à trier » (incognito retiré)._
 
 _Révisée le 22/10/2026 (parties sur l'incognito : file, terminées, étiquette `tag`) par « Refonte « Chambre noire » :
 lumière inactinique, pixel, Labo et Tirages, pile à trier » (incognito retiré)._
+_Remplacée le 24/10/2026 par la même refonte : deux pages, le Labo (pile à trier, génération en cours, file dans une
+feuille, champ de création) et les Tirages (mis à jour seuls, sans bouton Rafraîchir) ; la page En cours, ses
+terminées et la Galerie disparaissent._
 
 - **Contexte** : trois onglets (Créer, Éditer, Dessiner) font la même chose à une image d'entrée près ; l'image en
   cours et le résultat s'affichent sous le compositeur ; la file d'attente, dans une feuille ouverte par la pastille du

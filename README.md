@@ -418,15 +418,18 @@ le modèle à redessiner l'original.
 
 ### Tirages
 
-L'onglet **Tirages** montre toutes les images de `outputs\`, la plus récente d'abord. Un appui sur une miniature
-l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèle, durée, et la graine quand elle est connue). Glisser sur le côté passe
-à l'image voisine (flèches du clavier sur ordinateur), glisser vers le bas ferme, un appui sur l'image masque les
-commandes. Pour zoomer (jusqu'à ×6), pincer l'image : elle passe au-dessus de tout, peut couvrir tout l'écran, suit les
-doigts, et revient à sa taille dès qu'on les relâche. Sur ordinateur, la molette zoome, glisser déplace l'image et un
-clic la remet à sa taille. En haut à droite : **Partager**, **Copier** et **Télécharger** ; en bas : **Éditer** (ajoute
-l'image aux images d'entrée du Labo), **Dessiner**, **Reprendre**, **Relancer** et **Supprimer** (définitif, après
-confirmation : images d'entrée, dossier de travail et ligne du journal des générations compris). Le champ de création
-n'est pas sur les Tirages.
+L'onglet **Tirages** montre toutes les images de `outputs\`, la plus récente d'abord : trois colonnes sur le
+téléphone, davantage sur un grand écran. Il se met à jour seul, sans bouton Rafraîchir : une image gardée ou un tirage
+supprimé, ici ou sur un autre appareil, y apparaît ou en disparaît à la vérification suivante de l'état du Mac (toutes
+les 2 à 5 secondes). Vide, il montre le logo, « Aucun tirage pour l'instant » et un bouton **Aller au Labo**. Un appui
+sur une miniature l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèle, durée, et la graine
+quand elle est connue). Glisser sur le côté passe à l'image voisine (flèches du clavier sur ordinateur), glisser vers
+le bas ferme, un appui sur l'image masque les commandes. Pour zoomer (jusqu'à ×6), pincer l'image : elle passe
+au-dessus de tout, peut couvrir tout l'écran, suit les doigts, et revient à sa taille dès qu'on les relâche. Sur
+ordinateur, la molette zoome, glisser déplace l'image et un clic la remet à sa taille. En haut à droite :
+**Partager**, **Copier** et **Télécharger** ; en bas : **Éditer** (ajoute l'image aux images d'entrée du Labo),
+**Dessiner**, **Reprendre**, **Relancer** et **Supprimer** (définitif, après confirmation : images d'entrée, dossier
+de travail et ligne du journal des générations compris). Le champ de création n'est pas sur les Tirages.
 
 **Reprendre** remet dans le Labo la saisie d'où vient l'image, à la place de la saisie en cours (après confirmation si
 elle n'est pas vide) : son texte, ses réglages (format, résolution, étapes) et ses images d'entrée selon son usage.
