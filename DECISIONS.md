@@ -4,6 +4,19 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-24 · Choix confiés à Claude jusqu'à la fin du parcours de la refonte
+
+- **Contexte** : suites du groupe E en cours, groupe G (code d'accès demandé aussi sur le Mac) restant ; chaque choix
+  de confidentialité ou de conception était jusqu'ici posé au porteur.
+- **Décision** (porteur, 24/10/2026) : « Continu de maniere autonome, tu choisi tes propres recommandations jusqu'a la
+  fin de tout les tickets du parcours. » Jusqu'à la fin des tickets du parcours « Refonte UI et pile à trier »,
+  Claude retient sa propre recommandation à chaque choix, zones sensibles comprises, l'écrit ici (question et
+  recommandation retenue) et la déclare au tableau de bord. La délégation vaut dans la discussion principale où elle
+  a été donnée : le groupe G s'y fait donc, pas dans une session liée (une session liée ne peut pas tenir un accord
+  du porteur d'un message d'une autre session). Restent au porteur : pousser, ouvrir la pull request, fusionner vers
+  `main`, le compte rendu du parcours et la livraison.
+- **Écarté** : lancer G en session liée, qui buterait sur chaque choix à faire confirmer par le porteur.
+
 ## 2026-10-24 · Marque de l'onglet posée dès l'entrée dans l'espace, refus clair du verrouillage
 
 - **Contexte** : revue Standards/Spec et passe « bogues » des suites du groupe E ; deux constats touchant l'espace
