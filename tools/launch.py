@@ -251,7 +251,8 @@ d='M1 0h7v1h1v7h-1v1h-7v-1h-1v-7h1zM4 2h1v3h-1zM4 6h1v1h-1z'/%3E\
 @keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 @media (prefers-reduced-motion:reduce){.shake{animation:none}}
 </style></head><body><form id="f"><img class="logo" src="/logo.svg" alt=""><h1>Chambre noire</h1>
-<p>Saisissez le code d'accès affiché sur le Mac, sous le bouton « Téléphone » en haut de l'interface. Il n'est demandé qu'une fois sur cet appareil.</p>
+<p>Saisissez le code d'accès affiché sur le Mac : touchez la lampe d'état, en haut à droite de l'interface, puis
+« Ouvrir depuis le téléphone ». Il n'est demandé qu'une fois sur cet appareil.</p>
 <input id="c" aria-label="Code d'accès" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="xxxx-xxxx" autofocus>
 <button id="b">Entrer</button><div id="err" role="alert"></div></form>
 <script>

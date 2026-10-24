@@ -144,11 +144,13 @@ Options : `--port 7860` (changer de port), `--model q4|q8` (modèle Q4_K_M par d
 `setup.py --q8`), `--backend vulkan|cuda|cpu` (Windows : forcer un moteur ; par défaut CUDA s'il est installé, sinon
 Vulkan ; sur Mac, le moteur est toujours Metal), `--no-browser`. Pour lancer Q8_0 par le raccourci, ajoutez
 `"model": "q8"` dans `tools/config.local.json` (réglages propres à la machine, non suivis par git, lus par-dessus
-`tools/config.json`). La pastille d'état en haut à droite indique le modèle utilisé ; un appui ouvre
-le panneau **Moteur** (moteur, modèle, calibration des estimations, version du code servi, journal) : la ligne
-**Version** dit quel commit tourne (utile pour savoir si un correctif est en ligne sur le téléphone), et **Serveur**
-« à relancer » apparaît quand `tools/launch.py` ou `tools/estimate.py` a changé depuis le lancement du serveur (le
-reste est en ligne sans relance).
+`tools/config.json`). La **lampe d'état** en haut à droite dit l'état du moteur d'un regard : ambre fixe, prêt ;
+ambre pulsée, un calcul en cours ou une file non vide ; grise, connexion ; rouge avec l'icône d'erreur, moteur
+indisponible (fichiers manquants) ou Mac injoignable. Un appui ouvre le panneau **Moteur** (état, moteur, modèle,
+calibration des estimations, version du code servi, « Ouvrir depuis le téléphone » sur l'ordinateur, entrée de
+l'espace privé, journal) : la ligne **Version** dit quel commit tourne (utile pour savoir si un correctif est en ligne
+sur le téléphone), et **Serveur** « à relancer » apparaît quand `tools/launch.py` ou `tools/estimate.py` a changé
+depuis le lancement du serveur (le reste est en ligne sans relance).
 
 Par défaut, l'interface n'écoute que sur `127.0.0.1` : elle n'est pas accessible depuis le réseau.
 
@@ -158,7 +160,8 @@ Avec l'option `--lan`, l'interface est aussi accessible depuis un téléphone ou
 calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
 
 - **Code d'accès** : au premier lancement avec `--lan`, un code est créé dans `tools/access_code.txt`. Sur
-  l'ordinateur, le bouton **Téléphone** en haut de l'interface l'affiche avec l'adresse à taper sur le téléphone
+  l'ordinateur, la partie **Ouvrir depuis le téléphone** du panneau Moteur (un appui sur la lampe d'état, en haut à
+  droite) l'affiche avec l'adresse à taper sur le téléphone
   (par exemple `http://Nom-du-Mac.local:7860`). Le téléphone le demande une fois, puis le retient un an. Tout appareil
   autre que l'ordinateur lui-même doit le saisir. Pour en changer, supprimez le fichier et relancez. Limite connue :
   l'ordinateur passe sans code, donc un autre compte ouvert sur le même Mac peut, par l'adresse `127.0.0.1`, tout faire
@@ -166,12 +169,12 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   supprimer des images, modifier les prompts enregistrés, et lire le code d'accès du téléphone ; l'espace privé demande
   toujours son code.
 - **Adresses acceptées** : l'interface ne répond qu'aux adresses `127.0.0.1`, `localhost` et à celles affichées par le
-  bouton **Téléphone** (nom `.local` et adresse IP de l'ordinateur au démarrage) ; tout autre nom est refusé, même
-  sans `--lan`. Si l'adresse IP de l'ordinateur change, l'ancienne est refusée jusqu'au redémarrage de l'interface :
-  préférez l'adresse en `.local` sur le téléphone. Depuis l'ordinateur, ouvrir l'adresse du Wi-Fi demande aussi le code.
-  Si [Tailscale](https://tailscale.com) est connecté sur l'ordinateur au démarrage, ses noms et son adresse `100.x`
-  s'ajoutent à la liste : l'interface est alors joignable hors du Wi-Fi depuis un appareil du même compte Tailscale,
-  avec le même code.
+  panneau **Ouvrir depuis le téléphone** (nom `.local` et adresse IP de l'ordinateur au démarrage) ; tout autre nom est
+  refusé, même sans `--lan`. Si l'adresse IP de l'ordinateur change, l'ancienne est refusée jusqu'au redémarrage de
+  l'interface : préférez l'adresse en `.local` sur le téléphone. Depuis l'ordinateur, ouvrir l'adresse du Wi-Fi
+  demande aussi le code. Si [Tailscale](https://tailscale.com) est connecté sur l'ordinateur au démarrage, ses noms
+  et son adresse `100.x` s'ajoutent à la liste : l'interface est alors joignable hors du Wi-Fi depuis un appareil du
+  même compte Tailscale, avec le même code.
   Les envois venant d'une page d'un autre site (formulaire ou script) sont refusés : seule l'interface elle-même peut
   lancer une génération, annuler ou supprimer une image.
 - **Installer comme une application (Android, Chrome)** : Chrome n'installe une page qu'en HTTPS. Tailscale le fournit
@@ -182,14 +185,15 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   tailscale serve --bg 7860
   ```
 
-  Après le redémarrage de l'interface, le bouton **Téléphone** affiche en premier l'adresse
+  Après le redémarrage de l'interface, **Ouvrir depuis le téléphone** affiche en premier l'adresse
   `https://<nom-du-mac>.<réseau>.ts.net/`. Ouverte sur le téléphone (Tailscale connecté), elle demande le code une fois,
   puis le menu de Chrome propose **Installer l'application** : icône sur l'écran d'accueil, plein écran, et une page
   « Ordinateur injoignable » quand le Mac ne répond pas. `tailscale serve --https=443 off` retire cette publication.
   Les requêtes relayées par Tailscale demandent toujours le code, même si elles arrivent sur le Mac par `127.0.0.1` ;
   sans `--lan`, elles sont refusées. Sur iPhone, Safari → Partager → **Sur l'écran d'accueil** fonctionne aussi en HTTP.
 - **Notification de fin de génération** : à la fin de chaque génération (ou en cas d'échec), l'ordinateur envoie une
-  notification au téléphone, même si l'application y est fermée ou en arrière-plan ; la toucher rouvre l'application.
+  notification au téléphone, même si l'application y est fermée ou en arrière-plan ; la toucher ouvre l'application
+  sur le Labo, devant la pile, qu'elle soit fermée ou déjà ouverte (elle y passe alors sans se recharger).
   L'autorisation est demandée au premier appui sur **Révéler** ; l'interrupteur **Notification en fin de génération**
   du panneau Réglages les coupe. Elles ne passent que par l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du
   Wi-Fi), ou sur l'ordinateur lui-même. Le message transite chiffré par le service de notification du navigateur
@@ -295,8 +299,8 @@ déplie, avec une ligne par image pour l'annuler ou la faire passer en tête seu
 passe en tête depuis n'importe quel appareil. La file, la carte en cours et la pastille ne montrent que les
 générations de l'espace où l'on est (public, ou espace privé) : rang et « +N en attente » ne comptent qu'elles ; une
 génération qui attend derrière une génération de l'autre espace affiche un temps qui compte ce travail caché, sans
-ligne pour lui. L'icône de l'onglet **Labo** a un anneau qui suit la génération en cours. En haut, l'état du moteur
-(« Prêt », « En cours ») ouvre le panneau Moteur. On peut recharger la
+ligne pour lui. L'icône de l'onglet **Labo** a un anneau qui suit la génération en cours. En haut, la lampe d'état
+(ambre fixe ou pulsée) ouvre le panneau Moteur. On peut recharger la
 page sans rien perdre : elle se rattache aux générations normales qu'elle avait lancées (retenues par le navigateur),
 pas à celles des autres appareils, qui restent visibles dans la file ; dans l'espace privé, à toutes les générations
 privées en cours (voir « Espace privé »). Une génération ainsi reprise garde son prompt complet (sous l'image, et pour
@@ -495,20 +499,20 @@ du Mac, ne suffit pas pour voir les images privées. C'est le seul mode de confi
 est retiré, et un appareil qui l'avait allumé voit une seule fois, au chargement, « L'incognito n'existe plus : vos
 images sont enregistrées. Pour la confidentialité, passez par l'espace privé. »
 
-- Rien ne le signale à l'arrivée sur l'application. Son entrée est le **cadenas** de l'en-tête des **Tirages**,
-  à côté du bouton Rafraîchir et aussi visible que lui : la première fois, il crée l'espace (code de 8 caractères au moins, lettres, chiffres, signes ;
-  majuscules et minuscules comptent ; saisi deux fois).
+- Rien ne le signale à l'arrivée sur l'application. Son entrée est la ligne **Espace privé**, avec un cadenas, du
+  panneau Moteur (un appui sur la lampe d'état, en haut à droite) : la première fois, elle crée l'espace (code de 8
+  caractères au moins, lettres, chiffres, signes ; majuscules et minuscules comptent ; saisi deux fois).
 - **En HTTPS ou sur le Mac seulement** : l'espace privé ne s'ouvre (création, entrée, Tirages privés, Changer le
-  code) que sur le Mac lui-même ou par l'adresse HTTPS de Tailscale (celle en `https://` du panneau
-  Téléphone). Par l'adresse `http://` du Wi-Fi, le code et les images passeraient en clair sur le réseau : le cadenas
-  le dit et ne demande pas le code. Le téléphone doit donc passer par l'adresse HTTPS, ce qu'il fait déjà s'il a
-  installé l'application depuis elle.
-- Ensuite, le cadenas demande le code pour **entrer** dans l'espace privé, sur l'appareil où on le touche et seulement
-  sur lui. Un code faux est suivi d'une attente d'une seconde. Dans l'espace privé, toute l'application passe en
-  lumière inactinique verte : on sait où l'on est.
-- Le cadenas **Sortir**, en haut à droite, ramène à l'application normale en verrouillant l'espace. Il se verrouille
-  aussi seul après 15 minutes sans activité privée sur cet appareil, et à la fermeture ou au rechargement de
-  l'application.
+  code) que sur le Mac lui-même ou par l'adresse HTTPS de Tailscale (celle en `https://` de **Ouvrir depuis le
+  téléphone**). Par l'adresse `http://` du Wi-Fi, le code et les images passeraient en clair sur le réseau : la ligne
+  **Espace privé** le dit et ne demande pas le code. Le téléphone doit donc passer par l'adresse HTTPS, ce qu'il fait
+  déjà s'il a installé l'application depuis elle.
+- Ensuite, la ligne **Espace privé** demande le code pour **entrer** dans l'espace privé, sur l'appareil où on le touche
+  et seulement sur lui. Un code faux est suivi d'une attente d'une seconde. Dans l'espace privé, toute l'application
+  passe en lumière inactinique verte : on sait où l'on est.
+- **Sortir**, en haut à droite à côté de la lampe, ramène à l'application normale en verrouillant l'espace (la ligne
+  **Espace privé** n'est pas dans le panneau Moteur tant qu'on est dedans). L'espace se verrouille aussi seul après 15
+  minutes sans activité privée sur cet appareil, et à la fermeture ou au rechargement de l'application.
 - Dans l'espace privé, **toute génération est privée** (texte → image, édition, dessin) : son image, ses images
   d'entrée, sa miniature, son prompt et ses réglages sont chiffrés sur le Mac. Le texte tapé n'est pas retenu par le
   navigateur. Une génération privée lancée va jusqu'au bout et est rangée chiffrée même si l'espace se verrouille avant
@@ -718,8 +722,8 @@ devraient prendre ≈ 3 min chacune selon le modèle de coût (non mesurées).
 utilisateur (stratégie AppLocker). Utilisez le raccourci `Chambre noire.lnk`, qui lance directement `python.exe`.
 S'il manque : `venv\Scripts\python.exe tools\make_shortcut.py`.
 
-**La pastille d'état en haut à droite indique « Non prêt ».** Le panneau Moteur (un appui sur la pastille) affiche
-les fichiers manquants. L'installation est incomplète :
+**La lampe d'état en haut à droite est rouge.** Le panneau Moteur (un appui sur la lampe) dit pourquoi : « serveur
+injoignable » si l'interface ne tourne plus, sinon les fichiers manquants. L'installation est alors incomplète :
 `venv\Scripts\python.exe setup.py --check` puis `venv\Scripts\python.exe setup.py` (sur Mac : `venv/bin/python`).
 
 **La génération échoue immédiatement.** Le détail est dans `jobs\<identifiant>\sd-cli.log`. Sous Windows, vérifiez que
@@ -1012,11 +1016,13 @@ plusieurs photos d'un coup, vidage après « Révéler », saisie propre à chaq
 une pile, déplié pile vide, replié après « Révéler », par sa poignée ou un toucher sur la pile sans rien perdre de la
 saisie, déplié d'office puis replié quand la carte revient, touché il reste déplié, pas replié par la fin d'un balayage,
 replié dès le premier toucher après un balayage au doigt, image glissée sur la ligne, ✓ et ✕ jamais sous la ligne,
-dessin en pleine hauteur, grille de réglages qui ouvre le panneau, rien qui dépasse), l'en-tête (cadenas, état du
-moteur), la file cloisonnée par espace, les prompts enregistrés privés, la reprise d'une génération, le suivi d'une
-génération privée devenue inconnue (sans faux « Échec »), le brouillon unique (reprise des anciens, aucun brouillon
-privé dans le navigateur, ancien réglage incognito signalé une fois puis oublié) et le pilote lui-même (recherche de
-données restées dans la page, fichiers écrits par le banc, délais).
+dessin en pleine hauteur, grille de réglages qui ouvre le panneau, rien qui dépasse), l'en-tête (lampe d'état et ses
+couleurs, son panneau avec « Ouvrir depuis le téléphone » sur l'ordinateur seulement et la ligne « Espace privé »,
+« Sortir », rien qui dépasse), le toucher d'une notification (service worker et page), la file cloisonnée par espace,
+les prompts enregistrés privés, la reprise d'une génération, le suivi d'une génération privée devenue inconnue (sans
+faux « Échec »), le brouillon unique (reprise des anciens, aucun brouillon privé dans le navigateur, ancien réglage
+incognito signalé une fois puis oublié) et le pilote lui-même (recherche de données restées dans la page, fichiers
+écrits par le banc, délais).
 
 Tests de bout en bout, interface lancée :
 

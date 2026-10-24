@@ -30,7 +30,7 @@ async function fresh() {
   await page.goto(bench.url + '/');
   await page.eval(`localStorage.clear()`);
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   await page.eval(`opt.steps = 'low'; opt.res = 'low'; saveOpt(); refreshChoices();
     window.sentBodies = []; const f = window.fetch; window.fetch = (u, o) => {
       if (String(u).endsWith('/api/generate')) sentBodies.push(JSON.parse(o.body)); return f(u, o); }`);

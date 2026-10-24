@@ -26,7 +26,7 @@ before(async () => {
   page.on('Fetch.requestPaused', p => paused ? paused(p)
     : page.send('Fetch.continueRequest', { requestId: p.requestId }).catch(() => {}));
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   await page.eval(`opt.steps = 'low'; opt.res = 'low'; saveOpt(); refreshChoices()`);   // générations courtes
   await watchSorts();
 });
@@ -266,7 +266,7 @@ test('rechargement pendant le bandeau : rien n\'est envoyé, l\'image est encore
   await page.click('#pileNo');
   await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'page rechargée' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'page rechargée' });
   await page.waitFor(`pileItems.some(it => it.prompt === 'zp3 doute')`, { what: 'image dans la pile rechargée' });
   await new Promise(r => setTimeout(r, 5500));      // au-delà du délai : rien n'est parti avant le rechargement
   assert.equal(await inPile('zp3 doute'), true, 'image effacée malgré la fermeture de la page');

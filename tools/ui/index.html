@@ -55,14 +55,14 @@
     background:radial-gradient(90% 55% at 50% -8%, var(--halo), transparent 72%), var(--void); }
   .ambient::after { content:""; position:absolute; inset:0; background:var(--grain); background-size:180px; opacity:.32; }
   .priv .logo { filter:hue-rotate(115deg) saturate(.8); }
-  #privExit { flex:none; margin-left:8px; color:var(--accent2); }
+  #privExit { flex:none; color:var(--accent2); }
   #privExit[hidden] { display:none; } #privExit svg { width:18px; height:18px; }
-  @media (max-width: 420px) { #privExit span, .priv .topbar h1 { display:none; } #privExit { padding:0 10px; } }
+  @media (max-width: 420px) { #privExit { padding:0 10px; gap:6px; } }
 
   /* ------------------------------------------------------------ surfaces mates : boutons, barres, feuilles */
   .mat { position:relative; background:var(--surf); border:1px solid var(--line); box-shadow:var(--shadow); }
 
-  /* ------------------------------------------------------------ barre du haut : marque et pastille d'état */
+  /* ------------------------------------------------------------ barre du haut : marque et lampe d'état */
   .topbar { position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:10px;
     padding:calc(10px + env(safe-area-inset-top)) 16px 10px; }
   .topbar::before { content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
@@ -75,12 +75,18 @@
   .chipbtn { display:inline-flex; align-items:center; gap:8px; height:36px; padding:0 14px; border-radius:var(--r-m); cursor:pointer;
     font-size:14px; font-weight:600; color:var(--ink); }
   .brand { margin-right:auto; }
-  #phoneBtn[hidden] { display:none; }
-  #statusChip { flex:none; max-width:50vw; }
-  #status { display:flex; align-items:center; gap:8px; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  #status::before { content:""; flex:none; width:8px; height:8px; border-radius:50%; background:var(--warn); box-shadow:0 0 8px var(--warn); }
-  #status.ok::before { background:var(--ok); box-shadow:0 0 8px var(--ok); } #status.err::before { background:var(--err); box-shadow:0 0 8px var(--err); }
-  @media (max-width: 700px) { #phoneBtn span { display:none; } #phoneBtn { padding:0 10px; } }
+  /* lampe d'état : un point lumineux, gris pendant la connexion, ambre fixe moteur prêt, ambre pulsé pendant un calcul
+     (ou une file non vide), rouge avec l'icône d'erreur si le moteur est indisponible ou le Mac injoignable ; le
+     bouton garde une cible de doigt de 40 px */
+  .lamp { flex:none; display:grid; place-items:center; width:40px; height:40px; padding:0; border:0; border-radius:var(--r-m);
+    background:none; cursor:pointer; }
+  .lamp::after { content:""; width:12px; height:12px; border-radius:50%; background:var(--ink3); }
+  .lamp.ok::after { background:var(--accent); box-shadow:0 0 6px 1px var(--accent), 0 0 18px 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .lamp.ok.busy::after { animation:lamp-pulse 1.6s ease-in-out infinite; }
+  .lamp.err::after { width:14px; height:14px; border-radius:0; background:var(--err); box-shadow:none;
+    -webkit-mask:var(--ico-err) center / contain no-repeat; mask:var(--ico-err) center / contain no-repeat; }
+  .lamp:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+  @keyframes lamp-pulse { 50% { opacity:.35; } }
 
   /* ------------------------------------------------------------ barre d'onglets flottante, repère qui glisse */
   .tabbar { position:fixed; z-index:30; left:50%; bottom:calc(12px + env(safe-area-inset-bottom)); transform:translateX(-50%);
@@ -308,7 +314,6 @@
   .hist-head span { color:var(--ink2); font-size:14px; margin-top:4px; font-variant-numeric:tabular-nums; }
   .hist-head .btn-icon { width:40px; height:40px; margin-left:auto; }
   .hist-head .btn-icon svg { width:19px; height:19px; }
-  .hist-head #privEntry:not([hidden]) + .btn-icon { margin-left:0; }   /* espace privé : cadenas à côté de Rafraîchir, même aspect */
   .hgrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; }
   @media (min-width: 700px) { .hgrid { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; } }
   .hgrid > button { position:relative; padding:0; border:0; border-radius:var(--r-s); overflow:hidden; aspect-ratio:1; background:var(--field); cursor:pointer;
@@ -527,6 +532,11 @@
   #peText { min-height:150px; }
   #promptEditSheet .ask-acts { margin-top:18px; }
   /* ------------------------------------------------------------ espace privé */
+  /* entrée : une ligne de la feuille de la lampe, cadenas et « Espace privé » ; masquée dans l'espace (sortie en haut) */
+  .privrow { display:flex; align-items:center; gap:12px; width:100%; min-height:48px; margin-top:18px; padding:0 14px;
+    border-radius:var(--r-m); cursor:pointer; font-size:15px; font-weight:600; text-align:left; }
+  .privrow[hidden] { display:none; }
+  .privrow svg { flex:none; width:20px; height:20px; color:var(--accent2); }
   .privsheet label { display:block; font-size:13px; font-weight:650; color:var(--ink2); margin:14px 2px 6px; }
   .privsheet .btn { width:100%; margin-top:18px; }
   .privsheet .ask-acts .btn { margin-top:0; }
@@ -573,8 +583,7 @@
 <div class="ambient" aria-hidden="true"></div>
 <header class="topbar">
   <div class="brand"><img class="logo" src="/logo.svg" alt=""><h1>Chambre noire</h1></div>
-  <button class="chipbtn mat" id="phoneBtn" hidden onclick="openSheet('engineSheet')" aria-label="Ouvrir depuis le téléphone"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="6.5" y="2.5" width="11" height="19" rx="3"/><path d="M10.5 18.5h3"/></svg><span>Téléphone</span></button>
-  <button class="chipbtn mat" id="statusChip" onclick="openSheet('engineSheet')" aria-label="État du moteur"><span id="status">connexion…</span></button>
+  <button class="lamp" id="lamp" onclick="openSheet('engineSheet')" aria-label="Connexion au Mac…" title="Connexion au Mac…"></button>
   <button class="chipbtn mat" id="privExit" hidden onclick="privLock()" aria-label="Sortir de l'espace privé" title="Sortir de l'espace privé"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg><span>Sortir</span></button>
 </header>
 
@@ -636,7 +645,7 @@
   </div>
 
   <div class="pane" id="pane-tirages">
-    <div class="hist-head"><h2>Tirages</h2><span id="histCount"></span><button class="btn-icon mat" id="privEntry" hidden aria-label="Espace privé"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg></button><button class="btn-icon mat" onclick="loadHistory()" aria-label="Actualiser les tirages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg></button></div>
+    <div class="hist-head"><h2>Tirages</h2><span id="histCount"></span><button class="btn-icon mat" onclick="loadHistory()" aria-label="Actualiser les tirages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg></button></div>
     <div class="hgrid" id="histGrid"></div>
   </div>
 
@@ -721,10 +730,11 @@
   <div class="sheet-head"><h2 id="engineTitle">Moteur</h2><button class="btn secondary small" onclick="closeSheet()">Fermer</button></div>
   <dl class="facts" id="engineFacts"></dl>
   <div id="phone" hidden>
-    <h3>Depuis un téléphone du même Wi-Fi</h3>
+    <h3>Ouvrir depuis le téléphone</h3>
     <dl class="facts" id="phoneFacts"></dl>
     <p class="note">Le code n'est demandé qu'une fois par appareil.</p>
   </div>
+  <button class="privrow mat" id="privEntry" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg><span>Espace privé</span></button>
   <h3>Journal</h3>
   <div class="log" id="log"></div>
 </section>
@@ -780,7 +790,7 @@
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
   <div class="sheet-head"><h2 id="privHttpsTitle">Espace privé</h2></div>
   <p class="note">L'espace privé ne s'ouvre qu'en HTTPS ou sur le Mac lui-même : par cette adresse en http://, le code et les images passeraient en clair sur le Wi-Fi.</p>
-  <p class="note">Ouvrez l'application par son adresse HTTPS (Tailscale), celle qui commence par https:// dans le panneau Téléphone du Mac.</p>
+  <p class="note">Ouvrez l'application par son adresse HTTPS (Tailscale), celle qui commence par https:// dans « Ouvrir depuis le téléphone », sur le Mac (lampe d'état, en haut à droite).</p>
   <button class="btn" onclick="closeSheet()">Compris</button>
 </section>
 <section class="sheet mat privsheet" id="privResetSheet" role="alertdialog" aria-modal="true" aria-labelledby="privResetTitle">
@@ -1035,21 +1045,25 @@ const staleServer = s => s.server_version && s.version && s.server_version.serve
 // spaceEpoch : change quand la page quitte l'espace privé sans attendre /api/status (« Sortir », privLock) ; une
 // réponse demandée avant, qui dirait encore l'espace ouvert, n'est pas appliquée : une nouvelle est demandée
 let spaceEpoch=0;
+// lampe d'état de l'en-tête : classes ok (moteur prêt), busy (calcul ou file non vide), err (moteur indisponible, Mac
+// injoignable), aucune pendant la connexion ; l'état dit en mots pour le lecteur d'écran et au survol
+function setLamp(cls, label){ const b=$('lamp'); b.className='lamp '+cls; b.setAttribute('aria-label', label); b.title=label; }
 async function refreshStatus(){
   const epoch=spaceEpoch;
-  try{ const s=await (await fetch('/api/status')).json(); const el=$('status');
+  try{ const s=await (await fetch('/api/status')).json();
     if(epoch!==spaceEpoch) return refreshStatus();
     queueState=s.queue||[]; queueAt=Date.now();
     // adresse et code d'accès pour le téléphone : envoyés seulement quand la page est ouverte sur le Mac
-    $('phone').hidden=$('phoneBtn').hidden=!s.phone; if(s.phone) facts('phoneFacts', [['Adresse', s.phone.urls[0]], ...s.phone.urls.slice(1).map(u=>['ou', u]), ['Code', s.phone.code, 'code']]);
-    const ver = s.model_version ? s.model_version.toUpperCase() : '';
-    if(s.sd_ready){ applyEstimates(s.estimates); el.textContent=(s.busy?'En cours':'Prêt')+(ver?' · '+ver:''); el.className='ok'; } else { el.textContent='Non prêt'; el.className='err'; }
+    $('phone').hidden=!s.phone; if(s.phone) facts('phoneFacts', [['Adresse', s.phone.urls[0]], ...s.phone.urls.slice(1).map(u=>['ou', u]), ['Code', s.phone.code, 'code']]);
+    const modelTag = s.model_version ? ' · '+s.model_version.toUpperCase() : '', busy=!!(s.busy || s.queued);
+    if(s.sd_ready){ applyEstimates(s.estimates); setLamp(busy ? 'ok busy' : 'ok', (busy ? 'Calcul en cours' : 'Moteur prêt')+modelTag); }
+    else setLamp('err', 'Moteur indisponible');
     applyPrivate(s.private); if(inPrivate()) adoptPrivate();
     const rev=s.rev ?? 0; if(rev!==pileRev) loadPile(rev);   // pile de l'espace changée (ici ou ailleurs)
-    facts('engineFacts', [['État', s.sd_ready ? (s.busy ? 'génération en cours' : 'prêt') : (s.detail||'non prêt')], ['Moteur', s.backend], ['Modèle', s.model],
+    facts('engineFacts', [['État', s.sd_ready ? (busy ? 'génération en cours' : 'prêt') : (s.detail||'non prêt')], ['Moteur', s.backend], ['Modèle', s.model],
       ['File d\'attente', s.queued ? s.queued+' en attente' : ''], ['Estimations', !s.estimates ? '' : calibrated ? 'calibrées sur '+s.estimates.samples+' mesure'+(s.estimates.samples>1?'s':'') : 'non calibrées'],
       ['Version', fmtVersion(s.version)], ['Serveur', staleServer(s)]]); }
-  catch(e){ $('status').textContent='Hors ligne'; $('status').className='err'; facts('engineFacts', [['État', 'serveur injoignable']]); }
+  catch(e){ setLamp('err', 'Mac injoignable'); facts('engineFacts', [['État', 'serveur injoignable']]); }
   renderRunTab(); renderQueue(); renderRunCard();
   clearTimeout(statusTimer);                       // un appel hors du rythme (lancement, annulation) remplace le suivant prévu
   statusTimer=setTimeout(refreshStatus, queueState.length || pageJobs.some(isActive) ? 2000 : 5000);
@@ -1240,8 +1254,10 @@ let toastTimer=null, askResolve=null;
 const LONG_TOAST = 6500;                         // ms : message d'erreur, ou long à lire (kind 'long')
 function toast(msg, kind, go){ const t=$('toastBox'); t.textContent=msg; t.className='toast mat on'+(kind?' '+kind:'')+(go?' go':'');
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('on'), kind==='err' || kind==='long' ? LONG_TOAST : 3000); }
-$('toastBox').onclick=()=>{ const t=$('toastBox'); if(!t.classList.contains('go')) return; t.classList.remove('on', 'go');
-  if(ivIndex>=0) closeInputs(); if(vIndex>=0) closeViewer(); closeSheet(); showLabo('top'); };   // la page, pas sous une vue
+// le Labo sur la pile, à l'écran et pas sous une vue ni une feuille : message « Image prête » touché, ou notification
+// touchée alors que l'application était déjà ouverte (sw.js le demande à la page)
+function toLabo(){ if(ivIndex>=0) closeInputs(); if(vIndex>=0) closeViewer(); closeSheet(); showLabo('top'); }
+$('toastBox').onclick=()=>{ const t=$('toastBox'); if(!t.classList.contains('go')) return; t.classList.remove('on', 'go'); toLabo(); };
 function ask(title, text, yes, danger){
   $('askTitle').textContent=title; $('askText').textContent=text; $('askYes').textContent=yes; $('askYes').classList.toggle('danger-fill', !!danger);
   openSheet('askSheet'); return new Promise(res=>{ askResolve=res; }); }
@@ -2298,11 +2314,10 @@ function forgetResult(name){                      // image supprimée : elle qui
   const p=pageJobs.find(q=>q.result && q.result.name===name);
   if(p) drop(p); }
 // ------------------------------------------------------------ espace privé : galerie chiffrée sur le Mac, ouverte par un
-// code privé propre à chaque appareil (session du serveur, cookie HttpOnly). Entrée discrète, un cadenas dans l'en-tête
-// des Tirages (rien à côté de Révéler à l'arrivée : décision du porteur) ; masquée si le serveur ne le propose pas.
-// Déverrouillé sur cet appareil, on est « dans l'espace privé » (décision du porteur du 14/10/2026) : thème propre,
-// une seule sortie (le cadenas en haut à droite, qui verrouille). Entrée : le cadenas discret
-// de l'en-tête des Tirages.
+// code privé propre à chaque appareil (session du serveur, cookie HttpOnly). Entrée discrète, la ligne « Espace privé »
+// au cadenas de la feuille de la lampe (rien à l'écran à l'arrivée : décision du porteur) ; masquée si le serveur ne le
+// propose pas. Déverrouillé sur cet appareil, on est « dans l'espace privé » (décision du porteur du 14/10/2026) : thème
+// propre, une seule sortie (« Sortir », en haut à droite, qui verrouille).
 function inPrivate(){ return privState.unlocked; }
 function applyPrivate(p){ if(!p) return; const was=inPrivate(); privState=p;
   $('privEntry').hidden=!p.available || p.unlocked; $('privEntry').title=p.exists ? 'Espace privé' : 'Créer l\'espace privé';
@@ -2435,7 +2450,9 @@ document.querySelectorAll('.privsheet input').forEach(inp=>inp.addEventListener(
 // page fermée ou rechargée : l'espace se verrouille (la session de cet appareil est fermée sur le Mac)
 addEventListener('pagehide', ()=>{ if(privState.unlocked) fetch('/api/private/lock', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}', keepalive:true}).catch(()=>{}); });
 // application installable sur le téléphone (le navigateur n'accepte le service worker qu'en HTTPS ou sur le Mac)
-if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{});
+  // notification touchée, application déjà ouverte : le service worker la ramène et demande le Labo
+  navigator.serviceWorker.addEventListener('message', e=>{ if(e.data && e.data.go==='labo') toLabo(); }); }
 </script>
 </body>
 </html>

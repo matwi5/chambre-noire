@@ -48,7 +48,7 @@ async function fresh(pane = 'labo') {
   await page.goto(bench.url + '/');
   await page.eval(`localStorage.clear()`);
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok' && pileRead`, { what: 'moteur prêt affiché, pile lue' });
+  await page.waitFor(`$('lamp').classList.contains('ok') && pileRead`, { what: 'moteur prêt affiché, pile lue' });
   await page.keepPile();
   await page.waitFor(`!$('composer').classList.contains('folded')`, { what: 'champ déplié' });
   await page.tab(pane);

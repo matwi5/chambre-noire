@@ -17,7 +17,7 @@ before(async () => {
   chrome = await launchChrome();
   page = await chrome.phonePage();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
 });
 
 after(async () => {
@@ -67,11 +67,11 @@ test('glisser le doigt change d\'onglet hors du champ de création, jamais sur l
   page.assertNoErrors();
 });
 
-test('rien en cours : pas de carte en cours ; l\'état du moteur ouvre son panneau', async () => {
+test('rien en cours : pas de carte en cours ; la lampe ouvre la feuille du moteur', async () => {
   await page.tab('labo');
   assert.deepEqual(await page.eval(`[$('runCard').hidden, $('queueChip').hidden]`), [true, true]);
   assert.equal(await page.visible('#pileEmpty'), true, 'pile vide : l\'état vide');
-  await page.click('#statusChip');
+  await page.click('#lamp');
   await page.waitFor(`$('engineSheet').classList.contains('on')`, { what: 'panneau Moteur' });
   await page.eval(`closeSheet()`);
   page.assertNoErrors();

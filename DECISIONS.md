@@ -565,6 +565,8 @@ lumière inactinique, pixel, Labo et Tirages, pile à trier » (incognito retir�
 
 _Révisée le 22/10/2026 (« Génération incognito » dans la file) par « Refonte « Chambre noire » : lumière inactinique,
 pixel, Labo et Tirages, pile à trier » (incognito retiré)._
+_Remplacée en partie le 24/10/2026 (emplacement du cadenas) par la même refonte : l'entrée est la ligne « Espace
+privé » au cadenas de la feuille de la lampe d'état._
 
 - **Contexte** : en essayant l'espace privé sur le téléphone, le porteur voit passer d'un espace à l'autre ce qui
   devrait rester d'un seul côté : un prompt enregistré dans l'espace privé apparaît dans l'espace public (la spec du

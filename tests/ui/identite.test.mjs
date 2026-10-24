@@ -56,14 +56,14 @@ test('page du code d\'accès, téléphone en mode clair : noir chaud, sans verre
 
 test('interface, téléphone en mode clair : noir chaud, sans verre ; espace privé en lumière verte', async () => {
   await bench.login(page);
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   let l = await looks();
   assert.ok(dark(l.bg) && l.bg[0] > l.bg[2], `fond noir chaud : ${l.bg}`);
   await page.waitFor(barOfVoid, { what: 'barre d\'état du fond' });
   assert.equal(l.themes.length, 1, 'une seule couleur de barre d\'état');
   assert.deepEqual(l.glass, [], 'aucune surface en verre flouté');
   const titles = ['.topbar h1', '.hist-head h2', '#setTitle', '#engineTitle', '#tabbar button span:last-child',
-    '#pileEmpty p'], text = ['#prompt', '#go', '.note', '#status', 'label', '#runPhase'];
+    '#pileEmpty p'], text = ['#prompt', '#go', '.note', '#privEntry span', 'label', '#runPhase'];
   assert.deepEqual(await pixel([...titles, ...text]), { ...allAs(titles, true), ...allAs(text, false) },
     'nom, titres, onglets et états vides en police pixel, le reste en police du téléphone');
   const created = `postJson('/api/private/create', { code: 'code-identite-1' }).then(r => r.status)`;

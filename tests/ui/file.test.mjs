@@ -14,7 +14,7 @@ before(async () => {
   chrome = await launchChrome();
   page = await chrome.phonePage();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
 });
 
 after(async () => {
@@ -91,7 +91,7 @@ const PUB = 'HOLD=sortie zq9public de la page', SECRET = 'SLOW=0.05 zq9secret de
 test('sortie : la génération privée quitte l\'écran et la page ; elle revient au retour, aussi après un rechargement', async () => {
   await bench.idle();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   await page.generate(PUB);                                   // génération publique de la page, en cours
   await page.waitFor(`pageJobs.some(p => !p.private && p.j.status === 'running')`,
     { what: 'génération publique en cours' });
@@ -115,7 +115,7 @@ test('sortie : la génération privée quitte l\'écran et la page ; elle revien
   assert.equal((await onScreen()).shown, 'privée ' + SECRET);
 
   await page.goto(bench.url + '/');                // rechargement dans l'espace privé
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   if (!await page.eval(`inPrivate()`)) await enterPrivate();   // la fermeture de la page a pu verrouiller l'espace
   await page.waitFor(`pageJobs.some(p => p.private && isActive(p))`,
     { what: 'génération privée retrouvée après le rechargement' });
@@ -136,7 +136,7 @@ test('sortie : la génération privée quitte l\'écran et la page ; elle revien
 test('fermé par le Mac : la génération privée quitte l\'écran comme après « Sortir »', async () => {
   await bench.idle();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   const pub = await page.launch('SLOW=1 zq9public d\'un autre appareil');   // la privée attend derrière
   await enterPrivate();
   await page.generate(SECRET);
@@ -198,7 +198,7 @@ const firstPaths = () => page.eval(`[...$('queueList').querySelectorAll('.qcard'
 test('cartes : un lot de la page sur une carte avec ses cases, réglages, heure ; « autre appareil »', async () => {
   await bench.idle();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   const held = await page.launch('HOLD=cartes zq9 d\'un autre appareil');
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`, { what: 'génération en cours' });
   const other = await page.launch('zq9 attend ailleurs', { width: 960, height: 640, steps: 12 });

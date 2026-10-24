@@ -36,7 +36,7 @@ const assertNoOtherErrors = page => assert.deepEqual(page.errors.filter(e => !/s
 
 async function open(page) {
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
 }
 async function enterPrivate(page) {
   const exists = await page.eval(`privState.exists`);
