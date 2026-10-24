@@ -6,8 +6,8 @@ r"""macOS : lance l'interface à l'ouverture de session, sans fenêtre, accessib
 Le service est un LaunchAgent (~/Library/LaunchAgents/com.matwi5.chambre-noire.plist) : macOS le démarre à chaque
 ouverture de session et le relance s'il s'arrête sur une erreur. Journal : logs/service.log, lisible par le seul
 compte (masque Umask du service, et droits remis à un journal déjà là). Le Mac reste éveillé tant
-qu'il tourne (caffeinate, voir launch.py) ; le code d'accès du téléphone est dans tools/access_code.txt et s'affiche
-en haut de l'interface ouverte sur le Mac.
+qu'il tourne (caffeinate, voir launch.py). Le code d'accès est demandé à tout appareil, le Mac compris : il est dans
+tools/access_code.txt, et sur le Mac la feuille de la lampe d'état (« Ouvrir depuis le téléphone ») l'affiche.
 """
 import os, plistlib, subprocess, sys
 
@@ -75,7 +75,8 @@ def install():
     if r.returncode:
         sys.exit(f"échec du démarrage du service : {r.stderr.strip() or r.stdout.strip()}")
     print(f"service installé et démarré : {PLIST}")
-    print("interface : http://127.0.0.1:7860/ sur le Mac ; adresse et code du téléphone affichés en haut de la page")
+    print("interface : http://127.0.0.1:7860/ sur le Mac (code d'accès dans tools/access_code.txt) ; adresse et code "
+          "du téléphone dans la feuille de la lampe d'état, « Ouvrir depuis le téléphone »")
 
 
 if __name__ == "__main__":

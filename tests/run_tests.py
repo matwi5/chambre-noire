@@ -2,25 +2,42 @@ r"""Tests de bout en bout via l'API du lanceur (127.0.0.1:7860, tools/launch.py 
 
   venv\Scripts\python.exe tests\run_tests.py [--base http://127.0.0.1:7860] [--only t2i|edit|mask|annot] [--steps 12] [--cfg 1]
 
-Chaque test enregistre un PNG dans la pile (outputs/.pile/) et affiche chemin, dimensions, taille et durée.
+Chaque test enregistre un PNG dans la pile (outputs/.pile/) et affiche chemin, dimensions, taille et durée. Chaque
+requête porte le cookie d'accès, calculé depuis tools/access_code.txt du dossier (le code n'est jamais affiché).
 - t2i   : texte vers image 512x512
 - edit  : édition image + texte (référence = résultat t2i)
 - mask  : édition guidée par masque (masque circulaire généré par tools/make_mask.py = équivalent d'un dessin)
 - annot : édition guidée par annotation (cercle rouge tracé sur l'image, méthode « circle-guided » officielle)
 """
-import argparse, base64, json, os, subprocess, sys, time, urllib.request
+import argparse, base64, functools, json, os, subprocess, sys, time, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 P = lambda *a: os.path.join(ROOT, *a)
+sys.path.insert(0, P("tools"))
+import launch  # noqa: E402  (nom et valeur du cookie d'accès, calculés comme le serveur)
 
 
 def data_url(path):
     return "data:image/png;base64," + base64.b64encode(open(path, "rb").read()).decode()
 
 
+@functools.cache
+def access_cookie():
+    """Cookie d'accès que le serveur demande à tout appareil, le Mac compris : empreinte du code de
+    tools/access_code.txt (créé au lancement du serveur), calculée une fois ; le code n'est jamais affiché."""
+    try:
+        code = launch.read_access_code()
+    except (OSError, ValueError):                    # droits, dossier, encodage : contenu jamais repris
+        code = None
+    if not code:
+        sys.exit("code d'accès introuvable ou illisible (tools/access_code.txt) : lancez d'abord tools/launch.py")
+    return f"{launch.ACCESS_COOKIE}={launch.access_token(code)}"
+
+
 def call(base, path, body=None):
     req = urllib.request.Request(base + path, data=json.dumps(body).encode() if body is not None else None,
-                                 method="POST" if body is not None else "GET", headers={"Content-Type": "application/json"})
+                                 method="POST" if body is not None else "GET",
+                                 headers={"Content-Type": "application/json", "Cookie": access_cookie()})
     with urllib.request.urlopen(req, timeout=7200) as r:
         return json.loads(r.read().decode())
 

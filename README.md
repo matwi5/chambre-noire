@@ -130,7 +130,9 @@ Double-cliquer sur **`Chambre noire.lnk`** sous Windows (on peut l'épingler à 
 ou sur **`Chambre noire.command`** sur Mac (on peut le glisser dans le Dock).
 
 Une fenêtre noire (Windows) ou de Terminal (Mac) s'ouvre : c'est le moteur, **laissez-la ouverte**. Le navigateur
-s'ouvre ensuite sur **http://127.0.0.1:7860/**. Pour arrêter, fermez cette fenêtre.
+s'ouvre ensuite sur **http://127.0.0.1:7860/**. Pour arrêter, fermez cette fenêtre. Le premier lancement crée le
+**code d'accès** dans `tools/access_code.txt`, même sans `--lan` : l'ordinateur lui-même le demande, une fois par
+navigateur (la page du code le rappelle sur l'ordinateur), comme tout autre appareil.
 
 Équivalent en ligne de commande, depuis le dossier du projet :
 
@@ -160,15 +162,20 @@ Par défaut, l'interface n'écoute que sur `127.0.0.1` : elle n'est pas accessib
 Avec l'option `--lan`, l'interface est aussi accessible depuis un téléphone ou une tablette du même Wi-Fi. Tout le
 calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
 
-- **Code d'accès** : au premier lancement avec `--lan`, un code est créé dans `tools/access_code.txt`. Sur
-  l'ordinateur, la partie **Ouvrir depuis le téléphone** du panneau Moteur (un appui sur la lampe d'état, en haut à
-  droite) l'affiche avec l'adresse à taper sur le téléphone
-  (par exemple `http://Nom-du-Mac.local:7860`). Le téléphone le demande une fois, puis le retient un an. Tout appareil
-  autre que l'ordinateur lui-même doit le saisir. Pour en changer, supprimez le fichier et relancez. Limite connue :
-  l'ordinateur passe sans code, donc un autre compte ouvert sur le même Mac peut, par l'adresse `127.0.0.1`, tout faire
-  dans l'espace public : lire les prompts, les tirages et les images d'entrée, lancer des générations, jeter ou
-  supprimer des images, modifier les prompts enregistrés, et lire le code d'accès du téléphone ; l'espace privé demande
-  toujours son code.
+- **Code d'accès** : au premier lancement, avec ou sans `--lan`, un code est créé dans `tools/access_code.txt`
+  (lisible par votre seul compte). Sur l'ordinateur, la partie **Ouvrir depuis le téléphone** du panneau Moteur (un
+  appui sur la lampe d'état, en haut à droite) l'affiche avec l'adresse à taper sur le téléphone
+  (par exemple `http://Nom-du-Mac.local:7860`). Le téléphone le demande une fois, puis le retient un an. Tout appareil,
+  l'ordinateur lui-même compris, doit le saisir : un autre compte ouvert sur le même Mac ne peut rien faire par
+  l'adresse `127.0.0.1` sans le connaître. Limite acceptée : le navigateur de l'ordinateur envoie ce cookie, comme
+  tout cookie, à tous les ports de `127.0.0.1` ; un autre compte qui ferait tourner son propre serveur sur un port
+  local et y attirerait votre navigateur pourrait donc le recevoir. Sur l'ordinateur, la page du code dit où le
+  trouver. Pour en changer, supprimez le fichier et relancez (chaque appareil le redemande alors) ; un appareil déjà
+  connecté le reste tant que le code ne change pas. Quand le code est redemandé à une page ouverte (cookie effacé,
+  code changé, onglet ouvert avant), elle se recharge une fois sur la page du code ; dans l'espace privé, la marque de
+  l'onglet est gardée et l'espace est reverrouillé une fois le code saisi. Un fichier `tools/access_code.txt`
+  illisible (droits, encodage, dossier à sa place) arrête le lancement avec un message, sans être écrasé :
+  supprimez-le pour qu'un nouveau code soit créé.
 - **Adresses acceptées** : l'interface ne répond qu'aux adresses `127.0.0.1`, `localhost` et à celles affichées par le
   panneau **Ouvrir depuis le téléphone** (nom `.local` et adresse IP de l'ordinateur au démarrage) ; tout autre nom est
   refusé, même sans `--lan`. Si l'adresse IP de l'ordinateur change, l'ancienne est refusée jusqu'au redémarrage de
@@ -531,14 +538,16 @@ images sont enregistrées. Pour la confidentialité, passez par l'espace privé.
   du navigateur (même session) : un onglet ouvert pendant qu'on est dans l'espace y entre aussi et prend la marque, et
   le fermer ou le recharger referme l'espace pour tous. Un simple rechargement dans l'espace referme donc l'espace. Un
   refus clair du Mac lui-même (accès refusé, ou « espace privé indisponible » quand le serveur tourne sans le module de
-  chiffrement) vaut verrouillage : l'espace ne peut de toute façon pas être ouvert. Sur une coupure du réseau ou une
-  panne sans réponse claire du Mac (relais Tailscale, erreur interne), la page réessaie : tant que le Mac n'a pas
-  accepté ce verrouillage, elle reste hors de l'espace (lampe « Mac injoignable »), et le renvoie si on la ferme de
-  nouveau ; après un rechargement, la ligne « Espace privé » du panneau Moteur n'apparaît qu'une fois le verrouillage
-  accepté (l'état du Mac n'est pas lu avant). Retaper le code privé rouvre l'espace normalement (l'entrée attend la fin
-  d'un verrouillage encore en route, qui sinon refermerait l'espace juste ouvert) ; une page fermée pendant l'envoi du
-  code annule cet envoi, et revenue, elle demande de retaper le code. Une application tuée puis relancée depuis l'écran
-  d'accueil repart sans marque : seule la fermeture de l'espace par le Mac au bout de 15 minutes protège ce cas.
+  chiffrement) vaut verrouillage : l'espace ne peut de toute façon pas être ouvert. Sauf le code d'accès redemandé
+  (401) : le verrouillage n'a pas atteint la session, la page se recharge sur la page du code et reverrouille ensuite.
+  Sur une coupure du réseau ou une panne sans réponse claire du Mac (relais Tailscale, erreur interne), la page
+  réessaie : tant que le Mac n'a pas accepté ce verrouillage, elle reste hors de l'espace (lampe « Mac injoignable »),
+  et le renvoie si on la ferme de nouveau ; après un rechargement, la ligne « Espace privé » du panneau Moteur
+  n'apparaît qu'une fois le verrouillage accepté (l'état du Mac n'est pas lu avant). Retaper le code privé rouvre
+  l'espace normalement (l'entrée attend la fin d'un verrouillage encore en route, qui sinon refermerait l'espace juste
+  ouvert) ; une page fermée pendant l'envoi du code annule cet envoi, et revenue, elle demande de retaper le code. Une
+  application tuée puis relancée depuis l'écran d'accueil repart sans marque : seule la fermeture de l'espace par le Mac
+  au bout de 15 minutes protège ce cas.
 - Dans l'espace privé, **toute génération est privée** (texte → image, édition, dessin) : son image, ses images
   d'entrée, sa miniature, son prompt et ses réglages sont chiffrés sur le Mac. Le texte tapé n'est pas retenu par le
   navigateur. Une génération privée lancée va jusqu'au bout et est rangée chiffrée même si l'espace se verrouille avant
@@ -882,7 +891,10 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   dernière utilisation en secondes ; `types` : les prompts types de `tools/prompt_types.json`, sans `used`, qu'aucune
   route ne modifie), `POST /api/prompts {"title", "text", "usage"}` (création) ou `{"id", "title", "text"}`
   (modification du titre et du texte), `POST /api/prompts/delete {"id"}`, `POST /api/prompts/used {"id"}` (le met en
-  tête) ; 404 pour un `id` inconnu ; avec `--lan`, `POST /api/login` ; espace privé (`private/`, voir `DECISIONS.md`
+  tête) ; 404 pour un `id` inconnu ; accès : `POST /api/login {"code"}` pose le cookie d'accès (`qwen_access`,
+  HttpOnly, un an ; 403 après une seconde si le code est faux) ; sans ce cookie, toute route répond 401 et `/` sert la
+  page du code, pour l'ordinateur lui-même aussi, avec ou sans `--lan` ; seuls le manifeste, le service worker, les
+  icônes, le logo et la police pixel sont servis sans lui ; espace privé (`private/`, voir `DECISIONS.md`
   pour le format) : `POST /api/private/create {"code"}` (409 s'il existe déjà), `POST /api/private/unlock {"code"}`
   (403 après une seconde si le code est faux), qui ouvrent une session pour l'appareil (cookie `qwen_private`,
   HttpOnly, sans durée de vie, fermée par le serveur après 15 minutes sans requête privée), `POST /api/private/lock`,
@@ -974,7 +986,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── config.json       moteur, modèle et port par défaut (moteur écrit par setup.py sous Windows)
 │   ├── config.local.json réglages propres à la machine, lus par-dessus config.json (facultatif, non versionné)
 │   ├── calibration.json  mesures de durée de la machine (créé à l'usage, non versionné)
-│   ├── access_code.txt   code d'accès des appareils du Wi-Fi (créé par --lan, non versionné)
+│   ├── access_code.txt   code d'accès de tous les appareils, le Mac compris (créé au premier lancement, non versionné)
 │   ├── push_vapid.pem, push_subscriptions.json   notifications : clé d'envoi et appareils abonnés (non versionnés)
 │   ├── prompt_types.json    prompts types livrés avec l'application (lecture seule)
 │   └── saved_prompts.json   prompts enregistrés, communs à tous les appareils (créé à l'usage, non versionné)
@@ -1056,7 +1068,8 @@ Tests de bout en bout, interface lancée :
 venv\Scripts\python.exe tests\run_tests.py --steps 8
 ```
 
-Sur Mac : `venv/bin/python tests/run_tests.py --steps 8`.
+Sur Mac : `venv/bin/python tests/run_tests.py --steps 8`. Le script lit le code d'accès dans
+`tools/access_code.txt`, comme un navigateur qui l'aurait saisi.
 
 ## Crédits et licences
 

@@ -12,7 +12,7 @@
 // lu, même si le Mac ne répond pas d'abord. Les suivants : effacement dès la fermeture (pagehide), champs de code
 // compris ; page rechargée après une fermeture dans l'espace dont le verrouillage s'est perdu (marque de l'onglet,
 // sessionStorage) ; code retapé pendant un reverrouillage en route, ou après un reverrouillage sans réponse ; mémoire
-// de l'onglet refusée.
+// de l'onglet refusée ; code d'accès redemandé dans l'espace (un 401 ne vaut pas verrouillé).
 //   venv/bin/python tests/check.py --quick --ui tests/ui/etancheite.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -673,5 +673,24 @@ test('« Sortir » en attente quand la page se ferme : rien n\'est redessiné ni
   await backLocked();
   page.errors.splice(0, page.errors.length, ...page.errors.filter(e =>
     !/status of 502 \(.*\) \(http:\/\/[^/]+\/api\/private\/lock\)$/.test(e)));
+  page.assertNoErrors();
+});
+
+test('code d\'accès redemandé dans l\'espace privé : un 401 ne vaut pas verrouillé, reverrouillé après le code',
+  async () => {
+  await enter();
+  await page.privateIdle();
+  // cookie d'accès seul effacé : la session privée du Mac reste ouverte, « Sortir » reçoit 401
+  await page.send('Network.deleteCookies', { name: 'qwen_access', url: bench.url });
+  await page.click('#privExit');
+  await waitUntil(() => page.eval(`!!document.getElementById('c')`).catch(() => false),
+    { what: 'page du code d\'accès' });
+  // (sur la page du code, RELOCK_MARK n'existe pas : la marque est lue sous son nom)
+  assert.equal(await page.eval(`sessionStorage.getItem('relock')`), '1', 'marque levée sans verrouillage du Mac');
+  await bench.login(page);                         // code saisi : la page revient, marquée
+  await page.waitFor(`!relock && $('lamp').classList.contains('ok')`, { what: 'reverrouillée, état lu' });
+  assert.deepEqual(await page.eval(`[inPrivate(), ${MARK}]`), [false, null], 'rentrée dans l\'espace sans code');
+  assert.equal(await macUnlocked(), false, 'session du Mac restée ouverte');
+  page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/status of 401 \(Unauthorized\)/.test(e)));
   page.assertNoErrors();
 });

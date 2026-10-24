@@ -27,8 +27,12 @@ Dans l'ordre du fichier :
   échec, sauf un délai dépassé ; `S.started` : la même chose au lancement, posé par `main()`), `engine_tag`,
   `default_backend`.
 - **Accès** : `ACCESS_FILE`, `ACCESS_COOKIE`, `LOCAL_CLIENTS`, `PUBLIC_FILES` (manifeste, icônes, logo, police pixel,
-  service worker, servis sans cookie), `LOGIN_PAGE`. Plus bas : `normalize_code`, `access_token`, `load_access_code`,
-  `lan_address`, `tailscale_hosts`, `tailscale_serve_url`.
+  service worker, servis sans cookie), `LOGIN_PAGE`, `LOGIN_MAC` (phrase de l'ordinateur, à la place de `<!--mac-->`
+  pour une requête `_local`). Plus bas : `normalize_code`, `access_token`, `read_access_code` (lecture et validation,
+  sans création ; aussi pour `tests/run_tests.py`), `load_access_code` (création exclusive en 0o600 ; un fichier
+  illisible n'est jamais écrasé), `setup_access` (code et empreinte posés dans `S` par `main()`, avec ou sans `--lan` ;
+  arrêt sur un fichier illisible), `cookie_value` (un cookie de l'en-tête, découpé à la main, pour `_allowed` et
+  `_private_token`), `lan_address`, `tailscale_hosts`, `tailscale_serve_url`.
 - **Notifications** (Web Push, `pywebpush`) : `push_vapid` (clé `tools/push_vapid.pem` créée au premier usage),
   `push_subscriptions` (`tools/push_subscriptions.json`, sous `PUSH_LOCK`), puis `notify_job` (génération hors lot,
   terminée ou en échec), `notify_lot` (une seule par lot) et `push_notify` (envoi dans un thread, à chaque abonnement ;
@@ -99,17 +103,19 @@ Dans l'ordre du fichier :
   connexion coupée, `cut_connection`, donne une ligne neutre, sans pile d'appels), `class H` : `log_request` (n'écrit
   que les requêtes en erreur), `log_message` (tait les routes de `QUIET_ROUTES` d'après leur chemin, par
   `quiet_request`), `_send` ; contrôles dans l'ordre `_host_ok` (liste blanche de `Host`), `_post_refused` (POST :
-  `Sec-Fetch-Site`, `Origin`, `Content-Type: application/json`), `_allowed` (le Mac passe, les autres présentent le
-  cookie d'accès) ; `_proxied`, `_local`, `_secure` (espace privé : adresse source locale et `Host` local ou nom HTTPS
-  de `tailscale serve`) ; sessions privées : `_private_token`, `_private_session`, `_in_private` (l'appareil est dans
-  l'espace privé : session et requête sûre ; espace de `/api/status`), `_send_private`, `_open_session` ; routes
+  `Sec-Fetch-Site`, `Origin`, `Content-Type: application/json`), `_allowed` (tout appareil, le Mac compris, présente
+  le cookie d'accès) ; `_proxied`, `_local`, `_secure` (espace privé : adresse source locale et `Host` local ou nom
+  HTTPS de `tailscale serve`) ; sessions privées : `_private_token`, `_private_session`, `_in_private` (l'appareil est
+  dans l'espace privé : session et requête sûre ; espace de `/api/status`), `_send_private`, `_open_session` ; routes
   privées : `_private_get`, `_private_post` ; toutes les autres routes : `do_GET`, `do_POST` (une suite de
   `if path == …`).
 - **Démarrage** : `exclude_from_backup` (Mac : `jobs/` hors de Time Machine), `setup_state`, `restrict_new_files`
   (masque 0o077 posé en tête de `main()` et de `tools/calibrate.py` : tout fichier créé ensuite, sd-cli compris, pour
   le seul compte du serveur), `close_folders` (dossiers du serveur créés avant le masque, fermés en 0o700 au
-  lancement), `main()` (options, `--lan`, Tailscale, ménage de `jobs/`, PNG cachés rendus par
-  `restore_hidden_images`, threads). Le banc n'exécute pas `main()`.
+  lancement), `main()` (options, code d'accès par `setup_access` à chaque lancement, `--lan`, Tailscale, ménage de
+  `jobs/`, PNG cachés rendus par `restore_hidden_images`, threads). Le banc n'exécute pas `main()` : il pose lui-même
+  `S.access_code` (`ACCESS_CODE`), et `call()` envoie le cookie d'accès pour le Mac aussi ; le pilote d'interface
+  connecte chaque page de `chrome.phonePage()` au banc direct (un banc relayé : `bench.login(page)`).
 
 `tools/estimate.py` : modèle de coût des durées (`predict`, `ref_px`, `prefix_cache`, `make_sample`, `class Store`
 pour `tools/calibration.json`).
@@ -159,7 +165,8 @@ dernier bloc, après le HTML.
     (un seul ouvert, `openedSheet`) ; `refreshStatus()` (interroge `/api/status` toutes les 5 s, 2 s tant que la file
     n'est pas vide ; met à jour `queueState`, la lampe par `setLamp` (classes `ok`, `busy`, `err`, aucune pendant la
     connexion), l'onglet Labo, la carte en cours, la file et l'espace privé par `applyPrivate`, et le panneau Moteur,
-    version servie comprise : `fmtVersion`, `staleServer`).
+    version servie comprise : `fmtVersion`, `staleServer`) ; sur un 401 (code d'accès redemandé), `reauth` recharge
+    une fois la page sur `/?reauth`, la page du code (`reauthing`, et l'adresse empêchent une boucle).
   - « champ de création replié ou déplié » : `setComposer`, `openComposer`, `foldComposer`, `followLabIdle` (appelé
     par `renderRunCard` : déplié d'office quand le Labo n'a plus rien à trier ni en cours ; replié quand il a de
     nouveau quelque chose si on n'y a pas touché depuis, `autoOpen` ; `labIdle`, remis à `null` par `changedSpace`),
@@ -291,14 +298,14 @@ dernier bloc, après le HTML.
     vidés (`clearPrivCodes`, champs `PRIV_CODES`, aussi à `pageshow`) et marque reposée (filet) ; page restaurée par «
     Retour » (`pageshow`, `persisted`) : même sortie si elle n'a pas eu lieu, message, puis `relock` : `refreshStatus`
     reverrouille d'abord par `relockSpace` (une seule promesse en route, `relocking` ; `LOCK_POST`, `fetch` et non
-    `postJson`, encore indéfini à la première interrogation ; `lockAccepted` : oui du Mac, 4xx, ou 503 « espace privé
-    indisponible » ; une coupure, un autre 5xx ou un 500 font réessayer) et n'applique aucun état tant que le Mac ne l'a
-    pas accepté (un état reçu alors que `relock` est devenu vrai est relu) ; page rechargée (onglet tué compris) :
-    `relock` lu dans la marque au chargement, même parcours (la reprise du chargement, `resume`, attend aussi le
-    reverrouillage, et reprend après le premier accepté : `resumeLater`). `relock` et la marque ne se lèvent que par
-    `liftRelock`, jamais pendant une fermeture (`pageHidden`). Un code retapé (`privPost`, création ou entrée) attend
-    d'abord le reverrouillage restant, puis `entering`, du départ du code jusqu'à l'état relu, empêche d'en lancer un ;
-    il lève `relock` ; la page fermée depuis (`hides`), il renvoie faux et demande de retaper le code.
+    `postJson`, encore indéfini à la première interrogation ; `lockAccepted` : oui du Mac, 4xx sauf 401, ou 503 « espace
+    privé indisponible » ; une coupure, un autre 5xx ou un 500 font réessayer ; 401 : `reauth`) et n'applique aucun état
+    tant que le Mac ne l'a pas accepté (un état reçu alors que `relock` est devenu vrai est relu) ; page rechargée
+    (onglet tué compris) : `relock` lu dans la marque au chargement, même parcours (la reprise du chargement, `resume`,
+    attend aussi le reverrouillage, et reprend après le premier accepté : `resumeLater`). `relock` et la marque ne se
+    lèvent que par `liftRelock`, jamais pendant une fermeture (`pageHidden`). Un code retapé (`privPost`, création ou
+    entrée) attend d'abord le reverrouillage restant, puis `entering`, du départ du code jusqu'à l'état relu, empêche
+    d'en lancer un ; il lève `relock` ; la page fermée depuis (`hides`), il renvoie faux et demande de retaper le code.
 
 Libellés visibles et code (la spec et les tickets parlent avec les libellés de l'écran) : visionneuse « Éditer »,
 « Dessiner », « Reprendre » (texte, images d'entrée, dessin et réglages : `resumeFrom`), « Relancer » (`againFrom`) et
@@ -376,8 +383,9 @@ invariants ».
   `localStorage` (`qwen-opt`, `qwen-prompt`, `qwen-own`).
 - **Contrôle d'accès** : `_host_ok` (liste blanche de `Host` contre le rebinding DNS, noms du Wi-Fi et de Tailscale
   figés au démarrage), `_post_refused` (tout POST : `Sec-Fetch-Site`, `Origin` égal à l'origine du `Host`,
-  `Content-Type: application/json` exigé, sinon 403/415), puis `_allowed` (le Mac lui-même passe ; les autres
-  appareils, et toute requête relayée par `tailscale serve`, présentent le cookie dérivé du code d'accès). L'espace
+  `Content-Type: application/json` exigé, sinon 403/415), puis `_allowed` (tout appareil, le Mac lui-même et toute
+  requête relayée par `tailscale serve` compris, présente le cookie dérivé du code d'accès ; sans lui, 401, et `/`
+  sert `LOGIN_PAGE` ; seuls les `PUBLIC_FILES` passent avant ; sans code chargé, rien ne passe). L'espace
   privé ajoute `_secure` (toutes ses routes sauf `lock` et la génération privée) :
   adresse source 127.0.0.1/::1 et `Host` local ou nom HTTPS de `tailscale serve` (`S.https_hosts`), jamais les
   en-têtes de relais, qu'un appareil du Wi-Fi peut envoyer en `http://` ; `/api/private/reset` exige `_local`.

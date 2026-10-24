@@ -83,7 +83,7 @@ _À éviter_ : template, modèle de prompt
 ## Confidentialité
 
 **Code d'accès** :
-Le code qui ouvre l'application aux appareils autres que l'ordinateur.
+Le code qui ouvre l'application à tout appareil, l'ordinateur lui-même compris.
 _À éviter_ : mot de passe, code privé
 
 **Espace public** :

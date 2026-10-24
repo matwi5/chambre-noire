@@ -3,9 +3,10 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   Windows : venv\Scripts\python.exe tools\launch.py [--port 7860] [--backend vulkan|cuda|cpu] [--model q4|q8] [--no-browser]
   macOS   : venv/bin/python tools/launch.py [--port 7860] [--model q4|q8] [--no-browser]
 
-- L'interface écoute sur 127.0.0.1:<port> et sert tools/ui/index.html. Avec --lan, elle écoute aussi sur le Wi-Fi
-  (téléphone, tablette) : les appareils autres que le Mac doivent saisir une fois le code d'accès de
-  tools/access_code.txt, créé au premier lancement ; sur macOS, le Mac ne se met pas en veille tant que le lanceur tourne.
+- L'interface écoute sur 127.0.0.1:<port> et sert tools/ui/index.html. Tout appareil, le Mac lui-même compris, saisit
+  une fois le code d'accès de tools/access_code.txt, créé au premier lancement, avec ou sans --lan. Avec --lan, elle
+  écoute aussi sur le Wi-Fi (téléphone, tablette) ; sur macOS, le Mac ne se met pas en veille tant que le lanceur
+  tourne.
 - Chaque génération lance sd-cli (rechargement quasi instantané grâce à --mmap et au cache disque),
   lit sa progression (étape k/N, secondes par étape), expose des aperçus intermédiaires optionnels et écrit le PNG
   dans son dossier de travail jobs/<id>/ ; fini, il passe dans la pile (outputs/.pile/), à trier : Garder le fait
@@ -45,7 +46,6 @@ Aucun droit administrateur, aucune modification système : tout reste dans ce do
 """
 import argparse, base64, datetime, errno, glob, hashlib, hmac, io, json, math, os, re, secrets, shutil, socket
 import subprocess, sys, threading, time, uuid, webbrowser
-from http.cookies import SimpleCookie
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlsplit
 try:
@@ -233,6 +233,7 @@ border:1px solid var(--line);background:var(--surf);box-shadow:0 18px 40px -22px
 font-display:swap}
 h1{font:500 24px/1.3 "Pixelify Sans",system-ui,sans-serif;margin:0 0 6px}
 p{color:var(--ink2);margin:0 0 20px;font-size:14.5px}
+code{font:13.5px ui-monospace,Menlo,monospace;color:var(--ink)}
 input{width:100%;font:inherit;font-size:24px;font-weight:650;letter-spacing:.16em;text-align:center;padding:14px;
 border-radius:var(--r-m);border:1px solid var(--line);background:var(--field);color:var(--ink);outline:none}
 input:focus{border-color:var(--accent)}
@@ -252,7 +253,7 @@ d='M1 0h7v1h1v7h-1v1h-7v-1h-1v-7h1zM4 2h1v3h-1zM4 6h1v1h-1z'/%3E\
 @media (prefers-reduced-motion:reduce){.shake{animation:none}}
 </style></head><body><form id="f"><img class="logo" src="/logo.svg" alt=""><h1>Chambre noire</h1>
 <p>Saisissez le code d'accès affiché sur le Mac : touchez la lampe d'état, en haut à droite de l'interface, puis
-« Ouvrir depuis le téléphone ». Il n'est demandé qu'une fois sur cet appareil.</p>
+« Ouvrir depuis le téléphone ». Il n'est demandé qu'une fois sur cet appareil.</p><!--mac-->
 <input id="c" aria-label="Code d'accès" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="xxxx-xxxx" autofocus>
 <button id="b">Entrer</button><div id="err" role="alert"></div></form>
 <script>
@@ -262,6 +263,10 @@ f.onsubmit=async e=>{e.preventDefault(); b.disabled=true; err.textContent='';
  if(r.ok) return location.replace('/');
  b.disabled=false; err.textContent='Code incorrect.'; f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake');};
 </script></body></html>"""
+# ajouté à la page du code pour une requête de l'ordinateur lui-même (_local), à la place de <!--mac--> : pas sur le
+# téléphone ; « ordinateur » et non « Mac » : la même page sert sous Windows
+LOGIN_MAC = ("<p>Sur cet ordinateur : ouvrez Chambre noire par son raccourci, ou saisissez le code de "
+             "<code>tools/access_code.txt</code>.</p>")
 
 
 THUMBS = P("outputs", ".thumbs")
@@ -1255,19 +1260,72 @@ def access_token(code):
     return hashlib.sha256(("qwen-image-local:" + normalize_code(code)).encode()).hexdigest()
 
 
+def read_access_code():
+    """Code d'accès de tools/access_code.txt, remis en 0o600, ou None s'il manque ou compte moins de 6 signes ; ne crée
+    rien (aussi lu par tests/run_tests.py). Un fichier illisible (droits, encodage, dossier) lève OSError ou
+    ValueError (UnicodeDecodeError)."""
+    try:
+        with open(ACCESS_FILE, encoding="utf-8") as f:
+            code = f.read().strip()
+    except FileNotFoundError:
+        return None
+    try:
+        os.chmod(ACCESS_FILE, 0o600)                 # créé autrement (à la main, copie) : fermé aux autres comptes
+    except OSError:
+        pass
+    return code if len(normalize_code(code)) >= 6 else None
+
+
 def load_access_code():
-    """Code d'accès des appareils du Wi-Fi : créé au premier lancement avec --lan, gardé dans tools/access_code.txt."""
-    if os.path.exists(ACCESS_FILE):
-        code = open(ACCESS_FILE, encoding="utf-8").read().strip()
-        if len(normalize_code(code)) >= 6:
-            return code
+    """Code d'accès de tous les appareils, le Mac compris : créé au premier lancement, avec ou sans --lan, gardé dans
+    tools/access_code.txt (0o600). Un fichier illisible n'est jamais écrasé (OSError, ValueError : setup_access
+    arrête le lancement) ; un fichier lisible mais trop court est remplacé."""
+    code = read_access_code()
+    if code:
+        return code
+    try:
+        os.remove(ACCESS_FILE)                       # trop court : remplacé par un nouveau code
+    except FileNotFoundError:
+        pass
     alphabet = "abcdefghjkmnpqrstuvwxyz23456789"          # sans caractères ambigus (0/o, 1/l/i)
     raw = "".join(secrets.choice(alphabet) for _ in range(8))
     code = raw[:4] + "-" + raw[4:]
-    with open(ACCESS_FILE, "w", encoding="utf-8") as f:
+    try:                                             # création exclusive, d'emblée en 0o600
+        fd = os.open(ACCESS_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:                          # créé entre-temps par un autre lancement : son code est gardé
+        for _ in range(40):
+            other = read_access_code()
+            if other:
+                return other
+            time.sleep(0.05)                         # (encore en cours d'écriture)
+        raise ValueError("code d'accès en cours d'écriture par un autre lancement")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(code + "\n")
-    os.chmod(ACCESS_FILE, 0o600)
     return code
+
+
+def setup_access():
+    """Code d'accès chargé ou créé, et empreinte du cookie qui le prouve : posés par main() à chaque lancement, avec ou
+    sans --lan (le Mac lui-même demande le code). Fichier illisible : arrêt, avec un message qui ne cite pas son
+    contenu."""
+    try:
+        S.access_code = load_access_code()
+    except (OSError, ValueError):
+        sys.exit("[launch] tools/access_code.txt est illisible : supprimez-le, puis relancez (un nouveau code d'accès "
+                 "sera créé, que chaque appareil redemandera).")
+    S.access_token = access_token(S.access_code)
+
+
+def cookie_value(header, name):
+    """Valeur du cookie name dans un en-tête Cookie, ou None. Découpé à la main sur « ; » : SimpleCookie perd tout
+    l'en-tête sur une seule paire mal formée, ou lève CookieError, et l'ordinateur partage ses cookies avec tout serveur
+    de 127.0.0.1 ou localhost (autres applications). Guillemets autour de la valeur retirés."""
+    for pair in header.split(";"):
+        key, sep, value = pair.partition("=")
+        if sep and key.strip() == name:
+            value = value.strip()
+            return value[1:-1] if len(value) >= 2 and value[0] == value[-1] == '"' else value
+    return None
 
 
 def lan_address():
@@ -1326,7 +1384,7 @@ class State:
     engine = estimate.LEGACY_ENGINE   # release de sd.cpp du moteur choisi
     model = "q4"
     store = None
-    access_code = None       # avec --lan : code demandé aux appareils autres que le Mac
+    access_code = None       # code demandé à tout appareil, le Mac compris (posé par setup_access, à chaque lancement)
     access_token = None      # valeur du cookie posé après saisie du code (empreinte du code, pas le code)
     lan_urls = []            # adresses affichées pour le téléphone
     lan_hosts = set()        # noms d'hôte admis en plus des noms locaux (ceux de lan_urls et le nom HTTPS de Tailscale)
@@ -2077,18 +2135,16 @@ class H(BaseHTTPRequestHandler):
         return None
 
     def _allowed(self):
-        """Le Mac lui-même passe toujours ; un autre appareil doit avoir saisi le code d'accès (cookie). Sans --lan, pas de
-        code : seul le Mac passe, une requête relayée par Tailscale est refusée."""
-        if self._local():
-            return True
-        if not S.access_code:
-            return not self._proxied()
-        morsel = SimpleCookie(self.headers.get("Cookie", "")).get(ACCESS_COOKIE)
-        return bool(morsel) and hmac.compare_digest(morsel.value, S.access_token)
+        """Tout appareil, le Mac lui-même compris, doit avoir saisi le code d'accès (cookie), avec ou sans --lan ; seuls
+        les fichiers publics (PUBLIC_FILES) passent sans lui, avant ce contrôle. Sans code chargé, rien ne passe."""
+        if not S.access_token:
+            return False
+        value = cookie_value(self.headers.get("Cookie", ""), ACCESS_COOKIE)
+        # en octets : compare_digest lève TypeError sur un texte non ASCII (cookie mal formé, jamais une erreur)
+        return value is not None and hmac.compare_digest(value.encode(), S.access_token.encode())
 
     def _private_token(self):
-        morsel = SimpleCookie(self.headers.get("Cookie", "")).get(PRIVATE_COOKIE)
-        return morsel.value if morsel else None
+        return cookie_value(self.headers.get("Cookie", ""), PRIVATE_COOKIE)
 
     def _private_session(self, touch=False):
         """Session de l'espace privé de cet appareil (cookie), ou None ; touch : requête privée, qui la prolonge."""
@@ -2290,7 +2346,8 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, open(P("tools", "ui", name), "rb").read(), ctype)
         if not self._allowed():
             if path in ("/", "/index.html"):
-                return self._send(200, LOGIN_PAGE, "text/html; charset=utf-8")
+                page = LOGIN_PAGE.replace("<!--mac-->", LOGIN_MAC if self._local() else "")
+                return self._send(200, page, "text/html; charset=utf-8")
             return self._send(401, {"error": "code d'accès requis"})
         if path in ("/", "/index.html"):
             return self._send(200, open(P("tools", "ui", "index.html"), "rb").read(), "text/html; charset=utf-8")
@@ -2318,8 +2375,10 @@ class H(BaseHTTPRequestHandler):
                                     "rev": S.rev["private" if inside else "public"],
                                     # code servi (git) : l'interface maintenant, le serveur à son lancement
                                     "version": code_version(), "server_version": S.started,
-                                    # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
-                                    "phone": {"urls": S.lan_urls, "code": S.access_code} if S.access_code and self._local() else None,
+                                    # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même, avec
+                                    # --lan (noms du Wi-Fi et de Tailscale admis)
+                                    "phone": ({"urls": S.lan_urls, "code": S.access_code}
+                                              if S.lan_hosts and self._local() else None),
                                     # espace privé : existe-t-il, est-on dedans sur cet appareil (sans prolonger la session),
                                     # peut-il s'ouvrir par cette adresse (HTTPS ou le Mac) et y être supprimé sans le code
                                     # (le Mac lui-même seulement)
@@ -2401,6 +2460,7 @@ class H(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b"{}"
+        # sans code chargé, pas de connexion possible : la requête va à _allowed, qui refuse tout (401)
         if path == "/api/login" and S.access_code:
             try:
                 code = json.loads(raw).get("code", "")
@@ -2596,7 +2656,7 @@ def main():
                          "communautaire (setup.py --uc)")
     ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--lan", action="store_true", default=bool(cfg.get("lan")),
-                    help="accessible aussi depuis le Wi-Fi (téléphone), avec un code d'accès ; Mac maintenu éveillé")
+                    help="accessible aussi depuis le Wi-Fi (téléphone), avec le code d'accès ; Mac maintenu éveillé")
     a = ap.parse_args()
     S.ui_port = a.port
     setup_state(cfg, a.backend, a.model)
@@ -2630,10 +2690,9 @@ def main():
                 pass
     for old in sorted(glob.glob(P("jobs", "*")))[:-20]:   # ne garde que les 20 derniers dossiers de travail
         shutil.rmtree(old, ignore_errors=True)
+    setup_access()                                     # avec ou sans --lan : le Mac aussi demande le code
     threading.Thread(target=worker, daemon=True).start()
     if a.lan:
-        S.access_code = load_access_code()
-        S.access_token = access_token(S.access_code)
         name, ip = lan_address()
         ts = tailscale_hosts()
         S.lan_urls = [f"http://{h}:{a.port}/" for h in dict.fromkeys(x for x in (name, ip, *ts) if x)]
@@ -2653,6 +2712,8 @@ def main():
     print(f"[launch] backend {S.backend}, modèle {S.model} — interface : {url}  (Ctrl+C pour arrêter)", flush=True)
     if a.lan:
         print(f"[launch] depuis le Wi-Fi : {' ou '.join(S.lan_urls)} — code d'accès dans tools/access_code.txt", flush=True)
+    else:                                       # le Mac aussi demande le code : où le lire, jamais le code lui-même
+        print("[launch] code d'accès dans tools/access_code.txt", flush=True)
     if not a.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     try:

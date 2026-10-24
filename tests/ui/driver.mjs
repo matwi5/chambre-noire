@@ -3,7 +3,8 @@
 //
 //   const bench = await startBench();            // serveur du banc sur un port libre, dossier temporaire
 //   const chrome = await launchChrome();         // profil temporaire, supprimé par chrome.close()
-//   const page = await chrome.phonePage();       // vue du téléphone du porteur : 367×760, densité 2,5, tactile
+//   const page = await chrome.phonePage();       // vue du téléphone du porteur : 367×760, densité 2,5, tactile ;
+//                                                // connectée au banc direct en cours (cookie du code d'accès)
 //   await page.goto(bench.url + '/'); await page.waitFor(`$('lamp').classList.contains('ok')`);
 //   …; page.assertNoErrors(); await chrome.close(); await bench.stop();
 //   bench.release('nom')                         // libère les générations HOLD=nom du faux moteur
@@ -31,11 +32,13 @@
 //   await page.openQueue()                       // feuille de la file ouverte par la pastille « +N en attente »
 //   await page.cancelRun()                       // « Annuler » de la carte en cours, confirmé
 //   await page.canvasInk('#revealCanvas')        // { width, height, ink } : pixels non transparents d'un canevas
-//   await bench.api('/api/pile')                 // réponse JSON d'une route du banc (sans cookie : le Mac)
+//   await bench.api('/api/pile')                 // réponse JSON d'une route du banc (le Mac, avec le cookie d'accès)
 //   await page.launch('texte', { private: true })   // génération demandée hors de l'interface (autre appareil)
 //   await page.leaks(['mot', 'id'])              // marqueurs restés dans la page (texte, attributs, champs, mémoire)
 //   const bench = await startBench({ relay: true }); await bench.login(page);   // comme le téléphone par Tailscale :
-//                                                // bench.url passe par tests/ui/relay.py (adresse HTTPS relayée)
+//                                                // bench.url passe par tests/ui/relay.py (adresse HTTPS relayée) ;
+//                                                // login : cookie d'accès posé, puis l'interface ouverte (sans
+//                                                // relais, chrome.phonePage() pose ce cookie d'office)
 //
 // Délais : une attente (waitFor, waitUntil) échoue après WAIT ms, une évaluation dans la page (page.eval, goto) après
 // EVAL_TIMEOUT ms, le démarrage du banc ou de Chrome après START_TIMEOUT ms : un test bloqué échoue, il n'attend pas
@@ -63,6 +66,9 @@ export const START_TIMEOUT = 60000;
 const WRITTEN = ['outputs', 'jobs', 'logs', 'private', 'tools'];
 
 const pause = ms => new Promise(r => setTimeout(r, ms));
+// banc direct en cours (startBench sans relais) : { url, cookie } ; chaque page de chrome.phonePage() y est connectée
+// (cookie du code d'accès, que le serveur demande aussi au Mac). Un banc relayé n'y est pas : bench.login(page)
+let directBench = null;
 
 // promesse qui échoue si elle n'est pas tenue dans les ms millisecondes
 function within(promise, ms, what) {
@@ -124,8 +130,10 @@ async function startPython(script, args, what) {
   return { first, stop, pid: proc.pid };
 }
 
-// serveur du banc ; relay : l'interface passe par tests/ui/relay.py, comme le téléphone par « tailscale serve »
-// (nom HTTPS, en-têtes de relais : le serveur demande le code d'accès, bench.login(page)). stop() arrête tout.
+// serveur du banc ; sans relais, les pages de chrome.phonePage() y sont connectées (cookie du code d'accès) ; relay :
+// l'interface passe par tests/ui/relay.py, comme le téléphone par « tailscale serve » (nom HTTPS, en-têtes de relais),
+// et la page se connecte par bench.login(page) (les cookies ne distinguent pas les ports : un banc relayé ne connecte
+// pas les pages d'office, pour que la page du code reste visible). stop() arrête tout.
 export async function startBench({ relay = false } = {}) {
   const server = await startPython('serve.py', [], 'serveur du banc');
   const { url: direct, hold, https, cookie } = JSON.parse(server.first);
@@ -134,13 +142,17 @@ export async function startBench({ relay = false } = {}) {
   const url = relayed ? `http://127.0.0.1:${relayed.first.trim()}` : direct;
   const dir = path.dirname(hold);                   // dossier temporaire du banc (hold/ en est un sous-dossier)
   const written = () => Object.assign({}, ...WRITTEN.map(d => files(path.join(dir, d))));
+  // requête du test au Mac lui-même (hors de la page), avec le cookie du code d'accès
+  const macFetch = route => fetch(direct + route, { headers: { Cookie: `${cookie.name}=${cookie.value}` } });
+  const entry = relayed ? null : { url, cookie };
+  if (entry) directBench = entry;
   return {
     url, direct, dir, pids: [server.pid, ...relayed ? [relayed.pid] : []],   // processus du banc (et du relais)
     // attend que le Mac soit au repos : rien en cours ni en file, toutes origines et tous espaces confondus (à faire
     // avant de recharger la page : une génération encore en file serait reprise par la page rechargée) ; page : puis
     // plus aucune génération active suivie par cette page (son dernier suivi rendu)
     async idle({ timeout = 2 * WAIT, page = null } = {}) {
-      await waitUntil(async () => { const s = await (await fetch(direct + '/api/status')).json();
+      await waitUntil(async () => { const s = await (await macFetch('/api/status')).json();
         return !s.busy && !s.queue.length; }, { timeout, what: 'Mac au repos (rien en cours ni en file)' });
       if (page) await page.waitFor(`!pageJobs.some(isActive)`, { timeout, what: 'page au repos' });
     },
@@ -155,13 +167,13 @@ export async function startBench({ relay = false } = {}) {
     },
     // par le relais : le cookie du code d'accès (celui que pose la saisie du code), puis l'interface ouverte
     async login(page) {
-      await page.send('Network.setCookie', { ...cookie, url, httpOnly: true, sameSite: 'Lax' });
+      await setAccessCookie(page, { url, cookie });
       await page.goto(url + '/');
     },
     // libère les générations dont le prompt porte HOLD=<name> (HOLD seul : 'hold') ; voir tests/fake_sdcli.py
     release(name = 'hold') { fs.writeFileSync(path.join(hold, name), ''); },
-    async api(route) { return (await fetch(direct + route)).json(); },
-    async stop() { await relayed?.stop(); await server.stop(); },
+    async api(route) { return (await macFetch(route)).json(); },
+    async stop() { if (directBench === entry) directBench = null; await relayed?.stop(); await server.stop(); },
   };
 }
 
@@ -188,6 +200,7 @@ export async function launchChrome() {
       pages.push(page);
       await page.send('Emulation.setDeviceMetricsOverride', PHONE);
       await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+      if (directBench) await setAccessCookie(page, directBench);
       return page;
     },
     async close() {
@@ -199,6 +212,11 @@ export async function launchChrome() {
       cleanup();
     },
   };
+}
+
+// cookie du code d'accès d'un banc posé dans le navigateur de la page (même cookie que la saisie du code)
+function setAccessCookie(page, { url, cookie }) {
+  return page.send('Network.setCookie', { ...cookie, url, httpOnly: true, sameSite: 'Lax' });
 }
 
 // une page : commandes du protocole, évaluation de JavaScript, attente d'une condition, erreurs de la console

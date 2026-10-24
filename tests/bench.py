@@ -87,7 +87,7 @@ def start():
     install_fake_engine()
     launch.print = lambda *a, **kw: LOG.append(" ".join(str(x) for x in a))
     launch.H.log_message = lambda self, fmt, *a: None if launch.quiet_request(fmt % a) else LOG.append(fmt % a)
-    # code d'accès actif, comme avec --lan : le client local passe, un autre appareil doit présenter le cookie
+    # code d'accès, que main() pose toujours : tout appareil, le Mac compris, présente le cookie (call, cookie=True)
     S.access_code = ACCESS_CODE
     S.access_token = launch.access_token(ACCESS_CODE)
     _server = launch.Server(("127.0.0.1", 0), launch.H)
@@ -129,8 +129,8 @@ def release(name="hold"):
 def call(method, path, body=None, remote=False, cookie=True, headers=None, private=None, wifi=False):
     """Requête HTTP au serveur du banc : (code, réponse JSON ou octets). Trois origines : le Mac lui-même (par défaut) ;
     remote, un autre appareil par l'adresse HTTPS de Tailscale (relayée par « tailscale serve » depuis 127.0.0.1) ;
-    wifi, un autre appareil en http:// direct sur le Wi-Fi (adresse source qui n'est pas celle du Mac). Les deux
-    dernières portent le cookie d'accès si cookie est vrai ; private : valeur du cookie de session de l'espace privé.
+    wifi, un autre appareil en http:// direct sur le Wi-Fi (adresse source qui n'est pas celle du Mac). Toutes portent
+    le cookie d'accès si cookie est vrai, le Mac compris ; private : valeur du cookie de session de l'espace privé.
     Les POST portent Content-Type: application/json."""
     return call_full(method, path, body, remote, cookie, headers, private, wifi)[:2]
 
@@ -143,7 +143,7 @@ def call_full(method, path, body=None, remote=False, cookie=True, headers=None, 
         h["Host"], h["X-Forwarded-For"] = HTTPS_HOST, "192.0.2.10"
     if wifi:
         h["Host"] = f"{WIFI_HOST}:{S.ui_port}"
-    if (remote or wifi) and cookie:
+    if cookie:
         cookies.append(f"{launch.ACCESS_COOKIE}={S.access_token}")
     if private:
         cookies.append(f"{launch.PRIVATE_COOKIE}={private}")

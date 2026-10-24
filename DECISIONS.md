@@ -4,6 +4,40 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-25 · Choix retenus par Claude pour le code d'accès demandé au Mac (délégation du porteur)
+
+- **Contexte** : ticket G1 « Demander le code d'accès sur le Mac aussi », sa revue Standards/Spec et sa passe
+  « bogues » ; choix faits par Claude sous la délégation du porteur (« Choix confiés à Claude jusqu'à la fin du
+  parcours de la refonte », plus bas).
+- **Choix retenus** (question → recommandation retenue) :
+  - Où la page du code dit-elle comment entrer depuis l'ordinateur ? → seulement pour une requête de l'ordinateur
+    lui-même, en plus du paragraphe du téléphone : « Sur cet ordinateur : ouvrez Chambre noire par son raccourci, ou
+    saisissez le code de `tools/access_code.txt`. » (« cet ordinateur » plutôt que « ce Mac » : juste sous Windows) ;
+  - « Ouvrir depuis le téléphone » sans `--lan` ? → masqué (le champ `phone` de `/api/status` suit les adresses du
+    Wi-Fi, sinon il montrerait une adresse vide) ;
+  - Une requête quand aucun code n'est chargé ? → refusée partout (401), Wi-Fi compris ;
+  - Au lancement sans `--lan` ? → le terminal dit où est le code (`tools/access_code.txt`), jamais le code ;
+  - Fichier du code illisible (encodage, droits, dossier à sa place) ? → le lancement s'arrête avec un message qui
+    dit quoi faire, sans jamais écraser le fichier ; un fichier lisible mais trop court est remplacé comme avant ;
+  - Droits et création du fichier du code ? → resserrés à 0o600 à chaque lecture ; création exclusive, et un code
+    créé entre-temps par un autre lancement est relu, pas écrasé ;
+  - Lecture des cookies ? → par le serveur lui-même, tolérante aux paires mal formées d'autres applications locales
+    (les cookies ne distinguent pas les ports), comparaison en octets sans jamais lever ;
+  - Le cookie d'accès du Mac part aussi vers les autres ports de 127.0.0.1 ? → risque accepté et écrit dans le README :
+    il faut qu'un autre compte écoute sur un port local et y attire le navigateur du porteur ; pas de correction simple
+    ;
+  - Un onglet ouvert sans cookie valable (avant la mise en service, cookies effacés, code changé) ? → un 401 de
+    `/api/status` recharge la page une fois, sur la page du code, sans boucle ;
+  - Un 401 au reverrouillage de l'espace privé vaut-il « verrouillé » (décision du 24/10, « une erreur de la famille
+    4xx (comme « accès refusé ») ») ? → non, c'est l'exception : depuis que le Mac demande le code d'accès, un 401 veut
+    dire que la requête n'a pas atteint la session privée, qui peut rester ouverte ; la marque de l'onglet est gardée
+    et l'espace reverrouillé une fois le code d'accès saisi. Les autres 4xx et le 503 « indisponible » restent des
+    verrouillages ;
+  - Tests d'interface ? → connectés à un seul endroit du pilote (`driver.mjs`) pour les bancs directs ; un banc relayé
+    garde `bench.login(page)` ; le banc pose son propre code sans passer par `setup_access`.
+- **Écarté** : écraser un fichier de code illisible ; prendre un 401 pour un verrouillage accepté ; laisser un onglet
+  bloqué sur « Moteur indisponible ».
+
 ## 2026-10-24 · Choix retenus par Claude pour les suites du groupe E (délégation du porteur)
 
 - **Contexte** : correctifs des suites du groupe E après la revue Standards/Spec et deux passes « bogues » ; choix
@@ -48,6 +82,9 @@ les messages de commit.
 - **Écarté** : lancer G en session liée, qui buterait sur chaque choix à faire confirmer par le porteur.
 
 ## 2026-10-24 · Marque de l'onglet posée dès l'entrée dans l'espace, refus clair du verrouillage
+
+_Précisée le 25/10/2026 (un 401 n'est pas un verrouillage depuis que le Mac demande le code d'accès) par « Choix
+retenus par Claude pour le code d'accès demandé au Mac »._
 
 - **Contexte** : revue Standards/Spec et passe « bogues » des suites du groupe E ; deux constats touchant l'espace
   privé posés au porteur avec une recommandation chacun.
@@ -1036,6 +1073,9 @@ _Remplacée le 22/10/2026 par « Refonte « Chambre noire » : lumière inactini
   Toute requête de l'interface doit envoyer `Content-Type: application/json`.
 
 ## 2026-10-13 · Accès du téléphone par un code et un cookie
+
+_Remplacée en partie le 24/10/2026 (le Mac passait sans code) par « Code d'accès demandé aussi au Mac, entrée par un
+jeton à usage unique »._
 
 - **Décision** : avec `--lan`, tout appareil autre que le Mac saisit une fois un code de 8 caractères tiré au hasard
   (`tools/access_code.txt`, non versionné). Le cookie, valable un an, est l'empreinte SHA-256 du code, pas le code.

@@ -1,9 +1,10 @@
 // Test de fumée de l'interface, dans la vue du téléphone : chaque écran principal s'ouvre sans erreur de console
-// (Labo, avec la génération en cours, et Tirages), et le panneau Moteur dit quelle version du code est servie.
+// (Labo, avec la génération en cours, et Tirages), et le panneau Moteur dit quelle version du code est servie. Code
+// d'accès redemandé (cookie effacé, réponse 401 de /api/status) : la page se recharge une fois sur la page du code.
 //   venv/bin/python tests/check.py --ui   (tous les fichiers ; --quick --ui tests/ui/smoke.test.mjs pour celui-ci)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome } from './driver.mjs';
+import { startBench, launchChrome, waitUntil } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -53,7 +54,7 @@ test('« Révéler » suit la génération sur le Labo, puis annulation depuis l
     { what: 'génération sur la carte en cours' });
   await page.cancelRun();
   await page.waitFor(`!pageJobs.some(isActive)`, { what: 'génération annulée' });
-  const status = await (await fetch(bench.url + '/api/status')).json();
+  const status = await bench.api('/api/status');
   assert.equal(status.queue.length, 0);
   page.assertNoErrors();
 });
@@ -66,5 +67,38 @@ test('panneau Moteur : version du code servi, et serveur à relancer quand launc
       server_version: { commit: 'def5678', server: 'f1' } }) })`);
   assert.deepEqual(shown, { v: 'abc1234 · main · 16/10/2026', none: '', same: '',
     stale: 'à relancer : son code a changé depuis son lancement' });
+  page.assertNoErrors();
+});
+
+const UNAUTHORIZED = { responseCode: 401, responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+  body: Buffer.from(JSON.stringify({ error: 'code d\'accès requis' })).toString('base64') };
+// page du code d'accès affichée (évaluation pendant un rechargement : pas encore)
+const loginShown = () => waitUntil(() => page.eval(`!!document.getElementById('c') && location.search`)
+  .then(v => v === '?reauth').catch(() => false), { what: 'page du code, après un seul rechargement' });
+
+test('code d\'accès redemandé : la page se recharge une fois sur la page du code, sans boucle', async () => {
+  await page.send('Network.clearBrowserCookies');   // cookie effacé, ou code changé sur le Mac
+  await page.eval(`void refreshStatus()`);
+  await loginShown();
+  // interface servie à cette adresse, dont l'état répond encore 401 : elle ne se recharge plus
+  await bench.login(page);
+  await page.goto(bench.url + '/?reauth');
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'interface ouverte' });
+  await page.eval(`window.zqSameDocument = true`);
+  const h = await page.holdRequests(['*/api/status'], () => true);
+  try {
+    await page.eval(`void refreshStatus()`);
+    await waitUntil(() => h.held.length > 0, { what: 'état demandé' });
+    for (const r of h.take()) await page.send('Fetch.fulfillRequest', { requestId: r.requestId, ...UNAUTHORIZED });
+    await page.waitFor(`$('lamp').classList.contains('err')`, { what: 'réponse 401 lue' });
+    await new Promise(r => setTimeout(r, 500));
+    assert.equal(await page.eval(`window.zqSameDocument === true`), true, 'page rechargée une seconde fois');
+  } finally {
+    await h.release();
+  }
+  await bench.login(page);
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'interface rouverte' });
+  // (les réponses 401, et elles seules, sont notées en erreur par Chrome)
+  page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/status of 401 \(Unauthorized\)/.test(e)));
   page.assertNoErrors();
 });

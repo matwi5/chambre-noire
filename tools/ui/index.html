@@ -1087,8 +1087,11 @@ function liftRelock(){ if(pageHidden) return; relock=false; markRelock(false); }
 let resumeLater=null;
 // verrouillage tenu pour accepté : oui du Mac, ou refus clair de sa part (décision du 24/10/2026) : une erreur 4xx,
 // ou 503 avec son corps JSON « espace privé indisponible » (serveur sans le module de chiffrement) ; une coupure
-// réseau, un 5xx sans ce corps (relais Tailscale) ou un 500 ne le sont pas : on réessaie, aucun état n'est appliqué
-async function lockAccepted(r){ if(!r) return false; if(r.ok || r.status>=400 && r.status<500) return true;
+// réseau, un 5xx sans ce corps (relais Tailscale) ou un 500 ne le sont pas : on réessaie, aucun état n'est appliqué.
+// Sauf 401 (code d'accès redemandé) : le verrouillage n'a pas atteint la session privée, qui reste peut-être ouverte ;
+// la page se recharge sur la page du code (reauth), marque gardée, et reverrouille une fois le code saisi
+async function lockAccepted(r){ if(!r) return false; if(r.status===401){ reauth(); return false; }
+  if(r.ok || r.status>=400 && r.status<500) return true;
   if(r.status!==503) return false;
   const j=await r.json().catch(()=>null);
   return !!j && typeof j.error==='string' && j.error.startsWith('espace privé indisponible'); }
@@ -1097,12 +1100,20 @@ function relockSpace(){
     if(await lockAccepted(r)){ spaceEpoch++; liftRelock();   // un état demandé avant n'est pas appliqué
       if(!relock && resumeLater){ const f=resumeLater; resumeLater=null; f(); } } })()
     .finally(()=>{ relocking=null; })); }
+// code d'accès redemandé par le Mac (401 : cookie effacé ou périmé, code changé, onglet ouvert avant la mise en service
+// du code) : la page se recharge une seule fois, sur la page du code ; « ?reauth » dans l'adresse empêche une boucle
+// si l'interface, rechargée, reçoit encore 401 (la page du code, le code accepté, revient sur « / »)
+let reauthing=false;
+function reauth(){ if(reauthing || /[?&]reauth\b/.test(location.search)) return; reauthing=true;
+  location.replace('/?reauth'); }
 async function refreshStatus(){
   if(relock && !entering) await relockSpace();
   const epoch=spaceEpoch;
   // reverrouillage pas encore accepté (le Mac n'a pas répondu) : affiché comme un Mac injoignable, aucun état lu
   try{ if(relock) throw new Error('espace privé pas encore reverrouillé');
-    const s=await (await fetch('/api/status')).json();
+    const reply=await fetch('/api/status');
+    if(reply.status===401){ reauth(); throw new Error('code d\'accès requis'); }
+    const s=await reply.json();
     // espace quitté pendant l'attente, ou verrouillage devenu nécessaire (page fermée pendant une entrée) : relu
     if(epoch!==spaceEpoch || relock) return refreshStatus();
     queueState=s.queue||[]; queueAt=Date.now();
