@@ -4,6 +4,23 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-24 · Cadrage réécrit pour le Labo et les Tirages, état vide des Tirages avec le logo
+
+- **Contexte** : avant de lancer le groupe E, deux points qui demandaient le porteur : le texte de `BRIEF.md`
+  (spec, section 13) et l'illustration de l'état vide des Tirages (spec, section 11), nouveau visuel.
+- **Décision** (porteur, 24/10/2026, réponse « 1 oui, 2 a ») :
+  - « Texte de `BRIEF.md` (ton accord est requis). Il parle encore des pages Créer, En cours et Galerie. Je
+    l'écrirais moi-même ici, avant le lancement, pour que la session n'ait pas à t'attendre. » (changements proposés,
+    écrits tels quels dans `BRIEF.md` : nom « Chambre noire », Labo, révélation en pixels, pile à trier, Tirages,
+    espace privé en lumière verte avec l'entrée dans la feuille de la lampe ; ligne de l'accès par téléphone laissée
+    au groupe G) → oui ;
+  - « Illustration de l'état vide des Tirages (ticket 2). La spec demande « une illustration en pixels » au-dessus de
+    « Aucun tirage pour l'instant ». C'est un nouveau visuel, et tu valides d'habitude un visuel avant qu'il soit
+    intégré. a) (Recommandé) Reprendre le logo, le paysage en carrés que tu as déjà validé (`logo.svg`), agrandi et
+    atténué. Aucun nouveau dessin, donc rien à valider, et la session ne s'arrête pas. b) La session dessine une
+    illustration nouvelle et s'arrête pour te montrer ses rendus avant de l'intégrer. » → a.
+- **Écarté** : un nouveau dessin pour l'état vide ; `BRIEF.md` laissé au groupe E.
+
 ## 2026-10-24 · Avis « zone sensible » limité au travail de la branche, notification qui ramène au Labo
 
 - **Contexte** : ticket d'outillage fait sur `dev` (`237c7d6`) ; texte de `CLAUDE.md` (section « Vérifications ») et

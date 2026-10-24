@@ -4,7 +4,7 @@
 
 Générer et modifier des images avec Qwen-Image 2.1 entièrement en local, sur un ordinateur ordinaire : un PC portable
 Windows à processeur graphique intégré (AMD ou Intel, sans carte NVIDIA) ou un Mac à puce Apple. Rien n'est envoyé
-sur Internet en dehors du téléchargement initial du moteur et du modèle.
+sur Internet en dehors du téléchargement initial du moteur et du modèle. L'application s'appelle « Chambre noire ».
 
 ## Utilisateurs
 
@@ -14,16 +14,18 @@ sur Internet en dehors du téléchargement initial du moteur et du modèle.
 
 ## Périmètre
 
-- Trois usages, une sortie PNG, depuis une seule page Créer : texte → image (sans image d'entrée) ; édition à partir
+- Trois usages, une sortie PNG, depuis le Labo : texte → image (sans image d'entrée) ; édition à partir
   de 1 à 10 images de référence et d'une instruction ; dessin guidé (masque ou annotation peints sur l'image).
 - Installation en une commande (`setup.py`) : moteur stable-diffusion.cpp et modèles épinglés, vérifiés par SHA256.
 - Estimations de durée calibrées sur la machine, progression et aperçus pendant la génération, annulation.
 - File d'attente commune aux appareils (générations calculées l'une après l'autre, jamais simultanément), suivie
-  sur une page En cours ; lots : variantes d'un même prompt (avec ou sans image d'entrée) et campagne d'édition, une
-  image par photo.
+  sur le Labo, où la génération en cours se révèle en pixels ; lots : variantes d'un même prompt (avec ou sans image
+  d'entrée) et campagne d'édition, une image par photo.
+- Chaque image terminée arrive dans une pile à trier : Garder l'envoie dans les Tirages, Jeter l'efface, avec quelques
+  secondes pour annuler.
 - Prompts enregistrés, partagés entre appareils, et prompts types livrés avec l'application.
-- Galerie des images produites ; espace privé chiffré, ouvert par un code distinct, que l'on ouvre par un cadenas
-  discret.
+- Tirages : les images gardées ; espace privé chiffré, ouvert par un code distinct, en lumière verte, avec sa propre
+  pile et ses tirages, dont l'entrée est dans la feuille de la lampe d'état.
 - Accès depuis un téléphone protégé par un code ; démarrage automatique en service sur Mac.
 
 ## Hors périmètre
