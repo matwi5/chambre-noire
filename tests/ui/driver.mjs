@@ -39,7 +39,7 @@
 //
 // Variables d'environnement : CHROME (chemin de Chrome), PYTHON (Python du banc ; défaut : venv/ du dépôt, sinon
 // celui du dossier principal quand on est dans un worktree, sinon python3), QWEN_UI_WAIT (délai par défaut des
-// attentes, en ms : check.py le double quand le banc tourne en même temps).
+// attentes, en ms : check.py le double quand le banc ou plusieurs Chrome tournent en même temps).
 import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

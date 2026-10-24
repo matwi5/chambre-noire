@@ -14,6 +14,7 @@ class QueueOrderTest(bench.BenchCase):
         ids = [generate(f"SLOW=0.05 image {k}", steps=8)["id"] for k in range(3)]
         self.assertEqual([bench.job(i)["queue_position"] for i in ids], [0, 1, 2])
         wait_job(ids[0])
+        wait_job(ids[1], until=("running",))          # la suivante prise par worker() (sinon [1, 2] un instant)
         self.assertEqual([bench.job(i)["queue_position"] for i in ids[1:]], [0, 1])
         done = [wait_job(i) for i in ids]
         self.assertEqual([j["status"] for j in done], ["done"] * 3)

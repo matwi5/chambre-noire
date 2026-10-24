@@ -25,11 +25,13 @@ un fichier créé passe les contrôles avant son premier commit.
    affiche sa durée ; avec --quick et aucun .py changé depuis la base (non suivis compris ; sans base, le banc tourne),
    seul tests/test_public_repo.py tourne ;
 5. avec --ui : les tests d'interface tests/ui/*.test.mjs, ou les seuls fichiers donnés (pilote Chrome, voir
-   tests/ui/driver.mjs), un fichier après l'autre, chacun avec sa durée, en même temps que le banc : chacun sert le
-   serveur sur un port libre, depuis son propre dossier temporaire (bench.start()), et l'interface dans un autre
-   processus (tests/ui/serve.py) ;
-6. avis, sans échec, « zone sensible : passe bogues /code-review requise » quand une ligne ajoutée depuis la base
-   dans tools/ touche l'incognito ou l'espace privé (SENSITIVE).
+   tests/ui/driver.mjs), UI_JOBS fichiers à la fois (3 par défaut, QWEN_UI_JOBS), chacun avec sa durée, en même
+   temps que le banc : chacun son Chrome, et son serveur sur un port libre, depuis son propre dossier temporaire
+   (bench.start()), avec l'interface dans un autre processus (tests/ui/serve.py) ; résultats dans l'ordre des
+   fichiers ;
+6. avis, sans échec, « zone sensible : passe bogues /code-review requise » quand une ligne ajoutée dans tools/ touche
+   l'espace privé (SENSITIVE), depuis la base de la branche en cours (notice_base) : sur une branche de groupe, là où
+   elle a quitté dev ; sur dev ou main, et donc en CI, seuls les changements pas encore commités comptent.
 
 La sortie complète va aussi dans un journal (chemin imprimé à la fin) ; la dernière ligne récapitule les fautes
 (fichier:ligne, test du banc, fichier d'interface), pour qu'une sortie coupée par tail les montre encore.
@@ -50,8 +52,12 @@ LINE_FILES = ("*.py", "*.md", "*.mjs", "*.js")
 # mots d'une ligne ajoutée qui demandent la passe bogues de /code-review (confidentialité : incognito, espace privé)
 SENSITIVE = ("localStorage", "incognito", "inPrivate", "privState", "asideInput", "secret(", "/api/private/",
              "private/")
+# l'avis compte le travail de la branche en cours (notice_base) ; sur l'une de celles-ci (« HEAD » : tête détachée,
+# comme en CI), seulement ce qui n'est pas encore commité
+DEV_BRANCH = "dev"                                   # branche où se fusionnent les groupes
+SHARED_REFS = (DEV_BRANCH, "main", "HEAD")
 # images de l'interface que seul showImage remplit (sinon l'image d'avant reste à l'écran jusqu'au chargement)
-IMAGE_IDS = ("vImg", "vBg", "ivImg", "stageImg", "paintImg")
+IMAGE_IDS = ("vImg", "vBg", "ivImg", "paintImg")
 IMAGE_SRC_RE = re.compile(r"\$\(\s*['\"](" + "|".join(IMAGE_IDS) + r")['\"]\s*\)\.src\s*=(?!=)")
 # notes non suivies du dossier principal, reliées dans chaque worktree par --link-venv (et chaque fichier de
 # docs/agents/, sauf la carte du code, qui est suivie)
@@ -64,6 +70,9 @@ UI_TESTS = "tests/ui/*.test.mjs"
 UI_TEST_TIMEOUT = int(os.environ.get("QWEN_UI_TEST_TIMEOUT") or 180000)
 UI_FILE_TIMEOUT = 1200
 UI_WAIT_LOADED = 30000                               # attente par défaut du pilote quand le banc tourne en même temps
+# fichiers d'interface lancés à la fois (chacun son Chrome, son banc, ses ports et son dossier temporaire ; QWEN_UI_JOBS
+# le change) : un contrôle complet n'attend plus la somme des fichiers (décision du 24/10/2026)
+UI_JOBS = max(1, int(os.environ.get("QWEN_UI_JOBS") or 3))
 SHOWN_FAULTS = 12                                    # fautes nommées au plus par contrôle dans la dernière ligne
 
 
@@ -388,10 +397,25 @@ def print_index(pattern):
     return 0
 
 
+def notice_base():
+    """Base de l'avis « zone sensible » : le travail de la branche en cours, pas ce que d'autres groupes ont déjà
+    fusionné (décision du 24/10/2026). Sur une branche de groupe, là où elle a quitté dev ; sur dev ou sans dev, le
+    dernier commit (seuls les changements pas encore commités comptent) ; hors git, None (pas d'avis)."""
+    try:
+        if git("rev-parse", "--abbrev-ref", "HEAD").strip() not in SHARED_REFS:
+            try:
+                return git("merge-base", "HEAD", DEV_BRANCH).strip() or None
+            except subprocess.CalledProcessError:       # pas de branche dev : le dernier commit, comme sur dev
+                pass
+        return git("rev-parse", "HEAD").strip() or None
+    except (OSError, subprocess.CalledProcessError):    # hors git, ou git absent : pas d'avis
+        return None
+
+
 def sensitive_notice(base):
-    """Avis (jamais un échec) quand une ligne ajoutée depuis base dans le code de l'application (tools/, hors .md)
-    touche une zone sensible (SENSITIVE) : le ticket demande alors la passe bogues de /code-review. Les tests, qui
-    nomment ces zones pour les vérifier, ne déclenchent pas l'avis."""
+    """Avis (jamais un échec) quand une ligne ajoutée depuis base (notice_base) dans le code de l'application (tools/,
+    hors .md) touche une zone sensible (SENSITIVE) : le ticket demande alors la passe bogues de /code-review. Les
+    tests, qui nomment ces zones pour les vérifier, ne déclenchent pas l'avis."""
     if not base:
         return
     hits, current = {}, None
@@ -475,41 +499,51 @@ def ui_titles(files):
     return titles
 
 
-def run_ui(files, name=None, wait=None):
-    """Tests d'interface (tous, ou les seuls files ; name : motif des noms de tests, --test-name-pattern), un fichier
-    après l'autre, chacun dans son groupe de processus : un test dépasse UI_TEST_TIMEOUT, un fichier
-    UI_FILE_TIMEOUT, et Chrome et le banc sont arrêtés à la fin de chaque fichier, même bloqué. wait : délai par
-    défaut des attentes du pilote (QWEN_UI_WAIT). Renvoie (réussi, lignes à afficher, fautes : fichiers en échec)."""
+def run_ui_file(f, flags, env):
+    """Un fichier d'interface dans son groupe de processus : (sortie, code de retour) ; il dépasse UI_FILE_TIMEOUT,
+    ou finit, et Chrome et le banc sont arrêtés dans tous les cas, même bloqués. node introuvable : OSError."""
+    proc = subprocess.Popen(["node", "--test", *flags, f], cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+                            start_new_session=os.name != "nt")
+    try:
+        out, _ = proc.communicate(timeout=UI_FILE_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        stop_group(proc)
+        out = proc.communicate()[0] + f"\nfichier arrêté au bout de {seconds(UI_FILE_TIMEOUT)}"
+    stop_group(proc)                                  # restes du fichier (Chrome, banc) : arrêtés dans tous les cas
+    return out.rstrip(), proc.returncode
+
+
+def run_ui(files, name=None, wait=None, jobs=None):
+    """Tests d'interface (tous, ou les seuls files ; name : motif des noms de tests, --test-name-pattern), jobs fichiers
+    à la fois (UI_JOBS ; chacun son Chrome et son banc, sur des ports libres et des dossiers temporaires distincts),
+    chacun dans son groupe de processus : un test dépasse UI_TEST_TIMEOUT, un fichier UI_FILE_TIMEOUT. wait : délai
+    par défaut des attentes du pilote (QWEN_UI_WAIT ; allongé par l'appelant quand la machine est chargée). Lignes et
+    totaux dans l'ordre des fichiers. Renvoie (réussi, lignes à afficher, fautes : fichiers en échec)."""
     files = ui_files(files)
     env = dict(os.environ, PYTHON=sys.executable, **({"QWEN_UI_WAIT": str(wait)} if wait else {}))
     env.pop("NODE_TEST_CONTEXT", None)                # lancé depuis un test node : sinon node --test ne lance rien
     flags = ["--test-concurrency=1", "--test-reporter=spec", f"--test-timeout={UI_TEST_TIMEOUT}", "--test-force-exit",
              *([f"--test-name-pattern={name}"] if name else [])]
     shown, faults, total, start = [], [], {}, time.monotonic()
-    for f in files:
+
+    def one(f):
         began = time.monotonic()
-        try:
-            proc = subprocess.Popen(["node", "--test", *flags, f], cwd=ROOT, env=env, stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
-                                    start_new_session=os.name != "nt")
-        except OSError:
-            return False, ["Interface : node introuvable"], ["node introuvable"]
-        try:
-            out, _ = proc.communicate(timeout=UI_FILE_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            stop_group(proc)
-            out = proc.communicate()[0] + f"\nfichier arrêté au bout de {seconds(UI_FILE_TIMEOUT)}"
-        stop_group(proc)                              # restes du fichier (Chrome, banc) : arrêtés dans tous les cas
-        out = out.rstrip()
+        return (*run_ui_file(f, flags, env), time.monotonic() - began)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(min(jobs or UI_JOBS, len(files) or 1)) as pool:
+            results = list(pool.map(one, files))
+    except OSError:
+        return False, ["Interface : node introuvable"], ["node introuvable"]
+    for f, (out, code, took) in zip(files, results):
         counts = ui_counts(out)
         for k, v in counts.items():
             total[k] = total.get(k, 0) + v
-        if proc.returncode or not counts.get("tests"):    # aucun test lancé : pas une réussite
+        if code or not counts.get("tests"):           # aucun test lancé : pas une réussite
             faults.append(f)
             shown.append(out)
         failed = counts.get("fail", 0) + counts.get("cancelled", 0)
-        shown.append(f"Interface : {f} : {counts.get('tests', '?')} tests, {failed} en échec "
-                     f"({seconds(time.monotonic() - began)})")
+        shown.append(f"Interface : {f} : {counts.get('tests', '?')} tests, {failed} en échec ({seconds(took)})")
     failed = total.get("fail", 0) + total.get("cancelled", 0)
     shown.append(f"Interface : {len(files)} fichier(s), {total.get('tests', 0)} tests, {total.get('pass', 0)} "
                  f"réussis, {failed} en échec ({seconds(time.monotonic() - start)})")
@@ -598,8 +632,8 @@ def run_checks(args):
         jobs.append(("Banc", lambda: run_bench("test_public_repo.py")))
     else:
         jobs.append(("Banc", run_bench))
-    if args.ui is not None:                           # banc en même temps : machine chargée, attentes allongées
-        wait = UI_WAIT_LOADED if jobs else None
+    if args.ui is not None:                           # banc ou plusieurs Chrome en même temps : attentes allongées
+        wait = UI_WAIT_LOADED if jobs or min(UI_JOBS, len(ui_files(args.ui))) > 1 else None
         jobs.append(("Interface", lambda: run_ui(args.ui, args.name, wait)))
     with concurrent.futures.ThreadPoolExecutor(max(len(jobs), 1)) as pool:
         futures = [(name, pool.submit(job)) for name, job in jobs]
@@ -608,7 +642,7 @@ def run_checks(args):
             print("\n".join(lines))
             if not ok:
                 failed[name] = faults
-    sensitive_notice(base)
+    sensitive_notice(notice_base())
     return failed
 
 

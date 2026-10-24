@@ -43,9 +43,8 @@ test('feuille des prompts', async () => {
   page.assertNoErrors();
 });
 
-// (titre attendu tel quel par tests/test_check.py, UiNameTest : « la page En cours » est la carte en cours du Labo,
-// « le haut de la page » sa carte)
-test('« Générer » mène à la page En cours, puis annulation depuis le haut de la page', async () => {
+// (titre attendu tel quel par tests/test_check.py, UiNameTest)
+test('« Révéler » suit la génération sur le Labo, puis annulation depuis la carte en cours', async () => {
   // une génération lente lancée depuis l'interface (le faux moteur ralentit sur SLOW=…)
   await page.typePrompt('SLOW=0.3 essai de la file');
   await page.click('#go');

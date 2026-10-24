@@ -977,7 +977,8 @@ du JavaScript de l'interface avec Node.js (`node --check`), refuse une ligne ajo
 depuis la séparation d'avec `origin/main`, lance le banc et affiche son résultat (`--no-bench` pour le sauter ;
 `--quick` le saute si aucun fichier Python n'a changé depuis cette séparation). Il échoue aussi si un fichier du
 dépôt contient un repère propre à une machine (chemin de dossier personnel, adresse IP privée, nom Tailscale) : le
-dépôt est public. Un avis, sans échec, signale un changement de code qui touche l'espace privé. Sur
+dépôt est public. Un avis, sans échec, signale un changement de code qui touche l'espace privé (sur une branche de
+travail, depuis son départ de `dev` ; sur `dev` ou `main`, ce qui n'est pas encore commité). Sur
 GitHub, la même commande, complète, tourne sur chaque pull request vers `main` et chaque envoi sur `dev`
 (`.github/workflows/checks.yml`, sur macOS).
 
@@ -995,8 +996,10 @@ ajoutées, en moins d'une seconde ; le hook avant commit du dépôt (`.githooks/
 
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps que
 le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier, et `--name <motif>` pour les seuls tests dont le
-nom correspond (échec immédiat si aucun ne correspond). Un test bloqué échoue au bout de 3 minutes (20 pour un
-fichier), et Chrome et le banc sont arrêtés à la fin de chaque fichier. Les tests ouvrent l'interface servie par le banc
+nom correspond (échec immédiat si aucun ne correspond). Trois fichiers tournent à la fois, chacun son Chrome et son
+banc (`QWEN_UI_JOBS=<n>` en change le nombre) ; les résultats s'affichent dans l'ordre des fichiers. Un test bloqué
+échoue au bout de 3 minutes (20 pour un fichier), et Chrome et le banc sont arrêtés à la fin de chaque fichier. Les
+tests ouvrent l'interface servie par le banc
 dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du navigateur. Ils
 couvrent les écrans principaux, le Labo (deux onglets, carte en cours sur ou derrière la pile, non balayable, annulation
 confirmée, « Déjà terminée » pour une génération finie pendant la question, « Mac injoignable », révélation en pixels,
