@@ -143,12 +143,16 @@ def note_names(main):
 
 def link_hooks():
     """Hooks versionnés (HOOKS) activés pour le dépôt (core.hooksPath, réglage commun à tous ses worktrees, chemin
-    relatif : chacun prend les siens) ; un autre réglage déjà posé est gardé."""
+    relatif : chacun prend les siens) ; un autre réglage déjà posé est gardé, et dit actif s'il mène à un dossier qui
+    contient le hook (celui du dossier principal, posé en chemin absolu)."""
     try:
         current = git("config", "--get", "core.hooksPath").strip()
     except subprocess.CalledProcessError:
         current = ""
     if current == HOOKS:
+        return
+    if current and os.path.isfile(os.path.join(ROOT, os.path.expanduser(current), "pre-commit")):
+        print(f"hooks : pre-commit actif (core.hooksPath vaut « {current} », qui le contient)")
         return
     if current:
         print(f"hooks : core.hooksPath vaut déjà « {current} », gardé ({HOOKS}/pre-commit n'est pas activé)")

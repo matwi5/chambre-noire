@@ -257,6 +257,26 @@ class LinkNotesTest(unittest.TestCase):
             f.write(text)
 
 
+class HooksMessageTest(RepoCase):
+    """--link-venv : un core.hooksPath qui pointe déjà vers un dossier qui contient le hook (celui du dossier principal,
+    vu d'un worktree, en chemin absolu ou relatif) est dit actif, pas « non activé »."""
+    def hooks_message(self):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            check.link_hooks()
+        return out.getvalue()
+
+    def test_a_hooks_path_that_holds_the_hook_is_reported_active(self):
+        self.write("ailleurs/.githooks/pre-commit", "#!/bin/sh\n")
+        for value in (os.path.join(self.root, "ailleurs", ".githooks"), "ailleurs/.githooks"):
+            sh(self.root, "git", "config", "core.hooksPath", value)
+            message = self.hooks_message()
+            self.assertIn("pre-commit actif", message)
+            self.assertNotIn("pas activé", message)
+            self.assertNotIn("n'est pas activé", message)
+        sh(self.root, "git", "config", "core.hooksPath", "autres-hooks")      # sans le hook : signalé
+        self.assertIn("n'est pas activé", self.hooks_message())
+
+
 class ImageSrcTest(unittest.TestCase):
     def test_a_displayed_image_only_gets_its_address_through_showImage(self):
         html = "\n".join([

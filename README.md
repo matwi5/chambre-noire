@@ -1117,7 +1117,9 @@ Sur Mac : `venv/bin/python tests/run_tests.py --steps 8`. Le script lit le code 
 - **Moteur** : [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (licence MIT).
 - **Police pixel** : [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans), © 2021 The Pixelify Sans Project
   Authors, sous **SIL Open Font License 1.1** ([tools/ui/OFL.txt](tools/ui/OFL.txt)) ; sous-ensemble latin en woff2
-  tiré de Google Fonts, pour le nom de l'application et les titres.
+  tiré de Google Fonts ([page de la police](https://fonts.google.com/specimen/Pixelify+Sans), fichier variable,
+  graisses 400 à 700), **version 1.000** (table `name` du fichier `tools/ui/PixelifySans.woff2`), pour le nom de
+  l'application et les titres. Adresse exacte du fichier sur `fonts.gstatic.com` : à confirmer.
 
 Le code de ce dépôt (interface, lanceur, scripts) est sous **licence MIT**, voir [LICENSE](LICENSE). Les poids du modèle restent soumis à leur
 propre licence et sont téléchargés directement depuis leurs dépôts d'origine.
