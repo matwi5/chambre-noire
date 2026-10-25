@@ -270,10 +270,18 @@ def check_js():
     for line in image_src_lines(html):
         print(f"  index.html:{line} : adresse donnée à la main à une image affichée : passer par showImage")
         bad.append(f"tools/ui/index.html:{line}")
+    for name in missing_image_ids(html):
+        print(f"  tests/check.py : IMAGE_IDS cite « {name} », absent de index.html (id=\"{name}\")")
+        bad.append(f"tests/check.py (IMAGE_IDS : {name})")
     bad = [b for b in bad if b]
     print(f"JavaScript : {len(blocks)} bloc(s) <script> de index.html et {len(files)} fichier(s) vérifiés"
           + (" : ÉCHEC" if bad else ""))
     return bad
+
+
+def missing_image_ids(html):
+    """Identifiants de IMAGE_IDS qu'aucun élément de html ne porte (la règle de showImage ne garderait plus rien)."""
+    return [name for name in IMAGE_IDS if not re.search(rf"""\bid\s*=\s*["']{name}["']""", html)]
 
 
 def image_src_lines(html):
@@ -427,7 +435,11 @@ def check_rules(base):
     """Règles mécaniques de CODING_STANDARDS.md (tests/rules.py) sur les lignes ajoutées depuis base : variable
     JavaScript qui porte l'id d'un élément (index.html), « .every( » ou « all( » sans test de longueur, promesse prise
     pour un booléen, HOLD=<nom> repris d'un fichier de test à l'autre, attente de « running » sans HOLD ni SLOW
-    (tests) ; et sur toute la carte du code : chaque nom cité existe dans le code. Liste des fautes (fichier:ligne)."""
+    (tests) ; couleur écrite hors des jetons, @keyframes sans animation, adresse privée posée hors de showImage
+    (index.html) ; attente fixe, aide ou attente recopiée d'un fichier à l'autre, espace privé fermé sans attendre son
+    repos, entrée privée écrite à la main (tests d'interface). Sur des fichiers entiers : print qui dépend de secret(),
+    route absente de la docstring, écriture sous PRIVATE_LOCK sans finish_rekey() (launch.py), import interne cassé
+    (tous les .py) ; chaque nom cité par la carte du code existe dans le code. Liste des fautes (fichier:ligne)."""
     bad = []
 
     def report(f, found):
@@ -437,12 +449,22 @@ def check_rules(base):
 
     if base:
         added = added_lines(base, "tools/ui/index.html", "tests/")
-        report("tools/ui/index.html", rules.id_shadows(read("tools/ui/index.html"),
-                                                       added.get("tools/ui/index.html", set())))
+        html, ui_added = read("tools/ui/index.html"), added.get("tools/ui/index.html", set())
+        report("tools/ui/index.html", rules.id_shadows(html, ui_added) + rules.private_src(html, ui_added)
+               + rules.hardcoded_colors(html.splitlines(), ui_added)
+               + rules.unused_keyframes(html.splitlines(), ui_added))
         for f in checked_files("tests/*.mjs"):           # pathspec git : « * » traverse les dossiers
             lines = read(f).splitlines()
             report(f, rules.unchecked_every(lines, added.get(f, set())) + rules.unawaited_then(lines,
                                                                                                added.get(f, set())))
+        ui_tests = {f: read(f) for f in checked_files(UI_TESTS)}
+        for f, text in ui_tests.items():
+            lines, mine = text.splitlines(), added.get(f, set())
+            report(f, rules.fixed_waits(lines, mine) + rules.unsettled_private_close(lines, mine)
+                   + rules.private_entry_by_hand(lines, mine))
+        ui_added = {f: added.get(f, set()) for f in ui_tests}
+        for f, k, why in rules.copied_helpers(ui_tests, ui_added) + rules.copied_waits(ui_tests, ui_added):
+            report(f, [(k, why)])
         for f in checked_files("tests/*.py"):
             if f == "tests/test_rules.py":                # ses exemples fautifs sont voulus
                 continue
@@ -457,6 +479,15 @@ def check_rules(base):
             report(f, [(k, why)])
     else:
         print("Règles : avis : base introuvable, règles des lignes ajoutées non vérifiées")
+    try:
+        server = read("tools/launch.py")
+        report("tools/launch.py", rules.secret_prints(server) + rules.undocumented_routes(server)
+               + rules.private_lock_without_rekey(server))
+    except SyntaxError:                                 # déjà signalé par le contrôle Python
+        pass
+    sources = {f: read(f) for f in checked_files("*.py")}
+    for f, k, why in rules.broken_imports(sources):
+        report(f, [(k, why)])
     code = "\n".join(read(f) for f in checked_files("*.py", "*.html", "*.mjs", "*.js"))
     report(f"{AGENT_NOTES}/{CODE_MAP}", rules.missing_map_names(read(f"{AGENT_NOTES}/{CODE_MAP}"), code))
     print(f"Règles : {len(bad)} faute(s) (CODING_STANDARDS.md, noms de la carte du code)" + (" : ÉCHEC" if bad else ""))

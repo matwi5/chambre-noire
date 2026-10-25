@@ -84,3 +84,19 @@ relire, un échec dit la ligne et la raison.
 - `wait_job(…, ("running",))` attend une génération dont le prompt porte `HOLD` ou `SLOW` : sinon elle peut finir
   avant d'être vue en cours (CI rouge du 21/10/2026).
 - Chaque nom cité entre accents graves dans `docs/agents/carte-du-code.md` existe dans le code.
+- `index.html` : une couleur (`#hex`, `rgb(`, `rgba(`) ne s'écrit que dans le bloc des jetons (ligne qui déclare un
+  `--jeton`), pas ailleurs ; une `@keyframes` est nommée par une `animation` ; une adresse d'image peut-être privée
+  (`privImage`, `privThumb`, `thumbOf`, `srcOf`, `/api/private/`) n'est posée sur une image (`.src=`, `src="${…}"`)
+  que par `showImage` ou `preload`, qui la refusent pendant « Sortir » (listes connues : `PRIVATE_SRC_KNOWN` de
+  `tests/rules.py`) ; chaque id de `IMAGE_IDS` (`tests/check.py`) existe.
+- Tests d'interface (`tests/ui/*.test.mjs`) : pas d'attente fixe (`new Promise(r => setTimeout(r, N))`) : une condition
+  (`page.waitFor`), ou `elapse(ms)` du pilote pour un délai voulu ; une aide de premier niveau (`function`, `const … =
+  (…) =>`) ou une attente `page.waitFor` d'au moins 30 caractères déjà écrite dans un autre fichier va dans
+  `driver.mjs` ; l'espace privé se ferme (`/api/private/lock`, `pagehide` ou `pageshow` simulés, `closedByMac()` qui
+  n'attend pas le repos lui-même) juste après `await page.privateIdle()` (ligne de code précédente) ; on y entre par
+  `page.enterPrivate(code)`, pas par `/api/private/create` ou `/unlock`. Un cas voulu porte `// règle levée : <raison>`
+  sur sa ligne ou celle d'avant.
+- Sur des fichiers entiers, avant le banc : aucun `print` de `tools/launch.py` ne dépend de `secret(…)` ; chaque route
+  `/api/…` du serveur est dans sa docstring ; un bloc `with PRIVATE_LOCK:` qui appelle quelque chose passe par
+  `finish_rekey()` (sauf `store_private` et la suppression de tout l'espace) ; un import interne (`from bench import
+  x`, `launch.x`) nomme un nom qui existe.

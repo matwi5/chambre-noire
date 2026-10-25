@@ -263,6 +263,264 @@ def missing_map_names(text, code):
             if name not in words]
 
 
+# ------------------------------------------------------------ interface (tools/ui/index.html, lignes ajoutées)
+
+# couleur écrite en dur dans du CSS (après « : », « , », « ( » ou une espace) : #hex, rgb(…), rgba(…) ; une valeur
+# rgba(${…}) faite de jetons lus par cssRgb est permise
+COLOR_RE = re.compile(r"(?:(?<=[\s:,(])#[0-9a-fA-F]{3,8}\b|\brgba?\((?!\$\{))")
+TOKEN_RE = re.compile(r"--[\w-]+\s*:")                # ligne qui déclare un jeton (:root, html.priv)
+# fonctions qui donnent l'adresse d'une image peut-être privée, et fonctions qui seules la posent sur une image ;
+# PRIVATE_SRC_KNOWN : listes dessinées d'un coup depuis les images de l'espace, vidées par changedSpace à la sortie
+PRIVATE_URL_RE = re.compile(r"\b(?:privImage|privThumb|thumbOf|srcOf)\(|['\"`]/api/private/")
+IMAGE_SET_RE = re.compile(r"\.src\s*=(?!=)|\bsrc=[\"']?\$\{")
+PRIVATE_SRC_OK = {"showImage", "preload"}
+PRIVATE_SRC_KNOWN = {"renderGallery", "lotCases", "openLot"}
+
+
+def hardcoded_colors(lines, added=None):
+    """Couleurs écrites en dur hors des jetons (ligne qui déclare un --jeton, métadonnée theme-color, masque dont
+    seule l'opacité compte) : [(ligne, raison)]."""
+    bad = []
+    for k, line in enumerate(lines, 1):
+        if added is not None and k not in added:
+            continue
+        if TOKEN_RE.search(line) or 'name="theme-color"' in line or "mask" in line:
+            continue
+        found = COLOR_RE.search(line)
+        if found:
+            bad.append((k, f"couleur « {found.group(0)} » écrite en dur : un jeton (var(--…)) du bloc :root"))
+    return bad
+
+
+def unused_keyframes(lines, added=None):
+    """@keyframes qu'aucune « animation » ni « animation-name » ne nomme : [(ligne, raison)]."""
+    text = "\n".join(lines)
+    bad = []
+    for k, line in enumerate(lines, 1):
+        if added is not None and k not in added:
+            continue
+        for m in re.finditer(r"@keyframes\s+([\w-]+)", line):
+            name = re.escape(m.group(1))
+            if not re.search(rf"animation(?:-name)?\s*:[^;}}]*(?<![\w-]){name}(?![\w-])", text):
+                bad.append((k, f"@keyframes {m.group(1)} : aucune animation ne la nomme"))
+    return bad
+
+
+def private_src(html, added=None):
+    """Adresse d'image peut-être privée (privImage, privThumb, thumbOf, srcOf, /api/private/) posée sur une image
+    hors de showImage et preload (seules à refuser une image privée pendant « Sortir ») : [(ligne, raison)]."""
+    bad = []
+    for k, line in enumerate(html.splitlines(), 1):
+        if added is not None and k not in added:
+            continue
+        if not (IMAGE_SET_RE.search(line) and PRIVATE_URL_RE.search(line)):
+            continue
+        where = enclosing_name("index.html", html, k)
+        if where not in PRIVATE_SRC_OK | PRIVATE_SRC_KNOWN:
+            bad.append((k, f"adresse peut-être privée posée sur une image dans {where} : passer par showImage "
+                           "(ou preload), qui la refusent pendant « Sortir »"))
+    return bad
+
+
+# ------------------------------------------------------------ tests d'interface (tests/ui/*.test.mjs)
+
+WAIVER = "// règle levée :"                           # sur la ligne ou celle d'avant, avec la raison
+FIXED_WAIT_RE = re.compile(r"new Promise\(\s*\(?\s*(\w+)\s*\)?\s*=>\s*setTimeout\(\s*\1\s*,")
+HELPER_RE = re.compile(rf"^(?:async\s+)?function\s*\*?\s*({IDENT})\s*\(|^const\s+({IDENT})\s*=\s*(?:async\s*)?"
+                       rf"(?:\([^)]*\)|{IDENT})\s*=>")
+WAIT_LITERAL_RE = re.compile(r"waitFor\(\s*(`(?:[^`$]|\$(?!\{))*`|'[^']*'|\"[^\"]*\")")
+WAIT_LITERAL_MIN = 30                                 # caractères d'une attente qu'on n'écrit pas deux fois
+CLOSE_RE = re.compile(r"(?:\bpost|postJson|fetch)\(\s*['\"`]/api/private/lock|PageTransitionEvent\(\s*['\"](?:pagehide"
+                      r"|pageshow)|new Event\(\s*['\"]page(?:hide|show)|\bclosedByMac\(\)")
+ENTRY_RE = re.compile(r"(?:\bpost|postJson|fetch)\(\s*(?:\$\{)?[^)]*['\"`]/api/private/(?:create|unlock)")
+
+
+def waived(lines, k):
+    """Vrai si la ligne k (ou celle d'avant) lève les règles des tests par « // règle levée : <raison> »."""
+    return WAIVER in lines[k - 1] or (k > 1 and lines[k - 2].strip().startswith(WAIVER))
+
+
+def fixed_waits(lines, added=None):
+    """Attente fixe (new Promise(r => setTimeout(r, N))) dans un test : [(ligne, raison)]."""
+    return [(k, "attente fixe : attendre une condition (page.waitFor), ou elapse(ms) pour un délai voulu")
+            for k, line in enumerate(lines, 1)
+            if (added is None or k in added) and FIXED_WAIT_RE.search(line) and not waived(lines, k)]
+
+
+def _per_file(texts, added, find):
+    """Ce que find(ligne) trouve dans chaque fichier ; renvoie les lignes ajoutées dont la trouvaille est aussi dans un
+    autre fichier : [(fichier, ligne, trouvaille, autres fichiers)]."""
+    where = {}
+    for f, text in texts.items():
+        for k, line in enumerate(text.splitlines(), 1):
+            for found in find(line):
+                where.setdefault(found, {}).setdefault(f, []).append(k)
+    out = []
+    for found, files in where.items():
+        for f, numbers in files.items():
+            others = sorted(set(files) - {f})
+            if others:
+                lines = texts[f].splitlines()
+                out += [(f, k, found, others) for k in added_only(numbers, added.get(f))
+                        if not waived(lines, k)]
+    return sorted(out)
+
+
+def copied_helpers(texts, added):
+    """Aide de premier niveau (function, ou const … = (…) =>) déclarée sous le même nom dans deux fichiers de test ou
+    plus : [(fichier, ligne, raison)] pour les lignes ajoutées."""
+    def find(line):
+        m = HELPER_RE.match(line)
+        return [m.group(1) or m.group(2)] if m else []
+    return [(f, k, f"aide « {name} » déjà déclarée dans {', '.join(others)} : la mettre dans driver.mjs")
+            for f, k, name, others in _per_file(texts, added, find)]
+
+
+def copied_waits(texts, added):
+    """Même attente page.waitFor(`…`) (WAIT_LITERAL_MIN caractères au moins, sans ${…}) dans deux fichiers de test ou
+    plus : [(fichier, ligne, raison)] pour les lignes ajoutées."""
+    def find(line):
+        return [m.group(1) for m in WAIT_LITERAL_RE.finditer(line) if len(m.group(1)) - 2 >= WAIT_LITERAL_MIN]
+    return [(f, k, f"attente {lit[:40]}… déjà écrite dans {', '.join(others)} : une aide de driver.mjs")
+            for f, k, lit, others in _per_file(texts, added, find)]
+
+
+def unsettled_private_close(lines, added=None):
+    """Espace privé fermé sans l'avoir attendu au repos : /api/private/lock envoyé, pagehide ou pageshow simulés,
+    closedByMac() appelé sans page.privateIdle() sur la ligne de code juste avant (une requête privée servie après la
+    fermeture répondrait 403). closedByMac est permis s'il attend lui-même le repos. [(ligne, raison)]."""
+    text = "\n".join(lines)
+    own = re.search(r"function closedByMac\(\)\s*\{(.*?)\n\}", text, re.S)
+    settles = bool(own and "privateIdle(" in own.group(1))
+    bad = []
+    for k, line in enumerate(lines, 1):
+        if (added is not None and k not in added) or not CLOSE_RE.search(line) or waived(lines, k):
+            continue
+        if "privateIdle(" in line or (settles and "closedByMac()" in line and not re.search(r"lock|Event", line)):
+            continue
+        before = next((l for l in reversed(lines[:k - 1]) if l.strip() and not l.strip().startswith("//")), "")
+        if "privateIdle(" not in before:
+            bad.append((k, "espace privé fermé sans await page.privateIdle() juste avant (403 sous charge)"))
+    return bad
+
+
+def private_entry_by_hand(lines, added=None):
+    """/api/private/create ou /unlock appelé par un test au lieu de page.enterPrivate(code) : [(ligne, raison)]."""
+    return [(k, "entrée dans l'espace privé écrite à la main : page.enterPrivate(code)")
+            for k, line in enumerate(lines, 1)
+            if (added is None or k in added) and ENTRY_RE.search(line) and not waived(lines, k)]
+
+
+# ------------------------------------------------------------ serveur (tools/launch.py) et code Python
+
+def _calls(node, name):
+    return [n for n in ast.walk(node) if isinstance(n, ast.Call) and _callee(n) == name]
+
+
+def secret_prints(src):
+    """print dont le texte dépend de secret(…) : dans un if ou une expression conditionnelle qui le teste, ou en
+    argument (aucun print ne parle de l'espace privé) : [(ligne, raison)]."""
+    tree, bad = ast.parse(src), set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If) and _calls(node.test, "secret"):
+            bad.update(c.lineno for c in _calls(node, "print"))
+        if isinstance(node, ast.Call) and _callee(node) == "print" and any(_calls(a, "secret") for a in node.args):
+            bad.add(node.lineno)
+    return [(k, "print qui dépend de secret(…) : rien ne distingue une génération privée") for k in sorted(bad)]
+
+
+def undocumented_routes(src):
+    """Routes (chaîne "/api/…" du code, préfixes en « / » exceptés) absentes de la docstring du module, où
+    « /api/private/image|thumb » vaut pour chacune : [(ligne, raison)]."""
+    tree = ast.parse(src)
+    doc = ast.get_docstring(tree) or ""
+    documented = set()
+    for m in re.finditer(r"(/api/(?:[\w-]+/)*)([\w-]+(?:\|[\w-]+)*)", doc):
+        documented.update(m.group(1) + part for part in m.group(2).split("|"))
+    doc_node = tree.body[0] if tree.body and isinstance(tree.body[0], ast.Expr) else None
+    bad = {}
+    for node in ast.walk(tree):
+        if (node is not getattr(doc_node, "value", None) and isinstance(node, ast.Constant)
+                and isinstance(node.value, str) and re.fullmatch(r"/api/[\w/-]*[\w-]", node.value)
+                and node.value not in documented):
+            bad.setdefault(node.value, node.lineno)
+    return sorted((k, f"route {route} absente de la docstring") for route, k in bad.items())
+
+
+def private_lock_without_rekey(src):
+    """Bloc « with PRIVATE_LOCK: » qui appelle quelque chose (une écriture possible de private/) sans finish_rekey()
+    dans le bloc ou avant lui dans la fonction. Exceptions : store_private (suit les clés remplacées, S.rekeyed) et
+    la suppression de tout l'espace (shutil.rmtree(PRIVATE)). [(ligne, raison)]."""
+    tree, bad = ast.parse(src), []
+    for fn in ast.walk(tree):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) or fn.name == "store_private":
+            continue
+        for node in ast.walk(fn):
+            if not (isinstance(node, ast.With) and any(isinstance(i.context_expr, ast.Name)
+                                                       and i.context_expr.id == "PRIVATE_LOCK" for i in node.items)):
+                continue
+            calls = [c for c in ast.walk(node) if isinstance(c, ast.Call)]
+            if not calls or _calls(node, "finish_rekey"):
+                continue
+            if any(c.lineno < node.lineno for c in _calls(fn, "finish_rekey")):
+                continue
+            if any(_callee(c) == "rmtree" and c.args and isinstance(c.args[0], ast.Name) and c.args[0].id == "PRIVATE"
+                   for c in calls):
+                continue
+            bad.append((node.lineno, "écriture sous PRIVATE_LOCK sans finish_rekey() avant"))
+    return bad
+
+
+def _top_names(src):
+    """Noms définis au premier niveau d'un module (fonctions, classes, affectations, imports, aussi sous if/try) et
+    par « global »."""
+    tree, names = ast.parse(src), {"__file__", "__name__", "__doc__"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Global):
+            names.update(node.names)
+    stack = list(tree.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            for t in node.targets if isinstance(node, ast.Assign) else [node.target]:
+                names.update(_names(t) or [n.id for n in ast.walk(t) if isinstance(n, ast.Name)])
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            names.update((a.asname or a.name).split(".")[0] for a in node.names)
+        elif isinstance(node, (ast.If, ast.Try, ast.With, ast.For)):
+            stack += [n for n in ast.iter_child_nodes(node) if isinstance(n, ast.stmt)]
+            if isinstance(node, ast.Try):
+                stack += [n for h in node.handlers for n in h.body]
+    return names
+
+
+def broken_imports(sources):
+    """Imports internes cassés : « from x import nom » ou « x.nom » (lecture) d'un module du dépôt (sources :
+    {chemin : texte} des .py) où nom n'est pas défini : [(fichier, ligne, raison)]."""
+    paths = {p.rsplit("/", 1)[-1][:-3]: p for p in sources}
+    names, bad = {}, []
+    defined = lambda m: names.setdefault(m, _top_names(sources[paths[m]]))
+    for f, src in sorted(sources.items()):
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:                         # déjà signalé par le contrôle Python
+            continue
+        aliases = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                aliases.update({a.asname or a.name: a.name for a in node.names if a.name in paths})
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module in paths:
+                bad += [(f, node.lineno, f"{a.name} introuvable dans {paths[node.module]}") for a in node.names
+                        if a.name != "*" and a.name not in defined(node.module)]
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load) and isinstance(node.value, ast.Name)
+                    and node.value.id in aliases and node.attr not in defined(aliases[node.value.id])):
+                bad.append((f, node.lineno, f"{node.value.id}.{node.attr} introuvable dans "
+                                            f"{paths[aliases[node.value.id]]}"))
+    return sorted(set(bad))
+
+
 ROUTE_RE = re.compile(r"[\"'](/api/[\w/<>.-]*)[\"']")
 
 

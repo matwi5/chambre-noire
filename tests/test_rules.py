@@ -135,5 +135,148 @@ class MapTest(unittest.TestCase):
         self.assertIn("showImage", [name for _, name in index])
 
 
+class InterfaceRulesTest(unittest.TestCase):
+    """Règles de tools/ui/index.html : couleurs hors des jetons, @keyframes sans animation, adresse privée posée hors
+    de showImage et preload."""
+    def test_a_colour_is_written_in_the_tokens_only(self):
+        html = lines(":root { --void:#0d0a08; --line:rgba(241,230,210,.13);",       # jetons : permis
+                     "  .x { color:#ffa53a; }",                                       # 2 : refusée
+                     "  .y { box-shadow:0 0 4px rgba(0,0,0,.5); }",                  # 3 : refusée
+                     "  x.fillStyle=`rgba(${r},${g},${b},.18)`;",                    # tirée des jetons : permise
+                     '<meta name="theme-color" content="#0d0a08">',                   # métadonnée : permise
+                     "  .m { mask:linear-gradient(90deg, #000 85%, transparent); }",  # masque (alpha) : permis
+                     "  $('#add').click(); .z { color:var(--ink); }",                 # identifiant, jeton : permis
+                     "  .w { border:1px solid #fff }")                                # 8 : refusée
+        self.assertEqual([k for k, _ in rules.hardcoded_colors(html)], [2, 3, 8])
+        self.assertEqual(rules.hardcoded_colors(html, {1, 4}), [])
+
+    def test_keyframes_need_an_animation_that_names_them(self):
+        html = lines("@keyframes shake { 20% { transform:translateX(-8px) } }",   # employée
+                     "@keyframes oubli { to { opacity:0 } }",                     # 2 : refusée
+                     ".shake { animation:shake .4s; }",
+                     "@keyframes pane-l { from { opacity:0 } }",
+                     ".p { animation-name: pane-l; }")
+        self.assertEqual([k for k, _ in rules.unused_keyframes(html)], [2])
+
+    def test_a_private_address_reaches_an_image_through_showImage(self):
+        html = "\n".join(["<script>",
+                          "function showImage(img, src){ img.src=src; }",                    # permise
+                          "function preload(url){ const im=new Image(); im.src=url; }",       # permise
+                          "function renderX(it){",
+                          "  im.src=thumbOf(it);",                                            # 5 : refusée
+                          "  g.innerHTML=`<img src=\"${privImage(it.id)}\">`;",               # 6 : refusée
+                          "  showImage(im, srcOf(it));",                                      # permise
+                          "  const u=privThumb(it.id); a.href=u; }",                          # pas une image
+                          "function renderGallery(it){ im.src=thumbOf(it); }",                # exception connue
+                          "</script>"])
+        self.assertEqual([k for k, _ in rules.private_src(html)], [5, 6])
+
+
+class TestFileRulesTest(unittest.TestCase):
+    """Règles des tests d'interface : attente fixe, aide ou attente recopiée d'un fichier à l'autre, espace privé fermé
+    sans attendre son repos, entrée privée écrite à la main ; « // règle levée : <raison> » lève une règle."""
+    def test_a_fixed_wait_is_refused(self):
+        src = lines("await new Promise(r => setTimeout(r, 300));",                      # 1 : refusée
+                    "await elapse(5500);                    // délai voulu",
+                    "await page.eval(`setTimeout(() => $('pileNo').click(), 250)`);",  # code de la page
+                    "// règle levée : rejoue le minuteur de 700 ms de la page",
+                    "await new Promise(r => setTimeout(r, 700));")
+        self.assertEqual([k for k, _ in rules.fixed_waits(src)], [1])
+
+    def test_a_helper_or_a_wait_copied_into_a_second_file_is_refused(self):
+        texts = {"tests/ui/a.test.mjs": "\n".join([
+                     "async function fresh() {", "}",
+                     "const post = (url, body) => page.eval(`postJson(${url})`);",
+                     "const CODE = 'code-1';",
+                     "await page.waitFor(`$('viewer').classList.contains('on')`);",
+                     "await page.waitFor(`inPrivate()`);"]),
+                 "tests/ui/b.test.mjs": "\n".join([
+                     "async function fresh(pane) {",                                   # 1 : refusée
+                     "const post = url => page.eval(url);",                            # 2 : refusée
+                     "const CODE = 'code-2';",                                         # constante : permise
+                     "await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'x' });",   # 4 : refusée
+                     "await page.waitFor(`inPrivate()`);"])}                           # courte : permise
+        added = {"tests/ui/a.test.mjs": set(), "tests/ui/b.test.mjs": None}
+        self.assertEqual([(f, k) for f, k, _ in rules.copied_helpers(texts, added) + rules.copied_waits(texts, added)],
+                         [("tests/ui/b.test.mjs", 1), ("tests/ui/b.test.mjs", 2), ("tests/ui/b.test.mjs", 4)])
+
+    def test_closing_the_private_space_waits_for_it_to_settle(self):
+        src = lines("test('a', async () => {",
+                    "  await page.enterPrivate(CODE);",
+                    "  await page.generate('x');",
+                    "  assert.equal(await post('/api/private/lock'), 200);",                # 4 : refusée
+                    "  await page.privateIdle();",
+                    "  assert.equal(await post('/api/private/lock'), 200);",                # au repos : permise
+                    "  await page.eval(`dispatchEvent(new PageTransitionEvent('pagehide'))`);",   # 7 : refusée
+                    "  const h = await page.holdRequests(['*/api/private/lock'], () => true);",   # retenue : permise
+                    "  // règle levée : la fermeture pendant une lecture privée est le sujet du test",
+                    "  await page.eval(`dispatchEvent(new PageTransitionEvent('pagehide'))`);",
+                    "});")
+        self.assertEqual([k for k, _ in rules.unsettled_private_close(src)], [4, 7])
+
+    def test_entering_the_private_space_goes_through_the_driver(self):
+        src = lines("assert.equal(await post('/api/private/create', { code: CODE }), 200);",   # 1 : refusée
+                    "await page.eval(`postJson('/api/private/unlock', { code: 'x' })`);",       # 2 : refusée
+                    "await page.enterPrivate(CODE);",
+                    "const h = await page.holdRequests(['*/api/private/unlock'], () => true);")
+        self.assertEqual([k for k, _ in rules.private_entry_by_hand(src)], [1, 2])
+
+
+class ServerRulesTest(unittest.TestCase):
+    """Règles statiques du serveur et des tests Python, lancées avant le banc."""
+    def test_no_print_depends_on_secret(self):
+        src = "\n".join(["def a(job):",
+                         "    if secret(job):",
+                         "        print('privée')",                              # 3 : refusée
+                         "    print('fin', 'p' if secret(job) else 'q')",       # 4 : refusée
+                         "    print(DONE_LINE)",
+                         "    open(os.devnull if secret(job) else f)"])
+        self.assertEqual([k for k, _ in rules.secret_prints(src)], [3, 4])
+
+    def test_every_route_is_in_the_docstring(self):
+        src = '\n'.join(['"""API : POST /api/generate, GET /api/private/image|thumb?id=<id>."""',
+                         'def do_GET(path):',
+                         '    if path == "/api/generate": pass',
+                         '    if path in ("/api/private/image", "/api/private/thumb"): pass',
+                         '    if path == "/api/oubliee": pass',                       # 5 : refusée
+                         '    if path.startswith("/api/job/"): pass'])               # préfixe : laissé
+        self.assertEqual(rules.undocumented_routes(src), [(5, "route /api/oubliee absente de la docstring")])
+
+    def test_a_private_write_under_the_lock_finishes_a_rekey_first(self):
+        src = "\n".join(["def keep():",
+                         "    with PRIVATE_LOCK:",
+                         "        finish_rekey()",
+                         "        write(x)",
+                         "def forget():",
+                         "    with PRIVATE_LOCK:",                                  # 7 : refusée
+                         "        remove_private_item(x)",
+                         "def count():",
+                         "    with PRIVATE_LOCK:",                                  # aucun appel : permise
+                         "        S.rev += 1",
+                         "def reset():",
+                         "    with PRIVATE_LOCK:",                                  # tout l'espace : permise
+                         "        shutil.rmtree(PRIVATE)"])
+        self.assertEqual([k for k, _ in rules.private_lock_without_rekey(src)], [6])
+
+    def test_an_internal_import_names_something_that_exists(self):
+        sources = {"tools/launch.py": "import estimate\nX = 1\ndef worker():\n    estimate.fit()\n",
+                   "tools/estimate.py": "def fit():\n    pass\n",
+                   "tests/bench.py": "import launch\ndef call():\n    pass\nlaunch.ROOT = 'x'\n"
+                                     "print(launch.X, launch.Y)\n",
+                   "tests/test_a.py": "from bench import call, appel\nimport bench\nbench.__file__\n"}  # 1 : appel
+        self.assertEqual(rules.broken_imports(sources),
+                         [("tests/bench.py", 5, "launch.Y introuvable dans tools/launch.py"),
+                          ("tests/test_a.py", 1, "appel introuvable dans tests/bench.py")])
+
+    def test_the_repository_follows_the_server_rules(self):
+        src = check.read("tools/launch.py")
+        self.assertEqual(rules.secret_prints(src), [])
+        self.assertEqual(rules.undocumented_routes(src), [])
+        self.assertEqual(rules.private_lock_without_rekey(src), [])
+        sources = {f: check.read(f) for f in check.checked_files("tools/*.py", "tests/*.py", "*.py")}
+        self.assertGreater(len(sources), 10)
+        self.assertEqual(rules.broken_imports(sources), [])
+
+
 if __name__ == "__main__":
     unittest.main()
