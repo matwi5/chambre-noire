@@ -252,7 +252,10 @@ venv/bin/python tools/make_service.py
 le service de l'ancien nom de l'application (`com.matwi5.qwen-image-local`), s'il est installé. Le journal du service
 est dans `logs/service.log`, lisible par votre seul compte (relancer `make_service.py` l'applique à un service déjà
 installé, journal existant compris) ; au lancement, l'interface ferme aussi aux autres comptes ses dossiers
-`outputs/`, `jobs/` et `logs/`. Le
+`outputs/`, `jobs/` et `logs/`. `make_service.py` attend que l'ancien service soit vraiment arrêté avant de démarrer
+le nouveau (et réessaie), et ses erreurs ne citent aucune adresse du Mac. Avant de relancer le service,
+`venv/bin/python tools/service_busy.py` imprime seulement `True` si une génération tourne, sinon `False` (sans
+afficher le code d'accès). Le
 raccourci `Chambre noire.command` entre alors dans l'interface déjà lancée par l'entrée à usage unique
 (`tools/launch.py --enter`), sans taper le code ; après une mise à jour de l'application, relancer
 `tools/make_shortcut.py` le met à jour.
@@ -1013,6 +1016,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── fix_int8_te.py    correctif de l'encodeur texte int8 (Windows)
 │   ├── make_shortcut.py  crée Chambre noire.lnk (Windows) ou Chambre noire.command (Mac)
 │   ├── make_service.py   Mac : démarrage automatique de l'interface, accessible depuis le Wi-Fi
+│   ├── service_busy.py   Mac : une génération tourne-t-elle ? (True ou False, avant de relancer le service)
 │   ├── make_mask.py      génère un masque ou une annotation par script
 │   ├── make_test_image.py  génère une image de test (formes et texte) pour essayer l'édition
 │   ├── config.json       moteur, modèle et port par défaut (moteur écrit par setup.py sous Windows)

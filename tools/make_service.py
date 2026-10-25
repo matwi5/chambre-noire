@@ -9,11 +9,16 @@ compte (masque Umask du service, et droits remis à un journal déjà là). Le M
 qu'il tourne (caffeinate, voir launch.py). Le code d'accès est demandé à tout appareil, le Mac compris : il est dans
 tools/access_code.txt, et sur le Mac la feuille de la lampe d'état (« Ouvrir depuis le téléphone ») l'affiche.
 """
-import os, plistlib, subprocess, sys
+import os, plistlib, re, subprocess, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LABEL = "com.matwi5.chambre-noire"
 OLD_LABEL = "com.matwi5.qwen-image-local"   # service de l'ancien nom de l'application, retiré à chaque appel
+# le bootout de launchctl rend la main avant que le service soit parti : un bootstrap trop tôt échoue (erreur 5) et
+# laisse le service arrêté ; on attend qu'il soit parti (BOOT_TRIES regards, BOOT_WAIT s d'écart), puis on réessaie
+BOOT_TRIES, BOOT_WAIT = 20, 0.5
+# adresses à taire dans un message d'erreur (adresse IP, nom réseau du Mac, nom Tailscale)
+ADDRESS_RE = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b|[\w.-]+\.(?:local|ts\.net)\b")
 
 
 def plist_path(label):
@@ -28,8 +33,23 @@ def launchctl(*args):
     return subprocess.run(["launchctl", *args], capture_output=True, text=True)
 
 
+def scrub(text):
+    """Texte d'erreur sans adresse (le journal et la sortie du service en contiennent)."""
+    return ADDRESS_RE.sub("<adresse>", text)
+
+
+def wait_gone(label):
+    """Attend que launchd ait vraiment retiré le service (launchctl print échoue) ; faux s'il est encore là."""
+    for _ in range(BOOT_TRIES):
+        if launchctl("print", f"{DOMAIN}/{label}").returncode:
+            return True
+        time.sleep(BOOT_WAIT)
+    return False
+
+
 def unload(label):
     launchctl("bootout", f"{DOMAIN}/{label}")          # sans erreur si le service ne tourne pas
+    wait_gone(label)
     plist = plist_path(label)
     if os.path.exists(plist):
         os.remove(plist)
@@ -69,11 +89,16 @@ def install():
         os.chmod(spec["StandardOutPath"], 0o600)
     unload(OLD_LABEL)
     launchctl("bootout", f"{DOMAIN}/{LABEL}")               # remplace une version déjà installée
+    wait_gone(LABEL)                                        # sinon le bootstrap échoue et le service reste arrêté
     with open(PLIST, "wb") as f:
         plistlib.dump(spec, f)
-    r = launchctl("bootstrap", DOMAIN, PLIST)
-    if r.returncode:
-        sys.exit(f"échec du démarrage du service : {r.stderr.strip() or r.stdout.strip()}")
+    for _ in range(BOOT_TRIES):
+        r = launchctl("bootstrap", DOMAIN, PLIST)
+        if not r.returncode:
+            break
+        time.sleep(BOOT_WAIT)
+    else:
+        sys.exit(f"échec du démarrage du service : {scrub(r.stderr.strip() or r.stdout.strip())}")
     print(f"service installé et démarré : {PLIST}")
     print("interface : http://127.0.0.1:7860/ sur le Mac (code d'accès dans tools/access_code.txt) ; adresse et code "
           "du téléphone dans la feuille de la lampe d'état, « Ouvrir depuis le téléphone »")
