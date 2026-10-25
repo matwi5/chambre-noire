@@ -10,7 +10,7 @@ tableaux, blocs de code, HTML, lignes vides et toutes les autres lignes restent 
 l'intérieur d'un `code` et ne fait jamais commencer une ligne par une marque de bloc (« - », « 1. », « # », « > »,
 « | », « ``` », soulignement « --- » ou « === ») ; une ligne sans espace où couper reste telle quelle et est signalée.
 """
-import argparse, os, re, sys
+import argparse, ast, io, os, re, sys, tokenize
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check  # noqa: E402
@@ -97,6 +97,111 @@ def rewrap(text, numbers=None, width=check.LINE_MAX):
             continue
         out.append(line)
     return newline.join(out), cuts, left
+
+
+COMMENT_RE = {".py": re.compile(r"^(\s*#\s?)"), ".mjs": re.compile(r"^(\s*//\s?)"), ".js": re.compile(r"^(\s*//\s?)")}
+
+
+def docstring_lines(text):
+    """Numéros des lignes d'une docstring Python (module, classe, fonction) : celles qu'on peut couper sans changer le
+    code ; {} si le texte ne se lit pas."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return {}
+    out = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.body:
+            first = node.body[0]
+            if (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
+                    and isinstance(first.value.value, str)
+                    and re.match(r"[rRuU]?('''|\"\"\")", ast.get_source_segment(text, first.value) or "")):
+                line = text.splitlines()[first.lineno - 1]       # triples guillemets seuls : coupable sans risque
+                indent = line[:len(line) - len(line.lstrip())]
+                out.update({k: indent for k in range(first.lineno, first.end_lineno + 1)})
+    return out
+
+
+def comment_lines(path, text):
+    """Numéros des lignes qui ne portent qu'un commentaire (pas une ligne d'une chaîne qui commence par # ou //) :
+    jetons COMMENT de tokenize pour un .py ; pour un .mjs ou .js, lignes qui commencent hors d'une chaîne, d'un
+    gabarit `…` et d'un commentaire /* */."""
+    if path.endswith(".py"):
+        try:
+            tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
+        except (tokenize.TokenError, SyntaxError):
+            return set()
+        lines = text.split("\n")
+        return {t.start[0] for t in tokens
+                if t.type == tokenize.COMMENT and not lines[t.start[0] - 1][:t.start[1]].strip()}
+    starts, state, i, k = {1}, "", 0, 1
+    while i < len(text):
+        c = text[i]
+        if c == "\n":
+            k += 1
+            if state in ("", "//"):
+                starts.add(k)
+                state = ""
+        elif state in ("'", '"', "`"):
+            if c == "\\":
+                i += 1
+            elif c == state:
+                state = ""
+        elif state == "/*":
+            if text.startswith("*/", i):
+                state, i = "", i + 1
+        elif state == "" and text.startswith("//", i):
+            state = "//"
+        elif state == "" and text.startswith("/*", i):
+            state = "/*"
+        elif state == "" and c in "'\"`":
+            state = c
+        i += 1
+    lines = text.split("\n")
+    return {n for n in starts if n <= len(lines) and lines[n - 1].lstrip().startswith("//")}
+
+
+def cut_with(line, head, indent, width):
+    """line coupée à des espaces après son début head, les suites précédées de indent ; [line] si rien n'y tient."""
+    body, out, lead = line[len(head):], [], head
+    while len(lead) + len(body) > width:
+        pos = cut_at(body, width - len(lead))
+        if pos is None:
+            break
+        out.append(lead + body[:pos].rstrip())
+        body, lead = body[pos:].lstrip(" "), indent
+    return out + [lead + body]
+
+
+def rewrap_code(path, text, numbers, width=check.LINE_MAX):
+    """Lignes trop longues d'un .py, .mjs ou .js recoupées quand c'est sans risque : commentaire seul sur sa ligne
+    (suites avec le même « # » ou « // », au même retrait) et ligne de docstring Python (suites au retrait de la
+    docstring) ; (nouveau texte, nombre de lignes coupées, numéros laissés : code, chaîne, commentaire en fin de
+    ligne). numbers : seuls numéros à recouper (None : toutes)."""
+    comment = COMMENT_RE[os.path.splitext(path)[1]]
+    docs = docstring_lines(text) if path.endswith(".py") else {}
+    comments = comment_lines(path, text)
+    lines = text.split("\n")
+    out, cuts, left = [], 0, []
+    for k, line in enumerate(lines, 1):
+        if len(line) <= width or (numbers is not None and k not in numbers):
+            out.append(line)
+            continue
+        m = comment.match(line) if k in comments else None
+        if m:
+            marker = m.group(1).rstrip() + " "
+            pieces = cut_with(line, m.group(1), marker, width)
+        elif k in docs:
+            indent = line[:len(line) - len(line.lstrip())]
+            pieces = cut_with(line, indent, docs[k], width)
+        else:
+            pieces = [line]
+        if len(pieces) > 1:
+            cuts += 1
+        else:
+            left.append(k)
+        out += pieces
+    return "\n".join(out), cuts, left
 
 
 def main():

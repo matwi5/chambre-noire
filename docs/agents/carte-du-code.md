@@ -8,6 +8,11 @@ cité ici entre accents graves n'existe plus dans le code : un renommage met la 
 L'API locale (routes, champs, codes d'erreur) est décrite dans le README, « Fonctionnement technique » ; les formats
 et les raisons dans `DECISIONS.md`.
 
+Sommaire : `tools/launch.py` (le serveur) ; `tools/ui/index.html` (l'interface) ; Mécanismes ; Pièges de
+l'interface ; Copies entre Python et JavaScript ; Tests. Pour lire sans `grep` : `check.py --map <nom>` situe une
+fonction, `check.py --show <nom>` imprime son corps, `check.py --uses <mot>` liste ses usages dans `tools/`,
+`tests/`, le README et cette carte.
+
 ```text
 navigateur ──HTTP──▶ tools/launch.py ──lance une fois par génération──▶ sdcpp/<moteur>/sd-cli ──▶ PNG
 tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pas de sd-server persistant)
@@ -471,7 +476,10 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
   ligne `OFFLINE` de `tools/ui/sw.js` n'en reprend que le fond, le texte, le texte atténué, le halo, l'accent et le
   texte sur l'accent, et `manifest.webmanifest` le fond ; le grain de l'espace privé (`html.priv`) est le même bruit
   teinté de vert ; la déclaration `@font-face` de
-  la police pixel est dans `index.html` et dans `LOGIN_PAGE`.
+  la police pixel est dans `index.html` et dans `LOGIN_PAGE`. Gardée par `tests/test_palette.py` : valeurs partagées
+  des trois copies (`palette_faults`), `theme-color` des trois pages et `theme_color`, `background_color` du manifeste
+  égaux à `--void` ; icônes à leur taille, coins transparents (`any`) ou opaques (`maskable`, icône d'Apple), chaque
+  icône du manifeste dans `PUBLIC_FILES`.
 - Pas une copie : l'estimation de chaque génération de la file (`job_estimate`, pour `queue_entry` et le travail caché
   `ahead`) appelle `estimate.predict` ; l'estimation de « Relancer » (`relaunch`) est approchée (chaque référence
   comptée à la taille de la sortie, pas de `refPx`).
@@ -481,3 +489,16 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
 `tests/bench.py` (banc : `start`, `call`, `generate`, `wait_job`, `wait_idle`, `wait_until`, `capture_push`),
 `tests/fake_sdcli.py` (faux moteur), `tests/test_*.py`, `tests/check.py` (tous les contrôles), `tests/ui/`
 (`driver.mjs`, `serve.py`, tests `*.test.mjs`). Commandes dans `CLAUDE.md`.
+
+Recettes visuelles (pas de script jetable) :
+
+- Planche avant/après d'un ticket visuel : `PLANCHE_AVANT=<commit> node tests/ui/probe.mjs --script
+  tests/ui/planche.mjs` dessine en une image les vues de `VIEWS` (Labo, pile, Tirages, visionneuse, espace privé), une
+  rangée par version ; la rangée « avant » est jouée par la sonde de ce commit dans un worktree temporaire (supprimé à
+  la fin). `PLANCHE_SORTIE` choisit le fichier, `PLANCHE_VUES` les vues. Chaque capture attend la fin des transitions
+  (`SETTLED`).
+- PNG d'une icône depuis son SVG : `node tests/ui/probe.mjs --svg tools/ui/logo.svg --size 512 --shot
+  /tmp/icone.png`. Piège de Chrome sans écran : sa fenêtre est plus haute que la zone affichée, une capture sans coupe
+  sort plus haute que demandé ; la sonde fixe la vue à la taille voulue (densité 1, fond transparent) et coupe la
+  capture (`clip`) à cette taille. Les coins d'une icône « maskable » ou de l'icône d'Apple restent opaques
+  (`tests/test_palette.py`).

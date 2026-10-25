@@ -1,12 +1,26 @@
-"""Contrôles du projet en une commande (bibliothèque standard seulement) :
+"""Contrôles du projet en une commande (bibliothèque standard seulement ; c'est aussi la CI GitHub,
+.github/workflows/checks.yml, sur chaque pull request vers main et chaque envoi sur dev) :
 
-  venv/bin/python tests/check.py            # compilation Python, JavaScript, lignes, banc de test
-  venv/bin/python tests/check.py --no-bench # sans le banc (quelques secondes)
-  venv/bin/python tests/check.py --ui       # en plus, les tests d'interface (Chrome sans écran, en local seulement)
-  venv/bin/python tests/check.py --ui tests/ui/x.test.mjs   # un seul fichier d'interface (ou plusieurs)
-  venv/bin/python tests/check.py --quick    # banc sauté si aucun .py n'a changé depuis la base (jamais en CI)
-  python3 tests/check.py --lines            # seulement la longueur des lignes ajoutées (moins d'une seconde)
+  venv/bin/python tests/check.py            # contrôle complet : compilation, JavaScript, lignes, règles, banc
+  venv/bin/python tests/check.py --ui       # en plus, tous les tests d'interface (Chrome sans écran, en local)
+  venv/bin/python tests/check.py --no-bench --ui tests/ui/x.test.mjs [--name <motif>]   # boucle de travail
+  venv/bin/python tests/check.py --quick    # banc sauté si aucun .py n'a changé depuis le dernier commit
+  venv/bin/python tests/check.py --ui tests/ui/x.test.mjs --repeat 3   # un fichier passé 3 fois (intermittent)
+  python3 tests/check.py --lines [--fix]    # longueur des lignes ajoutées seule (moins d'une seconde) ; --fix recoupe
   python3 tests/check.py --link-venv        # worktree : liens vers venv et les notes du dossier principal, hook
+  python3 tests/check.py --map <nom> | --show <nom> | --uses <mot>   # situer, lire, chercher sans grep
+
+Quand lancer quoi. Pendant le travail : le seul fichier touché (venv/bin/python -m unittest discover -s tests -p
+test_x.py, ou --no-bench --ui tests/ui/x.test.mjs : seul check.py pose le délai par test et arrête Chrome et le banc,
+jamais « node --test » nu) ; les fichiers d'interface concernés se trouvent par --uses ou grep. Avant la revue et
+avant le commit : le contrôle complet (--ui si l'interface a changé) ; relancé sur un arbre identique aux mêmes
+options, il ne repasse pas (« déjà vert sur cet état », avec les lignes à citer ; --force pour relancer). On cite la
+dernière ligne telle quelle (« Ran N tests … », totaux de l'interface), jamais un compte de tête. Pas de commande
+« timeout » sous macOS : les délais sont ceux de check.py (UI_TEST_TIMEOUT par test, UI_FILE_TIMEOUT par fichier) ou
+de l'outil qui lance la commande. Le contrôle complet avec --ui prend quelques minutes (banc et interface en même
+temps). Une vérification d'interface nouvelle devient un test de tests/ui/ (pilote driver.mjs), une vérification
+ponctuelle passe par la sonde (tests/ui/probe.mjs), jamais par un script jetable ; une vue plus grande que le
+téléphone cache des débordements : regarder aussi les captures (page.screenshot, tests/ui/planche.mjs).
 
 « Suivi » veut dire ici suivi par git, ou nouveau et pas encore ajouté (fichier non suivi que .gitignore n'exclut pas) :
 un fichier créé passe les contrôles avant son premier commit.
@@ -14,33 +28,42 @@ un fichier créé passe les contrôles avant son premier commit.
 1. compile chaque fichier .py suivi (sans écrire de .pyc) ;
 2. passe à « node --check » chaque bloc <script> de tools/ui/index.html (un bloc sur une seule ligne compris) et chaque
    fichier .js ou .mjs suivi ; échoue si un bloc ouvert n'a pas été extrait ; refuse une adresse donnée à la main à
-   une image des visionneuses, de la zone de résultat ou du dessin ($('vImg').src=…, IMAGE_IDS) : elles passent par
-   showImage ;
+   une image des visionneuses, de la zone de résultat ou du dessin ($('vImg').src=…, IMAGE_IDS, dont chaque id doit
+   exister) : elles passent par showImage ;
 3. vérifie que les lignes ajoutées depuis la base (git merge-base HEAD origin/main, arbre de travail compris ; toutes
    celles d'un fichier nouveau) des fichiers .py, .md, .mjs et .js suivis ont 120 caractères au plus, hors tableaux et
-   blocs de code Markdown ; base introuvable : un avis, et le contrôle passe ; --lines ne fait que ce contrôle, et
-   --lines --cached juge l'index (ce que le prochain commit enregistre : hook .githooks/pre-commit) ;
-   si l'un de ces trois contrôles échoue, check.py s'arrête là, sans lancer le banc ni l'interface ;
-4. lance le banc (unittest discover -s tests), recopie telles quelles sa ligne « Ran N tests … » et son verdict, et
-   affiche sa durée ; avec --quick et aucun .py changé depuis la base (non suivis compris ; sans base, le banc tourne),
-   seul tests/test_public_repo.py tourne ;
-5. avec --ui : les tests d'interface tests/ui/*.test.mjs, ou les seuls fichiers donnés (pilote Chrome, voir
+   blocs de code Markdown ; base introuvable : un avis, et le contrôle passe ; --lines ne fait que ce contrôle,
+   --lines --cached juge l'index (hook .githooks/pre-commit, posé par --link-venv), --lines --fix recoupe les seules
+   lignes fautives qui peuvent l'être (Markdown, commentaires, docstrings) et --hook juge le fichier qu'une écriture de
+   Claude Code vient de changer (hook PostToolUse de .claude/settings.json : fautes sur stderr, code 2) ;
+4. règles mécaniques de CODING_STANDARDS.md (tests/rules.py, liste à la fin de ce fichier, noms de la carte du code
+   compris) : sur les lignes ajoutées, et sur des fichiers entiers pour celles du serveur et des imports ;
+   si l'un de ces quatre contrôles échoue, check.py s'arrête là, sans lancer le banc ni l'interface ;
+5. lance le banc (unittest discover -s tests), recopie telles quelles sa ligne « Ran N tests … » et son verdict, et
+   affiche sa durée ; avec --quick (jamais en CI) et aucun .py changé depuis le dernier commit (ticket_base : non
+   suivis compris ; hors git, le banc tourne), seul tests/test_public_repo.py tourne ;
+6. avec --ui : les tests d'interface tests/ui/*.test.mjs, ou les seuls fichiers donnés (pilote Chrome, voir
    tests/ui/driver.mjs), UI_JOBS fichiers à la fois (3 par défaut, QWEN_UI_JOBS), chacun avec sa durée, en même
    temps que le banc : chacun son Chrome, et son serveur sur un port libre, depuis son propre dossier temporaire
    (bench.start()), avec l'interface dans un autre processus (tests/ui/serve.py) ; résultats dans l'ordre des
-   fichiers ;
-6. avis, sans échec, « zone sensible : passe bogues /code-review requise » quand une ligne ajoutée dans tools/ touche
-   l'espace privé (SENSITIVE), depuis la base de la branche en cours (notice_base) : sur une branche de groupe, là où
-   elle a quitté dev ; sur dev ou main, et donc en CI, seuls les changements pas encore commités comptent.
+   fichiers ; --name <motif> ne lance que les tests dont le nom correspond (échec tout de suite si aucun), --repeat N
+   passe chaque fichier N fois ; un test « todo » est compté « à faire », sans échec ;
+7. avis, sans échec, « zone sensible : passe bogues /code-review requise » quand une ligne ajoutée dans tools/ depuis
+   le dernier commit (ticket_base : le ticket en cours, arbre de travail compris ; donc aucun avis en CI) touche
+   l'espace privé ou la suppression de données (SENSITIVE) ; il nomme la fonction (ou la route) de chaque ligne. Un
+   indice : la ligne « Zone sensible » du ticket fait foi.
 
-La sortie complète va aussi dans un journal (chemin imprimé à la fin) ; la dernière ligne récapitule les fautes
-(fichier:ligne, test du banc, fichier d'interface), pour qu'une sortie coupée par tail les montre encore.
+La sortie complète va aussi dans un journal (chemin imprimé à la fin ; les lignes de pile de Node n'y sont qu'à lui) ;
+un passage en échec garde le sien sous un nom horodaté (FAILURES_DIR, les FAILURES_KEPT derniers). La dernière ligne
+récapitule les fautes (fichier:ligne, test du banc, fichier d'interface), les lignes de résultat à citer et le journal
+gardé, pour qu'une sortie coupée par tail les montre encore. Un contrôle vert enregistre l'empreinte de l'arbre et ses
+options (green_record, à côté du journal).
 
 Le Python des contrôles est celui du venv du dépôt (venv/ à la racine, sinon celui du dossier principal quand on est
 dans un worktree), sinon l'interpréteur qui lance ce script (cas de la CI) : check.py se relance de lui-même avec le
 bon. Code de sortie non nul au moindre échec.
 """
-import argparse, concurrent.futures, glob, os, re, signal, subprocess, sys, tempfile, time
+import argparse, concurrent.futures, glob, json, os, re, shutil, signal, subprocess, sys, tempfile, time
 
 import rules                                          # tests/rules.py : règles mécaniques, index de la carte
 
@@ -49,13 +72,11 @@ VENV_PY = os.path.join("Scripts", "python.exe") if os.name == "nt" else os.path.
 SCRIPT_RE = re.compile(r"<script\b([^>]*)>(.*?)</script\s*>", re.S | re.I)
 LINE_MAX = 120                                       # caractères au plus par ligne ajoutée (CODING_STANDARDS.md)
 LINE_FILES = ("*.py", "*.md", "*.mjs", "*.js")
-# mots d'une ligne ajoutée qui demandent la passe bogues de /code-review (confidentialité : incognito, espace privé)
+# mots d'une ligne ajoutée qui demandent la passe bogues de /code-review : confidentialité (incognito, espace privé)
+# et suppression de données (Jeter, Supprimer, effacement des fichiers d'une image)
 SENSITIVE = ("localStorage", "incognito", "inPrivate", "privState", "asideInput", "secret(", "/api/private/",
-             "private/")
-# l'avis compte le travail de la branche en cours (notice_base) ; sur l'une de celles-ci (« HEAD » : tête détachée,
-# comme en CI), seulement ce qui n'est pas encore commité
-DEV_BRANCH = "dev"                                   # branche où se fusionnent les groupes
-SHARED_REFS = (DEV_BRANCH, "main", "HEAD")
+             "private/", "/api/discard", "/api/delete", "discardItem", "commitDiscard", "sortTop", "deleteItem",
+             "delete_output", "delete_extras", "remove_private_item")
 # images de l'interface que seul showImage remplit (sinon l'image d'avant reste à l'écran jusqu'au chargement)
 IMAGE_IDS = ("vImg", "vBg", "ivImg", "paintImg")
 IMAGE_SRC_RE = re.compile(r"\$\(\s*['\"](" + "|".join(IMAGE_IDS) + r")['\"]\s*\)\.src\s*=(?!=)")
@@ -66,6 +87,7 @@ AGENT_NOTES, CODE_MAP = "docs/agents", "carte-du-code.md"
 HOOKS = ".githooks"                                  # hooks versionnés (core.hooksPath), posés par --link-venv
 MAPPED = ("tools/launch.py", "tools/ui/index.html")  # fichiers que la carte du code décrit (--map en donne l'index)
 UI_TESTS = "tests/ui/*.test.mjs"
+USES_PLACES = ("tools", "tests", "README.md", f"{AGENT_NOTES}/{CODE_MAP}")   # où --uses cherche
 # délais des tests d'interface : par test (ms, node --test-timeout ; QWEN_UI_TEST_TIMEOUT le change), par fichier (s)
 UI_TEST_TIMEOUT = int(os.environ.get("QWEN_UI_TEST_TIMEOUT") or 180000)
 UI_FILE_TIMEOUT = 1200
@@ -74,6 +96,11 @@ UI_WAIT_LOADED = 30000                               # attente par défaut du pi
 # le change) : un contrôle complet n'attend plus la somme des fichiers (décision du 24/10/2026)
 UI_JOBS = max(1, int(os.environ.get("QWEN_UI_JOBS") or 3))
 SHOWN_FAULTS = 12                                    # fautes nommées au plus par contrôle dans la dernière ligne
+# lignes de résultat recopiées dans la dernière ligne, celles qu'on cite : « Ran N tests … », verdict, totaux
+CITED_RE = re.compile(r"(Banc(?: \([^)]*\))? : (?:Ran |OK|FAILED)|Interface : \d+ fichier\(s\), )")
+NODE_STACK_RE = re.compile(r"\s+at\s")             # ligne de pile de Node : dans le journal, pas à l'écran
+# journaux des passages en échec, gardés à côté du journal (une cause intermittente ne se perd plus)
+FAILURES_DIR, FAILURES_KEPT = "qwen-check-echecs", 10
 
 
 def git(*args):
@@ -143,12 +170,16 @@ def note_names(main):
 
 def link_hooks():
     """Hooks versionnés (HOOKS) activés pour le dépôt (core.hooksPath, réglage commun à tous ses worktrees, chemin
-    relatif : chacun prend les siens) ; un autre réglage déjà posé est gardé."""
+    relatif : chacun prend les siens) ; un autre réglage déjà posé est gardé, et dit actif s'il mène à un dossier qui
+    contient le hook (celui du dossier principal, posé en chemin absolu)."""
     try:
         current = git("config", "--get", "core.hooksPath").strip()
     except subprocess.CalledProcessError:
         current = ""
     if current == HOOKS:
+        return
+    if current and os.path.isfile(os.path.join(ROOT, os.path.expanduser(current), "pre-commit")):
+        print(f"hooks : pre-commit actif (core.hooksPath vaut « {current} », qui le contient)")
         return
     if current:
         print(f"hooks : core.hooksPath vaut déjà « {current} », gardé ({HOOKS}/pre-commit n'est pas activé)")
@@ -261,10 +292,18 @@ def check_js():
     for line in image_src_lines(html):
         print(f"  index.html:{line} : adresse donnée à la main à une image affichée : passer par showImage")
         bad.append(f"tools/ui/index.html:{line}")
+    for name in missing_image_ids(html):
+        print(f"  tests/check.py : IMAGE_IDS cite « {name} », absent de index.html (id=\"{name}\")")
+        bad.append(f"tests/check.py (IMAGE_IDS : {name})")
     bad = [b for b in bad if b]
     print(f"JavaScript : {len(blocks)} bloc(s) <script> de index.html et {len(files)} fichier(s) vérifiés"
           + (" : ÉCHEC" if bad else ""))
     return bad
+
+
+def missing_image_ids(html):
+    """Identifiants de IMAGE_IDS qu'aucun élément de html ne porte (la règle de showImage ne garderait plus rien)."""
+    return [name for name in IMAGE_IDS if not re.search(rf"""\bid\s*=\s*["']{name}["']""", html)]
 
 
 def image_src_lines(html):
@@ -316,17 +355,14 @@ def file_lines(f, cached=False):
         return None
 
 
-def check_line_length(base, cached=False):
+def long_lines(base, cached=False, paths=LINE_FILES):
     """Lignes ajoutées depuis base de plus de LINE_MAX caractères (pas octets), dans les .py, .md, .mjs et .js suivis
-    (tools/ui/index.html n'en est pas) ; hors tableaux Markdown (ligne qui commence par |) et blocs ``` d'un .md.
-    cached : lignes de l'index (hook avant commit). Liste des fautes (fichier:ligne)."""
-    if not base:
-        print(f"Lignes : avis : base introuvable (git merge-base HEAD origin/main), {LINE_MAX} caractères non vérifiés")
-        return []
-    bad = []
-    for f, numbers in sorted(added_lines(base, *LINE_FILES, cached=cached).items()):
+    (tools/ui/index.html n'en est pas ; paths : seuls ces chemins) ; hors tableaux Markdown (ligne qui commence par |)
+    et blocs ``` d'un .md. cached : lignes de l'index (hook avant commit). [(fichier, ligne, longueur)]."""
+    found = []
+    for f, numbers in sorted(added_lines(base, *paths, cached=cached).items()):
         lines = file_lines(f, cached)
-        if lines is None:
+        if lines is None or not f.endswith(tuple(p[1:] for p in LINE_FILES)):
             continue
         fenced = False
         for k, text in enumerate(lines, 1):
@@ -335,12 +371,104 @@ def check_line_length(base, cached=False):
                 fenced = not fenced
                 continue
             if k in numbers and not (md and (fenced or text.lstrip().startswith("|"))) and len(text) > LINE_MAX:
-                print(f"  {f}:{k} ({len(text)} caractères)")
-                bad.append(f"{f}:{k}")
+                found.append((f, k, len(text)))
+    return found
+
+
+def check_line_length(base, cached=False):
+    """Lignes trop longues (long_lines), affichées : liste des fautes (fichier:ligne)."""
+    if not base:
+        print(f"Lignes : avis : base introuvable (git merge-base HEAD origin/main), {LINE_MAX} caractères non vérifiés")
+        return []
+    bad = []
+    for f, k, n in long_lines(base, cached):
+        print(f"  {f}:{k} ({n} caractères)")
+        bad.append(f"{f}:{k}")
     print(f"Lignes : {len(bad)} ligne(s) ajoutée(s) de plus de {LINE_MAX} caractères" + (" : ÉCHEC" if bad else ""))
-    if any(".md:" in b for b in bad):
-        print("  Markdown : python3 tests/rewrap.py <fichier> recoupe ces lignes sans toucher au reste")
+    if bad:
+        print("  python3 tests/check.py --lines --fix recoupe celles des Markdown, des commentaires et des docstrings")
     return bad
+
+
+def fix_lines(base):
+    """--lines --fix : recoupe les seules lignes trop longues ajoutées (long_lines), sans toucher au reste du
+    paragraphe : Markdown par tests/rewrap.py (retrait, puces et citations gardés), commentaire seul sur sa ligne et
+    docstring d'un .py, .mjs ou .js (rewrap.rewrap_code) ; puis le contrôle des lignes, qui nomme celles laissées
+    (code, chaînes : à recouper à la main). Code de sortie du contrôle."""
+    import rewrap                                     # ici : rewrap importe check
+    if not base:
+        return 1 if check_line_length(base) else 0
+    by_file = {}
+    for f, k, _ in long_lines(base):
+        by_file.setdefault(f, set()).add(k)
+    for f, numbers in sorted(by_file.items()):
+        path = os.path.join(ROOT, f)
+        with open(path, encoding="utf-8", newline="") as fh:
+            text = fh.read()
+        if f.endswith(".md"):
+            new, cuts, left = rewrap.rewrap(text, numbers)
+        else:
+            new, cuts, left = rewrap.rewrap_code(f, text, numbers)
+        if new != text:
+            with open(path, "w", encoding="utf-8", newline="") as fh:
+                fh.write(new)
+            broken = fix_breaks(f, path, new)
+            if broken:                                # garde-fou : un fichier qui ne se lit plus est rendu tel quel
+                with open(path, "w", encoding="utf-8", newline="") as fh:
+                    fh.write(text)
+                print(f"{f} : recoupe annulée, le fichier ne se lisait plus ({broken}) : à recouper à la main")
+                continue
+        print(f"{f} : {cuts} ligne(s) recoupée(s)" + (f", {len(left)} à recouper à la main" if left else ""))
+    return 1 if check_line_length(base) else 0
+
+
+def fix_breaks(f, path, text):
+    """Raison pour laquelle le fichier recoupé ne se lit plus (Python compilé, JavaScript par node --check), ou None."""
+    if f.endswith(".py"):
+        try:
+            compile(text, f, "exec")
+        except SyntaxError as e:
+            return f"ligne {e.lineno} : {e.msg}"
+    elif f.endswith((".js", ".mjs")):
+        try:
+            r = subprocess.run(["node", "--check", path], capture_output=True, text=True)
+        except OSError:                                # sans node : rien à vérifier
+            return None
+        if r.returncode:
+            return (r.stderr or r.stdout).strip().splitlines()[0]
+    return None
+
+
+def hook_lines(stdin):
+    """--hook (PostToolUse de Claude Code sur Edit et Write, .claude/settings.json) : juge le seul fichier écrit
+    (tool_input.file_path du JSON reçu), dans le dépôt qui le contient (un worktree compris) ; rien s'il est hors d'un
+    dépôt de ce projet ou n'est pas un fichier contrôlé. Fautes sur stderr et code 2 (que Claude Code montre), sinon
+    0 sans rien écrire."""
+    global ROOT
+    try:
+        path = json.loads(stdin or "{}").get("tool_input", {}).get("file_path") or ""
+    except (ValueError, AttributeError):
+        return 0
+    folder = os.path.dirname(os.path.abspath(path)) if path else ""
+    if not os.path.isdir(folder):
+        return 0
+    r = subprocess.run(["git", "-C", folder, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    root = r.stdout.strip()
+    if r.returncode or not os.path.isfile(os.path.join(root, "tests", "check.py")):
+        return 0
+    ROOT = root
+    rel = os.path.relpath(os.path.realpath(path), os.path.realpath(root)).replace(os.sep, "/")
+    base = merge_base()
+    if rel.startswith("..") or not base:
+        return 0
+    found = long_lines(base, paths=(rel,))
+    if not found:
+        return 0
+    print(f"Lignes de plus de {LINE_MAX} caractères ajoutées :", file=sys.stderr)
+    for f, k, n in found:
+        print(f"  {f}:{k} ({n} caractères)", file=sys.stderr)
+    print("python3 tests/check.py --lines --fix les recoupe (Markdown, commentaires, docstrings)", file=sys.stderr)
+    return 2
 
 
 def read(f):
@@ -352,7 +480,11 @@ def check_rules(base):
     """Règles mécaniques de CODING_STANDARDS.md (tests/rules.py) sur les lignes ajoutées depuis base : variable
     JavaScript qui porte l'id d'un élément (index.html), « .every( » ou « all( » sans test de longueur, promesse prise
     pour un booléen, HOLD=<nom> repris d'un fichier de test à l'autre, attente de « running » sans HOLD ni SLOW
-    (tests) ; et sur toute la carte du code : chaque nom cité existe dans le code. Liste des fautes (fichier:ligne)."""
+    (tests) ; couleur écrite hors des jetons, @keyframes sans animation, adresse privée posée hors de showImage
+    (index.html) ; attente fixe, aide ou attente recopiée d'un fichier à l'autre, espace privé fermé sans attendre son
+    repos, entrée privée écrite à la main (tests d'interface). Sur des fichiers entiers : print qui dépend de secret(),
+    route absente de la docstring, écriture sous PRIVATE_LOCK sans finish_rekey() (launch.py), import interne cassé
+    (tous les .py) ; chaque nom cité par la carte du code existe dans le code. Liste des fautes (fichier:ligne)."""
     bad = []
 
     def report(f, found):
@@ -362,12 +494,22 @@ def check_rules(base):
 
     if base:
         added = added_lines(base, "tools/ui/index.html", "tests/")
-        report("tools/ui/index.html", rules.id_shadows(read("tools/ui/index.html"),
-                                                       added.get("tools/ui/index.html", set())))
+        html, ui_added = read("tools/ui/index.html"), added.get("tools/ui/index.html", set())
+        report("tools/ui/index.html", rules.id_shadows(html, ui_added) + rules.private_src(html, ui_added)
+               + rules.hardcoded_colors(html.splitlines(), ui_added)
+               + rules.unused_keyframes(html.splitlines(), ui_added))
         for f in checked_files("tests/*.mjs"):           # pathspec git : « * » traverse les dossiers
             lines = read(f).splitlines()
             report(f, rules.unchecked_every(lines, added.get(f, set())) + rules.unawaited_then(lines,
                                                                                                added.get(f, set())))
+        ui_tests = {f: read(f) for f in checked_files(UI_TESTS)}
+        for f, text in ui_tests.items():
+            lines, mine = text.splitlines(), added.get(f, set())
+            report(f, rules.fixed_waits(lines, mine) + rules.unsettled_private_close(lines, mine)
+                   + rules.private_entry_by_hand(lines, mine))
+        ui_added = {f: added.get(f, set()) for f in ui_tests}
+        for f, k, why in rules.copied_helpers(ui_tests, ui_added) + rules.copied_waits(ui_tests, ui_added):
+            report(f, [(k, why)])
         for f in checked_files("tests/*.py"):
             if f == "tests/test_rules.py":                # ses exemples fautifs sont voulus
                 continue
@@ -382,6 +524,15 @@ def check_rules(base):
             report(f, [(k, why)])
     else:
         print("Règles : avis : base introuvable, règles des lignes ajoutées non vérifiées")
+    try:
+        server = read("tools/launch.py")
+        report("tools/launch.py", rules.secret_prints(server) + rules.undocumented_routes(server)
+               + rules.private_lock_without_rekey(server))
+    except SyntaxError:                                 # déjà signalé par le contrôle Python
+        pass
+    sources = {f: read(f) for f in checked_files("*.py")}
+    for f, k, why in rules.broken_imports(sources):
+        report(f, [(k, why)])
     code = "\n".join(read(f) for f in checked_files("*.py", "*.html", "*.mjs", "*.js"))
     report(f"{AGENT_NOTES}/{CODE_MAP}", rules.missing_map_names(read(f"{AGENT_NOTES}/{CODE_MAP}"), code))
     print(f"Règles : {len(bad)} faute(s) (CODING_STANDARDS.md, noms de la carte du code)" + (" : ÉCHEC" if bad else ""))
@@ -397,48 +548,65 @@ def print_index(pattern):
     return 0
 
 
-def notice_base():
-    """Base de l'avis « zone sensible » : le travail de la branche en cours, pas ce que d'autres groupes ont déjà
-    fusionné (décision du 24/10/2026). Sur une branche de groupe, là où elle a quitté dev ; sur dev ou sans dev, le
-    dernier commit (seuls les changements pas encore commités comptent) ; hors git, None (pas d'avis)."""
+def print_uses(word):
+    """Usages de word (texte exact ; mot entier pour un identifiant) dans USES_PLACES, fichiers nouveaux compris :
+    fichier:ligne:texte. 1 s'il n'y en a aucun."""
+    whole = ["-w"] if re.fullmatch(r"[A-Za-z_$][\w$]*", word) else []
     try:
-        if git("rev-parse", "--abbrev-ref", "HEAD").strip() not in SHARED_REFS:
-            try:
-                return git("merge-base", "HEAD", DEV_BRANCH).strip() or None
-            except subprocess.CalledProcessError:       # pas de branche dev : le dernier commit, comme sur dev
-                pass
+        out = git("grep", "-n", "-I", "-F", "--untracked", *whole, "-e", word, "--", *USES_PLACES)
+    except subprocess.CalledProcessError:              # aucun usage : git grep sort en 1
+        out = ""
+    print(out.rstrip() or f"{word} : aucun usage dans {', '.join(USES_PLACES)}")
+    return 0 if out.strip() else 1
+
+
+def print_body(name):
+    """Corps de chaque fonction ou classe name de MAPPED (là où --map la situe) : « fichier:ligne » puis ses lignes.
+    1 si elle est introuvable."""
+    found = False
+    for f in MAPPED:
+        text = read(f)
+        lines = text.splitlines()
+        for start, end in rules.function_spans(f, text, name):
+            found = True
+            print(f"{f}:{start}")
+            print("\n".join(lines[start - 1:end]))
+    if not found:
+        print(f"{name} : introuvable dans {', '.join(MAPPED)} (--map {name} pour les noms approchants)")
+    return 0 if found else 1
+
+
+def ticket_base():
+    """Base du travail du ticket en cours : le dernier commit (arbre de travail et fichiers nouveaux comptent ; décision
+    du 25/10/2026), quelle que soit la branche. Sert à l'avis « zone sensible » et à --quick. Hors git, None."""
+    try:
         return git("rev-parse", "HEAD").strip() or None
-    except (OSError, subprocess.CalledProcessError):    # hors git, ou git absent : pas d'avis
+    except (OSError, subprocess.CalledProcessError):    # hors git, ou git absent
         return None
 
 
 def sensitive_notice(base):
-    """Avis (jamais un échec) quand une ligne ajoutée depuis base (notice_base) dans le code de l'application (tools/,
-    hors .md) touche une zone sensible (SENSITIVE) : le ticket demande alors la passe bogues de /code-review. Les
-    tests, qui nomment ces zones pour les vérifier, ne déclenchent pas l'avis."""
+    """Avis (jamais un échec) quand une ligne ajoutée depuis base (ticket_base) dans le code de l'application (tools/,
+    hors .md) touche une zone sensible (SENSITIVE) : le ticket demande peut-être la passe bogues de /code-review (la
+    ligne « Zone sensible » du ticket fait foi). L'avis nomme, par fichier, la fonction (ou la route) de chaque ligne
+    touchée et ses mots. Les tests, qui nomment ces zones pour les vérifier, ne déclenchent pas l'avis."""
     if not base:
         return
-    hits, current = {}, None
-    for line in git("diff", "--unified=0", "--no-color", "--no-ext-diff", base, "--", "tools/",
-                    ":!*.md").splitlines():
-        if line.startswith("+++ "):
-            current = line[6:] if line.startswith("+++ b/") else None
-        elif line.startswith("+") and current:
-            for word in SENSITIVE:
-                if word in line:
-                    hits.setdefault(word, set()).add(current)
-    for f in new_files("tools/", ":!*.md"):          # fichier nouveau : toutes ses lignes sont ajoutées
+    parts = []
+    for f, numbers in sorted(added_lines(base, "tools/", ":!*.md").items()):
         try:
-            with open(os.path.join(ROOT, f), encoding="utf-8") as fh:
-                text = fh.read()
-        except (OSError, UnicodeDecodeError):
+            text = read(f)
+        except (OSError, UnicodeDecodeError):           # image, fichier supprimé
             continue
-        for word in SENSITIVE:
-            if word in text:
-                hits.setdefault(word, set()).add(f)
-    if hits:
-        print("Avis : zone sensible : passe bogues /code-review requise ("
-              + " ; ".join(f"{w} dans {', '.join(sorted(fs))}" for w, fs in hits.items()) + ")")
+        lines, where = text.splitlines(), {}
+        for k in sorted(numbers):
+            words = [w for w in SENSITIVE if k <= len(lines) and w in lines[k - 1]]
+            if words:
+                where.setdefault(rules.enclosing_name(f, text, k), set()).update(words)
+        if where:
+            parts.append(f"{f} : " + ", ".join(f"{name} ({', '.join(sorted(ws))})" for name, ws in where.items()))
+    if parts:
+        print("Avis : zone sensible : passe bogues /code-review requise (" + " ; ".join(parts) + ")")
 
 
 def py_changed(base):
@@ -514,28 +682,30 @@ def run_ui_file(f, flags, env):
     return out.rstrip(), proc.returncode
 
 
-def run_ui(files, name=None, wait=None, jobs=None):
+def run_ui(files, name=None, wait=None, jobs=None, repeat=1):
     """Tests d'interface (tous, ou les seuls files ; name : motif des noms de tests, --test-name-pattern), jobs fichiers
     à la fois (UI_JOBS ; chacun son Chrome et son banc, sur des ports libres et des dossiers temporaires distincts),
     chacun dans son groupe de processus : un test dépasse UI_TEST_TIMEOUT, un fichier UI_FILE_TIMEOUT. wait : délai
     par défaut des attentes du pilote (QWEN_UI_WAIT ; allongé par l'appelant quand la machine est chargée). Lignes et
-    totaux dans l'ordre des fichiers. Renvoie (réussi, lignes à afficher, fautes : fichiers en échec)."""
+    totaux dans l'ordre des fichiers. repeat : chaque fichier passe autant de fois (« (passage k/N) » dans ses lignes,
+    pour montrer un échec intermittent). Renvoie (réussi, lignes à afficher, fautes : fichiers en échec)."""
     files = ui_files(files)
+    runs = [(f, f if repeat == 1 else f"{f} (passage {k}/{repeat})") for k in range(1, repeat + 1) for f in files]
     env = dict(os.environ, PYTHON=sys.executable, **({"QWEN_UI_WAIT": str(wait)} if wait else {}))
     env.pop("NODE_TEST_CONTEXT", None)                # lancé depuis un test node : sinon node --test ne lance rien
     flags = ["--test-concurrency=1", "--test-reporter=spec", f"--test-timeout={UI_TEST_TIMEOUT}", "--test-force-exit",
              *([f"--test-name-pattern={name}"] if name else [])]
     shown, faults, total, start = [], [], {}, time.monotonic()
 
-    def one(f):
+    def one(run):
         began = time.monotonic()
-        return (*run_ui_file(f, flags, env), time.monotonic() - began)
+        return (*run_ui_file(run[0], flags, env), time.monotonic() - began)
     try:
-        with concurrent.futures.ThreadPoolExecutor(min(jobs or UI_JOBS, len(files) or 1)) as pool:
-            results = list(pool.map(one, files))
+        with concurrent.futures.ThreadPoolExecutor(min(jobs or UI_JOBS, len(runs) or 1)) as pool:
+            results = list(pool.map(one, runs))
     except OSError:
         return False, ["Interface : node introuvable"], ["node introuvable"]
-    for f, (out, code, took) in zip(files, results):
+    for (_, f), (out, code, took) in zip(runs, results):
         counts = ui_counts(out)
         for k, v in counts.items():
             total[k] = total.get(k, 0) + v
@@ -543,10 +713,12 @@ def run_ui(files, name=None, wait=None, jobs=None):
             faults.append(f)
             shown.append(out)
         failed = counts.get("fail", 0) + counts.get("cancelled", 0)
-        shown.append(f"Interface : {f} : {counts.get('tests', '?')} tests, {failed} en échec ({seconds(took)})")
+        todo = f", {counts['todo']} à faire" if counts.get("todo") else ""      # test « todo » : compté, sans échec
+        shown.append(f"Interface : {f} : {counts.get('tests', '?')} tests, {failed} en échec{todo} ({seconds(took)})")
     failed = total.get("fail", 0) + total.get("cancelled", 0)
-    shown.append(f"Interface : {len(files)} fichier(s), {total.get('tests', 0)} tests, {total.get('pass', 0)} "
-                 f"réussis, {failed} en échec ({seconds(time.monotonic() - start)})")
+    todo = f", {total['todo']} à faire" if total.get("todo") else ""
+    shown.append(f"Interface : {len(runs)} fichier(s), {total.get('tests', 0)} tests, {total.get('pass', 0)} "
+                 f"réussis, {failed} en échec{todo} ({seconds(time.monotonic() - start)})")
     return not faults, shown + ["Interface : " + ("ÉCHEC" if faults else "OK")], faults
 
 
@@ -572,18 +744,22 @@ def stop_group(proc):
 
 
 class Tee:
-    """Sortie écrite à la fois à l'écran et dans le journal."""
-    def __init__(self, *streams):
-        self.streams = streams
+    """Sortie écrite à la fois à l'écran et dans le journal ; les lignes de pile de Node (NODE_STACK_RE) ne vont que
+    dans le journal (hidden : leur nombre)."""
+    def __init__(self, screen, log):
+        self.screen, self.log, self.hidden = screen, log, 0
 
     def write(self, text):
-        for s in self.streams:
-            s.write(text)
+        self.log.write(text)
+        lines = text.splitlines(keepends=True)
+        shown = [l for l in lines if not NODE_STACK_RE.match(l)]
+        self.hidden += len(lines) - len(shown)
+        self.screen.write("".join(shown))
         return len(text)
 
     def flush(self):
-        for s in self.streams:
-            s.flush()
+        self.screen.flush()
+        self.log.flush()
 
 
 def journal_path():
@@ -593,19 +769,62 @@ def journal_path():
                                                                 f"qwen-check-{os.path.basename(ROOT)}.log")
 
 
-def summary(failed):
-    """Dernière ligne de la sortie : OK, ou chaque contrôle en échec avec ses fautes (SHOWN_FAULTS au plus)."""
+def kept_journal_path(journal):
+    """Chemin où garder le journal d'un passage en échec : FAILURES_DIR à côté du journal, nom horodaté. Les plus
+    vieux au-delà de FAILURES_KEPT sont retirés."""
+    folder = os.path.join(os.path.dirname(journal), FAILURES_DIR)
+    os.makedirs(folder, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(journal))[0]
+    old = sorted(n for n in os.listdir(folder) if n.startswith(stem + "-"))
+    for name in old[:max(0, len(old) - FAILURES_KEPT + 1)]:
+        os.remove(os.path.join(folder, name))
+    stamp = time.strftime("%Y%m%d-%H%M%S") + f"-{time.time_ns() % 10 ** 9:09d}"
+    return os.path.join(folder, f"{stem}-{stamp}.log")
+
+
+def summary(failed, cited=(), kept=None):
+    """Dernière ligne de la sortie : OK, ou chaque contrôle en échec avec ses fautes (SHOWN_FAULTS au plus) ; puis les
+    lignes de résultat à citer (cited : « Ran N tests … », totaux de l'interface) et le journal gardé d'un échec."""
+    counts = f" ({' ; '.join(cited)})" if cited else ""
     if not failed:
-        return "Contrôles : OK"
+        return "Contrôles : OK" + counts
     parts = []
     for name, faults in failed.items():
         more = f" et {len(faults) - SHOWN_FAULTS} autre(s)" if len(faults) > SHOWN_FAULTS else ""
         parts.append(f"{name} : {', '.join(faults[:SHOWN_FAULTS])}{more}")
-    return "Contrôles : ÉCHEC : " + " ; ".join(parts)
+    return "Contrôles : ÉCHEC : " + " ; ".join(parts) + counts + (f" (journal gardé : {kept})" if kept else "")
+
+
+def tree_fingerprint():
+    """Empreinte de l'état du dépôt : arbre de travail entier (fichiers suivis et nouveaux non ignorés), écrit dans un
+    index temporaire (l'index réel n'est pas touché) ; None hors git."""
+    with tempfile.TemporaryDirectory(prefix="qwen-check-index-") as tmp:
+        env = dict(os.environ, GIT_INDEX_FILE=os.path.join(tmp, "index"))
+        try:
+            for args in (("read-tree", "HEAD"), ("add", "-A", "--", ".")):
+                subprocess.run(["git", *args], cwd=ROOT, env=env, capture_output=True, check=True)
+            return subprocess.run(["git", "write-tree"], cwd=ROOT, env=env, capture_output=True, text=True,
+                                  check=True).stdout.strip() or None
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
+
+def state_key(args):
+    """Clé d'un contrôle complet : empreinte de l'arbre, dernier commit et base (--quick, l'avis, les lignes et les
+    règles en dépendent), options qui changent ce qui tourne ; None hors git."""
+    tree = tree_fingerprint()
+    options = {k: getattr(args, k, None) for k in ("no_bench", "quick", "ui", "name", "repeat")}
+    return f"{tree} {ticket_base()} {merge_base()} {json.dumps(options, sort_keys=True)}" if tree else None
+
+
+def green_record(journal):
+    """Fichier du dernier contrôle vert (clé, date, lignes à citer), à côté du journal."""
+    return journal + ".vert.json"
 
 
 def run_checks(args):
-    """Contrôles statiques, puis banc et interface s'ils passent : {contrôle : fautes} des contrôles en échec."""
+    """Contrôles statiques, puis banc et interface s'ils passent : ({contrôle : fautes} des contrôles en échec, lignes
+    de résultat à citer : « Ran N tests … », verdict du banc, totaux de l'interface)."""
     base = merge_base()
     failed = {}
     for name, check in (("Python", check_python), ("JavaScript", check_js),
@@ -615,7 +834,7 @@ def run_checks(args):
             failed[name] = faults
     if failed:
         print("Banc et interface : pas lancés (contrôles ci-dessus en échec : les corriger d'abord)")
-        return failed
+        return failed, []
     if args.ui is not None and args.name:
         try:
             found = any(re.search(args.name, t) for t in ui_titles(ui_files(args.ui)))
@@ -623,62 +842,120 @@ def run_checks(args):
             found = True
         if not found:
             print(f"Interface : aucun test ne correspond au motif « {args.name} » : rien n'est lancé")
-            return {"Interface": [f"motif « {args.name} » sans test"]}
+            return {"Interface": [f"motif « {args.name} » sans test"]}, []
     jobs = []                                         # banc et interface : en parallèle (bancs indépendants)
     if args.no_bench:
         pass
-    elif args.quick and not py_changed(base):
-        print("Banc : sauté (--quick, aucun .py changé depuis la base) ; seul le test du dépôt public tourne")
+    elif args.quick and not py_changed(ticket_base()):
+        print("Banc : sauté (--quick, aucun .py changé depuis le dernier commit) ; seul le test du dépôt public tourne")
         jobs.append(("Banc", lambda: run_bench("test_public_repo.py")))
     else:
         jobs.append(("Banc", run_bench))
     if args.ui is not None:                           # banc ou plusieurs Chrome en même temps : attentes allongées
         wait = UI_WAIT_LOADED if jobs or min(UI_JOBS, len(ui_files(args.ui))) > 1 else None
-        jobs.append(("Interface", lambda: run_ui(args.ui, args.name, wait)))
+        jobs.append(("Interface", lambda: run_ui(args.ui, args.name, wait, repeat=args.repeat)))
+    cited = []
     with concurrent.futures.ThreadPoolExecutor(max(len(jobs), 1)) as pool:
         futures = [(name, pool.submit(job)) for name, job in jobs]
         for name, future in futures:
             ok, lines, faults = future.result()
             print("\n".join(lines))
+            cited += [l for l in lines if CITED_RE.match(l)]
             if not ok:
                 failed[name] = faults
-    sensitive_notice(notice_base())
-    return failed
+    sensitive_notice(ticket_base())
+    return failed, cited
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Contrôles du projet (compilation, JavaScript, lignes, banc, interface)")
+def parse_args(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--no-bench", action="store_true", help="sauter le banc de test")
     ap.add_argument("--quick", action="store_true",
-                    help="sauter le banc si aucun .py n'a changé depuis la base (le test du dépôt public tourne)")
+                    help="sauter le banc si aucun .py n'a changé depuis le dernier commit (test du dépôt public lancé)")
     ap.add_argument("--ui", nargs="*", metavar="FICHIER",
                     help="lancer aussi les tests d'interface (Chrome, en local), tous ou les seuls fichiers donnés")
     ap.add_argument("--name", metavar="MOTIF", help="avec --ui : seuls les tests dont le nom correspond (expression "
                     "régulière) ; échoue tout de suite si aucun ne correspond")
+    ap.add_argument("--repeat", type=int, default=1, metavar="N", help="avec --ui : passer N fois chaque fichier "
+                    "d'interface (échec intermittent)")
+    ap.add_argument("--force", action="store_true",
+                    help="relancer même si un contrôle identique est déjà vert sur cet état de l'arbre")
     ap.add_argument("--lines", action="store_true",
                     help=f"seulement la longueur des lignes ajoutées depuis la base ({LINE_MAX} caractères)")
     ap.add_argument("--cached", action="store_true", help="avec --lines : juger l'index (hook avant commit)")
+    ap.add_argument("--fix", action="store_true", help="avec --lines : recouper les lignes trop longues qui peuvent "
+                    "l'être sans risque (Markdown, commentaires, docstrings), puis vérifier")
+    ap.add_argument("--hook", action="store_true", help="hook PostToolUse de Claude Code : juge le fichier écrit "
+                    "(JSON sur l'entrée), fautes sur stderr, code 2")
     ap.add_argument("--link-venv", action="store_true",
                     help="worktree : liens vers venv et les notes du dossier principal ; hook avant commit")
     ap.add_argument("--map", nargs="?", const="", metavar="NOM",
                     help="index fonction → ligne de launch.py et index.html (les noms qui contiennent NOM)")
-    args = ap.parse_args()
+    ap.add_argument("--uses", metavar="MOT", help="usages de MOT dans tools/, tests/, le README et la carte du code")
+    ap.add_argument("--show", metavar="NOM", help="corps de la fonction NOM de launch.py ou index.html")
+    return ap.parse_args(argv)
+
+
+def already_green(record, key):
+    """Lignes à imprimer si le dernier contrôle vert (record) avait la même clé, sinon None."""
+    try:
+        with open(record, encoding="utf-8") as f:
+            green = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not key or green.get("key") != key:
+        return None
+    return [f"Contrôles : déjà vert sur cet état (passage du {green['when']}) : pas relancé (--force pour relancer)",
+            *green.get("lines", []), summary({}, green.get("cited", []))]
+
+
+def main(argv=None):
+    args = parse_args(argv)
     if args.link_venv:
         return link_venv()
     if args.map is not None:
         return print_index(args.map)
-    if args.lines:                                    # bibliothèque standard seulement : pas de relance dans le venv
+    if args.uses:
+        return print_uses(args.uses)
+    if args.show:
+        return print_body(args.show)
+    if args.hook:                                     # bibliothèque standard seulement : pas de relance dans le venv
+        return hook_lines(sys.stdin.read())
+    if args.lines and args.fix:
+        return fix_lines(merge_base())
+    if args.lines:
         return 1 if check_line_length(merge_base(), cached=args.cached) else 0
     reexec_in_venv()
     path, screen = journal_path(), sys.stdout
+    key = state_key(args)
+    shown = None if args.force else already_green(green_record(path), key)
+    if shown:
+        print("\n".join(shown[:-1]))
+        sensitive_notice(ticket_base())                # l'avis n'est pas gardé : refait (rapide)
+        print(shown[-1])
+        return 0
+    kept = None
     with open(path, "w", encoding="utf-8") as log:
-        sys.stdout = Tee(screen, log)
+        sys.stdout = tee = Tee(screen, log)
         try:
-            failed = run_checks(args)
+            failed, cited = run_checks(args)
+            if tee.hidden:
+                print(f"({tee.hidden} ligne(s) de pile Node masquée(s) : dans le journal)")
             print(f"Journal complet : {path}")
-            print(summary(failed))
+            kept = kept_journal_path(path) if failed else None
+            print(summary(failed, cited, kept))
         finally:
             sys.stdout = screen
+    if kept:
+        shutil.copyfile(path, kept)
+        try:                                          # un échec efface le vert d'avant, même sur un arbre identique
+            os.remove(green_record(path))
+        except FileNotFoundError:
+            pass
+    elif key:
+        with open(green_record(path), "w", encoding="utf-8") as f:
+            json.dump({"key": key, "when": time.strftime("%d/%m/%Y %H:%M"), "cited": cited,
+                       "lines": [f"Journal du passage : {path}"]}, f)
     return 1 if failed else 0
 
 

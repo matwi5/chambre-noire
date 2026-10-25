@@ -33,7 +33,7 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
         GET /api/private/image|thumb?id=<id>, GET /api/private/input?id=<id>&file=<init.png|ref_N.png>,
         prompts enregistrés de l'espace privé (private/prompts, chiffré) : GET /api/private/prompts,
         POST /api/private/prompts, POST /api/private/prompts/delete, POST /api/private/prompts/used,
-        GET /api/result?name=<png>[&download=1], GET /api/status,
+        GET /api/result?name=<png>[&download=1], GET /api/status, POST /api/login {"code": …} (cookie d'accès),
         tirages et pile : GET /api/history, GET /api/pile, GET /api/thumb?name=<png>, POST /api/keep {"name": <png>},
         POST /api/discard {"name": <png>}, POST /api/delete {"name": <png>},
         images d'entrée d'une image : GET /api/input?name=<png>&file=<init.png|ref_N.png>[&thumb=1][&download=1],

@@ -1,16 +1,17 @@
 // Aides du pilote (driver.mjs) et délais des tests d'interface : page.leaks trouve un marqueur laissé dans une variable
 // globale, un texte caché, un attribut ou un élément détaché ; bench.disk voit un fichier écrit ; chrome.phonePage
 // est connectée au banc (le Mac demande le code d'accès : sans le cookie, il reçoit la page du code) ; page.eval et
-// bench.idle échouent dans leur délai ; un test bloqué lancé par check.py échoue dans le délai par test, sans laisser
-// Chrome ni le serveur du banc.
-//   venv/bin/python tests/check.py --quick --ui tests/ui/pilote.test.mjs
+// bench.idle échouent dans leur délai ; une erreur de console n'échoue que le test où elle apparaît, qu'elle nomme ;
+// page.click refuse un élément recouvert ou hors de l'écran ; un test bloqué lancé par check.py échoue dans le délai
+// par test, sans laisser Chrome ni le serveur du banc.
+//   venv/bin/python tests/check.py --no-bench --ui tests/ui/pilote.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { startBench, launchChrome } from './driver.mjs';
+import { startBench, launchChrome, waitUntil } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -19,7 +20,7 @@ before(async () => {
   chrome = await launchChrome();
   page = await chrome.phonePage();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
 });
 
 after(async () => {
@@ -53,7 +54,7 @@ test('page.leaks : un marqueur laissé dans l\'état global ou caché dans la pa
 });
 
 test('bench.disk : une image enregistrée est vue, rien quand rien n\'est écrit', async () => {
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   const disk = bench.disk();
   assert.deepEqual(disk.written(), []);
   await page.generate('zp1 disque');
@@ -68,7 +69,7 @@ test('chrome.phonePage : connectée au banc ; sans le cookie, le Mac lui-même r
   try {
     const p = await alone.phonePage();
     await p.goto(bench.url + '/');
-    await p.waitFor(`$('lamp').classList.contains('ok')`, { what: 'interface ouverte, sans saisie du code' });
+    await p.ready('interface ouverte, sans saisie du code');
     await p.send('Network.clearBrowserCookies');
     await p.goto(bench.url + '/');
     await p.waitFor(`!!document.getElementById('c')`, { what: 'champ du code d\'accès' });
@@ -87,6 +88,40 @@ test('délais : page.eval et bench.idle échouent au lieu d\'attendre sans fin',
   await assert.rejects(bench.idle({ timeout: 300 }), /Mac au repos/);
   bench.release('pilote');
   await bench.idle();
+  page.assertNoErrors();
+});
+
+test('erreurs : une erreur de console laissée par ce test…', async () => {
+  await page.eval(`console.error('zpErr1')`);
+  await waitUntil(() => page.errors.length > 0, { what: 'erreur reçue par le pilote' });
+  assert.match(page.errors[0], /^« erreurs : une erreur de console laissée par ce test… » : console\.error : zpErr1/);
+});
+
+test('erreurs : …n\'échoue pas le suivant ; l\'échec nomme son test', async () => {
+  page.assertNoErrors();
+  await page.eval(`console.error('zpErr2')`);
+  await waitUntil(() => page.errors.length > 0, { what: 'erreur reçue par le pilote' });
+  assert.throws(() => page.assertNoErrors(),
+    /« erreurs : …n'échoue pas le suivant ; l'échec nomme son test » : console\.error : zpErr2/);
+  assert.ok(!page.errors.some(e => e.includes('zpErr1')), page.errors.join(' ; '));
+  page.errors.length = 0;
+});
+
+test('page.click : échoue sur un élément recouvert ou hors de l\'écran, en nommant ce qui le recouvre', async () => {
+  await page.eval(`(() => { const b = document.createElement('button'); b.id = 'zpBtn'; b.textContent = 'zp';
+    b.style.cssText = 'position:fixed;left:20px;top:200px;width:80px;height:40px;z-index:50';
+    b.onclick = () => { window.zpClicks = (window.zpClicks || 0) + 1; }; document.body.append(b);
+    const c = document.createElement('div'); c.id = 'zpCover';
+    c.style.cssText = 'position:fixed;left:0;top:150px;width:200px;height:200px;z-index:60'; document.body.append(c);
+  })()`);
+  await assert.rejects(page.click('#zpBtn', { timeout: 300 }), /élément recouvert par #zpCover : #zpBtn/);
+  assert.equal(await page.eval(`window.zpClicks || 0`), 0, 'recouvert : pas d\'appui');
+  await page.eval(`$('zpCover').remove()`);
+  await page.click('#zpBtn');
+  assert.equal(await page.eval(`zpClicks`), 1);
+  await page.eval(`$('zpBtn').style.left = '-500px'`);
+  await assert.rejects(page.click('#zpBtn', { timeout: 300 }), /élément hors de l'écran : #zpBtn/);
+  await page.eval(`$('zpBtn').remove()`);
   page.assertNoErrors();
 });
 

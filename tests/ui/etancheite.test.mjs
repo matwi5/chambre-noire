@@ -28,7 +28,7 @@ before(async () => {
   page = await chrome.phonePage();
   page.on('Page.frameNavigated', p => { if (!p.frame.parentId) navigated = true; });
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
 });
 
 after(async () => {
@@ -107,8 +107,9 @@ async function privateTour() {
   await page.waitFor(`$('ivImg').complete && $('ivImg').naturalWidth > 0`, { what: 'image d\'entrée privée' });
   await page.eval(`closeInputs(); openViewer(histItems.findIndex(it => it.lot), histItems); openLot()`);
   await page.waitFor(`openedSheet === $('lotSheet')`, { what: 'feuille du lot privé' });
-  await page.tab('labo');                          // (visionneuse et feuille du lot toujours ouvertes)
-  await page.click('#pileNo');                     // un Jeter privé qui attend la fin de son bandeau à la sortie
+  await page.tab('labo', { force: true });         // (visionneuse et feuille du lot ouvertes : pas au doigt)
+  // un Jeter privé qui attend la fin de son bandeau à la sortie (sous la visionneuse : pas au doigt)
+  await page.click('#pileNo', { force: true });
   await page.waitFor(`!!discarding && !$('undoBar').hidden`, { what: 'Jeter privé en attente' });
   return [...new Set([...markers, ...WORDS, '/api/private/', 'prive_', thumb.slice(-120, -40)])];
 }
@@ -120,7 +121,7 @@ test('« Sortir » : plus rien de l\'espace privé dans la page', async () => {
   await enter();
   const markers = await privateTour();
   kept = await page.eval(`histItems.length`);
-  await page.click('#privExit');
+  await page.click('#privExit', { force: true });  // visionneuse et feuille du lot ouvertes exprès : pas au doigt
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.deepEqual(await scan(markers, true), [], 'données privées restées dans la page');
   assert.equal(await page.eval(`$('undoBar').hidden`), true, 'bandeau du Jeter privé resté');
@@ -372,7 +373,7 @@ test('mémoire de l\'onglet refusée par le navigateur : la page se charge et fo
     window, 'sessionStorage', { get() { throw new DOMException('refusé', 'SecurityError'); } })` });
   try {
     await page.goto(bench.url + '/');
-    await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+    await page.ready();
     assert.equal(await page.eval(`relock`), false);
     await enter();
     await page.eval(`dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))`);
@@ -689,7 +690,7 @@ test('code d\'accès redemandé dans l\'espace privé : « Sortir » ferme quand
   // (sur la page du code, RELOCK_MARK n'existe pas : la marque est lue sous son nom)
   assert.equal(await page.eval(`sessionStorage.getItem('relock')`), null, 'sortie acceptée, marque restée');
   await bench.login(page);
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'interface rouverte' });
+  await page.ready('interface rouverte');
   assert.deepEqual(await page.eval(`[inPrivate(), ${MARK}]`), [false, null], 'rentrée dans l\'espace sans code');
   assert.equal(await macUnlocked(), false, 'session du Mac restée ouverte');
   page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/status of 401 \(Unauthorized\)/.test(e)));

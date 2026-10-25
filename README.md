@@ -252,7 +252,10 @@ venv/bin/python tools/make_service.py
 le service de l'ancien nom de l'application (`com.matwi5.qwen-image-local`), s'il est installé. Le journal du service
 est dans `logs/service.log`, lisible par votre seul compte (relancer `make_service.py` l'applique à un service déjà
 installé, journal existant compris) ; au lancement, l'interface ferme aussi aux autres comptes ses dossiers
-`outputs/`, `jobs/` et `logs/`. Le
+`outputs/`, `jobs/` et `logs/`. `make_service.py` attend que l'ancien service soit vraiment arrêté avant de démarrer
+le nouveau (et réessaie), et ses erreurs ne citent aucune adresse du Mac. Avant de relancer le service,
+`venv/bin/python tools/service_busy.py` imprime seulement `True` si une génération tourne, sinon `False` (sans
+afficher le code d'accès). Le
 raccourci `Chambre noire.command` entre alors dans l'interface déjà lancée par l'entrée à usage unique
 (`tools/launch.py --enter`), sans taper le code ; après une mise à jour de l'application, relancer
 `tools/make_shortcut.py` le met à jour.
@@ -1013,6 +1016,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 │   ├── fix_int8_te.py    correctif de l'encodeur texte int8 (Windows)
 │   ├── make_shortcut.py  crée Chambre noire.lnk (Windows) ou Chambre noire.command (Mac)
 │   ├── make_service.py   Mac : démarrage automatique de l'interface, accessible depuis le Wi-Fi
+│   ├── service_busy.py   Mac : une génération tourne-t-elle ? (True ou False, avant de relancer le service)
 │   ├── make_mask.py      génère un masque ou une annotation par script
 │   ├── make_test_image.py  génère une image de test (formes et texte) pour essayer l'édition
 │   ├── config.json       moteur, modèle et port par défaut (moteur écrit par setup.py sous Windows)
@@ -1028,7 +1032,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     ├── bench.py          banc de test du serveur, sans GPU : serveur sur un port libre, dossier temporaire
     ├── fake_sdcli.py     faux moteur du banc
     ├── check.py          tous les contrôles en une commande (compilation, JavaScript, banc, interface)
-    ├── rewrap.py         recoupe les lignes trop longues d'un fichier Markdown
+    ├── rewrap.py         recoupe les lignes trop longues (Markdown, commentaires, docstrings)
+    ├── mutate.py         applique une mutation le temps d'une commande (preuve rouge d'une garde), puis rend le fichier
     ├── rules.py          règles mécaniques de CODING_STANDARDS.md et index de la carte du code (pour check.py)
     ├── test_*.py         tests du banc
     └── ui/               tests de l'interface dans Chrome sans écran (pilote driver.mjs, tests *.test.mjs)
@@ -1050,32 +1055,43 @@ Sur Mac : `venv/bin/python -m unittest discover -s tests`. Le faux moteur n'a é
 Tous les contrôles en une commande : `venv/bin/python tests/check.py` compile les fichiers Python, vérifie la syntaxe
 du JavaScript de l'interface avec Node.js (`node --check`), refuse une ligne ajoutée de plus de 120 caractères
 depuis la séparation d'avec `origin/main`, lance le banc et affiche son résultat (`--no-bench` pour le sauter ;
-`--quick` le saute si aucun fichier Python n'a changé depuis cette séparation). Il échoue aussi si un fichier du
+`--quick` le saute si aucun fichier Python n'a changé depuis le dernier commit). Il échoue aussi si un fichier du
 dépôt contient un repère propre à une machine (chemin de dossier personnel, adresse IP privée, nom Tailscale) : le
-dépôt est public. Un avis, sans échec, signale un changement de code qui touche l'espace privé (sur une branche de
-travail, depuis son départ de `dev` ; sur `dev` ou `main`, ce qui n'est pas encore commité). Sur
+dépôt est public. Un avis, sans échec, signale un changement de code pas encore commité qui touche l'espace privé ou
+la suppression d'images, et nomme la fonction (ou la route) de chaque ligne touchée. Sur
 GitHub, la même commande, complète, tourne sur chaque pull request vers `main` et chaque envoi sur `dev`
 (`.github/workflows/checks.yml`, sur macOS).
 
 Il vérifie aussi, sur les lignes ajoutées, les règles de `CODING_STANDARDS.md` devenues mécaniques (`tests/rules.py`),
 et que chaque nom cité par la carte du code existe encore ; `--map <nom>` imprime la ligne des fonctions de
-`tools/launch.py` et `tools/ui/index.html` dont le nom le contient. Les contrôles rapides (compilation, JavaScript,
-longueur des lignes, règles) passent d'abord : si l'un échoue, le banc et l'interface ne sont pas lancés. La dernière
-ligne de la sortie nomme chaque faute (`fichier:ligne`, test du banc, fichier d'interface) et la sortie complète
-va aussi dans un journal, dont le chemin est affiché ; le banc et chaque
-fichier d'interface affichent leur durée. `python3 tests/check.py --lines` ne vérifie que la longueur des lignes
-ajoutées, en moins d'une seconde ; le hook avant commit du dépôt (`.githooks/pre-commit`, activé par
-`python3 tests/check.py --link-venv`) le lance sur ce qui va être enregistré et refuse le commit fautif.
-`python3 tests/rewrap.py <fichier>.md` recoupe les lignes trop longues ajoutées à un fichier Markdown (toutes avec
-`--all`) sans toucher aux titres, listes, tableaux, blocs de code ni lignes vides.
+`tools/launch.py` et `tools/ui/index.html` dont le nom le contient, `--show <nom>` le corps d'une de ces fonctions et
+`--uses <mot>` les usages d'un nom dans `tools/`, `tests/`, ce README et la carte du code. Les contrôles
+rapides (compilation, JavaScript, longueur des lignes, règles) passent d'abord : si l'un échoue, le banc et
+l'interface ne sont pas lancés. La dernière ligne de la sortie nomme chaque faute (`fichier:ligne`, test du banc,
+fichier d'interface) et recopie les comptes du banc (« Ran N tests … ») et de l'interface ; la sortie complète va
+aussi dans un journal, dont le chemin est affiché
+(les lignes de pile de Node n'y sont qu'à lui), et le journal d'un passage en échec est gardé sous un nom horodaté
+(les dix derniers), cité par la dernière ligne. Un contrôle vert enregistre l'état de l'arbre : relancé à
+l'identique (mêmes fichiers, mêmes options), il dit « déjà vert sur cet état » sans rien relancer (`--force` pour
+relancer). Le banc et chaque fichier d'interface affichent leur durée. `python3 tests/check.py --lines` ne vérifie que
+la longueur des lignes ajoutées, en moins d'une seconde ; le hook avant commit du dépôt (`.githooks/pre-commit`,
+activé par `python3 tests/check.py --link-venv`) le lance sur ce qui va être enregistré et refuse le commit fautif.
+`python3 tests/check.py --lines --fix` recoupe les seules lignes fautives quand c'est sans risque (Markdown,
+commentaire seul sur sa ligne, docstring Python), en gardant retrait, puces et citations, sans remettre en forme le
+reste du paragraphe, et nomme celles qui restent à recouper à la main ; `python3 tests/rewrap.py <fichier>.md` fait
+de même pour un fichier Markdown (toutes ses lignes trop longues avec `--all`). Dans Claude Code, le hook du dépôt
+(`.claude/settings.json`) lance `check.py --hook` après chaque écriture d'un fichier (Edit, Write) : il juge ce seul
+fichier et montre ses lignes trop longues tout de suite.
 
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps que
 le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier, et `--name <motif>` pour les seuls tests dont le
-nom correspond (échec immédiat si aucun ne correspond). Trois fichiers tournent à la fois, chacun son Chrome et son
+nom correspond (échec immédiat si aucun ne correspond) ; `--repeat <n>` passe n fois chaque fichier, pour montrer un
+échec intermittent. Trois fichiers tournent à la fois, chacun son Chrome et son
 banc (`QWEN_UI_JOBS=<n>` en change le nombre) ; les résultats s'affichent dans l'ordre des fichiers. Un test bloqué
 échoue au bout de 3 minutes (20 pour un fichier), et Chrome et le banc sont arrêtés à la fin de chaque fichier. Les
-tests ouvrent l'interface servie par le banc
-dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du navigateur. Ils
+tests ouvrent l'interface servie par le banc dans un Chrome sans écran, aux dimensions d'un téléphone ; chacun échoue
+sur une erreur de la console du navigateur apparue pendant lui (l'échec nomme le test), et un appui n'a lieu que sur
+un élément qui est sous le doigt (ni recouvert, ni hors de l'écran). Ils
 couvrent les écrans principaux, le Labo (deux onglets, carte en cours sur ou derrière la pile, non balayable, annulation
 confirmée, « Déjà terminée » pour une génération finie pendant la question, « Mac injoignable », révélation en pixels,
 génération d'un autre appareil sans aperçu ou cachée, « +N en attente », rien qui dépasse à la largeur du téléphone), la
@@ -1117,7 +1133,9 @@ Sur Mac : `venv/bin/python tests/run_tests.py --steps 8`. Le script lit le code 
 - **Moteur** : [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (licence MIT).
 - **Police pixel** : [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans), © 2021 The Pixelify Sans Project
   Authors, sous **SIL Open Font License 1.1** ([tools/ui/OFL.txt](tools/ui/OFL.txt)) ; sous-ensemble latin en woff2
-  tiré de Google Fonts, pour le nom de l'application et les titres.
+  tiré de Google Fonts ([page de la police](https://fonts.google.com/specimen/Pixelify+Sans), fichier variable,
+  graisses 400 à 700), **version 1.000** (table `name` du fichier `tools/ui/PixelifySans.woff2`), pour le nom de
+  l'application et les titres. Adresse exacte du fichier sur `fonts.gstatic.com` : à confirmer.
 
 Le code de ce dépôt (interface, lanceur, scripts) est sous **licence MIT**, voir [LICENSE](LICENSE). Les poids du modèle restent soumis à leur
 propre licence et sont téléchargés directement depuis leurs dépôts d'origine.

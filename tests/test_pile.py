@@ -308,7 +308,6 @@ class FileModesTest(bench.BenchCase):
 
     def test_journal_and_pile_images_are_owner_only(self):
         j = wait_job(generate("visible")["id"])
-        bench.wait_idle()                                # « done » est posé avant l'écriture du journal
 
         def mode(*p):
             return os.stat(bench.launch.P(*p)).st_mode & 0o777
@@ -316,7 +315,6 @@ class FileModesTest(bench.BenchCase):
         self.assertEqual(mode("outputs", ".pile", j["name"]), 0o600)
         os.chmod(bench.launch.P("outputs", "journal.jsonl"), 0o644)   # journal d'avant : remis en 600 au suivant
         wait_job(generate("second")["id"])
-        bench.wait_idle()
         self.assertEqual(mode("outputs", "journal.jsonl"), 0o600)
         self.assertEqual(call("POST", "/api/keep", {"name": j["name"]})[0], 200)
         self.assertEqual(mode("outputs", j["name"]), 0o600)
@@ -358,7 +356,6 @@ class ArrivalFailureTest(bench.BenchCase):
             return real(job, meta)
         with bench.capture_push() as sent, mock.patch.object(bench.launch, "to_pile", cancelled_first):
             j = wait_job(generate("SLOW=0.05 a red car", steps=4)["id"])
-            bench.wait_idle()
         self.assertEqual(j["status"], "cancelled")
         self.assertEqual((pile_names(), files("jobs", j["id"]), bench.journal(), sent.decided), ([], [], [], []))
 
@@ -388,7 +385,6 @@ class RevTest(bench.BenchCase):
         code, job = call("POST", "/api/generate", bench.gen_body("zq6 privée", private=True), private=session)
         self.assertEqual(code, 202, job)
         self.assertEqual(wait_job(job["id"], private=session)["status"], "done")
-        bench.wait_idle()
         self.assertEqual(rev(), before)
 
     def test_rev_changes_with_the_pile_and_the_prints(self):

@@ -71,6 +71,23 @@ class RewrapTest(unittest.TestCase):
         line = "https://exemple.org/" + "x" * 130
         self.assertEqual(rewrap.rewrap("a\n" + line + "\n"), ("a\n" + line + "\n", 0, [2]))
 
+    def test_code_keeps_strings_and_single_quoted_docstrings_whole(self):
+        py = "\n".join(["def f():",
+                        "    '" + WORDS + "'",                              # docstring entre simples guillemets
+                        "    SAMPLE = '''début",
+                        "# " + WORDS,                                       # dans une chaîne : pas un commentaire
+                        "'''",
+                        "    # " + WORDS,                                   # vrai commentaire : coupé
+                        "    return SAMPLE", ""])
+        new, cuts, left = rewrap.rewrap_code("a.py", py, None)
+        self.assertEqual((cuts, left), (1, [2, 4]))
+        compile(new, "a.py", "exec")
+        self.assertIn("# " + WORDS, new.split("\n"))
+        js = "\n".join(["const page = `", "// " + WORDS, "`;", "  // " + WORDS, "const s = '// " + WORDS + "';", ""])
+        new, cuts, left = rewrap.rewrap_code("a.mjs", js, None)
+        self.assertEqual((cuts, left), (1, [2, 5]))
+        self.assertEqual(new.split("\n")[1], "// " + WORDS, "ligne d'un gabarit : laissée")
+
     def test_the_current_readme(self):
         with open(os.path.join(HERE, "..", "README.md"), encoding="utf-8") as f:
             readme = f.read()
