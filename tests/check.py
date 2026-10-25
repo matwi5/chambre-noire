@@ -409,8 +409,31 @@ def fix_lines(base):
         if new != text:
             with open(path, "w", encoding="utf-8", newline="") as fh:
                 fh.write(new)
+            broken = fix_breaks(f, path, new)
+            if broken:                                # garde-fou : un fichier qui ne se lit plus est rendu tel quel
+                with open(path, "w", encoding="utf-8", newline="") as fh:
+                    fh.write(text)
+                print(f"{f} : recoupe annulée, le fichier ne se lisait plus ({broken}) : à recouper à la main")
+                continue
         print(f"{f} : {cuts} ligne(s) recoupée(s)" + (f", {len(left)} à recouper à la main" if left else ""))
     return 1 if check_line_length(base) else 0
+
+
+def fix_breaks(f, path, text):
+    """Raison pour laquelle le fichier recoupé ne se lit plus (Python compilé, JavaScript par node --check), ou None."""
+    if f.endswith(".py"):
+        try:
+            compile(text, f, "exec")
+        except SyntaxError as e:
+            return f"ligne {e.lineno} : {e.msg}"
+    elif f.endswith((".js", ".mjs")):
+        try:
+            r = subprocess.run(["node", "--check", path], capture_output=True, text=True)
+        except OSError:                                # sans node : rien à vérifier
+            return None
+        if r.returncode:
+            return (r.stderr or r.stdout).strip().splitlines()[0]
+    return None
 
 
 def hook_lines(stdin):

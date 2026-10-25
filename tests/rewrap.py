@@ -10,7 +10,7 @@ tableaux, blocs de code, HTML, lignes vides et toutes les autres lignes restent 
 l'intérieur d'un `code` et ne fait jamais commencer une ligne par une marque de bloc (« - », « 1. », « # », « > »,
 « | », « ``` », soulignement « --- » ou « === ») ; une ligne sans espace où couper reste telle quelle et est signalée.
 """
-import argparse, ast, os, re, sys
+import argparse, ast, io, os, re, sys, tokenize
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check  # noqa: E402
@@ -114,11 +114,51 @@ def docstring_lines(text):
         if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.body:
             first = node.body[0]
             if (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
-                    and isinstance(first.value.value, str)):
-                line = text.splitlines()[first.lineno - 1]
+                    and isinstance(first.value.value, str)
+                    and re.match(r"[rRuU]?('''|\"\"\")", ast.get_source_segment(text, first.value) or "")):
+                line = text.splitlines()[first.lineno - 1]       # triples guillemets seuls : coupable sans risque
                 indent = line[:len(line) - len(line.lstrip())]
                 out.update({k: indent for k in range(first.lineno, first.end_lineno + 1)})
     return out
+
+
+def comment_lines(path, text):
+    """Numéros des lignes qui ne portent qu'un commentaire (pas une ligne d'une chaîne qui commence par # ou //) :
+    jetons COMMENT de tokenize pour un .py ; pour un .mjs ou .js, lignes qui commencent hors d'une chaîne, d'un
+    gabarit `…` et d'un commentaire /* */."""
+    if path.endswith(".py"):
+        try:
+            tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
+        except (tokenize.TokenError, SyntaxError):
+            return set()
+        lines = text.split("\n")
+        return {t.start[0] for t in tokens
+                if t.type == tokenize.COMMENT and not lines[t.start[0] - 1][:t.start[1]].strip()}
+    starts, state, i, k = {1}, "", 0, 1
+    while i < len(text):
+        c = text[i]
+        if c == "\n":
+            k += 1
+            if state in ("", "//"):
+                starts.add(k)
+                state = ""
+        elif state in ("'", '"', "`"):
+            if c == "\\":
+                i += 1
+            elif c == state:
+                state = ""
+        elif state == "/*":
+            if text.startswith("*/", i):
+                state, i = "", i + 1
+        elif state == "" and text.startswith("//", i):
+            state = "//"
+        elif state == "" and text.startswith("/*", i):
+            state = "/*"
+        elif state == "" and c in "'\"`":
+            state = c
+        i += 1
+    lines = text.split("\n")
+    return {n for n in starts if n <= len(lines) and lines[n - 1].lstrip().startswith("//")}
 
 
 def cut_with(line, head, indent, width):
@@ -140,13 +180,14 @@ def rewrap_code(path, text, numbers, width=check.LINE_MAX):
     ligne). numbers : seuls numéros à recouper (None : toutes)."""
     comment = COMMENT_RE[os.path.splitext(path)[1]]
     docs = docstring_lines(text) if path.endswith(".py") else {}
+    comments = comment_lines(path, text)
     lines = text.split("\n")
     out, cuts, left = [], 0, []
     for k, line in enumerate(lines, 1):
         if len(line) <= width or (numbers is not None and k not in numbers):
             out.append(line)
             continue
-        m = comment.match(line)
+        m = comment.match(line) if k in comments else None
         if m:
             marker = m.group(1).rstrip() + " "
             pieces = cut_with(line, m.group(1), marker, width)

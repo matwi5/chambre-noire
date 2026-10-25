@@ -123,6 +123,17 @@ class LinesTest(RepoCase):
         self.assertIn("    return 1  # " + words, new_py, "ligne de code : laissée")
         compile("\n".join(new_py), "a.py", "exec")
 
+    def test_fix_gives_back_a_file_it_would_break(self):
+        text = "x = 1\n" + LONG + "\n"
+        self.write("a.py", text)
+        import rewrap
+        with mock.patch.object(rewrap, "rewrap_code", return_value=("def (:\n", 1, [])), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(check.fix_lines(self.base), 1)
+        with open(os.path.join(self.root, "a.py"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), text)
+        self.assertIn("a.py : recoupe annulée, le fichier ne se lisait plus", out.getvalue())
+
     def test_the_editor_hook_judges_the_edited_file_only(self):
         self.install_check()
         self.write("a.py", "x = 1\n" + LONG + "\n")
