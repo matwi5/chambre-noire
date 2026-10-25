@@ -8,6 +8,11 @@ cité ici entre accents graves n'existe plus dans le code : un renommage met la 
 L'API locale (routes, champs, codes d'erreur) est décrite dans le README, « Fonctionnement technique » ; les formats
 et les raisons dans `DECISIONS.md`.
 
+Sommaire : `tools/launch.py` (le serveur) ; `tools/ui/index.html` (l'interface) ; Mécanismes ; Pièges de
+l'interface ; Copies entre Python et JavaScript ; Tests. Pour lire sans `grep` : `check.py --map <nom>` situe une
+fonction, `check.py --show <nom>` imprime son corps, `check.py --uses <mot>` liste ses usages dans `tools/`,
+`tests/`, le README et cette carte.
+
 ```text
 navigateur ──HTTP──▶ tools/launch.py ──lance une fois par génération──▶ sdcpp/<moteur>/sd-cli ──▶ PNG
 tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pas de sd-server persistant)

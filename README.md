@@ -1059,10 +1059,12 @@ GitHub, la même commande, complète, tourne sur chaque pull request vers `main`
 
 Il vérifie aussi, sur les lignes ajoutées, les règles de `CODING_STANDARDS.md` devenues mécaniques (`tests/rules.py`),
 et que chaque nom cité par la carte du code existe encore ; `--map <nom>` imprime la ligne des fonctions de
-`tools/launch.py` et `tools/ui/index.html` dont le nom le contient. Les contrôles rapides (compilation, JavaScript,
-longueur des lignes, règles) passent d'abord : si l'un échoue, le banc et l'interface ne sont pas lancés. La dernière
-ligne de la sortie nomme chaque faute (`fichier:ligne`, test du banc, fichier d'interface) et recopie les comptes du
-banc (« Ran N tests … ») et de l'interface ; la sortie complète va aussi dans un journal, dont le chemin est affiché
+`tools/launch.py` et `tools/ui/index.html` dont le nom le contient, `--show <nom>` le corps d'une de ces fonctions et
+`--uses <mot>` les usages d'un nom dans `tools/`, `tests/`, ce README et la carte du code. Les contrôles
+rapides (compilation, JavaScript, longueur des lignes, règles) passent d'abord : si l'un échoue, le banc et
+l'interface ne sont pas lancés. La dernière ligne de la sortie nomme chaque faute (`fichier:ligne`, test du banc,
+fichier d'interface) et recopie les comptes du banc (« Ran N tests … ») et de l'interface ; la sortie complète va
+aussi dans un journal, dont le chemin est affiché
 (les lignes de pile de Node n'y sont qu'à lui), et le journal d'un passage en échec est gardé sous un nom horodaté
 (les dix derniers), cité par la dernière ligne. Un contrôle vert enregistre l'état de l'arbre : relancé à
 l'identique (mêmes fichiers, mêmes options), il dit « déjà vert sur cet état » sans rien relancer (`--force` pour

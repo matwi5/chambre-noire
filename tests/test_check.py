@@ -393,6 +393,47 @@ class MainTest(RepoCase):
         self.assertEqual(sh(self.root, "git", "status", "--porcelain"), " M a.py\n?? neuf.py\n", "index réel intact")
 
 
+class UsesShowTest(RepoCase):
+    """--uses <mot> liste les usages d'un nom dans tools/, tests/, le README et la carte du code ; --show <nom> imprime
+    le corps de la fonction (Python ou JavaScript de index.html) que --map situe."""
+    def run_main(self, *argv):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = check.main(list(argv))
+        return code, out.getvalue()
+
+    def test_uses_lists_every_use_in_the_followed_places(self):
+        self.write("tools/launch.py", "def sort_image(a):\n    return a\n\nsort_images = 1\n")
+        self.write("tests/test_a.py", "from launch import sort_image\n")
+        self.write("README.md", "Le tri passe par `sort_image`.\n")
+        self.write("docs/agents/carte-du-code.md", "- `sort_image(action, name)` : tri\n")
+        self.write("ailleurs/notes.md", "sort_image\n")
+        code, out = self.run_main("--uses", "sort_image")
+        self.assertEqual(code, 0)
+        self.assertEqual([l.split(":")[0] + ":" + l.split(":")[1] for l in out.strip().splitlines()],
+                         ["README.md:1", "docs/agents/carte-du-code.md:1", "tests/test_a.py:1", "tools/launch.py:1"])
+
+    def test_show_prints_the_body_of_a_function(self):
+        self.write("tools/launch.py", "\n".join(["import os", "", "def first(a):", "    if a:",
+                                                 "        return {'k': '}'}", "    return 2", "", "",
+                                                 "class H:", "    def do_GET(self):", "        return 1", "",
+                                                 "def after():", "    pass", ""]))
+        self.write("tools/ui/index.html", "\n".join(["<script>", "function showImage(el, src) {",
+                                                     "  const s = '}{';  // }", "  if (src) { el.src = src; }",
+                                                     "}", "function other() {}", "</script>", ""]))
+        code, out = self.run_main("--show", "first")
+        self.assertEqual(code, 0)
+        self.assertEqual(out.splitlines(), ["tools/launch.py:3", "def first(a):", "    if a:",
+                                            "        return {'k': '}'}", "    return 2"])
+        self.assertEqual(self.run_main("--show", "do_GET")[1].splitlines(),
+                         ["tools/launch.py:10", "    def do_GET(self):", "        return 1"])
+        self.assertEqual(self.run_main("--show", "showImage")[1].splitlines(),
+                         ["tools/ui/index.html:2", "function showImage(el, src) {", "  const s = '}{';  // }",
+                          "  if (src) { el.src = src; }", "}"])
+        code, out = self.run_main("--show", "absente")
+        self.assertEqual(code, 1)
+        self.assertIn("absente : introuvable", out)
+
+
 class HooksMessageTest(RepoCase):
     """--link-venv : un core.hooksPath qui pointe déjà vers un dossier qui contient le hook (celui du dossier principal,
     vu d'un worktree, en chemin absolu ou relatif) est dit actif, pas « non activé »."""

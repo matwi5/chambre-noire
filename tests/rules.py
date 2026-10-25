@@ -311,6 +311,54 @@ def enclosing_name(path, text, k):
     return before[-1] if before else "premier niveau"
 
 
+def _js_block_end(text, start):
+    """Position de l'accolade qui ferme celle ouverte en start, chaînes ('…', "…", `…`) et commentaires sautés ;
+    None si elle manque."""
+    depth, i, n = 0, start, len(text)
+    while i < n:
+        c = text[i]
+        if c in "'\"`":
+            i += 1
+            while i < n and text[i] != c and not (c != "`" and text[i] == "\n"):
+                i += 2 if text[i] == "\\" else 1
+        elif text.startswith("//", i):
+            i = text.find("\n", i)
+            if i < 0:
+                return None
+        elif text.startswith("/*", i):
+            i = text.find("*/", i) + 1
+            if i <= 0:
+                return None
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
+
+
+def function_spans(path, text, name):
+    """Lignes (première, dernière) de chaque fonction ou classe appelée name : Python (méthodes comprises), ou
+    JavaScript des blocs <script> d'un HTML (déclarations de code_index : function, ou const/let/var de premier
+    niveau, jusqu'à l'accolade fermante ; sans accolade, la seule ligne de la déclaration)."""
+    if path.endswith(".py"):
+        return [(start, end) for start, end, qual in _py_scopes(text) if qual.split(".")[-1] == name]
+    spans, lines = [], text.splitlines(keepends=True)
+    offsets = [0]
+    for line in lines:
+        offsets.append(offsets[-1] + len(line))
+    for k, found in code_index(path, text):
+        if found != name:
+            continue
+        line = lines[k - 1]
+        brace = line.find("{")
+        end = _js_block_end(text, offsets[k - 1] + brace) if brace >= 0 else None
+        spans.append((k, text.count("\n", 0, end) + 1 if end is not None else k))
+    return spans
+
+
 def code_index(path, text):
     """Fonctions, classes et constantes de premier niveau d'un fichier Python ou des blocs <script> d'un HTML :
     [(ligne, nom)]."""

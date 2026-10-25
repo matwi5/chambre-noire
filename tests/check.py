@@ -65,6 +65,7 @@ AGENT_NOTES, CODE_MAP = "docs/agents", "carte-du-code.md"
 HOOKS = ".githooks"                                  # hooks versionnés (core.hooksPath), posés par --link-venv
 MAPPED = ("tools/launch.py", "tools/ui/index.html")  # fichiers que la carte du code décrit (--map en donne l'index)
 UI_TESTS = "tests/ui/*.test.mjs"
+USES_PLACES = ("tools", "tests", "README.md", f"{AGENT_NOTES}/{CODE_MAP}")   # où --uses cherche
 # délais des tests d'interface : par test (ms, node --test-timeout ; QWEN_UI_TEST_TIMEOUT le change), par fichier (s)
 UI_TEST_TIMEOUT = int(os.environ.get("QWEN_UI_TEST_TIMEOUT") or 180000)
 UI_FILE_TIMEOUT = 1200
@@ -405,6 +406,34 @@ def print_index(pattern):
     return 0
 
 
+def print_uses(word):
+    """Usages de word (texte exact ; mot entier pour un identifiant) dans USES_PLACES, fichiers nouveaux compris :
+    fichier:ligne:texte. 1 s'il n'y en a aucun."""
+    whole = ["-w"] if re.fullmatch(r"[A-Za-z_$][\w$]*", word) else []
+    try:
+        out = git("grep", "-n", "-I", "-F", "--untracked", *whole, "-e", word, "--", *USES_PLACES)
+    except subprocess.CalledProcessError:              # aucun usage : git grep sort en 1
+        out = ""
+    print(out.rstrip() or f"{word} : aucun usage dans {', '.join(USES_PLACES)}")
+    return 0 if out.strip() else 1
+
+
+def print_body(name):
+    """Corps de chaque fonction ou classe name de MAPPED (là où --map la situe) : « fichier:ligne » puis ses lignes.
+    1 si elle est introuvable."""
+    found = False
+    for f in MAPPED:
+        text = read(f)
+        lines = text.splitlines()
+        for start, end in rules.function_spans(f, text, name):
+            found = True
+            print(f"{f}:{start}")
+            print("\n".join(lines[start - 1:end]))
+    if not found:
+        print(f"{name} : introuvable dans {', '.join(MAPPED)} (--map {name} pour les noms approchants)")
+    return 0 if found else 1
+
+
 def ticket_base():
     """Base du travail du ticket en cours : le dernier commit (arbre de travail et fichiers nouveaux comptent ; décision
     du 25/10/2026), quelle que soit la branche. Sert à l'avis « zone sensible » et à --quick. Hors git, None."""
@@ -709,6 +738,8 @@ def parse_args(argv=None):
                     help="worktree : liens vers venv et les notes du dossier principal ; hook avant commit")
     ap.add_argument("--map", nargs="?", const="", metavar="NOM",
                     help="index fonction → ligne de launch.py et index.html (les noms qui contiennent NOM)")
+    ap.add_argument("--uses", metavar="MOT", help="usages de MOT dans tools/, tests/, le README et la carte du code")
+    ap.add_argument("--show", metavar="NOM", help="corps de la fonction NOM de launch.py ou index.html")
     return ap.parse_args(argv)
 
 
@@ -731,6 +762,10 @@ def main(argv=None):
         return link_venv()
     if args.map is not None:
         return print_index(args.map)
+    if args.uses:
+        return print_uses(args.uses)
+    if args.show:
+        return print_body(args.show)
     if args.lines:                                    # bibliothèque standard seulement : pas de relance dans le venv
         return 1 if check_line_length(merge_base(), cached=args.cached) else 0
     reexec_in_venv()
