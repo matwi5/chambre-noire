@@ -476,7 +476,10 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
   ligne `OFFLINE` de `tools/ui/sw.js` n'en reprend que le fond, le texte, le texte atténué, le halo, l'accent et le
   texte sur l'accent, et `manifest.webmanifest` le fond ; le grain de l'espace privé (`html.priv`) est le même bruit
   teinté de vert ; la déclaration `@font-face` de
-  la police pixel est dans `index.html` et dans `LOGIN_PAGE`.
+  la police pixel est dans `index.html` et dans `LOGIN_PAGE`. Gardée par `tests/test_palette.py` : valeurs partagées
+  des trois copies (`palette_faults`), `theme-color` des trois pages et `theme_color`, `background_color` du manifeste
+  égaux à `--void` ; icônes à leur taille, coins transparents (`any`) ou opaques (`maskable`, icône d'Apple), chaque
+  icône du manifeste dans `PUBLIC_FILES`.
 - Pas une copie : l'estimation de chaque génération de la file (`job_estimate`, pour `queue_entry` et le travail caché
   `ahead`) appelle `estimate.predict` ; l'estimation de « Relancer » (`relaunch`) est approchée (chaque référence
   comptée à la taille de la sortie, pas de `refPx`).
