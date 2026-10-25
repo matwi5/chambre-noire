@@ -4,6 +4,22 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-26 · Aperçu disparu : 204 au lieu de 404 ; textes des pistes de la rétro acceptés
+
+- **Contexte** : compte rendu de la session des pistes de la rétro (R1 à R22) ; une piste en attente (R3, cause du
+  test instable de saisie) et les textes proposés pour `CLAUDE.md` et `docs/agents/session-deleguee.md`.
+- **Décision** (porteur, 26/10/2026, réponses à quatre questions) :
+  - « R3 · Un aperçu demandé juste avant la fin de sa génération reçoit un 404, que Chrome écrit dans la console
+    (cause du test instable de saisie). Que faire ? » → « 204 si l'aperçu n'existe plus (Recommandé) » : pour une
+    génération visible dont l'aperçu a disparu (annulée, finie), le Mac répond 204 sans corps ; 404 reste pour une
+    génération inconnue, cachée ou oubliée (espace privé inchangé) ; la page abandonne en plus ses aperçus en route à
+    « Sortir » ;
+  - « Textes proposés pour CLAUDE.md (…) : je les écris tels quels ? » → « Oui, tels quels (Recommandé) » ;
+  - « Nouveau texte complet de docs/agents/session-deleguee.md (…) : je remplace le fichier ? » → « Oui, je remplace
+    (Recommandé) » ;
+  - « La session « Pistes » a fini : je l'arrête et je retire son worktree ? » → « Oui, après R3 (Recommandé) ».
+- **Écarté** : corriger seulement côté page ; laisser le 404.
+
 ## 2026-10-25 · Pistes de la rétro du parcours de la refonte : avis par ticket, hook de longueur, second contrôle
 
 - **Contexte** : rétro globale du parcours « Refonte UI et pile à trier » ; le porteur a retenu les 22 pistes de ce
