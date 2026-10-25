@@ -313,7 +313,9 @@ dernier bloc, après le HTML.
     Retour » (`pageshow`, `persisted`) : même sortie si elle n'a pas eu lieu, message, puis `relock` : `refreshStatus`
     reverrouille d'abord par `relockSpace` (une seule promesse en route, `relocking` ; `LOCK_POST`, `fetch` et non
     `postJson`, encore indéfini à la première interrogation ; `lockAccepted` : oui du Mac, 4xx sauf 401, ou 503 « espace
-    privé indisponible » ; une coupure, un autre 5xx ou un 500 font réessayer ; 401 : `reauth`) et n'applique aucun état
+    privé indisponible » ; une coupure, un autre 5xx ou un 500 font réessayer ; 401, d'un ancien serveur pas encore
+    relancé seulement (le Mac admet le verrouillage sans le code d'accès) : `reauth`, et `LOGIN_PAGE` renvoie le
+    verrouillage d'un onglet marqué) et n'applique aucun état
     tant que le Mac ne l'a pas accepté (un état reçu alors que `relock` est devenu vrai est relu) ; page rechargée
     (onglet tué compris) : `relock` lu dans la marque au chargement, même parcours (la reprise du chargement, `resume`,
     attend aussi le reverrouillage, et reprend après le premier accepté : `resumeLater`). `relock` et la marque ne se
@@ -399,7 +401,9 @@ invariants ».
   figés au démarrage), `_post_refused` (tout POST : `Sec-Fetch-Site`, `Origin` égal à l'origine du `Host`,
   `Content-Type: application/json` exigé, sinon 403/415), puis `_allowed` (tout appareil, le Mac lui-même et toute
   requête relayée par `tailscale serve` compris, présente le cookie dérivé du code d'accès ; sans lui, 401, et `/`
-  sert `LOGIN_PAGE` ; seuls les `PUBLIC_FILES` passent avant ; sans code chargé, rien ne passe). L'espace
+  sert `LOGIN_PAGE` ; seuls les `PUBLIC_FILES` passent avant ; sans code chargé, rien ne passe ; exception dans
+  `do_POST` : `POST /api/private/lock` passe sans le cookie d'accès, après `_host_ok` et `_post_refused`, et ne ferme
+  que la session du cookie privé de l'appareil). L'espace
   privé ajoute `_secure` (toutes ses routes sauf `lock` et la génération privée) :
   adresse source 127.0.0.1/::1 et `Host` local ou nom HTTPS de `tailscale serve` (`S.https_hosts`), jamais les
   en-têtes de relais, qu'un appareil du Wi-Fi peut envoyer en `http://` ; `/api/private/reset` exige `_local`.

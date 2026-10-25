@@ -4,6 +4,26 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-25 · Constats de la revue de sécurité du groupe G
+
+- **Contexte** : revue de sécurité du groupe G (lecture seule, `git diff 64d7a92..29a3a00`) : aucune faille critique
+  ni haute ; constats posés au porteur avec une recommandation chacun.
+- **Décision** (porteur, 25/10/2026, réponse « ok pour tes reco ») : « Trancher les constats de la revue de sécurité
+  du groupe G. Elle n'a trouvé aucune faille critique ni haute, donc livrer sans les corriger reste défendable. Je
+  n'ai rien corrigé : Moyenne : comme le cookie d'accès, le cookie de session de l'espace privé part aussi vers les
+  autres ports de 127.0.0.1. Un autre compte du Mac qui y attirerait ton navigateur pendant que ton espace privé est
+  ouvert pourrait s'en servir. Le texte du risque accepté ne parle que du cookie d'accès. ➡️ Je propose d'élargir ce
+  texte dans le README et `DECISIONS.md` ; je l'écris sur ton oui. Faible : un refus 401 au moment de reverrouiller
+  laisse la session privée ouverte jusqu'à 15 minutes. ➡️ Je recommande de corriger avant l'envoi : le verrouillage
+  passerait sans cookie d'accès, toujours derrière le contrôle anti-autre-site. C'est un petit changement du serveur,
+  avec un test et une passe « bogues ». Faible : si le service est arrêté, un autre compte qui prend le port 7860
+  pourrait montrer une fausse page du code au raccourci. ➡️ Piste. Faible : un cookie posé par un autre port peut
+  bloquer le Mac, sans fuite. ➡️ Piste. » → les quatre recommandations : risque accepté élargi au cookie de session
+  privée (README) ; `POST /api/private/lock` admis sans cookie d'accès, après `_host_ok` et `_post_refused` ; les deux
+  derniers constats restent des pistes (`ETAT_DU_PROJET.md`).
+- **Écarté pour l'instant** : vérifier le propriétaire du port avant `--enter` ; accepter l'une quelconque des valeurs
+  `qwen_access` présentes ; porter la session privée par un en-tête plutôt qu'un cookie.
+
 ## 2026-10-25 · Choix retenus par Claude pour l'entrée du Mac par jeton (délégation du porteur)
 
 - **Contexte** : ticket G2 « Entrer depuis le Mac sans taper le code, par un jeton à usage unique », sa revue
@@ -49,7 +69,8 @@ les messages de commit.
     créé entre-temps par un autre lancement est relu, pas écrasé ;
   - Lecture des cookies ? → par le serveur lui-même, tolérante aux paires mal formées d'autres applications locales
     (les cookies ne distinguent pas les ports), comparaison en octets sans jamais lever ;
-  - Le cookie d'accès du Mac part aussi vers les autres ports de 127.0.0.1 ? → risque accepté et écrit dans le README :
+  - Le cookie d'accès du Mac part aussi vers les autres ports de 127.0.0.1 ? → risque accepté et écrit dans le README
+    (élargi le 25/10/2026 au cookie de session privée, entrée « Constats de la revue de sécurité du groupe G ») :
     il faut qu'un autre compte écoute sur un port local et y attire le navigateur du porteur ; pas de correction simple
     ;
   - Un onglet ouvert sans cookie valable (avant la mise en service, cookies effacés, code changé) ? → un 401 de

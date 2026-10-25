@@ -182,8 +182,10 @@ calcul reste sur l'ordinateur : le téléphone n'affiche que l'interface.
   `http://Nom-du-Mac.local:7860`). Le téléphone le demande une fois, puis le retient un an. Tout appareil, l'ordinateur
   lui-même compris, doit le saisir : un autre compte ouvert sur le même Mac ne peut rien faire par l'adresse `127.0.0.1`
   sans le connaître. Limite acceptée : le navigateur de l'ordinateur envoie ce cookie, comme tout cookie, à tous les
-  ports de `127.0.0.1` ; un autre compte qui ferait tourner son propre serveur sur un port local et y attirerait votre
-  navigateur pourrait donc le recevoir. Sur l'ordinateur, le lancement et le raccourci entrent sans le taper (entrée à
+  ports de `127.0.0.1`, et de même le cookie de session de l'espace privé tant que l'espace est ouvert ; un autre compte
+  qui ferait tourner son propre serveur sur un port local et y attirerait votre navigateur pourrait donc les recevoir,
+  et, avec le second, lire l'espace privé ouvert jusqu'à sa fermeture (« Sortir », ou par le Mac après 15 minutes sans
+  requête privée). Sur l'ordinateur, le lancement et le raccourci entrent sans le taper (entrée à
   usage unique, voir « Lancement ») ; un onglet ouvert à la main le demande, et la page du code dit où le trouver. Pour
   en changer, supprimez le fichier et relancez (chaque appareil le redemande alors) ; un appareil déjà connecté le reste
   tant que le code ne change pas. Quand le code est redemandé à une page ouverte (cookie effacé, code changé, onglet
@@ -556,8 +558,10 @@ images sont enregistrées. Pour la confidentialité, passez par l'espace privé.
   du navigateur (même session) : un onglet ouvert pendant qu'on est dans l'espace y entre aussi et prend la marque, et
   le fermer ou le recharger referme l'espace pour tous. Un simple rechargement dans l'espace referme donc l'espace. Un
   refus clair du Mac lui-même (accès refusé, ou « espace privé indisponible » quand le serveur tourne sans le module de
-  chiffrement) vaut verrouillage : l'espace ne peut de toute façon pas être ouvert. Sauf le code d'accès redemandé
-  (401) : le verrouillage n'a pas atteint la session, la page se recharge sur la page du code et reverrouille ensuite.
+  chiffrement) vaut verrouillage : l'espace ne peut de toute façon pas être ouvert. Le verrouillage passe sans le code
+  d'accès ; seul un ancien serveur, pas encore relancé, le refuse encore (401) : ce refus ne vaut pas verrouillage, la
+  page se recharge sur la page du code, qui renvoie le verrouillage dès son chargement, puis l'interface reverrouille
+  une fois le code saisi.
   Sur une coupure du réseau ou une panne sans réponse claire du Mac (relais Tailscale, erreur interne), la page
   réessaie : tant que le Mac n'a pas accepté ce verrouillage, elle reste hors de l'espace (lampe « Mac injoignable »),
   et le renvoie si on la ferme de nouveau ; après un rechargement, la ligne « Espace privé » du panneau Moteur
@@ -916,20 +920,26 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   journal du serveur ; `POST /api/login {"code"}` pose le cookie d'accès (`qwen_access`,
   HttpOnly, un an ; 403 après une seconde si le code est faux) ; sans ce cookie, toute route répond 401 et `/` sert la
   page du code, pour l'ordinateur lui-même aussi, avec ou sans `--lan` ; seuls le manifeste, le service worker, les
-  icônes, le logo et la police pixel sont servis sans lui ; espace privé (`private/`, voir `DECISIONS.md`
+  icônes, le logo et la police pixel sont servis sans lui, et seul `POST /api/private/lock` passe aussi sans lui (voir
+  plus bas) ; espace privé (`private/`, voir `DECISIONS.md`
   pour le format) : `POST /api/private/create {"code"}` (409 s'il existe déjà), `POST /api/private/unlock {"code"}`
-  (403 après une seconde si le code est faux), qui ouvrent une session pour l'appareil (cookie `qwen_private`,
-  HttpOnly, sans durée de vie, fermée par le serveur après 15 minutes sans requête privée), `POST /api/private/lock`,
-  `POST /api/private/code {"old", "new"}` (nouvelles clés, images et prompts privés rechiffrés, toutes les sessions
-  fermées et le cookie de l'appareil effacé ; 500 si le rechiffrement échoue, sans perte : le message dit si le code a
-  changé), `POST /api/private/reset {"confirm": "SUPPRIMER"}` (efface l'espace et ferme toutes les sessions ; 403 hors
-  du Mac lui-même) ; `/api/status` porte `private` : `available` (bibliothèque `cryptography` présente), `exists`,
+  (403 après une seconde si le code est faux), qui ouvrent une session pour l'appareil (cookie `qwen_private`, HttpOnly,
+  sans durée de vie, fermée par le serveur après 15 minutes sans requête privée), `POST /api/private/lock` (admis sans
+  cookie d'accès, après les contrôles du nom d'hôte et de l'origine : une page à qui le code est redemandé ferme quand
+  même sa session ; corps ignoré ; il ne ferme que la session du cookie `qwen_private` de l'appareil et répond 200
+  `{"ok": true}`, session ou non, avec ou sans le module de chiffrement ; seuls le refusent, comme tout POST, un nom
+  d'hôte inconnu (403) et une requête d'un autre site ou sans `Content-Type: application/json` (403, 415) ; la page du
+  code, chargée dans un onglet marqué, l'envoie elle-même), `POST /api/private/code {"old", "new"}` (nouvelles clés,
+  images et prompts privés rechiffrés, toutes les sessions fermées et le cookie de l'appareil effacé ; 500 si le
+  rechiffrement échoue, sans perte : le message dit si le code a changé), `POST /api/private/reset
+  {"confirm": "SUPPRIMER"}` (efface l'espace et ferme toutes les sessions ; 403 hors du Mac lui-même) ; `/api/status`
+  porte `private` : `available` (bibliothèque `cryptography` présente), `exists`,
   `unlocked` (pour cet appareil, sans prolonger la session), `secure` (l'espace peut s'ouvrir par cette adresse) et
-  `local` (le Mac lui-même, seul à pouvoir supprimer l'espace sans le code) ; sans `cryptography`, ces routes
-  répondent 503. Toutes les routes de l'espace privé sauf `lock` et la génération privée répondent 403 hors du Mac
-  lui-même et de l'adresse HTTPS de « tailscale serve » (jugé sur l'adresse source 127.0.0.1 et le nom d'hôte, jamais
-  sur les en-têtes de relais) ; génération privée : `"private": true` dans `/api/generate` (403 sans session, 400 si
-  `private` n'est pas un booléen, 503 sans `cryptography`), identifiant de 32 caractères hexadécimaux tirés au hasard
+  `local` (le Mac lui-même, seul à pouvoir supprimer l'espace sans le code) ; sans `cryptography`, ces routes sauf
+  `lock` répondent 503. Toutes les routes de l'espace privé sauf `lock` et la génération privée répondent 403 hors du
+  Mac lui-même et de l'adresse HTTPS de « tailscale serve » (jugé sur l'adresse source 127.0.0.1 et le nom d'hôte,
+  jamais sur les en-têtes de relais) ; génération privée : `"private": true` dans `/api/generate` (403 sans session, 400
+  si `private` n'est pas un booléen, 503 sans `cryptography`), identifiant de 32 caractères hexadécimaux tirés au hasard
   (comme celui d'un lot privé), absente de `queue` hors de l'espace privé (rien n'y trahit l'espace privé aux autres
   appareils), entrée complète dedans (`kind` `private`, `id`, `mode`, `prompt`, `lot` avec son `id`) ; `GET
   /api/job/<id>` porte `private` et, une fois l'image rangée, `item` (son identifiant dans l'espace privé) ; `POST

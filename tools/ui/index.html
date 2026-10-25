@@ -1088,8 +1088,9 @@ let resumeLater=null;
 // verrouillage tenu pour accepté : oui du Mac, ou refus clair de sa part (décision du 24/10/2026) : une erreur 4xx,
 // ou 503 avec son corps JSON « espace privé indisponible » (serveur sans le module de chiffrement) ; une coupure
 // réseau, un 5xx sans ce corps (relais Tailscale) ou un 500 ne le sont pas : on réessaie, aucun état n'est appliqué.
-// Sauf 401 (code d'accès redemandé) : le verrouillage n'a pas atteint la session privée, qui reste peut-être ouverte ;
-// la page se recharge sur la page du code (reauth), marque gardée, et reverrouille une fois le code saisi
+// Sauf 401 : le Mac admet le verrouillage sans le code d'accès, seul un ancien serveur pas encore relancé le refuse
+// encore (cas de transition) ; la session privée reste peut-être ouverte : la page se recharge sur la page du code
+// (reauth), marque gardée ; celle-ci renvoie le verrouillage, et l'interface reverrouille une fois le code saisi
 async function lockAccepted(r){ if(!r) return false; if(r.status===401){ reauth(); return false; }
   if(r.ok || r.status>=400 && r.status<500) return true;
   if(r.status!==503) return false;

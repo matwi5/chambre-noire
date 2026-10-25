@@ -271,6 +271,10 @@ d='M1 0h7v1h1v7h-1v1h-7v-1h-1v-7h1zM4 2h1v3h-1zM4 6h1v1h-1z'/%3E\
 <input id="c" aria-label="Code d'accès" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="xxxx-xxxx" autofocus>
 <button id="b">Entrer</button><div id="err" role="alert"></div></form>
 <script>
+// onglet marqué (sortie de l'espace privé pas encore acceptée par le Mac) : la session est fermée dès maintenant, sans
+// attendre le code ; la marque reste, l'interface la lève une fois le code saisi
+try{ if(sessionStorage.getItem('relock')==='1') fetch('/api/private/lock',{method:'POST',credentials:'same-origin',
+ headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); }catch(e){}
 const f=document.getElementById('f'), b=document.getElementById('b'), err=document.getElementById('err');
 f.onsubmit=async e=>{e.preventDefault(); b.disabled=true; err.textContent='';
  const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:document.getElementById('c').value})});
@@ -2265,8 +2269,10 @@ class H(BaseHTTPRequestHandler):
         return None
 
     def _allowed(self):
-        """Tout appareil, le Mac lui-même compris, doit avoir saisi le code d'accès (cookie), avec ou sans --lan ; seuls
-        les fichiers publics (PUBLIC_FILES) passent sans lui, avant ce contrôle. Sans code chargé, rien ne passe."""
+        """Tout appareil, le Mac lui-même compris, doit avoir saisi le code d'accès (cookie), avec ou sans --lan.
+        Passent sans lui, avant ce contrôle : les fichiers publics (PUBLIC_FILES), GET /entrer (jeton d'entrée),
+        POST /api/login (saisie du code) et POST /api/private/lock (ne ferme que la session de l'appareil). Sans code
+        chargé, rien ne passe."""
         if not S.access_token:
             return False
         value = cookie_value(self.headers.get("Cookie", ""), ACCESS_COOKIE)
@@ -2355,8 +2361,8 @@ class H(BaseHTTPRequestHandler):
         return self._send(200, raw, ctype, extra)
 
     def _private_post(self, path, raw):
-        """Routes POST de l'espace privé : create, unlock, lock, code, reset, delete, keep, discard. Rien n'en va dans
-        les journaux."""
+        """Routes POST de l'espace privé, derrière _allowed : create, unlock, code, reset, delete, keep, discard,
+        prompts (lock est traité avant, dans do_POST). Rien n'en va dans les journaux."""
         if not HAVE_CRYPTO:
             return self._send(503, {"error": "espace privé indisponible : bibliothèque cryptography non installée"})
         try:
@@ -2366,7 +2372,7 @@ class H(BaseHTTPRequestHandler):
         if not isinstance(body, dict):
             return self._send(400, {"error": "objet JSON attendu"})
         action = path[len("/api/private/"):]
-        if action not in ("lock", "reset") and not self._secure():   # verrouiller : partout ; reset : le Mac seul
+        if action != "reset" and not self._secure():   # reset : le Mac seul, vérifié plus bas
             return self._send(403, {"error": PRIVATE_HTTPS_ONLY})
         if action == "delete":                  # supprimer une image privée, session exigée
             if not self._private_session(touch=True):
@@ -2409,9 +2415,6 @@ class H(BaseHTTPRequestHandler):
                 return self._send(403, {"error": "espace privé verrouillé"})
             except (OSError, InvalidTag, ValueError):
                 return self._send(500, {"error": "prompts privés non modifiés"})
-        if action == "lock":
-            S.private_sessions.pop(self._private_token(), None)
-            return self._send_private(200, {"ok": True})
         if action == "reset":                   # sans le code (oublié) : tout l'espace est effacé, sessions comprises
             if not self._local():               # depuis le Mac lui-même seulement (décision du porteur du 14/10/2026)
                 return self._send(403, {"error": "l'espace privé ne se supprime sans le code que sur le Mac lui-même"})
@@ -2630,6 +2633,14 @@ class H(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        # verrouiller passe sans le cookie d'accès (code redemandé, cookie effacé) : la page qui se ferme ou sort ferme
+        # quand même sa session, au lieu de la laisser ouverte jusqu'à PRIVATE_IDLE. Partout (adresse sûre ou non),
+        # corps ignoré, même sans cryptography (aucune session n'existe alors) : seule la session du cookie privé de
+        # l'appareil se ferme, et la réponse est la même qu'il y en ait une ou non ; toute autre route privée reste
+        # derrière _allowed
+        if path == "/api/private/lock":
+            S.private_sessions.pop(self._private_token(), None)
+            return self._send_private(200, {"ok": True})
         if not self._allowed():
             return self._send(401, {"error": "code d'accès requis"})
         if path.startswith("/api/private/"):

@@ -12,7 +12,8 @@
 // lu, même si le Mac ne répond pas d'abord. Les suivants : effacement dès la fermeture (pagehide), champs de code
 // compris ; page rechargée après une fermeture dans l'espace dont le verrouillage s'est perdu (marque de l'onglet,
 // sessionStorage) ; code retapé pendant un reverrouillage en route, ou après un reverrouillage sans réponse ; mémoire
-// de l'onglet refusée ; code d'accès redemandé dans l'espace (un 401 ne vaut pas verrouillé).
+// de l'onglet refusée ; code d'accès redemandé dans l'espace (le verrouillage passe sans lui ; un 401 ne vaut pas
+// verrouillé).
 //   venv/bin/python tests/check.py --quick --ui tests/ui/etancheite.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -676,21 +677,82 @@ test('« Sortir » en attente quand la page se ferme : rien n\'est redessiné ni
   page.assertNoErrors();
 });
 
-test('code d\'accès redemandé dans l\'espace privé : un 401 ne vaut pas verrouillé, reverrouillé après le code',
+test('code d\'accès redemandé dans l\'espace privé : « Sortir » ferme quand même la session, puis la page du code',
   async () => {
   await enter();
   await page.privateIdle();
-  // cookie d'accès seul effacé : la session privée du Mac reste ouverte, « Sortir » reçoit 401
+  // cookie d'accès seul effacé : le verrouillage passe sans lui (il ne ferme que la session de cette page)
   await page.send('Network.deleteCookies', { name: 'qwen_access', url: bench.url });
   await page.click('#privExit');
   await waitUntil(() => page.eval(`!!document.getElementById('c')`).catch(() => false),
     { what: 'page du code d\'accès' });
   // (sur la page du code, RELOCK_MARK n'existe pas : la marque est lue sous son nom)
-  assert.equal(await page.eval(`sessionStorage.getItem('relock')`), '1', 'marque levée sans verrouillage du Mac');
+  assert.equal(await page.eval(`sessionStorage.getItem('relock')`), null, 'sortie acceptée, marque restée');
+  await bench.login(page);
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'interface rouverte' });
+  assert.deepEqual(await page.eval(`[inPrivate(), ${MARK}]`), [false, null], 'rentrée dans l\'espace sans code');
+  assert.equal(await macUnlocked(), false, 'session du Mac restée ouverte');
+  page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/status of 401 \(Unauthorized\)/.test(e)));
+  page.assertNoErrors();
+});
+
+const UNAUTHORIZED = { responseCode: 401, responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+  body: Buffer.from(JSON.stringify({ error: 'code d\'accès requis' })).toString('base64') };
+
+// session privée de cette page vue par le Mac, hors de la page : cookies lus dans le navigateur (HttpOnly compris)
+// avant qu'un test n'efface le cookie d'accès ; rend une fonction qui demande au Mac si la session est ouverte
+async function macSessionOf() {
+  const { cookies } = await page.send('Network.getCookies', { urls: [bench.url] });
+  const header = ['qwen_access', 'qwen_private'].map(n => `${n}=${cookies.find(c => c.name === n)?.value ?? ''}`)
+    .join('; ');
+  return async () => (await (await fetch(bench.direct + '/api/status', { headers: { Cookie: header } })).json())
+    .private.unlocked;
+}
+
+test('verrouillage refusé par un 401 (serveur d\'avant) : ne vaut pas verrouillé, reverrouillé après le code',
+  async () => {
+  await enter();
+  await page.privateIdle();
+  const unlocked = await macSessionOf();
+  await page.send('Network.deleteCookies', { name: 'qwen_access', url: bench.url });
+  // ancien serveur : aucun verrouillage n'arrive au Mac (retenus) ; celui de « Sortir » reçoit 401, les autres
+  // (fermeture de l'interface, page du code) aussi, une fois la page du code affichée
+  const h = await page.holdRequests(['*/api/private/lock'], () => true);
+  try {
+    await page.click('#privExit');
+    await answerLock(h, UNAUTHORIZED);
+    await waitUntil(() => page.eval(`!!document.getElementById('c')`).catch(() => false),
+      { what: 'page du code d\'accès' });
+    assert.equal(await page.eval(`sessionStorage.getItem('relock')`), '1', 'marque levée sans verrouillage du Mac');
+    assert.equal(await unlocked(), true, 'session du Mac fermée : le scénario ne simule plus un ancien serveur');
+    for (const r of h.take()) await page.send('Fetch.fulfillRequest', { requestId: r.requestId, ...UNAUTHORIZED });
+  } finally {
+    await h.release();
+  }
   await bench.login(page);                         // code saisi : la page revient, marquée
   await page.waitFor(`!relock && $('lamp').classList.contains('ok')`, { what: 'reverrouillée, état lu' });
   assert.deepEqual(await page.eval(`[inPrivate(), ${MARK}]`), [false, null], 'rentrée dans l\'espace sans code');
-  assert.equal(await macUnlocked(), false, 'session du Mac restée ouverte');
+  assert.equal(await unlocked(), false, 'session du Mac restée ouverte');
+  page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/status of 401 \(Unauthorized\)/.test(e)));
+  page.assertNoErrors();
+});
+
+test('page du code chargée avec la marque : elle ferme la session du Mac sans attendre le code', async () => {
+  await enter();
+  await page.privateIdle();
+  const unlocked = await macSessionOf();
+  await page.send('Network.deleteCookies', { name: 'qwen_access', url: bench.url });
+  // le verrouillage de la fermeture de l'interface se perd (réseau coupé) : seule la page du code peut le refaire
+  await page.eval(`(() => { const f = window.fetch;
+    window.fetch = (u, ...a) => String(u) === '/api/private/lock' ? Promise.reject(new TypeError('coupé'))
+      : f(u, ...a); })()`);
+  await page.goto(bench.url + '/');                // rechargement sans cookie d'accès : page du code, marque posée
+  await page.waitFor(`!!document.getElementById('c')`, { what: 'page du code d\'accès' });
+  assert.equal(await page.eval(`sessionStorage.getItem('relock')`), '1', 'marque levée par la page du code');
+  await waitUntil(async () => !(await unlocked()), { what: 'session du Mac fermée par la page du code' });
+  await bench.login(page);
+  await page.waitFor(`!relock && $('lamp').classList.contains('ok')`, { what: 'reverrouillée, état lu' });
+  assert.deepEqual(await page.eval(`[inPrivate(), ${MARK}]`), [false, null], 'rentrée dans l\'espace sans code');
   page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/status of 401 \(Unauthorized\)/.test(e)));
   page.assertNoErrors();
 });
