@@ -29,7 +29,7 @@ try {
   const page = await chrome.phonePage();
   if (opt.width) await page.send('Emulation.setDeviceMetricsOverride', { ...PHONE, width: Number(opt.width) });
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   if (opt.private) {
     await page.eval(`postJson('/api/private/create', { code: 'code-de-la-sonde' })`);
     await page.eval(`refreshStatus()`);

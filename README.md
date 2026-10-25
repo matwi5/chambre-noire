@@ -1080,11 +1080,13 @@ fichier et montre ses lignes trop longues tout de suite.
 
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps que
 le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier, et `--name <motif>` pour les seuls tests dont le
-nom correspond (échec immédiat si aucun ne correspond). Trois fichiers tournent à la fois, chacun son Chrome et son
+nom correspond (échec immédiat si aucun ne correspond) ; `--repeat <n>` passe n fois chaque fichier, pour montrer un
+échec intermittent. Trois fichiers tournent à la fois, chacun son Chrome et son
 banc (`QWEN_UI_JOBS=<n>` en change le nombre) ; les résultats s'affichent dans l'ordre des fichiers. Un test bloqué
 échoue au bout de 3 minutes (20 pour un fichier), et Chrome et le banc sont arrêtés à la fin de chaque fichier. Les
-tests ouvrent l'interface servie par le banc
-dans un Chrome sans écran, aux dimensions d'un téléphone, et échouent sur toute erreur de la console du navigateur. Ils
+tests ouvrent l'interface servie par le banc dans un Chrome sans écran, aux dimensions d'un téléphone ; chacun échoue
+sur une erreur de la console du navigateur apparue pendant lui (l'échec nomme le test), et un appui n'a lieu que sur
+un élément qui est sous le doigt (ni recouvert, ni hors de l'écran). Ils
 couvrent les écrans principaux, le Labo (deux onglets, carte en cours sur ou derrière la pile, non balayable, annulation
 confirmée, « Déjà terminée » pour une génération finie pendant la question, « Mac injoignable », révélation en pixels,
 génération d'un autre appareil sans aperçu ou cachée, « +N en attente », rien qui dépasse à la largeur du téléphone), la

@@ -17,7 +17,7 @@ before(async () => {
   chrome = await launchChrome();
   page = await chrome.phonePage();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
 });
 
 after(async () => {
@@ -186,6 +186,28 @@ test('révélation : carrés au hasard, puis chaque aperçu en mosaïque de plus
   await page.send('Emulation.setEmulatedMedia', { features: [] });
   bench.release('dessus');
   await bench.idle({ page });
+  page.assertNoErrors();
+});
+
+// le 404 intermittent de saisie.test.mjs : un aperçu demandé juste avant la fin de sa génération arrive au Mac après la
+// suppression de son dossier de travail (génération annulée : discard_cancelled ; privée finie : forget_files, qui
+// retire aussi job["preview"]) ; le Mac répond 404, que Chrome écrit dans la console. Rejoué ici en retenant la
+// requête de l'aperçu. En attente de la décision du porteur (réponse sans erreur pour un aperçu absent : la route sert
+// aussi les générations privées) : « todo », compté sans faire échouer
+test('aperçu en route quand la génération est annulée : aucune erreur dans la console', {
+  todo: 'le Mac répond 404 à un aperçu demandé avant la fin : décision du porteur attendue' }, async () => {
+  await page.eval(`opt.steps = 'high'; opt.res = 'low'; $('previewChk').checked = true; saveOpt(); refreshChoices()`);
+  const h = await page.holdRequests(['*/api/job/*/preview*'], () => true);
+  try {
+    await page.generate('SLOW=0.3 zq5 annulée pendant un aperçu');
+    await waitUntil(() => h.held.length > 0, { what: 'aperçu demandé (retenu)', timeout: 30000 });
+    const id = await page.eval(`pageJobs.at(-1).id`);
+    assert.equal((await post(`/api/job/${id}/cancel`)).status, 200);
+    await bench.idle({ page });                     // annulée : son dossier de travail est supprimé
+  } finally {
+    await h.release();                              // l'aperçu arrive au Mac après la fin
+  }
+  await page.waitFor(`![...ready.keys()].some(u => u.includes('/preview'))`, { what: 'aperçu répondu' });
   page.assertNoErrors();
 });
 

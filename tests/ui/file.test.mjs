@@ -14,7 +14,7 @@ before(async () => {
   chrome = await launchChrome();
   page = await chrome.phonePage();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
 });
 
 after(async () => {
@@ -76,6 +76,7 @@ test('espace privé : la file ne montre que les générations privées, avec leu
   await page.waitFor(`!pageJobs.some(isActive)`, { what: 'génération de cette page annulée' });
   assert.equal((await post(`/api/job/${pub.id}/cancel`)).status, 200);
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy)`, { what: 'Mac au repos' });
+  await page.closeSheet();                         // le voile d'une feuille ouverte recouvre l'en-tête
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   page.assertNoErrors();
@@ -91,7 +92,7 @@ const PUB = 'HOLD=sortie zq9public de la page', SECRET = 'SLOW=0.05 zq9secret de
 test('sortie : la génération privée quitte l\'écran et la page ; elle revient au retour, aussi après un rechargement', async () => {
   await bench.idle();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   await page.generate(PUB);                                   // génération publique de la page, en cours
   await page.waitFor(`pageJobs.some(p => !p.private && p.j.status === 'running')`,
     { what: 'génération publique en cours' });
@@ -102,6 +103,7 @@ test('sortie : la génération privée quitte l\'écran et la page ; elle revien
   await page.generate(SECRET);                                // génération privée, en attente derrière la publique
   await page.waitFor(`shown && shown.private`, { what: 'génération privée à l\'écran' });
 
+  await page.closeSheet();                         // le voile d'une feuille ouverte recouvre l'en-tête
   await page.click('#privExit');                   // « Sortir » : la privée quitte l'écran et la page, la publique revient
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.deepEqual(await jobs(), ['publique ' + PUB]);
@@ -115,7 +117,7 @@ test('sortie : la génération privée quitte l\'écran et la page ; elle revien
   assert.equal((await onScreen()).shown, 'privée ' + SECRET);
 
   await page.goto(bench.url + '/');                // rechargement dans l'espace privé
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   if (!await page.eval(`inPrivate()`)) await enterPrivate();   // la fermeture de la page a pu verrouiller l'espace
   await page.waitFor(`pageJobs.some(p => p.private && isActive(p))`,
     { what: 'génération privée retrouvée après le rechargement' });
@@ -123,6 +125,7 @@ test('sortie : la génération privée quitte l\'écran et la page ; elle revien
 
   await cancelOwnFromQueue();                      // en attente derrière la publique, cachée
   await page.waitFor(`!pageJobs.some(p => p.private && isActive(p))`, { what: 'génération privée annulée' });
+  await page.closeSheet();                         // le voile d'une feuille ouverte recouvre l'en-tête
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   // de retour dans l'espace public, la page reprend la génération publique qu'elle avait lancée
@@ -136,7 +139,7 @@ test('sortie : la génération privée quitte l\'écran et la page ; elle revien
 test('fermé par le Mac : la génération privée quitte l\'écran comme après « Sortir »', async () => {
   await bench.idle();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   const pub = await page.launch('SLOW=1 zq9public d\'un autre appareil');   // la privée attend derrière
   await enterPrivate();
   await page.generate(SECRET);
@@ -152,6 +155,7 @@ test('fermé par le Mac : la génération privée quitte l\'écran comme après 
   await page.waitFor(`pageJobs.some(p => p.private && isActive(p))`, { what: 'génération privée retrouvée' });
   await cancelOwnFromQueue();                      // en attente derrière la publique, cachée
   await page.waitFor(`!pageJobs.some(isActive)`, { what: 'génération privée annulée' });
+  await page.closeSheet();                         // le voile d'une feuille ouverte recouvre l'en-tête
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.equal((await post(`/api/job/${pub.id}/cancel`)).status, 200);
@@ -163,6 +167,7 @@ test('fermé par le Mac : la génération privée quitte l\'écran comme après 
 test('espace public : une génération privée en cours n\'a pas de carte et n\'est pas dans la file', async () => {
   await enterPrivate();
   const priv = await page.launch('SLOW=1 zq9secret en cours', { private: true });
+  await page.closeSheet();                         // le voile d'une feuille ouverte recouvre l'en-tête
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`,
@@ -186,6 +191,7 @@ test('espace public : une génération privée en cours n\'a pas de carte et n\'
   await page.waitFor(`!pageJobs.some(p => !p.private && isActive(p))`, { what: 'génération publique annulée' });
   await enterPrivate();
   assert.equal((await post(`/api/job/${priv.id}/cancel`)).status, 200);
+  await page.closeSheet();                         // le voile d'une feuille ouverte recouvre l'en-tête
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   page.assertNoErrors();
@@ -198,7 +204,7 @@ const firstPaths = () => page.eval(`[...$('queueList').querySelectorAll('.qcard'
 test('cartes : un lot de la page sur une carte avec ses cases, réglages, heure ; « autre appareil »', async () => {
   await bench.idle();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   const held = await page.launch('HOLD=cartes zq9 d\'un autre appareil');
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`, { what: 'génération en cours' });
   const other = await page.launch('zq9 attend ailleurs', { width: 960, height: 640, steps: 12 });

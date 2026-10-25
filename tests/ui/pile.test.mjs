@@ -23,7 +23,7 @@ before(async () => {
   chrome = await launchChrome();
   page = await chrome.phonePage();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   await page.eval(`opt.steps = 'low'; opt.res = 'low'; saveOpt(); refreshChoices()`);   // générations courtes
   await watchSorts();
 });
@@ -270,7 +270,7 @@ test('rechargement pendant le bandeau : rien n\'est envoyé, l\'image est encore
   await page.click('#pileNo');
   await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'page rechargée' });
+  await page.ready('page rechargée');
   await page.waitFor(`pileItems.some(it => it.prompt === 'zp3 doute')`, { what: 'image dans la pile rechargée' });
   await new Promise(r => setTimeout(r, 5500));      // au-delà du délai : rien n'est parti avant le rechargement
   assert.equal(await inPile('zp3 doute'), true, 'image effacée malgré la fermeture de la page');
@@ -755,8 +755,8 @@ test('espace privé : pendant « Sortir », ni Tirages, ni file, ni « Voir le l
     await page.eval(`openSheet('fileSheet'); $('queueList').innerHTML = '<i id="zqMark"></i>'; queueHtml = 'zq'`);
     await page.eval(`(() => { const f = window.zqFetch = window.fetch; window.zqLockCalls = 0;
       window.fetch = (u, ...a) => (String(u) === '/api/private/lock' && zqLockCalls++, f(u, ...a)); })()`);
-    await page.click('#privExit');
-    await page.click('#privExit');                 // second appui pendant l'attente
+    await page.click('#privExit', { force: true });   // feuille de la file ouverte exprès : pas au doigt
+    await page.click('#privExit', { force: true });   // second appui pendant l'attente
     await waitUntil(() => x.locking(), { what: 'sortie demandée' });
     assert.equal(await page.eval(`zqLockCalls`), 1, 'second verrouillage envoyé par un second appui');
     assert.equal(await page.eval(`$('zqLazy').hasAttribute('src')`), false, 'vignette différée encore à charger');
@@ -764,7 +764,7 @@ test('espace privé : pendant « Sortir », ni Tirages, ni file, ni « Voir le l
     await page.eval(`(() => { const t = window.setTimeout; window.setTimeout = f => { f(); return 0; };
       try { const im = $('histGrid').querySelector('img'); delete im.dataset.retry; im.onerror(); }
       finally { window.setTimeout = t; } })()`);
-    await page.tab('tirages');                     // les Tirages ouverts pendant la sortie
+    await page.tab('tirages', { force: true });    // les Tirages ouverts pendant la sortie, sous la feuille
     await page.eval(`histShown = ''; renderGallery()`);   // et redessinés (par une suppression, par exemple)
     await page.eval(`renderQueue()`);              // la file redessinée (son état relu pendant la sortie)
     // visionneuse ouverte sur une image privée qui a des images d'entrée

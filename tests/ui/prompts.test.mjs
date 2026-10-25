@@ -23,6 +23,7 @@ const CODE = 'code-du-banc-1';
 const post = (url, body = {}) => page.eval(`postJson(${JSON.stringify(url)}, ${JSON.stringify(body)}).then(r => r.status)`);
 const titles = list => page.eval(`[...$('${list}').querySelectorAll('.prow b')].map(b => b.textContent)`);
 async function openPrompts(expected) {             // feuille des prompts, une fois la liste de l'espace reçue
+  await page.closeSheet();                         // déjà ouverte : refermée d'abord, comme au doigt
   await page.click('#promptsBtn');
   await page.waitFor(`openedSheet === $('promptSheet') && $('typeList').children.length > 0`, { what: 'prompts types reçus' });
   await page.waitFor(`${JSON.stringify(expected)}.every(t => [...$('promptList').querySelectorAll('.prow b')].some(b => b.textContent === t))`,
@@ -35,11 +36,14 @@ async function saveCurrent(title, text) {
   await page.waitFor(`openedSheet === $('promptEditSheet')`, { what: 'feuille d\'enregistrement' });
   await page.eval(`$('peTitle').value = ${JSON.stringify(title)}`);
   await page.click('#peSave');
+  // le Mac a répondu : la liste revient d'elle-même (sinon openPrompts toucherait le bouton sous la feuille qui
+  // revient)
+  await page.waitFor(`openedSheet === $('promptSheet')`, { what: 'retour à la liste' });
 }
 
 test('espaces : les prompts privés ne se voient que dans l\'espace privé, les publics que dehors', async () => {
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   await openPrompts([]);
   await saveCurrent('Public', 'un prompt public');
   await page.waitFor(`openedSheet === $('promptSheet')`, { what: 'retour à la liste' });
@@ -89,7 +93,7 @@ const usages = list => page.eval(`[...$('${list}').querySelectorAll('.prow')]
 
 test('catégories : feuille ouverte sur celle de la saisie, « Tous » à un geste, nouveau prompt dedans', async () => {
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   await openPrompts([]);
   assert.equal(await filter(), 't2i', 'sans image : Créer');
   assert.deepEqual([...new Set(await usages('typeList'))], ['t2i']);

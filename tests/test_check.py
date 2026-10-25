@@ -223,6 +223,33 @@ class UiParallelTest(unittest.TestCase):
         self.assertTrue(any("3 fichier(s), 6 tests, 5 réussis, 1 en échec" in line for line in lines), lines)
 
 
+class UiRepeatTest(unittest.TestCase):
+    """--ui <fichiers> --repeat N repasse N fois chaque fichier (un échec intermittent se montre) ; chaque passage a sa
+    ligne, et un seul passage en échec fait échouer le contrôle."""
+    def test_each_file_runs_n_times(self):
+        runs = []
+
+        def fake(f, flags, env):
+            runs.append(f)
+            bad = f == "b.test.mjs" and runs.count(f) == 2
+            return f"ℹ tests 1\nℹ pass {0 if bad else 1}\nℹ fail {1 if bad else 0}", int(bad)
+        with mock.patch.object(check, "run_ui_file", fake):
+            ok, lines, faults = check.run_ui(["a.test.mjs", "b.test.mjs"], jobs=1, repeat=3)
+        self.assertEqual(sorted(runs), ["a.test.mjs"] * 3 + ["b.test.mjs"] * 3)
+        self.assertFalse(ok)
+        self.assertEqual(faults, ["b.test.mjs (passage 2/3)"])
+        self.assertIn("Interface : b.test.mjs (passage 2/3) : 1 tests, 1 en échec", "\n".join(lines))
+        self.assertTrue(any("6 fichier(s), 6 tests, 5 réussis, 1 en échec" in line for line in lines), lines)
+        self.assertEqual(check.parse_args(["--ui", "x.test.mjs", "--repeat", "3"]).repeat, 3)
+
+    def test_a_todo_test_is_counted_without_failing(self):
+        out = "ℹ tests 3\nℹ pass 2\nℹ fail 0\nℹ todo 1"
+        with mock.patch.object(check, "run_ui_file", return_value=(out, 0)):
+            ok, lines, _ = check.run_ui(["a.test.mjs"], jobs=1)
+        self.assertTrue(ok)
+        self.assertIn("Interface : a.test.mjs : 3 tests, 0 en échec, 1 à faire", "\n".join(lines))
+
+
 class NoticeBaseTest(RepoCase):
     """L'avis « zone sensible » compte depuis le dernier commit (le ticket en cours, arbre de travail et fichiers
     nouveaux compris ; décision du 25/10/2026), quelle que soit la branche : un ticket n'hérite plus des mots des

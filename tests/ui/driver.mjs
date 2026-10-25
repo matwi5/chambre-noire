@@ -5,8 +5,14 @@
 //   const chrome = await launchChrome();         // profil temporaire, supprimé par chrome.close()
 //   const page = await chrome.phonePage();       // vue du téléphone du porteur : 367×760, densité 2,5, tactile ;
 //                                                // connectée au banc direct en cours (cookie du code d'accès)
-//   await page.goto(bench.url + '/'); await page.waitFor(`$('lamp').classList.contains('ok')`);
+//   await page.goto(bench.url + '/'); await page.ready();   // ready : interface ouverte, moteur prêt (lampe)
 //   …; page.assertNoErrors(); await chrome.close(); await bench.stop();
+//                                                // assertNoErrors : erreurs de console du seul test en cours
+//                                                // (remises à zéro à chaque test, chacune nommée par son test)
+//   await page.click('#go')                      // toucher : échoue si l'élément n'est pas sous le doigt (recouvert,
+//                                                // hors de l'écran : l'échec nomme ce qui le recouvre)
+//   await elapse(5500)                           // délai voulu (dépasser un minuteur de l'interface) : seule attente
+//                                                // fixe permise dans un test, toute autre suit une condition
 //   bench.release('nom')                         // libère les générations HOLD=nom du faux moteur
 //   bench.dir                                    // dossier temporaire du banc (outputs/, jobs/…) : ce qu'il écrit
 //   await bench.idle()                           // rien en cours ni en file (avant un rechargement de la page)
@@ -67,6 +73,26 @@ export const START_TIMEOUT = 60000;
 const WRITTEN = ['outputs', 'jobs', 'logs', 'private', 'tools'];
 
 const pause = ms => new Promise(r => setTimeout(r, ms));
+// délai voulu d'un test (un minuteur de l'interface à dépasser : « rien n'est parti au bout de 5 s ») : la seule
+// attente fixe permise dans un test (tests/rules.py refuse un setTimeout nu) ; toute autre attente suit une condition
+export const elapse = ms => pause(ms);
+
+// erreurs de console attribuées au test en cours (node --test : le processus d'un fichier porte NODE_TEST_CONTEXT ;
+// pas la sonde) : au début de chaque test, celles des tests d'avant sont oubliées (une erreur ne fait pas échouer le
+// test suivant) ; celles d'avant le premier test (before) passent au premier ; chacune est précédée du test où elle
+// est apparue
+const BEFORE_TESTS = 'avant les tests';
+const livePages = new Set();
+let testLabel = BEFORE_TESTS;
+if (process.env.NODE_TEST_CONTEXT) {
+  const { beforeEach, afterEach } = await import('node:test');
+  beforeEach(t => {
+    if (testLabel !== BEFORE_TESTS) for (const p of livePages) p.errors.length = 0;
+    testLabel = `« ${t.name} »`;
+  });
+  afterEach(t => { testLabel = `après « ${t.name} »`; });
+}
+
 // banc direct en cours (startBench sans relais) : { url, cookie } ; chaque page de chrome.phonePage() y est connectée
 // (cookie du code d'accès, que le serveur demande aussi au Mac). Un banc relayé n'y est pas : bench.login(page)
 let directBench = null;
@@ -252,9 +278,14 @@ async function connect(wsUrl) {
     const i = ++id; pending.set(i, { resolve, reject, method }); ws.send(JSON.stringify({ id: i, method, params }));
   });
   const text = args => args.map(a => a.value ?? a.description ?? a.type).join(' ');
-  on('Runtime.consoleAPICalled', p => { if (p.type === 'error' || p.type === 'assert') errors.push(`console.${p.type} : ${text(p.args)}`); });
-  on('Runtime.exceptionThrown', p => errors.push(`exception : ${p.exceptionDetails.exception?.description || p.exceptionDetails.text}`));
-  on('Log.entryAdded', p => { if (p.entry.level === 'error') errors.push(`${p.entry.source} : ${p.entry.text}${p.entry.url ? ' (' + p.entry.url + ')' : ''}`); });
+  const record = what => errors.push(`${testLabel} : ${what}`);       // le test où l'erreur apparaît, devant
+  on('Runtime.consoleAPICalled', p => {
+    if (p.type === 'error' || p.type === 'assert') record(`console.${p.type} : ${text(p.args)}`); });
+  on('Runtime.exceptionThrown', p =>
+    record(`exception : ${p.exceptionDetails.exception?.description || p.exceptionDetails.text}`));
+  on('Log.entryAdded', p => {
+    if (p.entry.level === 'error')
+      record(`${p.entry.source} : ${p.entry.text}${p.entry.url ? ` (${p.entry.url})` : ''}`); });
   await Promise.all([send('Runtime.enable'), send('Log.enable'), send('Page.enable')]);
 
   let held = null;                                   // fin du balayage tenu (page.release)
@@ -330,9 +361,11 @@ async function connect(wsUrl) {
     },
     // attend qu'une expression de la page soit vraie
     waitFor(expression, opts = {}) { return waitUntil(() => page.eval(expression), { what: expression, ...opts }); },
+    // interface ouverte et moteur prêt (lampe d'état allumée) : l'attente qui suit chaque ouverture de la page
+    ready(what = 'moteur prêt affiché') { return page.waitFor(`$('lamp').classList.contains('ok')`, { what }); },
     // appui sur l'onglet de la page name (labo, tirages), comme au doigt ; attend la page affichée
-    async tab(name) {
-      await page.click(`#tabbar [data-pane="${name}"]`);
+    async tab(name, { force = false } = {}) {          // force : comme page.click
+      await page.click(`#tabbar [data-pane="${name}"]`, { force });
       await page.waitFor(`mode === ${JSON.stringify(name)} && $('pane-' + mode).classList.contains('active')`,
         { what: `onglet ${name} affiché` });
     },
@@ -388,8 +421,16 @@ async function connect(wsUrl) {
       await page.eval(`openViewer(${at}, pileView())`);
       await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
     },
-    // feuille de la file de l'espace, ouverte par la pastille « +N en attente » du Labo (attendue)
+    // feuille ouverte refermée, comme d'un toucher sur le voile hors d'elle (closeSheet de la page) : avant de toucher
+    // ce que le voile recouvre (en-tête, Labo)
+    async closeSheet() {
+      await page.eval(`openedSheet && closeSheet()`);
+      await page.waitFor(`!openedSheet && !$('scrim').classList.contains('on')`, { what: 'feuille refermée' });
+    },
+    // feuille de la file de l'espace, ouverte par la pastille « +N en attente » du Labo (attendue) ; une autre feuille
+    // ouverte est d'abord refermée
     async openQueue() {
+      await page.closeSheet();
       if (await page.eval(`mode`) !== 'labo') await page.tab('labo');
       await page.eval(`refreshStatus()`);
       await page.waitFor(`!$('queueChip').hidden`, { what: 'pastille « +N en attente »' });
@@ -460,8 +501,9 @@ async function connect(wsUrl) {
         t.dispatchEvent(new Event('input')); })()`);
     },
     // texte tapé dans le Labo puis « Révéler » : attend la demande acceptée (une génération de plus suivie par la
-    // page), le Labo affiché
+    // page), le Labo affiché ; une feuille ouverte est d'abord refermée
     async generate(text) {
+      await page.closeSheet();
       if (await page.eval(`mode`) !== 'labo') await page.tab('labo');
       await page.typePrompt(text);
       const before = await page.eval(`pageJobs.length`);
@@ -487,13 +529,38 @@ async function connect(wsUrl) {
       const { names } = await send('Runtime.globalLexicalScopeNames');
       return page.eval(`(${scanPage})(${JSON.stringify(markers)}, ${JSON.stringify(names)}, ${JSON.stringify(skip)})`);
     },
-    // appui sur un élément (événement click du DOM, comme un toucher) ; échoue s'il est absent ou masqué. Dans le
-    // champ de création replié, un toucher sur sa ligne le déplie d'abord, comme au doigt
-    async click(selector) {
-      const ok = await page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
+    // appui sur un élément (événement click du DOM, comme un toucher) ; échoue tout de suite s'il est absent, masqué
+    // ou désactivé, et après timeout ms s'il n'est toujours pas sous le doigt : amené au centre de l'écran, le point au
+    // centre de sa boîte doit être lui ou un de ses descendants (une feuille qui s'ouvre ou se ferme, un message qui
+    // passe : on attend ; sinon l'échec nomme l'élément qui le recouvre, ou dit qu'il est hors de l'écran). Dans le
+    // champ de création replié, un toucher sur sa ligne le déplie d'abord, comme au doigt. Une case dessinée par son
+    // étiquette (interrupteur) est sous le doigt quand l'étiquette l'est. force : appui sans ce contrôle, pour un état
+    // que le test monte exprès et que le doigt n'atteindrait pas (le dire en commentaire)
+    async click(selector, { timeout = WAIT, force = false } = {}) {
+      const end = Date.now() + timeout;
+      for (;;) {
+        const why = await page.tryClick(selector, force);
+        if (!why) return;
+        if (why.startsWith('absent') || Date.now() > end) throw new Error(`élément ${why} : ${selector}`);
+        await pause(50);
+      }
+    },
+    // un essai d'appui de page.click : '' s'il a eu lieu, sinon pourquoi
+    tryClick(selector, force = false) {
+      return page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
         if (el && el.closest('#composer.folded') && el.id !== 'composerLine') $('composerLine').click();
-        if (!el || el.hidden || el.disabled || !el.getClientRects().length) return false; el.click(); return true; })()`);
-      if (!ok) throw new Error(`élément absent, masqué ou désactivé : ${selector}`);
+        if (!el || el.hidden || el.disabled || !el.getClientRects().length) return 'absent, masqué ou désactivé';
+        if (${force}) { el.click(); return ''; }
+        el.scrollIntoView({ block: 'center', inline: 'center' });
+        const r = el.getBoundingClientRect();
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (!top) return 'hors de l\\'écran';
+        const under = top === el || el.contains(top) || top.closest('label')?.control === el;
+        const name = e => e.id ? '#' + e.id : e.tagName.toLowerCase() + (typeof e.className === 'string'
+          && e.className.trim() ? '.' + e.className.trim().split(/\\s+/).join('.') : '');
+        const holder = top.id ? null : top.parentElement?.closest('[id]');   // l'élément nommé qui le contient
+        if (!under) return 'recouvert par ' + name(top) + (holder ? ' (dans #' + holder.id + ')' : '');
+        el.click(); return ''; })()`);
     },
     // fichiers choisis d'un coup dans un champ <input type=file> (comme le sélecteur du téléphone) : événements input et
     // change envoyés par Chrome
@@ -507,11 +574,13 @@ async function connect(wsUrl) {
       const r = await send('Page.captureScreenshot', { format: 'png' });
       fs.writeFileSync(file, Buffer.from(r.data, 'base64'));
     },
+    // échoue sur les erreurs de console du test en cours (chacune précédée du test où elle est apparue)
     assertNoErrors() {
       if (errors.length) throw new Error(`erreurs dans la console :\n  ${errors.join('\n  ')}`);
     },
-    close() { try { ws.close(); } catch { /* déjà fermée */ } },
+    close() { livePages.delete(page); try { ws.close(); } catch { /* déjà fermée */ } },
   };
+  livePages.add(page);
   return page;
 }
 

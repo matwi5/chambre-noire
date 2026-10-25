@@ -14,7 +14,7 @@ before(async () => {
   chrome = await launchChrome();
   page = await chrome.phonePage();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
 });
 
 after(async () => {
@@ -197,7 +197,7 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
   await page.eval(`openViewer(histItems.findIndex(it => it.lot), histItems); openLot()`);
   await page.waitFor(`openedSheet === $('lotSheet') && $('lotSheetGrid').querySelectorAll('img').length === 2`,
     { what: 'feuille du lot ouverte' });
-  await page.click('#privExit');                   // « Sortir », la feuille du lot ouverte
+  await page.click('#privExit', { force: true });  // « Sortir », la feuille du lot ouverte (voile : pas au doigt)
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   // la visionneuse, ouverte sur l'image privée à la sortie, est vidée sans attendre son fondu
   const after = await page.eval(`({ open: openedSheet === $('lotSheet'), cells: $('lotSheetGrid').children.length,

@@ -606,28 +606,30 @@ def run_ui_file(f, flags, env):
     return out.rstrip(), proc.returncode
 
 
-def run_ui(files, name=None, wait=None, jobs=None):
+def run_ui(files, name=None, wait=None, jobs=None, repeat=1):
     """Tests d'interface (tous, ou les seuls files ; name : motif des noms de tests, --test-name-pattern), jobs fichiers
     à la fois (UI_JOBS ; chacun son Chrome et son banc, sur des ports libres et des dossiers temporaires distincts),
     chacun dans son groupe de processus : un test dépasse UI_TEST_TIMEOUT, un fichier UI_FILE_TIMEOUT. wait : délai
     par défaut des attentes du pilote (QWEN_UI_WAIT ; allongé par l'appelant quand la machine est chargée). Lignes et
-    totaux dans l'ordre des fichiers. Renvoie (réussi, lignes à afficher, fautes : fichiers en échec)."""
+    totaux dans l'ordre des fichiers. repeat : chaque fichier passe autant de fois (« (passage k/N) » dans ses lignes,
+    pour montrer un échec intermittent). Renvoie (réussi, lignes à afficher, fautes : fichiers en échec)."""
     files = ui_files(files)
+    runs = [(f, f if repeat == 1 else f"{f} (passage {k}/{repeat})") for k in range(1, repeat + 1) for f in files]
     env = dict(os.environ, PYTHON=sys.executable, **({"QWEN_UI_WAIT": str(wait)} if wait else {}))
     env.pop("NODE_TEST_CONTEXT", None)                # lancé depuis un test node : sinon node --test ne lance rien
     flags = ["--test-concurrency=1", "--test-reporter=spec", f"--test-timeout={UI_TEST_TIMEOUT}", "--test-force-exit",
              *([f"--test-name-pattern={name}"] if name else [])]
     shown, faults, total, start = [], [], {}, time.monotonic()
 
-    def one(f):
+    def one(run):
         began = time.monotonic()
-        return (*run_ui_file(f, flags, env), time.monotonic() - began)
+        return (*run_ui_file(run[0], flags, env), time.monotonic() - began)
     try:
-        with concurrent.futures.ThreadPoolExecutor(min(jobs or UI_JOBS, len(files) or 1)) as pool:
-            results = list(pool.map(one, files))
+        with concurrent.futures.ThreadPoolExecutor(min(jobs or UI_JOBS, len(runs) or 1)) as pool:
+            results = list(pool.map(one, runs))
     except OSError:
         return False, ["Interface : node introuvable"], ["node introuvable"]
-    for f, (out, code, took) in zip(files, results):
+    for (_, f), (out, code, took) in zip(runs, results):
         counts = ui_counts(out)
         for k, v in counts.items():
             total[k] = total.get(k, 0) + v
@@ -635,10 +637,12 @@ def run_ui(files, name=None, wait=None, jobs=None):
             faults.append(f)
             shown.append(out)
         failed = counts.get("fail", 0) + counts.get("cancelled", 0)
-        shown.append(f"Interface : {f} : {counts.get('tests', '?')} tests, {failed} en échec ({seconds(took)})")
+        todo = f", {counts['todo']} à faire" if counts.get("todo") else ""      # test « todo » : compté, sans échec
+        shown.append(f"Interface : {f} : {counts.get('tests', '?')} tests, {failed} en échec{todo} ({seconds(took)})")
     failed = total.get("fail", 0) + total.get("cancelled", 0)
-    shown.append(f"Interface : {len(files)} fichier(s), {total.get('tests', 0)} tests, {total.get('pass', 0)} "
-                 f"réussis, {failed} en échec ({seconds(time.monotonic() - start)})")
+    todo = f", {total['todo']} à faire" if total.get("todo") else ""
+    shown.append(f"Interface : {len(runs)} fichier(s), {total.get('tests', 0)} tests, {total.get('pass', 0)} "
+                 f"réussis, {failed} en échec{todo} ({seconds(time.monotonic() - start)})")
     return not faults, shown + ["Interface : " + ("ÉCHEC" if faults else "OK")], faults
 
 
@@ -732,7 +736,7 @@ def tree_fingerprint():
 def state_key(args):
     """Clé d'un contrôle complet : empreinte de l'arbre et options qui changent ce qui tourne ; None hors git."""
     tree = tree_fingerprint()
-    options = {k: getattr(args, k, None) for k in ("no_bench", "quick", "ui", "name")}
+    options = {k: getattr(args, k, None) for k in ("no_bench", "quick", "ui", "name", "repeat")}
     return f"{tree} {json.dumps(options, sort_keys=True)}" if tree else None
 
 
@@ -772,7 +776,7 @@ def run_checks(args):
         jobs.append(("Banc", run_bench))
     if args.ui is not None:                           # banc ou plusieurs Chrome en même temps : attentes allongées
         wait = UI_WAIT_LOADED if jobs or min(UI_JOBS, len(ui_files(args.ui))) > 1 else None
-        jobs.append(("Interface", lambda: run_ui(args.ui, args.name, wait)))
+        jobs.append(("Interface", lambda: run_ui(args.ui, args.name, wait, repeat=args.repeat)))
     cited = []
     with concurrent.futures.ThreadPoolExecutor(max(len(jobs), 1)) as pool:
         futures = [(name, pool.submit(job)) for name, job in jobs]
@@ -795,6 +799,8 @@ def parse_args(argv=None):
                     help="lancer aussi les tests d'interface (Chrome, en local), tous ou les seuls fichiers donnés")
     ap.add_argument("--name", metavar="MOTIF", help="avec --ui : seuls les tests dont le nom correspond (expression "
                     "régulière) ; échoue tout de suite si aucun ne correspond")
+    ap.add_argument("--repeat", type=int, default=1, metavar="N", help="avec --ui : passer N fois chaque fichier "
+                    "d'interface (échec intermittent)")
     ap.add_argument("--force", action="store_true",
                     help="relancer même si un contrôle identique est déjà vert sur cet état de l'arbre")
     ap.add_argument("--lines", action="store_true",
