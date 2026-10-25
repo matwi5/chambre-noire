@@ -3,6 +3,42 @@
 Les versions suivent [SemVer](https://semver.org/lang/fr/) ; tant que l'application est en 0.x, une version mineure
 peut changer un comportement existant.
 
+## 0.6.0 · 2026-10-25
+
+### Ajouté
+
+- **Chambre noire** : nouveau nom, lumière inactinique (sombre seulement, verte dans l'espace privé), titres en
+  police pixel, icône en paysage de carrés.
+- **Pile à trier** : chaque image terminée arrive sur une pile du Labo ; **Garder** l'envoie dans les Tirages,
+  **Jeter** l'efface complètement après 5 s pour annuler ; au bouton, au doigt ou à la souris. Routes `/api/pile`,
+  `/api/keep`, `/api/discard` et leurs équivalents privés.
+- **Révélation en pixels** de la génération en cours sur la pile ; champ de création repliable sous la pile.
+- **Lampe d'état** dans l'en-tête : un appui ouvre la feuille Moteur, « Ouvrir depuis le téléphone » et l'entrée de
+  l'espace privé. Anneau fixe pendant un calcul quand les animations sont réduites.
+- **Entrée sans code depuis l'ordinateur** : le lancement et le raccourci ouvrent une adresse d'entrée à usage unique
+  (`launch.py --enter`, `GET /entrer`), valable 60 s, sans le code.
+
+### Modifié
+
+- **Deux pages, Labo et Tirages**, remplacent Créer, En cours et Galerie ; les Tirages se mettent à jour seuls (plus
+  de bouton Rafraîchir).
+- **Le code d'accès est demandé à tout appareil, l'ordinateur compris**, et créé au premier lancement même sans
+  `--lan` ; un appareil déjà connecté le reste.
+- **L'incognito est retiré** : la confidentialité passe par l'espace privé ; une ancienne page qui l'envoie est
+  refusée.
+- **Espace privé** : reverrouillé au retour par « Retour », au rechargement d'un onglet qui y était, et effacé de la
+  page dès sa fermeture ; une notification touchée passe au Labo sans fermer une saisie en cours.
+- **Journal du serveur** : seules les requêtes en erreur y vont, avec des lignes neutres ; fichiers du serveur et de
+  sd-cli lisibles par le seul compte du propriétaire.
+- Après la mise à jour, **relancer le service et le raccourci** (`tools/make_service.py`, `tools/make_shortcut.py`) :
+  l'ancien serveur ne connaît ni la pile ni l'entrée par jeton.
+
+### Corrigé
+
+- Une image d'entrée que sd-cli ne sait pas lire est convertie en PNG avant la génération.
+- Une calibration ratée dit pourquoi.
+- Rien de privé n'est plus demandé au Mac pendant « Sortir » (miniatures refusées sous charge).
+
 ## 0.5.0 · 2026-10-22
 
 ### Ajouté
