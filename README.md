@@ -1029,6 +1029,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     ├── fake_sdcli.py     faux moteur du banc
     ├── check.py          tous les contrôles en une commande (compilation, JavaScript, banc, interface)
     ├── rewrap.py         recoupe les lignes trop longues (Markdown, commentaires, docstrings)
+    ├── mutate.py         applique une mutation le temps d'une commande (preuve rouge d'une garde), puis rend le fichier
     ├── rules.py          règles mécaniques de CODING_STANDARDS.md et index de la carte du code (pour check.py)
     ├── test_*.py         tests du banc
     └── ui/               tests de l'interface dans Chrome sans écran (pilote driver.mjs, tests *.test.mjs)

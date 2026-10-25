@@ -65,7 +65,9 @@ les tests viennent de bugs passés à travers les revues par ticket.
 - **Une correction de l'interface reçoit un test dans `tests/ui/`** quand le banc ne peut pas la voir : deux bugs
   d'interface ne sont apparus que dans Chrome, banc au vert.
 - **Le test d'une garde d'une zone sensible (espace privé, suppression) est prouvé rouge** sur le code
-  sans la branche qu'il protège (retirée le temps de l'essai), puis vert ; le message du commit le dit.
+  sans la branche qu'il protège (retirée le temps de l'essai), puis vert ; le message du commit le dit. L'essai passe
+  par `tests/mutate.py <fichier> --old <texte> --new <texte> -- <commande>`, qui rend toujours le fichier (échec,
+  interruption), pas par un script jetable qui modifie l'arbre.
 - **Une assertion « rien ne change » attend d'abord la fin de l'action qui pourrait changer quelque chose** (réponse
   reçue, Mac au repos : `bench.idle()`) : vérifiée trop tôt, elle passe avant que le changement arrive.
 - **Un fichier de test se termine par `if __name__ == "__main__": unittest.main()`**, pour se lancer seul.
