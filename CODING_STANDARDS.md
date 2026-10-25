@@ -13,8 +13,10 @@ les tests viennent de bugs passés à travers les revues par ticket.
   origin/main`) : les lignes existantes ne sont reprises que quand on les touche. `check.py --lines` (moins d'une
   seconde), le hook avant commit et celui de Claude Code après chaque écriture (`check.py --hook`) la vérifient
   seule ; `check.py --lines --fix` recoupe les seules lignes fautives (Markdown, commentaires, docstrings).
-- **Un comportement qui change change partout où il est décrit** : chercher son ancienne formulation (`grep`) dans le
-  README, les docstrings et commentaires, et la carte du code, et la reprendre dans le même commit.
+- **Un comportement qui change change partout où il est décrit** : chercher son ancienne formulation par `git grep`
+  sur tout le dépôt suivi (README, docstrings et commentaires, carte du code, et textes de l'interface :
+  `tools/ui/index.html`, `LOGIN_PAGE` de `tools/launch.py`, page hors ligne de `tools/ui/sw.js`), et la reprendre dans
+  le même commit. Un ancien libellé était resté dans l'interface après un renommage.
 
 ## Données et disque
 
@@ -71,6 +73,10 @@ les tests viennent de bugs passés à travers les revues par ticket.
 - **Une assertion « rien ne change » attend d'abord la fin de l'action qui pourrait changer quelque chose** (réponse
   reçue, Mac au repos : `bench.idle()`) : vérifiée trop tôt, elle passe avant que le changement arrive.
 - **Un fichier de test se termine par `if __name__ == "__main__": unittest.main()`**, pour se lancer seul.
+- **Réécrire un test garde l'assertion qui porte son titre ; un échec se diagnostique, il ne se supprime pas** : un
+  test réécrit avait perdu l'assertion qui prouvait ce que dit son nom, et passait sans plus rien vérifier. Un test
+  qui échoue se comprend d'abord (`check.py --repeat`, journal gardé) ; l'affaiblir ou le retirer se dit dans le
+  commit, avec la raison.
 
 ## Vérifiées par `tests/check.py`
 
