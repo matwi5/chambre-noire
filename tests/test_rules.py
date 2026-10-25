@@ -146,8 +146,11 @@ class InterfaceRulesTest(unittest.TestCase):
                      '<meta name="theme-color" content="#0d0a08">',                   # métadonnée : permise
                      "  .m { mask:linear-gradient(90deg, #000 85%, transparent); }",  # masque (alpha) : permis
                      "  $('#add').click(); .z { color:var(--ink); }",                 # identifiant, jeton : permis
-                     "  .w { border:1px solid #fff }")                                # 8 : refusée
-        self.assertEqual([k for k, _ in rules.hardcoded_colors(html)], [2, 3, 8])
+                     "  .w { border:1px solid #fff }",                                # 8 : refusée
+                     "  el.style.color = '#fff';",                                    # 9 : refusée (en JavaScript)
+                     "  .bar #add{ color:var(--ink) }",                               # sélecteur d'id : permis
+                     "  .k { box-shadow:0 0 2px #000; } /* sous un mask */")          # 11 : « mask » cité seulement
+        self.assertEqual([k for k, _ in rules.hardcoded_colors(html)], [2, 3, 8, 9, 11])
         self.assertEqual(rules.hardcoded_colors(html, {1, 4}), [])
 
     def test_keyframes_need_an_animation_that_names_them(self):
@@ -155,7 +158,9 @@ class InterfaceRulesTest(unittest.TestCase):
                      "@keyframes oubli { to { opacity:0 } }",                     # 2 : refusée
                      ".shake { animation:shake .4s; }",
                      "@keyframes pane-l { from { opacity:0 } }",
-                     ".p { animation-name: pane-l; }")
+                     ".p { animation-name: pane-l; }",
+                     "@keyframes spin { to { transform:rotate(1turn) } }",       # posée en JavaScript : permise
+                     "el.style.animation = 'spin 1s linear';")
         self.assertEqual([k for k, _ in rules.unused_keyframes(html)], [2])
 
     def test_a_private_address_reaches_an_image_through_showImage(self):
@@ -180,8 +185,10 @@ class TestFileRulesTest(unittest.TestCase):
                     "await elapse(5500);                    // délai voulu",
                     "await page.eval(`setTimeout(() => $('pileNo').click(), 250)`);",  # code de la page
                     "// règle levée : rejoue le minuteur de 700 ms de la page",
-                    "await new Promise(r => setTimeout(r, 700));")
-        self.assertEqual([k for k, _ in rules.fixed_waits(src)], [1])
+                    "await new Promise(r => setTimeout(r, 700));",
+                    "await new Promise(resolve => setTimeout(() => resolve(), 200));",   # 6 : refusée
+                    "await new Promise(go => { setTimeout(go, 150); });")                # 7 : refusée
+        self.assertEqual([k for k, _ in rules.fixed_waits(src)], [1, 6, 7])
 
     def test_a_helper_or_a_wait_copied_into_a_second_file_is_refused(self):
         texts = {"tests/ui/a.test.mjs": "\n".join([
@@ -218,8 +225,11 @@ class TestFileRulesTest(unittest.TestCase):
         src = lines("assert.equal(await post('/api/private/create', { code: CODE }), 200);",   # 1 : refusée
                     "await page.eval(`postJson('/api/private/unlock', { code: 'x' })`);",       # 2 : refusée
                     "await page.enterPrivate(CODE);",
-                    "const h = await page.holdRequests(['*/api/private/unlock'], () => true);")
-        self.assertEqual([k for k, _ in rules.private_entry_by_hand(src)], [1, 2])
+                    "const h = await page.holdRequests(['*/api/private/unlock'], () => true);",
+                    "assert.equal(await privatePost('/api/private/unlock'), 200);",              # 5 : refusée
+                    "await fetch(`${bench.url}/api/private/create`, { method: 'POST' });",       # 6 : refusée
+                    "await page.waitFor(`zqCalls.includes('/api/private/unlock')`);")             # lecture : permise
+        self.assertEqual([k for k, _ in rules.private_entry_by_hand(src)], [1, 2, 5, 6])
 
 
 class ServerRulesTest(unittest.TestCase):

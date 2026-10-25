@@ -13,12 +13,16 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import launch  # noqa: E402
 
 
+class NoAccessCode(Exception):
+    """tools/access_code.txt absent ou trop court (pas une KeyError : une réponse sans « busy » en est une)."""
+
+
 def busy(port=7860):
     """Vrai si une génération tourne sur l'interface de ce port (busy de /api/status, demandé par le Mac lui-même) ;
-    LookupError sans code d'accès."""
+    NoAccessCode sans code d'accès."""
     code = launch.read_access_code()
     if not code:
-        raise LookupError("code d'accès introuvable (tools/access_code.txt) : lancer depuis le dossier principal")
+        raise NoAccessCode("code d'accès introuvable (tools/access_code.txt) : lancer depuis le dossier principal")
     request = urllib.request.Request(f"http://127.0.0.1:{port}/api/status",
                                      headers={"Cookie": f"{launch.ACCESS_COOKIE}={launch.access_token(code)}"})
     with urllib.request.urlopen(request, timeout=10) as r:
@@ -31,7 +35,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     try:
         print(busy(args.port))
-    except LookupError as e:
+    except NoAccessCode as e:
         print(e, file=sys.stderr)
         return 2
     except (OSError, ValueError, KeyError, TypeError) as e:   # ni la réponse ni l'erreur complète : le type seul

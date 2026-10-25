@@ -17,7 +17,10 @@ avant le commit : le contrôle complet (--ui si l'interface a changé) ; relanc�
 options, il ne repasse pas (« déjà vert sur cet état », avec les lignes à citer ; --force pour relancer). On cite la
 dernière ligne telle quelle (« Ran N tests … », totaux de l'interface), jamais un compte de tête. Pas de commande
 « timeout » sous macOS : les délais sont ceux de check.py (UI_TEST_TIMEOUT par test, UI_FILE_TIMEOUT par fichier) ou
-de l'outil qui lance la commande.
+de l'outil qui lance la commande. Le contrôle complet avec --ui prend quelques minutes (banc et interface en même
+temps). Une vérification d'interface nouvelle devient un test de tests/ui/ (pilote driver.mjs), une vérification
+ponctuelle passe par la sonde (tests/ui/probe.mjs), jamais par un script jetable ; une vue plus grande que le
+téléphone cache des débordements : regarder aussi les captures (page.screenshot, tests/ui/planche.mjs).
 
 « Suivi » veut dire ici suivi par git, ou nouveau et pas encore ajouté (fichier non suivi que .gitignore n'exclut pas) :
 un fichier créé passe les contrôles avant son premier commit.
@@ -807,10 +810,11 @@ def tree_fingerprint():
 
 
 def state_key(args):
-    """Clé d'un contrôle complet : empreinte de l'arbre et options qui changent ce qui tourne ; None hors git."""
+    """Clé d'un contrôle complet : empreinte de l'arbre, dernier commit et base (--quick, l'avis, les lignes et les
+    règles en dépendent), options qui changent ce qui tourne ; None hors git."""
     tree = tree_fingerprint()
     options = {k: getattr(args, k, None) for k in ("no_bench", "quick", "ui", "name", "repeat")}
-    return f"{tree} {json.dumps(options, sort_keys=True)}" if tree else None
+    return f"{tree} {ticket_base()} {merge_base()} {json.dumps(options, sort_keys=True)}" if tree else None
 
 
 def green_record(journal):
@@ -926,7 +930,9 @@ def main(argv=None):
     key = state_key(args)
     shown = None if args.force else already_green(green_record(path), key)
     if shown:
-        print("\n".join(shown))
+        print("\n".join(shown[:-1]))
+        sensitive_notice(ticket_base())                # l'avis n'est pas gardé : refait (rapide)
+        print(shown[-1])
         return 0
     kept = None
     with open(path, "w", encoding="utf-8") as log:
@@ -942,6 +948,10 @@ def main(argv=None):
             sys.stdout = screen
     if kept:
         shutil.copyfile(path, kept)
+        try:                                          # un échec efface le vert d'avant, même sur un arbre identique
+            os.remove(green_record(path))
+        except FileNotFoundError:
+            pass
     elif key:
         with open(green_record(path), "w", encoding="utf-8") as f:
             json.dump({"key": key, "when": time.strftime("%d/%m/%Y %H:%M"), "cited": cited,

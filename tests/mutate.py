@@ -11,11 +11,25 @@ rouge), 1 si elle passe quand même (la mutation n'est pas vue : test à revoir)
 pas le temps de rendre le fichier : « git checkout -- <fichier> » le remet. La commande voit le fichier muté sur le
 disque : ne pas lancer de relecture sur le même arbre en même temps.
 """
-import argparse, signal, subprocess, sys
+import argparse, os, signal, subprocess, sys, tempfile
 
 
 class Interrupted(Exception):
     pass
+
+
+def write_whole(path, text):
+    """Écrit text dans path d'un coup : fichier temporaire du même dossier, puis os.replace (droits gardés)."""
+    mode = os.stat(path).st_mode & 0o777
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(path)), prefix=".mutate-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
 
 
 def main(argv=None):
@@ -42,8 +56,7 @@ def main(argv=None):
     previous = {s: signal.signal(s, interrupt) for s in (signal.SIGINT, signal.SIGTERM)}
     proc = None
     try:
-        with open(args.file, "w", encoding="utf-8", newline="") as f:
-            f.write(original.replace(args.old, args.new))
+        write_whole(args.file, original.replace(args.old, args.new))
         proc = subprocess.Popen(command)
         code = proc.wait()
     except Interrupted as e:
@@ -56,8 +69,10 @@ def main(argv=None):
         print(f"mutate : interrompue ({e}) : {args.file} rendu tel qu'il était")
         return 130
     finally:
-        with open(args.file, "w", encoding="utf-8", newline="") as f:
-            f.write(original)
+        # un second Ctrl-C pendant la remise ne l'interrompt pas, et le fichier est remplacé d'un coup (jamais vide)
+        for s in previous:
+            signal.signal(s, signal.SIG_IGN)
+        write_whole(args.file, original)
         for s, handler in previous.items():
             signal.signal(s, handler)
     if code:

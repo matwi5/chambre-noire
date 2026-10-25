@@ -478,11 +478,20 @@ class MainTest(RepoCase):
         self.write("neuf.py", "y = 1\n")                      # fichier nouveau : relancé
         self.main()
         self.assertEqual(self.runs, 5)
+        sh(self.root, "git", *GIT_USER, "commit", "-q", "--allow-empty", "-m", "rien")   # autre commit : relancé
+        self.main()
+        self.assertEqual(self.runs, 6)
+        self.failed = {"Banc": ["test_x"]}                  # un échec forcé efface le vert du même arbre
+        self.main("--force")
+        self.assertEqual(self.runs, 7)
+        self.failed = {}
+        self.main()
+        self.assertEqual(self.runs, 8, "« déjà vert » après un échec sur le même arbre")
         self.failed = {"Banc": ["test_x"]}                  # un échec n'est pas enregistré
         self.write("a.py", "x = 3\n")
         self.main()
         self.main()
-        self.assertEqual(self.runs, 7)
+        self.assertEqual(self.runs, 10)
         self.assertEqual(sh(self.root, "git", "status", "--porcelain"), " M a.py\n?? neuf.py\n", "index réel intact")
 
 

@@ -13,8 +13,9 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const HERE = path.dirname(new URL(import.meta.url).pathname);
+const SELF = fileURLToPath(import.meta.url), HERE = path.dirname(SELF);   // chemin décodé (espaces)
 const READY = `$('lamp').classList.contains('ok')`;
 // transitions et animations finies (les animations sans fin, comme la lampe qui pulse, exceptées) : capture nette
 const SETTLED = `!document.getAnimations().some(a => a.playState === 'running'
@@ -65,7 +66,7 @@ function before(commit, dir, names) {
   if (added.status) throw new Error(`worktree du commit ${commit} : ${added.stderr.trim()}`);
   try {
     const probe = path.join(tree, 'tests', 'ui', 'probe.mjs');
-    const r = spawnSync('node', [probe, '--script', new URL(import.meta.url).pathname], {
+    const r = spawnSync('node', [probe, '--script', SELF], {
       cwd: tree, encoding: 'utf8', timeout: 600000,
       env: { ...process.env, PLANCHE_PARTIE: dir, PLANCHE_VUES: names.join(','), PLANCHE_AVANT: '' } });
     if (r.status) throw new Error(`sonde du commit ${commit} : ${(r.stderr || r.stdout).trim().slice(-400)}`);

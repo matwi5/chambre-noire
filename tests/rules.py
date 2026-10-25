@@ -267,7 +267,11 @@ def missing_map_names(text, code):
 
 # couleur écrite en dur dans du CSS (après « : », « , », « ( » ou une espace) : #hex, rgb(…), rgba(…) ; une valeur
 # rgba(${…}) faite de jetons lus par cssRgb est permise
-COLOR_RE = re.compile(r"(?:(?<=[\s:,(])#[0-9a-fA-F]{3,8}\b|\brgba?\((?!\$\{))")
+# (un #hex suivi de « { » est un sélecteur d'id, pas une couleur ; entre guillemets, seulement donné à une couleur)
+COLOR_RE = re.compile(r"(?:(?<=[\s:,(])#[0-9a-fA-F]{3,8}\b(?!\s*\{)|\brgba?\((?!\$\{)"
+                      r"|(?:color|background\w*|fill\w*|stroke\w*|border\w*)\s*[:=]\s*['\"`]#[0-9a-fA-F]{3,8}\b)",
+                      re.I)
+MASK_RE = re.compile(r"\bmask(?:-image)?\s*:")         # masque : seule l'opacité de la couleur compte
 TOKEN_RE = re.compile(r"--[\w-]+\s*:")                # ligne qui déclare un jeton (:root, html.priv)
 # fonctions qui donnent l'adresse d'une image peut-être privée, et fonctions qui seules la posent sur une image ;
 # PRIVATE_SRC_KNOWN : listes dessinées d'un coup depuis les images de l'espace, vidées par changedSpace à la sortie
@@ -284,7 +288,7 @@ def hardcoded_colors(lines, added=None):
     for k, line in enumerate(lines, 1):
         if added is not None and k not in added:
             continue
-        if TOKEN_RE.search(line) or 'name="theme-color"' in line or "mask" in line:
+        if TOKEN_RE.search(line) or 'name="theme-color"' in line or MASK_RE.search(line):
             continue
         found = COLOR_RE.search(line)
         if found:
@@ -301,7 +305,7 @@ def unused_keyframes(lines, added=None):
             continue
         for m in re.finditer(r"@keyframes\s+([\w-]+)", line):
             name = re.escape(m.group(1))
-            if not re.search(rf"animation(?:-name)?\s*:[^;}}]*(?<![\w-]){name}(?![\w-])", text):
+            if not re.search(rf"animation(?:-name|Name)?\s*[:=][^;}}\n]*(?<![\w-]){name}(?![\w-])", text):
                 bad.append((k, f"@keyframes {m.group(1)} : aucune animation ne la nomme"))
     return bad
 
@@ -325,14 +329,18 @@ def private_src(html, added=None):
 # ------------------------------------------------------------ tests d'interface (tests/ui/*.test.mjs)
 
 WAIVER = "// règle levée :"                           # sur la ligne ou celle d'avant, avec la raison
-FIXED_WAIT_RE = re.compile(r"new Promise\(\s*\(?\s*(\w+)\s*\)?\s*=>\s*setTimeout\(\s*\1\s*,")
+# new Promise(… setTimeout(…, N) …) : attente d'un nombre fixe de millisecondes, quelle que soit la forme du rappel
+FIXED_WAIT_RE = re.compile(r"new Promise\(.*\bsetTimeout\(.*,\s*[\d_]+\s*\)")
 HELPER_RE = re.compile(rf"^(?:async\s+)?function\s*\*?\s*({IDENT})\s*\(|^const\s+({IDENT})\s*=\s*(?:async\s*)?"
                        rf"(?:\([^)]*\)|{IDENT})\s*=>")
 WAIT_LITERAL_RE = re.compile(r"waitFor\(\s*(`(?:[^`$]|\$(?!\{))*`|'[^']*'|\"[^\"]*\")")
 WAIT_LITERAL_MIN = 30                                 # caractères d'une attente qu'on n'écrit pas deux fois
-CLOSE_RE = re.compile(r"(?:\bpost|postJson|fetch)\(\s*['\"`]/api/private/lock|PageTransitionEvent\(\s*['\"](?:pagehide"
-                      r"|pageshow)|new Event\(\s*['\"]page(?:hide|show)|\bclosedByMac\(\)")
-ENTRY_RE = re.compile(r"(?:\bpost|postJson|fetch)\(\s*(?:\$\{)?[^)]*['\"`]/api/private/(?:create|unlock)")
+# appel qui envoie une route privée : son premier argument est l'adresse (« post('/api/…' », « privatePost(…) »,
+# « fetch(`${bench.url}/api/…` ») ; une comparaison, includes ou un motif de requêtes retenues n'en est pas un
+CALL_TO = r"(?<!\w)(?!includes\b|startsWith\b|endsWith\b|holdRequests\b|holdFetch\b)\w+\(\s*['\"`](?:\$\{[^}]*\})?"
+CLOSE_RE = re.compile(CALL_TO + r"/api/private/lock|PageTransitionEvent\(\s*['\"](?:pagehide|pageshow)"
+                      r"|new Event\(\s*['\"]page(?:hide|show)|\bclosedByMac\(\)")
+ENTRY_RE = re.compile(CALL_TO + r"/api/private/(?:create|unlock)")
 
 
 def waived(lines, k):

@@ -9,7 +9,7 @@ import bench
 from bench import S, generate, launch, wait_job
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
-import make_service, service_busy  # noqa: E402,E401
+import service_busy  # noqa: E402
 
 
 class ServiceBusyTest(bench.BenchCase):
@@ -43,6 +43,12 @@ class ServiceBusyTest(bench.BenchCase):
         self.assertIn("code d'accès introuvable", err)
         self.assertFalse(os.path.exists(launch.ACCESS_FILE))
 
+    def test_a_reply_without_busy_is_unreadable_not_a_missing_code(self):
+        with mock.patch.object(service_busy.json, "load", return_value={"queue": []}), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(service_busy.main(["--port", str(S.ui_port)]), 1)
+        self.assertIn("réponse illisible (KeyError)", err.getvalue())
+
     def test_an_unreachable_service_is_named_without_detail(self):
         with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
             code = service_busy.main(["--port", "1"])                    # rien n'écoute
@@ -56,12 +62,17 @@ class Done:
         self.returncode, self.stderr, self.stdout = returncode, stderr, ""
 
 
+@unittest.skipIf(sys.platform != "darwin", "LaunchAgent : macOS seulement (make_service lit os.getuid à l'import)")
 class MakeServiceTest(unittest.TestCase):
     def setUp(self):
+        global make_service
+        import make_service
         tmp = tempfile.TemporaryDirectory(prefix="qwen-service-test-")
         self.addCleanup(tmp.cleanup)
         self.calls = []
+        # tous les chemins du LaunchAgent dans le dossier temporaire : rien sous ~/Library/LaunchAgents
         for name, value in (("ROOT", tmp.name), ("PLIST", os.path.join(tmp.name, "agent.plist")),
+                            ("plist_path", lambda label: os.path.join(tmp.name, label + ".plist")),
                             ("BOOT_WAIT", 0.01)):
             p = mock.patch.object(make_service, name, value)
             p.start()

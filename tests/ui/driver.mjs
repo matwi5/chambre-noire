@@ -87,7 +87,13 @@ let testLabel = BEFORE_TESTS;
 if (process.env.NODE_TEST_CONTEXT) {
   const { beforeEach, afterEach } = await import('node:test');
   beforeEach(t => {
-    if (testLabel !== BEFORE_TESTS) for (const p of livePages) p.errors.length = 0;
+    for (const p of livePages) {
+      if (testLabel === BEFORE_TESTS) continue;
+      // arrivées après la fin du test d'avant (une réponse en retard) : écrites dans la sortie, pas perdues en silence
+      const late = p.errors.filter(e => e.startsWith('après '));
+      if (late.length) console.error(`erreurs de console après la fin d'un test :\n  ${late.join('\n  ')}`);
+      p.errors.length = 0;
+    }
     testLabel = `« ${t.name} »`;
   });
   afterEach(t => { testLabel = `après « ${t.name} »`; });

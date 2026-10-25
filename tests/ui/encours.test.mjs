@@ -189,11 +189,12 @@ test('révélation : carrés au hasard, puis chaque aperçu en mosaïque de plus
   page.assertNoErrors();
 });
 
-// le 404 intermittent de saisie.test.mjs : un aperçu demandé juste avant la fin de sa génération arrive au Mac après la
-// suppression de son dossier de travail (génération annulée : discard_cancelled ; privée finie : forget_files, qui
-// retire aussi job["preview"]) ; le Mac répond 404, que Chrome écrit dans la console. Rejoué ici en retenant la
-// requête de l'aperçu. En attente de la décision du porteur (réponse sans erreur pour un aperçu absent : la route sert
-// aussi les générations privées) : « todo », compté sans faire échouer
+// un aperçu demandé juste avant la fin de sa génération arrive au Mac quand il n'existe plus, et le Mac répond 404,
+// que Chrome écrit dans la console : génération annulée (discard_cancelled a supprimé le dossier), privée finie
+// (forget_files retire job["preview"]), ou oubliée (forget_job après « Sortir » : « job inconnu »). Le 404
+// intermittent de saisie.test.mjs est ce dernier cas (génération privée, sortie, /forget) ; rejoué ici le premier,
+// en retenant la requête de l'aperçu. En attente de la décision du porteur (pas d'erreur pour un aperçu absent : la
+// route sert aussi les générations privées, dont l'absence doit rester un 404) : « todo », compté sans échouer
 test('aperçu en route quand la génération est annulée : aucune erreur dans la console', {
   todo: 'le Mac répond 404 à un aperçu demandé avant la fin : décision du porteur attendue' }, async () => {
   await page.eval(`opt.steps = 'high'; opt.res = 'low'; $('previewChk').checked = true; saveOpt(); refreshChoices()`);

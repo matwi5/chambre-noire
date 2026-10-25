@@ -40,6 +40,7 @@ class MutateTest(unittest.TestCase):
         self.assertIn("la commande passe malgré la mutation", r.stdout)
         self.assertEqual(self.text(), ORIGINAL)
 
+    @unittest.skipIf(os.name == "nt", "SIGINT et SIGTERM envoyés à un processus : POSIX seulement")
     def test_an_interrupted_command_still_restores_the_file(self):
         for sig in (signal.SIGTERM, signal.SIGINT):
             with self.subTest(signal=sig.name):
