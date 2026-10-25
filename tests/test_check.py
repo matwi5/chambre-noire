@@ -516,6 +516,19 @@ class UsesShowTest(RepoCase):
         self.assertIn("absente : introuvable", out)
 
 
+class HelpTest(unittest.TestCase):
+    """check.py --help porte le détail que CLAUDE.md ne recopie plus : commandes, quand lancer quoi, ce qu'on cite,
+    délais, options."""
+    def test_the_help_says_how_to_use_the_checks(self):
+        r = subprocess.run([sys.executable, os.path.join(HERE, "check.py"), "--help"], capture_output=True, text=True,
+                           env=dict(os.environ, QWEN_CHECK_REEXEC="1"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        for said in ("--no-bench --ui tests/ui/x.test.mjs", "jamais « node --test » nu", "déjà vert sur cet état",
+                     "« Ran N tests … »", "« timeout » sous macOS", "QWEN_UI_JOBS", "--repeat", "--lines --fix",
+                     "--hook", "zone sensible", "--uses", "--show", ".githooks/pre-commit", "checks.yml"):
+            self.assertIn(said, r.stdout)
+
+
 class HooksMessageTest(RepoCase):
     """--link-venv : un core.hooksPath qui pointe déjà vers un dossier qui contient le hook (celui du dossier principal,
     vu d'un worktree, en chemin absolu ou relatif) est dit actif, pas « non activé »."""

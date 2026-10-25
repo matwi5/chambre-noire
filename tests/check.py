@@ -1,12 +1,23 @@
-"""Contrôles du projet en une commande (bibliothèque standard seulement) :
+"""Contrôles du projet en une commande (bibliothèque standard seulement ; c'est aussi la CI GitHub,
+.github/workflows/checks.yml, sur chaque pull request vers main et chaque envoi sur dev) :
 
-  venv/bin/python tests/check.py            # compilation Python, JavaScript, lignes, banc de test
-  venv/bin/python tests/check.py --no-bench # sans le banc (quelques secondes)
-  venv/bin/python tests/check.py --ui       # en plus, les tests d'interface (Chrome sans écran, en local seulement)
-  venv/bin/python tests/check.py --ui tests/ui/x.test.mjs   # un seul fichier d'interface (ou plusieurs)
+  venv/bin/python tests/check.py            # contrôle complet : compilation, JavaScript, lignes, règles, banc
+  venv/bin/python tests/check.py --ui       # en plus, tous les tests d'interface (Chrome sans écran, en local)
+  venv/bin/python tests/check.py --no-bench --ui tests/ui/x.test.mjs [--name <motif>]   # boucle de travail
   venv/bin/python tests/check.py --quick    # banc sauté si aucun .py n'a changé depuis le dernier commit
-  python3 tests/check.py --lines            # seulement la longueur des lignes ajoutées (moins d'une seconde)
+  venv/bin/python tests/check.py --ui tests/ui/x.test.mjs --repeat 3   # un fichier passé 3 fois (intermittent)
+  python3 tests/check.py --lines [--fix]    # longueur des lignes ajoutées seule (moins d'une seconde) ; --fix recoupe
   python3 tests/check.py --link-venv        # worktree : liens vers venv et les notes du dossier principal, hook
+  python3 tests/check.py --map <nom> | --show <nom> | --uses <mot>   # situer, lire, chercher sans grep
+
+Quand lancer quoi. Pendant le travail : le seul fichier touché (venv/bin/python -m unittest discover -s tests -p
+test_x.py, ou --no-bench --ui tests/ui/x.test.mjs : seul check.py pose le délai par test et arrête Chrome et le banc,
+jamais « node --test » nu) ; les fichiers d'interface concernés se trouvent par --uses ou grep. Avant la revue et
+avant le commit : le contrôle complet (--ui si l'interface a changé) ; relancé sur un arbre identique aux mêmes
+options, il ne repasse pas (« déjà vert sur cet état », avec les lignes à citer ; --force pour relancer). On cite la
+dernière ligne telle quelle (« Ran N tests … », totaux de l'interface), jamais un compte de tête. Pas de commande
+« timeout » sous macOS : les délais sont ceux de check.py (UI_TEST_TIMEOUT par test, UI_FILE_TIMEOUT par fichier) ou
+de l'outil qui lance la commande.
 
 « Suivi » veut dire ici suivi par git, ou nouveau et pas encore ajouté (fichier non suivi que .gitignore n'exclut pas) :
 un fichier créé passe les contrôles avant son premier commit.
@@ -14,28 +25,36 @@ un fichier créé passe les contrôles avant son premier commit.
 1. compile chaque fichier .py suivi (sans écrire de .pyc) ;
 2. passe à « node --check » chaque bloc <script> de tools/ui/index.html (un bloc sur une seule ligne compris) et chaque
    fichier .js ou .mjs suivi ; échoue si un bloc ouvert n'a pas été extrait ; refuse une adresse donnée à la main à
-   une image des visionneuses, de la zone de résultat ou du dessin ($('vImg').src=…, IMAGE_IDS) : elles passent par
-   showImage ;
+   une image des visionneuses, de la zone de résultat ou du dessin ($('vImg').src=…, IMAGE_IDS, dont chaque id doit
+   exister) : elles passent par showImage ;
 3. vérifie que les lignes ajoutées depuis la base (git merge-base HEAD origin/main, arbre de travail compris ; toutes
    celles d'un fichier nouveau) des fichiers .py, .md, .mjs et .js suivis ont 120 caractères au plus, hors tableaux et
-   blocs de code Markdown ; base introuvable : un avis, et le contrôle passe ; --lines ne fait que ce contrôle, et
-   --lines --cached juge l'index (ce que le prochain commit enregistre : hook .githooks/pre-commit) ;
-   si l'un de ces trois contrôles échoue, check.py s'arrête là, sans lancer le banc ni l'interface ;
-4. lance le banc (unittest discover -s tests), recopie telles quelles sa ligne « Ran N tests … » et son verdict, et
-   affiche sa durée ; avec --quick et aucun .py changé depuis le dernier commit (ticket_base : non suivis compris ;
-   hors git, le banc tourne), seul tests/test_public_repo.py tourne ;
-5. avec --ui : les tests d'interface tests/ui/*.test.mjs, ou les seuls fichiers donnés (pilote Chrome, voir
+   blocs de code Markdown ; base introuvable : un avis, et le contrôle passe ; --lines ne fait que ce contrôle,
+   --lines --cached juge l'index (hook .githooks/pre-commit, posé par --link-venv), --lines --fix recoupe les seules
+   lignes fautives qui peuvent l'être (Markdown, commentaires, docstrings) et --hook juge le fichier qu'une écriture de
+   Claude Code vient de changer (hook PostToolUse de .claude/settings.json : fautes sur stderr, code 2) ;
+4. règles mécaniques de CODING_STANDARDS.md (tests/rules.py, liste à la fin de ce fichier, noms de la carte du code
+   compris) : sur les lignes ajoutées, et sur des fichiers entiers pour celles du serveur et des imports ;
+   si l'un de ces quatre contrôles échoue, check.py s'arrête là, sans lancer le banc ni l'interface ;
+5. lance le banc (unittest discover -s tests), recopie telles quelles sa ligne « Ran N tests … » et son verdict, et
+   affiche sa durée ; avec --quick (jamais en CI) et aucun .py changé depuis le dernier commit (ticket_base : non
+   suivis compris ; hors git, le banc tourne), seul tests/test_public_repo.py tourne ;
+6. avec --ui : les tests d'interface tests/ui/*.test.mjs, ou les seuls fichiers donnés (pilote Chrome, voir
    tests/ui/driver.mjs), UI_JOBS fichiers à la fois (3 par défaut, QWEN_UI_JOBS), chacun avec sa durée, en même
    temps que le banc : chacun son Chrome, et son serveur sur un port libre, depuis son propre dossier temporaire
    (bench.start()), avec l'interface dans un autre processus (tests/ui/serve.py) ; résultats dans l'ordre des
-   fichiers ;
-6. avis, sans échec, « zone sensible : passe bogues /code-review requise » quand une ligne ajoutée dans tools/ depuis
+   fichiers ; --name <motif> ne lance que les tests dont le nom correspond (échec tout de suite si aucun), --repeat N
+   passe chaque fichier N fois ; un test « todo » est compté « à faire », sans échec ;
+7. avis, sans échec, « zone sensible : passe bogues /code-review requise » quand une ligne ajoutée dans tools/ depuis
    le dernier commit (ticket_base : le ticket en cours, arbre de travail compris ; donc aucun avis en CI) touche
    l'espace privé ou la suppression de données (SENSITIVE) ; il nomme la fonction (ou la route) de chaque ligne. Un
    indice : la ligne « Zone sensible » du ticket fait foi.
 
-La sortie complète va aussi dans un journal (chemin imprimé à la fin) ; la dernière ligne récapitule les fautes
-(fichier:ligne, test du banc, fichier d'interface), pour qu'une sortie coupée par tail les montre encore.
+La sortie complète va aussi dans un journal (chemin imprimé à la fin ; les lignes de pile de Node n'y sont qu'à lui) ;
+un passage en échec garde le sien sous un nom horodaté (FAILURES_DIR, les FAILURES_KEPT derniers). La dernière ligne
+récapitule les fautes (fichier:ligne, test du banc, fichier d'interface), les lignes de résultat à citer et le journal
+gardé, pour qu'une sortie coupée par tail les montre encore. Un contrôle vert enregistre l'empreinte de l'arbre et ses
+options (green_record, à côté du journal).
 
 Le Python des contrôles est celui du venv du dépôt (venv/ à la racine, sinon celui du dossier principal quand on est
 dans un worktree), sinon l'interpréteur qui lance ce script (cas de la CI) : check.py se relance de lui-même avec le
@@ -822,7 +841,7 @@ def run_checks(args):
 
 
 def parse_args(argv=None):
-    ap = argparse.ArgumentParser(description="Contrôles du projet (compilation, JavaScript, lignes, banc, interface)")
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--no-bench", action="store_true", help="sauter le banc de test")
     ap.add_argument("--quick", action="store_true",
                     help="sauter le banc si aucun .py n'a changé depuis le dernier commit (test du dépôt public lancé)")

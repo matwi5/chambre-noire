@@ -17,8 +17,8 @@ import path from 'node:path';
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const READY = `$('lamp').classList.contains('ok')`;
 // transitions et animations finies (les animations sans fin, comme la lampe qui pulse, exceptées) : capture nette
-const SETTLED = `document.getAnimations().every(a => a.playState !== 'running'
-  || a.effect.getComputedTiming().iterations === Infinity)`;
+const SETTLED = `!document.getAnimations().some(a => a.playState === 'running'
+  && a.effect.getComputedTiming().iterations !== Infinity)`;
 // vues, dans l'ordre : chacune amène la page dans l'état voulu (en partant de la précédente)
 const VIEWS = {
   labo: async page => { await page.waitFor(READY, { what: 'moteur prêt' }); },
