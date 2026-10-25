@@ -41,7 +41,7 @@ Le Python des contrôles est celui du venv du dépôt (venv/ à la racine, sinon
 dans un worktree), sinon l'interpréteur qui lance ce script (cas de la CI) : check.py se relance de lui-même avec le
 bon. Code de sortie non nul au moindre échec.
 """
-import argparse, concurrent.futures, glob, os, re, signal, subprocess, sys, tempfile, time
+import argparse, concurrent.futures, glob, json, os, re, shutil, signal, subprocess, sys, tempfile, time
 
 import rules                                          # tests/rules.py : règles mécaniques, index de la carte
 
@@ -73,6 +73,11 @@ UI_WAIT_LOADED = 30000                               # attente par défaut du pi
 # le change) : un contrôle complet n'attend plus la somme des fichiers (décision du 24/10/2026)
 UI_JOBS = max(1, int(os.environ.get("QWEN_UI_JOBS") or 3))
 SHOWN_FAULTS = 12                                    # fautes nommées au plus par contrôle dans la dernière ligne
+# lignes de résultat recopiées dans la dernière ligne, celles qu'on cite : « Ran N tests … », verdict, totaux
+CITED_RE = re.compile(r"(Banc(?: \([^)]*\))? : (?:Ran |OK|FAILED)|Interface : \d+ fichier\(s\), )")
+NODE_STACK_RE = re.compile(r"\s+at\s")             # ligne de pile de Node : dans le journal, pas à l'écran
+# journaux des passages en échec, gardés à côté du journal (une cause intermittente ne se perd plus)
+FAILURES_DIR, FAILURES_KEPT = "qwen-check-echecs", 10
 
 
 def git(*args):
@@ -564,18 +569,22 @@ def stop_group(proc):
 
 
 class Tee:
-    """Sortie écrite à la fois à l'écran et dans le journal."""
-    def __init__(self, *streams):
-        self.streams = streams
+    """Sortie écrite à la fois à l'écran et dans le journal ; les lignes de pile de Node (NODE_STACK_RE) ne vont que
+    dans le journal (hidden : leur nombre)."""
+    def __init__(self, screen, log):
+        self.screen, self.log, self.hidden = screen, log, 0
 
     def write(self, text):
-        for s in self.streams:
-            s.write(text)
+        self.log.write(text)
+        lines = text.splitlines(keepends=True)
+        shown = [l for l in lines if not NODE_STACK_RE.match(l)]
+        self.hidden += len(lines) - len(shown)
+        self.screen.write("".join(shown))
         return len(text)
 
     def flush(self):
-        for s in self.streams:
-            s.flush()
+        self.screen.flush()
+        self.log.flush()
 
 
 def journal_path():
@@ -585,19 +594,61 @@ def journal_path():
                                                                 f"qwen-check-{os.path.basename(ROOT)}.log")
 
 
-def summary(failed):
-    """Dernière ligne de la sortie : OK, ou chaque contrôle en échec avec ses fautes (SHOWN_FAULTS au plus)."""
+def kept_journal_path(journal):
+    """Chemin où garder le journal d'un passage en échec : FAILURES_DIR à côté du journal, nom horodaté. Les plus
+    vieux au-delà de FAILURES_KEPT sont retirés."""
+    folder = os.path.join(os.path.dirname(journal), FAILURES_DIR)
+    os.makedirs(folder, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(journal))[0]
+    old = sorted(n for n in os.listdir(folder) if n.startswith(stem + "-"))
+    for name in old[:max(0, len(old) - FAILURES_KEPT + 1)]:
+        os.remove(os.path.join(folder, name))
+    stamp = time.strftime("%Y%m%d-%H%M%S") + f"-{time.time_ns() % 10 ** 9:09d}"
+    return os.path.join(folder, f"{stem}-{stamp}.log")
+
+
+def summary(failed, cited=(), kept=None):
+    """Dernière ligne de la sortie : OK, ou chaque contrôle en échec avec ses fautes (SHOWN_FAULTS au plus) ; puis les
+    lignes de résultat à citer (cited : « Ran N tests … », totaux de l'interface) et le journal gardé d'un échec."""
+    counts = f" ({' ; '.join(cited)})" if cited else ""
     if not failed:
-        return "Contrôles : OK"
+        return "Contrôles : OK" + counts
     parts = []
     for name, faults in failed.items():
         more = f" et {len(faults) - SHOWN_FAULTS} autre(s)" if len(faults) > SHOWN_FAULTS else ""
         parts.append(f"{name} : {', '.join(faults[:SHOWN_FAULTS])}{more}")
-    return "Contrôles : ÉCHEC : " + " ; ".join(parts)
+    return "Contrôles : ÉCHEC : " + " ; ".join(parts) + counts + (f" (journal gardé : {kept})" if kept else "")
+
+
+def tree_fingerprint():
+    """Empreinte de l'état du dépôt : arbre de travail entier (fichiers suivis et nouveaux non ignorés), écrit dans un
+    index temporaire (l'index réel n'est pas touché) ; None hors git."""
+    with tempfile.TemporaryDirectory(prefix="qwen-check-index-") as tmp:
+        env = dict(os.environ, GIT_INDEX_FILE=os.path.join(tmp, "index"))
+        try:
+            for args in (("read-tree", "HEAD"), ("add", "-A", "--", ".")):
+                subprocess.run(["git", *args], cwd=ROOT, env=env, capture_output=True, check=True)
+            return subprocess.run(["git", "write-tree"], cwd=ROOT, env=env, capture_output=True, text=True,
+                                  check=True).stdout.strip() or None
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
+
+def state_key(args):
+    """Clé d'un contrôle complet : empreinte de l'arbre et options qui changent ce qui tourne ; None hors git."""
+    tree = tree_fingerprint()
+    options = {k: getattr(args, k, None) for k in ("no_bench", "quick", "ui", "name")}
+    return f"{tree} {json.dumps(options, sort_keys=True)}" if tree else None
+
+
+def green_record(journal):
+    """Fichier du dernier contrôle vert (clé, date, lignes à citer), à côté du journal."""
+    return journal + ".vert.json"
 
 
 def run_checks(args):
-    """Contrôles statiques, puis banc et interface s'ils passent : {contrôle : fautes} des contrôles en échec."""
+    """Contrôles statiques, puis banc et interface s'ils passent : ({contrôle : fautes} des contrôles en échec, lignes
+    de résultat à citer : « Ran N tests … », verdict du banc, totaux de l'interface)."""
     base = merge_base()
     failed = {}
     for name, check in (("Python", check_python), ("JavaScript", check_js),
@@ -607,7 +658,7 @@ def run_checks(args):
             failed[name] = faults
     if failed:
         print("Banc et interface : pas lancés (contrôles ci-dessus en échec : les corriger d'abord)")
-        return failed
+        return failed, []
     if args.ui is not None and args.name:
         try:
             found = any(re.search(args.name, t) for t in ui_titles(ui_files(args.ui)))
@@ -615,7 +666,7 @@ def run_checks(args):
             found = True
         if not found:
             print(f"Interface : aucun test ne correspond au motif « {args.name} » : rien n'est lancé")
-            return {"Interface": [f"motif « {args.name} » sans test"]}
+            return {"Interface": [f"motif « {args.name} » sans test"]}, []
     jobs = []                                         # banc et interface : en parallèle (bancs indépendants)
     if args.no_bench:
         pass
@@ -627,18 +678,20 @@ def run_checks(args):
     if args.ui is not None:                           # banc ou plusieurs Chrome en même temps : attentes allongées
         wait = UI_WAIT_LOADED if jobs or min(UI_JOBS, len(ui_files(args.ui))) > 1 else None
         jobs.append(("Interface", lambda: run_ui(args.ui, args.name, wait)))
+    cited = []
     with concurrent.futures.ThreadPoolExecutor(max(len(jobs), 1)) as pool:
         futures = [(name, pool.submit(job)) for name, job in jobs]
         for name, future in futures:
             ok, lines, faults = future.result()
             print("\n".join(lines))
+            cited += [l for l in lines if CITED_RE.match(l)]
             if not ok:
                 failed[name] = faults
     sensitive_notice(ticket_base())
-    return failed
+    return failed, cited
 
 
-def main():
+def parse_args(argv=None):
     ap = argparse.ArgumentParser(description="Contrôles du projet (compilation, JavaScript, lignes, banc, interface)")
     ap.add_argument("--no-bench", action="store_true", help="sauter le banc de test")
     ap.add_argument("--quick", action="store_true",
@@ -647,6 +700,8 @@ def main():
                     help="lancer aussi les tests d'interface (Chrome, en local), tous ou les seuls fichiers donnés")
     ap.add_argument("--name", metavar="MOTIF", help="avec --ui : seuls les tests dont le nom correspond (expression "
                     "régulière) ; échoue tout de suite si aucun ne correspond")
+    ap.add_argument("--force", action="store_true",
+                    help="relancer même si un contrôle identique est déjà vert sur cet état de l'arbre")
     ap.add_argument("--lines", action="store_true",
                     help=f"seulement la longueur des lignes ajoutées depuis la base ({LINE_MAX} caractères)")
     ap.add_argument("--cached", action="store_true", help="avec --lines : juger l'index (hook avant commit)")
@@ -654,7 +709,24 @@ def main():
                     help="worktree : liens vers venv et les notes du dossier principal ; hook avant commit")
     ap.add_argument("--map", nargs="?", const="", metavar="NOM",
                     help="index fonction → ligne de launch.py et index.html (les noms qui contiennent NOM)")
-    args = ap.parse_args()
+    return ap.parse_args(argv)
+
+
+def already_green(record, key):
+    """Lignes à imprimer si le dernier contrôle vert (record) avait la même clé, sinon None."""
+    try:
+        with open(record, encoding="utf-8") as f:
+            green = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not key or green.get("key") != key:
+        return None
+    return [f"Contrôles : déjà vert sur cet état (passage du {green['when']}) : pas relancé (--force pour relancer)",
+            *green.get("lines", []), summary({}, green.get("cited", []))]
+
+
+def main(argv=None):
+    args = parse_args(argv)
     if args.link_venv:
         return link_venv()
     if args.map is not None:
@@ -663,14 +735,29 @@ def main():
         return 1 if check_line_length(merge_base(), cached=args.cached) else 0
     reexec_in_venv()
     path, screen = journal_path(), sys.stdout
+    key = state_key(args)
+    shown = None if args.force else already_green(green_record(path), key)
+    if shown:
+        print("\n".join(shown))
+        return 0
+    kept = None
     with open(path, "w", encoding="utf-8") as log:
-        sys.stdout = Tee(screen, log)
+        sys.stdout = tee = Tee(screen, log)
         try:
-            failed = run_checks(args)
+            failed, cited = run_checks(args)
+            if tee.hidden:
+                print(f"({tee.hidden} ligne(s) de pile Node masquée(s) : dans le journal)")
             print(f"Journal complet : {path}")
-            print(summary(failed))
+            kept = kept_journal_path(path) if failed else None
+            print(summary(failed, cited, kept))
         finally:
             sys.stdout = screen
+    if kept:
+        shutil.copyfile(path, kept)
+    elif key:
+        with open(green_record(path), "w", encoding="utf-8") as f:
+            json.dump({"key": key, "when": time.strftime("%d/%m/%Y %H:%M"), "cited": cited,
+                       "lines": [f"Journal du passage : {path}"]}, f)
     return 1 if failed else 0
 
 

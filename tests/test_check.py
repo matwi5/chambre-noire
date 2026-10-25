@@ -100,21 +100,17 @@ class LinesTest(RepoCase):
 
     def test_the_full_check_stops_before_the_bench_and_names_the_line_last(self):
         self.write("b.mjs", "const x = 1;\n" + "//" + LONG + "\n")
-        args = argparse.Namespace(no_bench=False, quick=False, ui=[], name=None, lines=False, link_venv=False,
-                                  map=None)
         with mock.patch.object(check, "check_python", return_value=[]), \
                 mock.patch.object(check, "check_js", return_value=[]), \
                 mock.patch.object(check, "check_rules", return_value=[]), \
                 mock.patch.object(check, "run_bench") as bench, mock.patch.object(check, "run_ui") as ui, \
                 mock.patch.object(check, "journal_path", return_value=os.path.join(self.tmp.name, "journal.log")), \
-                mock.patch.object(check, "reexec_in_venv"), \
-                mock.patch("argparse.ArgumentParser.parse_args", return_value=args), \
-                contextlib.redirect_stdout(io.StringIO()) as out:
-            self.assertEqual(check.main(), 1)
+                mock.patch.object(check, "reexec_in_venv"), contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(check.main(["--ui"]), 1)
         bench.assert_not_called()
         ui.assert_not_called()
         lines = out.getvalue().strip().splitlines()
-        self.assertEqual(lines[-1], "Contrôles : ÉCHEC : Lignes : b.mjs:2")
+        self.assertTrue(lines[-1].startswith("Contrôles : ÉCHEC : Lignes : b.mjs:2 (journal gardé : "), lines[-1])
         with open(os.path.join(self.tmp.name, "journal.log"), encoding="utf-8") as f:
             self.assertEqual(f.read().strip().splitlines()[-1], lines[-1])
 
@@ -128,8 +124,7 @@ class UiNameTest(unittest.TestCase):
         self.assertTrue(any(t.startswith("« Révéler » suit la génération sur le Labo") for t in titles), titles)
 
     def test_a_pattern_without_test_fails_at_once(self):
-        args = argparse.Namespace(no_bench=False, quick=False, ui=["tests/ui/smoke.test.mjs"], name="zz-aucun-test",
-                                  lines=False, link_venv=False, map=None)
+        argv = ["--ui", "tests/ui/smoke.test.mjs", "--name", "zz-aucun-test"]
         with tempfile.TemporaryDirectory(prefix="qwen-check-test-") as tmp, \
                 mock.patch.object(check, "check_python", return_value=[]), \
                 mock.patch.object(check, "check_js", return_value=[]), \
@@ -137,20 +132,18 @@ class UiNameTest(unittest.TestCase):
                 mock.patch.object(check, "check_rules", return_value=[]), \
                 mock.patch.object(check, "run_bench") as bench, mock.patch.object(check, "run_ui") as ui, \
                 mock.patch.object(check, "journal_path", return_value=os.path.join(tmp, "journal.log")), \
-                mock.patch.object(check, "reexec_in_venv"), \
-                mock.patch("argparse.ArgumentParser.parse_args", return_value=args), \
-                contextlib.redirect_stdout(io.StringIO()) as out:
-            self.assertEqual(check.main(), 1)
+                mock.patch.object(check, "reexec_in_venv"), contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(check.main(argv), 1)
         bench.assert_not_called()                     # rien n'est lancé, ni le banc ni Chrome
         ui.assert_not_called()
         self.assertIn("aucun test ne correspond au motif « zz-aucun-test »", out.getvalue())
-        self.assertEqual(out.getvalue().strip().splitlines()[-1],
-                         "Contrôles : ÉCHEC : Interface : motif « zz-aucun-test » sans test")
-        args.name = "Révéler"                         # un motif qui vise un test : l'interface est lancée
+        self.assertTrue(out.getvalue().strip().splitlines()[-1].startswith(
+            "Contrôles : ÉCHEC : Interface : motif « zz-aucun-test » sans test (journal gardé : "))
+        args = check.parse_args(["--ui", "tests/ui/smoke.test.mjs", "--name", "Révéler"])   # vise un test : lancé
         with mock.patch.object(check, "run_ui", return_value=(True, [], [])) as ui, \
                 mock.patch.object(check, "run_bench", return_value=(True, [], [])), \
                 mock.patch.object(check, "sensitive_notice"), contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(check.run_checks(args), {})
+            self.assertEqual(check.run_checks(args)[0], {})
         ui.assert_called_once()
 
 
@@ -239,8 +232,7 @@ class QuickTest(RepoCase):
     """--quick saute le banc quand aucun .py n'a changé depuis le dernier commit, même si la branche en a changé depuis
     main (sur dev et sur une branche de groupe, c'est toujours le cas) ; un .py modifié ou nouveau le relance."""
     def bench_pattern(self):
-        args = argparse.Namespace(no_bench=False, quick=True, ui=None, name=None, lines=False, link_venv=False,
-                                  map=None)
+        args = check.parse_args(["--quick"])
         with mock.patch.object(check, "check_python", return_value=[]), \
                 mock.patch.object(check, "check_js", return_value=[]), \
                 mock.patch.object(check, "check_line_length", return_value=[]), \
@@ -305,6 +297,100 @@ class LinkNotesTest(unittest.TestCase):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
+
+
+class MainTest(RepoCase):
+    """Fin d'un contrôle : la dernière ligne récapitule les comptes à citer (banc, interface) ; les lignes de pile de
+    Node restent dans le journal ; un passage en échec garde son journal sous un nom horodaté ; un contrôle vert sur
+    un arbre identique, aux mêmes options, ne se relance pas (sauf --force)."""
+    CITED = ["Banc : Ran 3 tests in 0.512s", "Banc : OK",
+             "Interface : 2 fichier(s), 5 tests, 5 réussis, 0 en échec (9 s)"]
+
+    def setUp(self):
+        super().setUp()
+        self.journal = os.path.join(self.tmp.name, "journal.log")
+        self.write("a.py", "x = 1\n")
+        self.write(".gitignore", "ignore.txt\n")
+        sh(self.root, "git", "add", ".")
+        sh(self.root, "git", *GIT_USER, "commit", "-q", "-m", "code")
+        self.failed, self.printed, self.runs = {}, "", 0
+        for target, value in (("journal_path", self.journal), ("reexec_in_venv", None)):
+            p = mock.patch.object(check, target, return_value=value)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def fake_checks(self, args):
+        self.runs += 1
+        print(self.printed)
+        return self.failed, self.CITED
+
+    def main(self, *argv):
+        with mock.patch.object(check, "run_checks", self.fake_checks), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            code = check.main(list(argv))
+        return code, out.getvalue()
+
+    def kept(self):
+        folder = os.path.join(self.tmp.name, check.FAILURES_DIR)
+        return sorted(os.listdir(folder)) if os.path.isdir(folder) else []
+
+    def test_the_last_line_gives_the_counts_to_cite(self):
+        code, out = self.main()
+        self.assertEqual(code, 0)
+        self.assertEqual(out.strip().splitlines()[-1], "Contrôles : OK (" + " ; ".join(self.CITED) + ")")
+
+    def test_node_stack_lines_stay_in_the_journal(self):
+        self.printed = "Error: boum\n    at f (file:///x.test.mjs:1:2)\n    at async g (node:internal/x:3:4)\nsuite"
+        _, out = self.main()
+        self.assertNotIn("at f (file", out)
+        self.assertIn("Error: boum\nsuite", out)
+        self.assertIn("2 ligne(s) de pile Node masquée(s)", out)
+        with open(self.journal, encoding="utf-8") as f:
+            self.assertIn("    at f (file:///x.test.mjs:1:2)", f.read())
+
+    def test_a_failed_run_keeps_its_journal(self):
+        self.main()
+        self.assertEqual(self.kept(), [], "un passage vert ne garde rien")
+        self.failed, self.printed = {"Banc": ["test_x"]}, "sortie du passage en échec"
+        code, out = self.main("--force")                    # même arbre que le passage vert : forcé
+        self.assertEqual(code, 1)
+        kept = self.kept()
+        self.assertEqual(len(kept), 1)
+        path = os.path.join(self.tmp.name, check.FAILURES_DIR, kept[0])
+        last = out.strip().splitlines()[-1]
+        self.assertTrue(last.startswith("Contrôles : ÉCHEC : Banc : test_x ("), last)
+        self.assertTrue(last.endswith(f"(journal gardé : {path})"), last)
+        with open(path, encoding="utf-8") as f:
+            self.assertIn("sortie du passage en échec", f.read())
+        for _ in range(check.FAILURES_KEPT + 2):
+            self.main("--force")
+        self.assertEqual(len(self.kept()), check.FAILURES_KEPT, "les plus vieux sont retirés")
+
+    def test_a_green_state_is_not_checked_twice(self):
+        self.main()
+        code, out = self.main()
+        self.assertEqual((code, self.runs), (0, 1), out)
+        self.assertIn("déjà vert sur cet état (passage du ", out)
+        self.assertEqual(out.strip().splitlines()[-1], "Contrôles : OK (" + " ; ".join(self.CITED) + ")")
+        self.main("--quick")                                  # autres options : relancé
+        self.assertEqual(self.runs, 2)
+        self.main("--force")
+        self.assertEqual(self.runs, 3)
+        self.write("ignore.txt", "ignoré par git\n")         # fichier ignoré : même état
+        self.main()
+        self.assertEqual(self.runs, 3)
+        self.write("a.py", "x = 2\n")                        # fichier changé : relancé
+        self.main()
+        self.assertEqual(self.runs, 4)
+        self.write("neuf.py", "y = 1\n")                      # fichier nouveau : relancé
+        self.main()
+        self.assertEqual(self.runs, 5)
+        self.failed = {"Banc": ["test_x"]}                  # un échec n'est pas enregistré
+        self.write("a.py", "x = 3\n")
+        self.main()
+        self.main()
+        self.assertEqual(self.runs, 7)
+        self.assertEqual(sh(self.root, "git", "status", "--porcelain"), " M a.py\n?? neuf.py\n", "index réel intact")
 
 
 class HooksMessageTest(RepoCase):

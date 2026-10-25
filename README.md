@@ -1061,11 +1061,14 @@ Il vérifie aussi, sur les lignes ajoutées, les règles de `CODING_STANDARDS.md
 et que chaque nom cité par la carte du code existe encore ; `--map <nom>` imprime la ligne des fonctions de
 `tools/launch.py` et `tools/ui/index.html` dont le nom le contient. Les contrôles rapides (compilation, JavaScript,
 longueur des lignes, règles) passent d'abord : si l'un échoue, le banc et l'interface ne sont pas lancés. La dernière
-ligne de la sortie nomme chaque faute (`fichier:ligne`, test du banc, fichier d'interface) et la sortie complète
-va aussi dans un journal, dont le chemin est affiché ; le banc et chaque
-fichier d'interface affichent leur durée. `python3 tests/check.py --lines` ne vérifie que la longueur des lignes
-ajoutées, en moins d'une seconde ; le hook avant commit du dépôt (`.githooks/pre-commit`, activé par
-`python3 tests/check.py --link-venv`) le lance sur ce qui va être enregistré et refuse le commit fautif.
+ligne de la sortie nomme chaque faute (`fichier:ligne`, test du banc, fichier d'interface) et recopie les comptes du
+banc (« Ran N tests … ») et de l'interface ; la sortie complète va aussi dans un journal, dont le chemin est affiché
+(les lignes de pile de Node n'y sont qu'à lui), et le journal d'un passage en échec est gardé sous un nom horodaté
+(les dix derniers), cité par la dernière ligne. Un contrôle vert enregistre l'état de l'arbre : relancé à
+l'identique (mêmes fichiers, mêmes options), il dit « déjà vert sur cet état » sans rien relancer (`--force` pour
+relancer). Le banc et chaque fichier d'interface affichent leur durée. `python3 tests/check.py --lines` ne vérifie que
+la longueur des lignes ajoutées, en moins d'une seconde ; le hook avant commit du dépôt (`.githooks/pre-commit`,
+activé par `python3 tests/check.py --link-venv`) le lance sur ce qui va être enregistré et refuse le commit fautif.
 `python3 tests/rewrap.py <fichier>.md` recoupe les lignes trop longues ajoutées à un fichier Markdown (toutes avec
 `--all`) sans toucher aux titres, listes, tableaux, blocs de code ni lignes vides.
 
