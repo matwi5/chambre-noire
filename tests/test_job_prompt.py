@@ -34,7 +34,6 @@ class JobPromptTest(bench.BenchCase):
                 self.assertEqual(call("GET", f"/api/job/{job['id']}", **origin), (404, {"error": "job inconnu"}))
         bench.release()
         done = wait_job(job["id"], private=session)
-        bench.wait_idle()
         self.assertEqual(done["status"], "done")
         self.assertIsNone(bench.job(job["id"], private=session)["prompt"])   # rangée : la demande a quitté la mémoire
 

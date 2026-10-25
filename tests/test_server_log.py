@@ -33,7 +33,6 @@ class NeutralFailureLineTest(bench.BenchCase):
         code, job = call("POST", "/api/generate", gen_body(prompt, **kw), private=session)
         self.assertEqual(code, 202, job)
         self.assertEqual(wait_job(job["id"], private=session)["status"], "failed")
-        bench.wait_idle()
         self.assertFalse([line for line in bench.LOG if "zq7" in line], "le prompt dans le journal")
         return [line for line in bench.LOG if line.startswith("[job]")]
 
@@ -54,7 +53,6 @@ class NeutralFailureLineTest(bench.BenchCase):
         with mock.patch.object(bench.launch, "append_journal", side_effect=OSError("disque plein zq7")):
             jid = generate("zq7 normale")["id"]
             self.assertEqual(wait_job(jid)["status"], "done")
-            bench.wait_idle()
         self.assertIn("[job] fin de génération incomplète", bench.LOG)
         self.assertFalse([line for line in bench.LOG if "zq7" in line])
 
@@ -62,7 +60,6 @@ class NeutralFailureLineTest(bench.BenchCase):
         bench.LOG.clear()
         with mock.patch.object(bench.launch, "notify_job", side_effect=RuntimeError("panne zq7")):
             self.assertEqual(wait_job(generate("visible")["id"])["status"], "done")
-            bench.wait_idle()
         self.assertIn("[job] erreur du thread de calcul", bench.LOG)
         self.assertFalse([line for line in bench.LOG if "zq7" in line])
 
@@ -73,7 +70,6 @@ class NeutralFailureLineTest(bench.BenchCase):
             self.assertEqual(code, 202, reply)
             for j in reply["jobs"]:
                 wait_job(j["id"])
-            bench.wait_idle()
         self.assertIn("[push] notification du lot impossible", bench.LOG)
         self.assertFalse([line for line in bench.LOG if "zq7" in line])
 
@@ -95,7 +91,6 @@ class QuietSuccessTest(bench.BenchCase):
         code, job = call("POST", "/api/generate", gen_body(prompt, **kw), private=session)
         self.assertEqual(code, 202, job)
         self.assertEqual(wait_job(job["id"], private=session)["status"], "done")
-        bench.wait_idle()
         self.assertFalse([line for line in bench.LOG if "zq7" in line], "le prompt dans le journal")
         return logged()
 
@@ -106,7 +101,6 @@ class QuietSuccessTest(bench.BenchCase):
 
     def test_only_failed_requests_reach_the_log(self):
         name = wait_job(generate("visible")["id"])["name"]
-        bench.wait_idle()
         bench.LOG.clear()
         for path in ("/api/history", "/api/pile", "/api/result?name=" + name, "/api/thumb?name=" + name, "/"):
             self.assertEqual(call("GET", path)[0], 200, path)
@@ -136,7 +130,6 @@ class NoPrivateTraceTest(bench.BenchCase):
 
     def test_a_thumbnail_cut_while_sent_writes_only_the_neutral_line(self):
         name = wait_job(generate("visible")["id"])["name"]
-        bench.wait_idle()
         real = bench.launch.H._send
 
         def cut_on_success(handler, code, *a, **kw):       # l'appareil a fermé la page pendant l'envoi
@@ -177,7 +170,6 @@ class NoPrivateTraceTest(bench.BenchCase):
 
     def test_sorting_and_deletion_write_nothing(self):
         kept, thrown = (wait_job(generate(p)["id"])["name"] for p in ("visible", "jetée"))
-        bench.wait_idle()
         bench.LOG.clear()
         self.assertEqual(call("POST", "/api/keep", {"name": kept})[0], 200)
         self.assertEqual(call("POST", "/api/discard", {"name": thrown})[0], 200)

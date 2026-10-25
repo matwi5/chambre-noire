@@ -62,7 +62,6 @@ class PreparationFailureTest(bench.BenchCase):
                                                              ref_images=["data:image/png;base64,!!!"]), private=session)
         self.assertEqual(code, 202, reply)
         self.assertEqual(wait_job(reply["id"], private=session)["status"], "failed")
-        bench.wait_idle()
         self.assertEqual(bench.files("jobs", "*"), [])
         self.assertFalse(any("make it blue" in line for line in bench.LOG))
         self.assertEqual(wait_job(generate("next one")["id"])["status"], "done")
@@ -190,7 +189,6 @@ class RankWhileFinishingTest(bench.BenchCase):
             second = generate("second")["id"]
             bench.release("rang")
             wait_job(second)
-            bench.wait_idle()
         self.assertTrue(seen, "seconde génération absente de la file pendant le rangement de la première")
         self.assertEqual((seen[0]["status"], seen[0]["position"]), ("queued", 1))   # jamais « 0e en attente »
 

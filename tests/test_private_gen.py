@@ -42,7 +42,6 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
         done = self.wait_job(job["id"])
         self.assertEqual(done["status"], "done")
         self.assertIsNone(done["path"])
-        bench.wait_idle()
         [item] = self.pile()
         code, png = call("GET", f"/api/private/image?id={item['id']}", private=self.session)
         self.assertEqual((code, png[:4]), (200, b"\x89PNG"))
@@ -68,7 +67,6 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
         job = self.generate(mode="edit", ref_images=[bench.data_url(bench.png_bytes(fmt="WEBP"))])
         done = self.wait_job(job["id"])
         self.assertEqual(done["status"], "done", done.get("error"))
-        bench.wait_idle()
         [item] = self.pile()
         code, inp = call("GET", f"/api/private/input?id={item['id']}&file=ref_1.png", private=self.session)
         self.assertEqual((code, inp[:8]), (200, b"\x89PNG\r\n\x1a\n"))
@@ -137,7 +135,6 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
     def test_failed_private_generation_leaves_nothing(self):
         job = self.generate("FAIL zq9private")
         self.assertEqual(self.wait_job(job["id"])["status"], "failed")
-        bench.wait_idle()
         self.assertEqual(files("jobs", "*"), [])
         self.assertEqual(self.pile(), [])
         self.assertFalse([line for line in bench.LOG if "zq9private" in line])

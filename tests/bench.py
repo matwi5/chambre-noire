@@ -293,14 +293,34 @@ def job(jid, private=None):
     return reply
 
 
-def wait_job(jid, until=("done", "failed", "cancelled"), timeout=30, check=None, private=None):
+FINAL = ("done", "failed", "cancelled")
+
+
+def settled(jid):
+    """Vrai quand le thread de calcul en a fini avec la génération jid : elle n'est plus en cours (worker() rend
+    S.current en dernier : fichiers rangés, ligne du journal écrite, notification décidée) et, annulée ou privée,
+    son dossier de travail est supprimé. Une génération annulée encore en file (derrière une autre) compte comme
+    finie : worker() ne la jettera qu'à son tour."""
+    j = S.jobs.get(jid)
+    if j is None or any(p is j for p in S.pending):
+        return True
+    if S.current == jid:
+        return False
+    return not ((j.get("status") == "cancelled" or j.get("private")) and os.path.exists(j["dir"]))
+
+
+def wait_job(jid, until=FINAL, timeout=30, check=None, private=None, settle=True):
     """Attend qu'une génération atteigne un des statuts until (et que check(job) soit vrai) ; renvoie la génération.
-    private : session de l'espace privé, pour suivre une génération privée. Échoue tout de suite, avec le code et la
-    réponse, si le suivi répond autre chose que 200 (génération inconnue, refus) : attendre n'y changerait rien."""
+    Pour un statut final, attend aussi que le thread de calcul en ait fini avec elle (settled : « done » est posé avant
+    la ligne du journal, « cancelled » avant l'arrêt du moteur), sauf settle=False. private : session de l'espace
+    privé, pour suivre une génération privée. Échoue tout de suite, avec le code et la réponse, si le suivi répond
+    autre chose que 200 (génération inconnue, refus) : attendre n'y changerait rien."""
     end = time.time() + timeout
     while time.time() < end:
         j = job(jid, private)
         if j.get("status") in until and (check is None or check(j)):
+            if settle and j.get("status") in FINAL:
+                wait_until(lambda: settled(jid), max(end - time.time(), 1), f"génération {jid} rangée par worker()")
             return j
         time.sleep(0.05)
     raise AssertionError(f"génération {jid} : toujours {j.get('status')} après {timeout} s")
