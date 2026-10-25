@@ -1028,7 +1028,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     ├── bench.py          banc de test du serveur, sans GPU : serveur sur un port libre, dossier temporaire
     ├── fake_sdcli.py     faux moteur du banc
     ├── check.py          tous les contrôles en une commande (compilation, JavaScript, banc, interface)
-    ├── rewrap.py         recoupe les lignes trop longues d'un fichier Markdown
+    ├── rewrap.py         recoupe les lignes trop longues (Markdown, commentaires, docstrings)
     ├── rules.py          règles mécaniques de CODING_STANDARDS.md et index de la carte du code (pour check.py)
     ├── test_*.py         tests du banc
     └── ui/               tests de l'interface dans Chrome sans écran (pilote driver.mjs, tests *.test.mjs)
@@ -1071,8 +1071,12 @@ l'identique (mêmes fichiers, mêmes options), il dit « déjà vert sur cet ét
 relancer). Le banc et chaque fichier d'interface affichent leur durée. `python3 tests/check.py --lines` ne vérifie que
 la longueur des lignes ajoutées, en moins d'une seconde ; le hook avant commit du dépôt (`.githooks/pre-commit`,
 activé par `python3 tests/check.py --link-venv`) le lance sur ce qui va être enregistré et refuse le commit fautif.
-`python3 tests/rewrap.py <fichier>.md` recoupe les lignes trop longues ajoutées à un fichier Markdown (toutes avec
-`--all`) sans toucher aux titres, listes, tableaux, blocs de code ni lignes vides.
+`python3 tests/check.py --lines --fix` recoupe les seules lignes fautives quand c'est sans risque (Markdown,
+commentaire seul sur sa ligne, docstring Python), en gardant retrait, puces et citations, sans remettre en forme le
+reste du paragraphe, et nomme celles qui restent à recouper à la main ; `python3 tests/rewrap.py <fichier>.md` fait
+de même pour un fichier Markdown (toutes ses lignes trop longues avec `--all`). Dans Claude Code, le hook du dépôt
+(`.claude/settings.json`) lance `check.py --hook` après chaque écriture d'un fichier (Edit, Write) : il juge ce seul
+fichier et montre ses lignes trop longues tout de suite.
 
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps que
 le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier, et `--name <motif>` pour les seuls tests dont le

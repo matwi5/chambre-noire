@@ -3,7 +3,7 @@ git, est contrôlé comme un fichier suivi ; une adresse donnée à la main à u
 trop longue est refusée par --lines, par le hook avant commit et par le contrôle complet, qui s'arrête alors avant le
 banc ; --link-venv relie les notes du dossier principal dans un worktree ; les fichiers d'interface tournent sur
 plusieurs Chrome à la fois ; l'avis « zone sensible » ne regarde que le travail de la branche en cours."""
-import argparse, contextlib, io, os, shutil, subprocess, sys, tempfile, threading, unittest
+import contextlib, io, json, os, shutil, subprocess, sys, tempfile, threading, unittest
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -59,7 +59,7 @@ class LinesTest(RepoCase):
     qui s'arrête avant le banc et la nomme dans sa dernière ligne."""
     def install_check(self):
         """check.py et le hook dans le dépôt temporaire, dans la base ; hook activé comme par --link-venv."""
-        for rel in ("tests/check.py", "tests/rules.py", ".githooks/pre-commit"):
+        for rel in ("tests/check.py", "tests/rules.py", "tests/rewrap.py", ".githooks/pre-commit"):
             os.makedirs(os.path.dirname(os.path.join(self.root, rel)), exist_ok=True)
             shutil.copy2(os.path.join(HERE, "..", rel), os.path.join(self.root, rel))
         sh(self.root, "git", "add", "tests", ".githooks")
@@ -83,6 +83,61 @@ class LinesTest(RepoCase):
         self.assertIn("a.py:2 (121 caractères)", r.stdout)
         self.write("a.py", "x = 1\n" + LONG[:-1] + "\n")   # 120 : permise
         self.assertEqual(self.run_check("--lines").returncode, 0)
+
+    def test_fix_recuts_only_the_long_added_lines(self):
+        words = " ".join(f"mot{i}" for i in range(30))       # ≈ 170 caractères
+        base_md = ["# Notes", "", "Ancienne " + words, "suite ancienne", ""]
+        self.write("notes.md", "\n".join(base_md))
+        self.write("a.py", "\n".join(["def f():", '    """Court."""', "    return 1", ""]))
+        sh(self.root, "git", "add", "notes.md", "a.py")
+        self.install_check()                                    # notes.md et a.py dans la base
+        md = base_md[:4] + ["", "- puce " + words, "  suite de la puce", "", "> citation " + words, "",
+                            "Paragraphe court.", "Ligne " + words, "dernière ligne du paragraphe", ""]
+        self.write("notes.md", "\n".join(md))
+        py = ["def f():", '    """Court.', "", "    Docstring " + words, '    """',
+              "    # commentaire " + words, "    return 1  # " + words, ""]
+        self.write("a.py", "\n".join(py))
+        r = self.run_check("--lines", "--fix")
+        self.assertEqual(r.returncode, 1, r.stdout)          # la ligne de code reste : signalée
+        self.assertIn("a.py:", r.stdout)
+        self.assertIn("à recouper à la main", r.stdout)
+        with open(os.path.join(self.root, "notes.md"), encoding="utf-8") as f:
+            new_md = f.read().split("\n")
+        self.assertEqual(new_md[:4], base_md[:4], "ligne de la base laissée telle quelle")
+        words_of = lambda ls: [w for w in " ".join(ls).split() if w not in (">", "#")]   # marques des suites ôtées
+        self.assertEqual(words_of(new_md), words_of(md), "mêmes mots, même ordre")
+        added = new_md[4:]
+        self.assertTrue(len(added) > 10 and all(len(l) <= 120 for l in added), new_md)
+        bullet = new_md[new_md.index(next(l for l in new_md if l.startswith("- puce"))):]
+        self.assertTrue(bullet[1].startswith("  mot") or bullet[1].startswith("  suite"), bullet)
+        quote = [l for l in new_md if "citation" in l or (l.startswith("> ") and "mot" in l)]
+        self.assertTrue(len(quote) > 1 and all(l.startswith("> ") for l in quote), quote)
+        self.assertIn("Paragraphe court.", new_md, "le reste du paragraphe n'est pas recoupé")
+        with open(os.path.join(self.root, "a.py"), encoding="utf-8") as f:
+            new_py = f.read().split("\n")
+        self.assertEqual(words_of(new_py), words_of(py))
+        comment = [l for l in new_py if l.lstrip().startswith("#")]
+        self.assertTrue(len(comment) > 1 and all(l.startswith("    # ") for l in comment), comment)
+        doc = new_py[new_py.index(next(l for l in new_py if "Docstring" in l)) + 1]
+        self.assertTrue(doc.startswith("    mot"), doc)
+        self.assertIn("    return 1  # " + words, new_py, "ligne de code : laissée")
+        compile("\n".join(new_py), "a.py", "exec")
+
+    def test_the_editor_hook_judges_the_edited_file_only(self):
+        self.install_check()
+        self.write("a.py", "x = 1\n" + LONG + "\n")
+        self.write("b.md", "Court.\n")
+        hook = lambda path: subprocess.run([sys.executable, os.path.join(self.root, "tests", "check.py"), "--hook"],
+                                           input=json.dumps({"tool_name": "Edit", "tool_input": {"file_path": path}}),
+                                           capture_output=True, text=True, cwd=self.tmp.name)
+        r = hook(os.path.join(self.root, "a.py"))
+        self.assertEqual(r.returncode, 2, r.stderr)           # code 2 : Claude Code montre stderr
+        self.assertIn("a.py:2 (121 caractères)", r.stderr)
+        self.assertIn("--lines --fix", r.stderr)
+        r = hook(os.path.join(self.root, "b.md"))             # autre fichier, sans faute : rien
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+        r = hook(os.path.join(self.tmp.name, "hors-du-depot.py"))
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
 
     def test_the_hook_refuses_a_commit_that_adds_a_long_line(self):
         self.install_check()

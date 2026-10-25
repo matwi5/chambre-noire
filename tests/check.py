@@ -325,17 +325,14 @@ def file_lines(f, cached=False):
         return None
 
 
-def check_line_length(base, cached=False):
+def long_lines(base, cached=False, paths=LINE_FILES):
     """Lignes ajoutées depuis base de plus de LINE_MAX caractères (pas octets), dans les .py, .md, .mjs et .js suivis
-    (tools/ui/index.html n'en est pas) ; hors tableaux Markdown (ligne qui commence par |) et blocs ``` d'un .md.
-    cached : lignes de l'index (hook avant commit). Liste des fautes (fichier:ligne)."""
-    if not base:
-        print(f"Lignes : avis : base introuvable (git merge-base HEAD origin/main), {LINE_MAX} caractères non vérifiés")
-        return []
-    bad = []
-    for f, numbers in sorted(added_lines(base, *LINE_FILES, cached=cached).items()):
+    (tools/ui/index.html n'en est pas ; paths : seuls ces chemins) ; hors tableaux Markdown (ligne qui commence par |)
+    et blocs ``` d'un .md. cached : lignes de l'index (hook avant commit). [(fichier, ligne, longueur)]."""
+    found = []
+    for f, numbers in sorted(added_lines(base, *paths, cached=cached).items()):
         lines = file_lines(f, cached)
-        if lines is None:
+        if lines is None or not f.endswith(tuple(p[1:] for p in LINE_FILES)):
             continue
         fenced = False
         for k, text in enumerate(lines, 1):
@@ -344,12 +341,81 @@ def check_line_length(base, cached=False):
                 fenced = not fenced
                 continue
             if k in numbers and not (md and (fenced or text.lstrip().startswith("|"))) and len(text) > LINE_MAX:
-                print(f"  {f}:{k} ({len(text)} caractères)")
-                bad.append(f"{f}:{k}")
+                found.append((f, k, len(text)))
+    return found
+
+
+def check_line_length(base, cached=False):
+    """Lignes trop longues (long_lines), affichées : liste des fautes (fichier:ligne)."""
+    if not base:
+        print(f"Lignes : avis : base introuvable (git merge-base HEAD origin/main), {LINE_MAX} caractères non vérifiés")
+        return []
+    bad = []
+    for f, k, n in long_lines(base, cached):
+        print(f"  {f}:{k} ({n} caractères)")
+        bad.append(f"{f}:{k}")
     print(f"Lignes : {len(bad)} ligne(s) ajoutée(s) de plus de {LINE_MAX} caractères" + (" : ÉCHEC" if bad else ""))
-    if any(".md:" in b for b in bad):
-        print("  Markdown : python3 tests/rewrap.py <fichier> recoupe ces lignes sans toucher au reste")
+    if bad:
+        print("  python3 tests/check.py --lines --fix recoupe celles des Markdown, des commentaires et des docstrings")
     return bad
+
+
+def fix_lines(base):
+    """--lines --fix : recoupe les seules lignes trop longues ajoutées (long_lines), sans toucher au reste du
+    paragraphe : Markdown par tests/rewrap.py (retrait, puces et citations gardés), commentaire seul sur sa ligne et
+    docstring d'un .py, .mjs ou .js (rewrap.rewrap_code) ; puis le contrôle des lignes, qui nomme celles laissées
+    (code, chaînes : à recouper à la main). Code de sortie du contrôle."""
+    import rewrap                                     # ici : rewrap importe check
+    if not base:
+        return 1 if check_line_length(base) else 0
+    by_file = {}
+    for f, k, _ in long_lines(base):
+        by_file.setdefault(f, set()).add(k)
+    for f, numbers in sorted(by_file.items()):
+        path = os.path.join(ROOT, f)
+        with open(path, encoding="utf-8", newline="") as fh:
+            text = fh.read()
+        if f.endswith(".md"):
+            new, cuts, left = rewrap.rewrap(text, numbers)
+        else:
+            new, cuts, left = rewrap.rewrap_code(f, text, numbers)
+        if new != text:
+            with open(path, "w", encoding="utf-8", newline="") as fh:
+                fh.write(new)
+        print(f"{f} : {cuts} ligne(s) recoupée(s)" + (f", {len(left)} à recouper à la main" if left else ""))
+    return 1 if check_line_length(base) else 0
+
+
+def hook_lines(stdin):
+    """--hook (PostToolUse de Claude Code sur Edit et Write, .claude/settings.json) : juge le seul fichier écrit
+    (tool_input.file_path du JSON reçu), dans le dépôt qui le contient (un worktree compris) ; rien s'il est hors d'un
+    dépôt de ce projet ou n'est pas un fichier contrôlé. Fautes sur stderr et code 2 (que Claude Code montre), sinon
+    0 sans rien écrire."""
+    global ROOT
+    try:
+        path = json.loads(stdin or "{}").get("tool_input", {}).get("file_path") or ""
+    except (ValueError, AttributeError):
+        return 0
+    folder = os.path.dirname(os.path.abspath(path)) if path else ""
+    if not os.path.isdir(folder):
+        return 0
+    r = subprocess.run(["git", "-C", folder, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    root = r.stdout.strip()
+    if r.returncode or not os.path.isfile(os.path.join(root, "tests", "check.py")):
+        return 0
+    ROOT = root
+    rel = os.path.relpath(os.path.realpath(path), os.path.realpath(root)).replace(os.sep, "/")
+    base = merge_base()
+    if rel.startswith("..") or not base:
+        return 0
+    found = long_lines(base, paths=(rel,))
+    if not found:
+        return 0
+    print(f"Lignes de plus de {LINE_MAX} caractères ajoutées :", file=sys.stderr)
+    for f, k, n in found:
+        print(f"  {f}:{k} ({n} caractères)", file=sys.stderr)
+    print("python3 tests/check.py --lines --fix les recoupe (Markdown, commentaires, docstrings)", file=sys.stderr)
+    return 2
 
 
 def read(f):
@@ -734,6 +800,10 @@ def parse_args(argv=None):
     ap.add_argument("--lines", action="store_true",
                     help=f"seulement la longueur des lignes ajoutées depuis la base ({LINE_MAX} caractères)")
     ap.add_argument("--cached", action="store_true", help="avec --lines : juger l'index (hook avant commit)")
+    ap.add_argument("--fix", action="store_true", help="avec --lines : recouper les lignes trop longues qui peuvent "
+                    "l'être sans risque (Markdown, commentaires, docstrings), puis vérifier")
+    ap.add_argument("--hook", action="store_true", help="hook PostToolUse de Claude Code : juge le fichier écrit "
+                    "(JSON sur l'entrée), fautes sur stderr, code 2")
     ap.add_argument("--link-venv", action="store_true",
                     help="worktree : liens vers venv et les notes du dossier principal ; hook avant commit")
     ap.add_argument("--map", nargs="?", const="", metavar="NOM",
@@ -766,7 +836,11 @@ def main(argv=None):
         return print_uses(args.uses)
     if args.show:
         return print_body(args.show)
-    if args.lines:                                    # bibliothèque standard seulement : pas de relance dans le venv
+    if args.hook:                                     # bibliothèque standard seulement : pas de relance dans le venv
+        return hook_lines(sys.stdin.read())
+    if args.lines and args.fix:
+        return fix_lines(merge_base())
+    if args.lines:
         return 1 if check_line_length(merge_base(), cached=args.cached) else 0
     reexec_in_venv()
     path, screen = journal_path(), sys.stdout
