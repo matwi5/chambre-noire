@@ -1,8 +1,8 @@
-// Saisie, dans la vue du téléphone : page Créer unique (un champ de texte, une liste d'images d'entrée : sans image la
-// demande part en texte → image, avec des images en édition, dessin actif en masque ou annotation ; exemple du champ
+// Saisie, dans la vue du téléphone : saisie unique du Labo (un champ de texte, une liste d'images d'entrée : sans image
+// la demande part en texte → image, avec des images en édition, dessin actif en masque ou annotation ; exemple du champ
 // selon la saisie ; Campagne proposée à partir de 2 images), bouton Dessiner (selon le nombre d'images, ajout refusé
 // pendant le dessin, tracé gardé en désactivant et effacé avec son image), geste « Dessiner », collage d'une image,
-// images choisies d'un coup, champs vidés après « Générer », saisie propre à chaque espace (public, privé), variantes
+// images choisies d'un coup, champs vidés après « Révéler », saisie propre à chaque espace (public, privé), variantes
 // avec ou sans images et en dessin, hors campagne.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/saisie.test.mjs
 import { test, before, after } from 'node:test';
@@ -42,15 +42,16 @@ after(async () => {
   if (dir) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-// page neuve (brouillons effacés) sur un onglet
-async function fresh(pane = 'create') {
+// page neuve (brouillons effacés) sur un onglet ; pile vidée : le champ de création est déplié
+async function fresh(pane = 'labo') {
   await bench.idle();                              // rien en file : la page rechargée ne reprend rien
   await page.goto(bench.url + '/');
   await page.eval(`localStorage.clear()`);
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
-  if (pane !== 'create') await page.click(`#tabbar [data-pane="${pane}"]`);
-  await page.waitFor(`$('pane-${pane}').classList.contains('active')`);
+  await page.waitFor(`$('lamp').classList.contains('ok') && pileRead`, { what: 'moteur prêt affiché, pile lue' });
+  await page.keepPile();
+  await page.waitFor(`!$('composer').classList.contains('folded')`, { what: 'champ déplié' });
+  await page.tab(pane);
 }
 
 // une photo de ce gris (gris moyen par défaut) ; un autre gris : une adresse data: que la page n'a jamais affichée
@@ -64,7 +65,7 @@ function photos(n) {
   return Array.from({ length: n }, (_, i) => photo(`photo-${String(i + 1).padStart(2, '0')}.png`));
 }
 
-test('Créer : trois photos choisies d\'un coup sont toutes ajoutées, dans l\'ordre', async () => {
+test('Saisie : trois photos choisies d\'un coup sont toutes ajoutées, dans l\'ordre', async () => {
   await fresh();
   await page.setFiles('#inFiles', photos(3));
   await page.waitFor(`$('inThumbs').children.length === 3`, { what: 'trois vignettes', timeout: 5000 });
@@ -72,52 +73,50 @@ test('Créer : trois photos choisies d\'un coup sont toutes ajoutées, dans l\'o
   page.assertNoErrors();
 });
 
-test('Créer : sur douze photos choisies, dix sont ajoutées et le surplus est annoncé', async () => {
+test('Saisie : sur douze photos choisies, dix sont ajoutées et le surplus est annoncé', async () => {
   await fresh();
   const files = photos(12);
   await page.setFiles('#inFiles', files);
-  await page.waitFor(`$('toast').classList.contains('on') && $('toast').textContent.includes('2 non ajoutées')`,
+  await page.waitFor(`$('toastBox').classList.contains('on') && $('toastBox').textContent.includes('2 non ajoutées')`,
     { what: 'message du surplus', timeout: 5000 });
   assert.deepEqual(await page.eval(`inputImages.map(x => x.name)`), files.slice(0, 10).map(f => path.basename(f)));
   assert.equal(await page.eval(`$('inThumbs').children.length`), 10);
   page.assertNoErrors();
 });
 
-test('Créer : un fichier illisible est annoncé et n\'arrête pas les images suivantes', async () => {
+test('Saisie : un fichier illisible est annoncé et n\'arrête pas les images suivantes', async () => {
   await fresh();
   const bad = path.join(dir, 'abime.png');
   fs.writeFileSync(bad, 'pas une image');
   const [a, b] = photos(2);
   await page.setFiles('#inFiles', [a, bad, b]);
-  await page.waitFor(`$('toast').classList.contains('on') && $('toast').textContent.includes('illisible')`,
+  await page.waitFor(`$('toastBox').classList.contains('on') && $('toastBox').textContent.includes('illisible')`,
     { what: 'message du fichier illisible', timeout: 5000 });
   assert.deepEqual(await page.eval(`inputImages.map(x => x.name)`), ['photo-01.png', 'photo-02.png']);
   assert.equal(await page.eval(`$('inThumbs').children.length`), 2, 'chaque image ajoutée est visible');
   page.assertNoErrors();
 });
 
-test('« Éditer » depuis la galerie : l\'image rejoint les images d\'entrée, page Créer, 10 au plus', async () => {
+test('« Éditer » depuis la pile : l\'image rejoint les images d\'entrée, Labo, 10 au plus', async () => {
   await fresh();
   await page.typePrompt('un phare à éditer');
   await generate();
   await page.waitFor(`pageJobs.at(-1).result`, { what: 'image finie', timeout: 30000 });
-  await page.click('#tabbar [data-pane="hist"]');
-  await page.waitFor(`histItems.length > 0`, { what: 'galerie' });
-  await page.eval(`openViewer(0, histItems); viewerAction('edit')`);
-  await page.waitFor(`mode === 'create' && inputImages.length === 1 && $('inThumbs').children.length === 1`,
-    { what: 'image ajoutée, page Créer' });
+  await page.waitFor(`pileView().length > 0`, { what: 'image dans la pile' });
+  await page.eval(`openViewer(0, pileView()); viewerAction('edit')`);
+  await page.waitFor(`mode === 'labo' && inputImages.length === 1 && $('inThumbs').children.length === 1`,
+    { what: 'image ajoutée, Labo' });
   assert.equal(await page.eval(`$('inThumbs').querySelector('span').textContent`), '1', 'numérotée');
   await page.setFiles('#inFiles', photos(9));
   await page.waitFor(`inputImages.length === 10`, { what: 'dix images' });
-  await page.click('#tabbar [data-pane="hist"]');
-  await page.eval(`openViewer(0, histItems); viewerAction('edit')`);
-  await page.waitFor(`$('toast').textContent === '10 images d\\'entrée au maximum'`, { what: 'plafond annoncé' });
+  await page.eval(`openViewer(0, pileView()); viewerAction('edit')`);
+  await page.waitFor(`$('toastBox').textContent === '10 images d\\'entrée au maximum'`, { what: 'plafond annoncé' });
   assert.equal(await page.eval(`inputImages.length`), 10);
   page.assertNoErrors();
 });
 
 const draft = () => page.eval(`localStorage.getItem('qwen-prompt')`);
-const settings = () => page.eval(`JSON.stringify({ opt, incogOn, campaignOn, preview: $('previewChk').checked })`);
+const settings = () => page.eval(`JSON.stringify({ opt, campaignOn, preview: $('previewChk').checked })`);
 
 // un trait de pinceau dans le quart haut gauche de l'image du dessin ; souris : événements pointeur réels
 async function paint() {
@@ -129,9 +128,9 @@ async function paint() {
   await page.waitFor(`paintedPixels() > 0`, { what: 'zone peinte' });
 }
 
-// « Générer » ; refuse : 'error' (le Mac répond par une erreur) ou 'unreachable' (Mac injoignable), simulés au niveau
-// du réseau de Chrome. Demande acceptée : la page passe à En cours, puis le test revient à l'onglet de saisie ;
-// refusée : elle reste sur l'onglet
+// « Révéler » ; refuse : 'error' (le Mac répond par une erreur) ou 'unreachable' (Mac injoignable), simulés au niveau
+// du réseau de Chrome. Demande acceptée : suivie par la page, toujours sur le Labo ; refusée : elle reste sur
+// l'onglet
 async function generate({ refuse = null } = {}) {
   refusal = refuse;
   if (refuse) await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/generate', requestStage: 'Request' }] });
@@ -139,13 +138,13 @@ async function generate({ refuse = null } = {}) {
   await page.click('#go');
   if (refuse) {
     const shown = refuse === 'unreachable' ? 'Serveur injoignable' : 'Erreur : moteur non prêt';
-    await page.waitFor(`$('toast').textContent.startsWith(${JSON.stringify(shown)})`, { what: 'refus affiché' });
+    await page.waitFor(`$('toastBox').textContent.startsWith(${JSON.stringify(shown)})`, { what: 'refus affiché' });
     await page.send('Fetch.disable');
     assert.equal(await page.eval(`mode`), tab, 'demande refusée : la page reste sur l\'onglet');
+    assert.equal(await page.eval(`pageJobs.length`), jobsBefore, 'demande refusée : aucune génération suivie');
   } else {
-    await page.waitFor(`pageJobs.length > ${jobsBefore} && mode === 'run'`,
-      { what: 'génération suivie, page En cours' });
-    await page.click(`#tabbar [data-pane="${tab}"]`);
+    await page.waitFor(`pageJobs.length > ${jobsBefore} && mode === 'labo'`,
+      { what: 'génération suivie, Labo' });
   }
 }
 
@@ -161,8 +160,8 @@ async function drawOne() {
   await page.click('#drawBtn');
   await page.waitFor(`drawOn && ${SHOWN}`, { what: 'dessin actif' });
 }
-const toastSays = text => page.waitFor(`$('toast').classList.contains('on')
-  && $('toast').textContent === ${JSON.stringify(text)}`, { what: `message « ${text} »` });
+const toastSays = text => page.waitFor(`$('toastBox').classList.contains('on')
+  && $('toastBox').textContent === ${JSON.stringify(text)}`, { what: `message « ${text} »` });
 const REFUSED = 'Désactivez Dessiner pour ajouter d\'autres images';
 
 test('Dessiner : sans image, choix d\'une image puis dessin ; à plusieurs images, grisé et expliqué', async () => {
@@ -194,7 +193,7 @@ test('Dessiner : ajout refusé pendant le dessin ; tracé gardé en désactivant
   await paint();
   await page.setFiles('#inFiles', photos(1));      // choix de fichiers, puis appui sur la tuile d'ajout
   await toastSays(REFUSED);
-  await page.eval(`$('toast').classList.remove('on')`);
+  await page.eval(`$('toastBox').classList.remove('on')`);
   await page.click('#inDrop');
   await toastSays(REFUSED);
   assert.equal(await page.eval(`inputImages.length`), 1);
@@ -260,25 +259,23 @@ test('geste « Dessiner » : l\'image seule, dessin actif ; confirmation s\'il y
   await page.typePrompt('un phare à dessiner');
   await generate();
   await page.waitFor(`pageJobs.at(-1).result`, { what: 'image finie', timeout: 30000 });
-  await page.click('#tabbar [data-pane="hist"]');
-  await page.waitFor(`histItems.length > 0`, { what: 'galerie' });
-  const name = await page.eval(`histItems[0].name`);
-  await page.eval(`openViewer(0, histItems); void viewerAction('mask')`);   // saisie sans image : pas de confirmation
-  await page.waitFor(`mode === 'create' && drawOn && inputImages.length === 1`, { what: 'dessin sur l\'image' });
+  await page.waitFor(`pileView().length > 0`, { what: 'image dans la pile' });
+  const name = await page.eval(`pileView()[0].name`);
+  await page.eval(`openViewer(0, pileView()); void viewerAction('mask')`);   // saisie sans image : pas de confirmation
+  await page.waitFor(`mode === 'labo' && drawOn && inputImages.length === 1`, { what: 'dessin sur l\'image' });
   assert.equal(await page.eval(`inputImages[0].name`), name);
   await page.click('#drawBtn');
   await page.setFiles('#inFiles', photos(1));
   await page.waitFor(`inputImages.length === 2`, { what: 'deux images' });
-  await page.click('#tabbar [data-pane="hist"]');
-  await page.eval(`openViewer(0, histItems); void viewerAction('mask')`);
+  await page.eval(`openViewer(0, pileView()); void viewerAction('mask')`);
   await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation' });
   assert.equal(await page.eval(`$('askText').textContent`), 'Remplacer les 2 images de la saisie par celle-ci ?');
   await page.eval(`answer(false)`);                 // refusée : rien ne change
   assert.equal(await page.eval(`inputImages.length`), 2);
-  await page.eval(`openViewer(0, histItems); void viewerAction('mask')`);
+  await page.eval(`openViewer(0, pileView()); void viewerAction('mask')`);
   await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation' });
   await page.eval(`answer(true)`);
-  await page.waitFor(`mode === 'create' && drawOn && inputImages.length === 1
+  await page.waitFor(`mode === 'labo' && drawOn && inputImages.length === 1
     && inputImages[0].name === ${JSON.stringify(name)}`,
     { what: 'images remplacées, dessin actif' });
   assert.equal(await page.eval(`paintedPixels()`), 0, 'tracé vierge');
@@ -295,11 +292,11 @@ test('geste « Dessiner » : l\'image seule, dessin actif ; confirmation s\'il y
   page.assertNoErrors();
 });
 
-test('Créer : sans image d\'entrée la demande part du texte, avec des images c\'est une édition', async () => {
+test('Saisie : sans image d\'entrée la demande part du texte, avec des images c\'est une édition', async () => {
   await fresh();
-  assert.deepEqual(await tabs(), ['run', 'create', 'hist'], 'plus d\'onglet Éditer ni Dessiner');
-  assert.equal(await page.eval(`$('pane-create').classList.contains('active')
-    && !!$('inDrop').getClientRects().length`), true, 'ajout d\'images offert sur Créer');
+  assert.deepEqual(await tabs(), ['labo', 'tirages'], 'plus d\'onglet Éditer ni Dessiner');
+  assert.equal(await page.eval(`$('pane-labo').classList.contains('active')
+    && !!$('inDrop').getClientRects().length`), true, 'ajout d\'images offert sur le Labo');
   assert.match(await page.eval(`$('prompt').placeholder`), /^Décrivez l'image/);
   await page.typePrompt('un phare au crépuscule');
   await generate();
@@ -315,7 +312,7 @@ test('Créer : sans image d\'entrée la demande part du texte, avec des images c
   page.assertNoErrors();
 });
 
-test('Créer : texte et brouillon vidés quand la demande est acceptée, Réglages inchangés', async () => {
+test('Saisie : texte et brouillon vidés quand la demande est acceptée, Réglages inchangés', async () => {
   await fresh();
   await page.typePrompt('un phare au crépuscule');
   assert.equal(await draft(), 'un phare au crépuscule');
@@ -373,16 +370,17 @@ test('Campagne : proposée dès 2 images, ignorée sinon ; photos vidées, inter
   assert.equal(await shown(), true, 'à partir de 2 images');
   await page.click('#campChk');
   await page.waitFor(`campaignOn`, { what: 'campagne activée' });
-  assert.match(await page.eval(`$('pills').textContent`), /Campagne · 2 photos/);
+  assert.match(await page.eval(`$('setGrid').textContent`), /Campagne2 photos/);
   // une image retirée : l'interrupteur disparaît, son réglage reste mais la demande part en édition simple
   await page.click('#inThumbs .thumb:last-child button');
   await page.waitFor(`inputImages.length === 1`, { what: 'image retirée' });
   assert.equal(await shown(), false);
-  assert.doesNotMatch(await page.eval(`$('pills').textContent`), /Campagne/);
+  assert.doesNotMatch(await page.eval(`$('setGrid').textContent`), /Campagne/);
   await page.typePrompt('voiture bleue');
   await generate();
   assert.deepEqual(await lastJob(), { mode: 'edit', lot: null });
   assert.equal(await page.eval(`campaignOn`), true, 'réglage gardé');
+  await page.click('#composerLine');               // replié après « Révéler »
   await page.setFiles('#inFiles', photos(2));
   await page.waitFor(`inputImages.length === 2`, { what: 'deux photos' });
   assert.equal(await page.eval(`$('campChk').checked && !!$('campSwitch').getClientRects().length`), true,
@@ -408,7 +406,8 @@ test('Variantes : proposées avec des images et en Dessiner hors campagne, la de
   await page.waitFor(`inputImages.length === 1`, { what: 'une image' });
   assert.equal(await countShown(), true, 'rangée des images avec une image d\'entrée');
   await pick(2);
-  // HOLD : chaque lot ne finit qu'une fois la page revenue sur Créer (fini sur En cours, il n'aurait pas de message)
+  // HOLD : chaque lot ne finit qu'une fois la page passée sur les Tirages (fini sur le Labo, il n'aurait pas de
+  // message)
   await page.typePrompt('HOLD=chapeau deux essais d\'un chapeau');
   await generate();
   assert.deepEqual(await lastJob(), { mode: 'edit', lot: { size: 2, campaign: false } });
@@ -420,10 +419,11 @@ test('Variantes : proposées avec des images et en Dessiner hors campagne, la de
   assert.equal(await countShown(), false, 'pas de variantes en campagne');
   await page.typePrompt('HOLD=voiture voiture bleue');
   await generate();
-  bench.release('chapeau');                        // les deux lots, une fois revenu sur Créer
+  await page.tab('tirages');
+  bench.release('chapeau');                        // les deux lots, une fois sur les Tirages
   bench.release('voiture');
   assert.deepEqual(await lastJob(), { mode: 'edit', lot: { size: 3, campaign: true } });
-  // fin de chaque lot, vue depuis Créer : un message par lot, une fois toutes ses images finies ; derrière les
+  // fin de chaque lot, vue depuis les Tirages : un message par lot, une fois toutes ses images finies ; derrière les
   // générations des tests précédents, toutes les pages d'interface et le banc tournant en même temps
   await page.waitFor(`pageJobs.length === 5 && pageJobs.every(p => p.result)`,
     { what: 'deux lots terminés', timeout: 60000 });
@@ -441,7 +441,7 @@ test('Variantes : proposées avec des images et en Dessiner hors campagne, la de
   page.assertNoErrors();
 });
 
-test('Créer : rien n\'est vidé quand le Mac refuse la demande ou est injoignable', async () => {
+test('Saisie : rien n\'est vidé quand le Mac refuse la demande ou est injoignable', async () => {
   await fresh();
   await page.setFiles('#inFiles', photos(2));
   await page.waitFor(`inputImages.length === 2`, { what: 'deux images' });
@@ -461,19 +461,15 @@ test('Créer : rien n\'est vidé quand le Mac refuse la demande ou est injoignab
 const CODE = 'code-du-banc-1';
 const post = (url, body = {}) => page.eval(`postJson(${JSON.stringify(url)}, ${JSON.stringify(body)}).then(r => r.status)`);
 // entrée dans l'espace privé (créé la première fois) ; la page le voit à son interrogation suivante de /api/status
-async function enterPrivate() {
-  const exists = await page.eval(`privState.exists`);
-  assert.equal(await post(exists ? '/api/private/unlock' : '/api/private/create', { code: CODE }), 200);
-  await page.eval(`refreshStatus()`);
-  await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
-}
-// fermeture de l'espace par le Mac (15 minutes sans requête privée) : la session est fermée sans passer par « Sortir »
+const enterPrivate = () => page.enterPrivate(CODE);
+// fermeture de l'espace par le Mac (15 minutes sans requête privée) : la session est fermée sans passer par « Sortir ».
+// Le Mac ne ferme qu'un espace au repos (page.privateIdle)
 async function closedByMac() {
+  await page.privateIdle();
   assert.equal(await post('/api/private/lock'), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`!inPrivate()`, { what: 'hors de l\'espace privé' });
 }
-const goTab = pane => page.click(`#tabbar [data-pane="${pane}"]`);
 const value = () => page.eval(`$('prompt').value`);
 // onglets marqués (supprimés) : une pastille dessinée sur le bouton (pseudo-élément ::after) ou une infobulle
 const marked = () => page.eval(`[...document.querySelectorAll('#tabbar button')]
@@ -503,6 +499,8 @@ test('espaces : la saisie privée disparaît à « Sortir », la saisie publique
 
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  // replié après le « Révéler » privé, le champ se déplie à la lecture de la pile publique, vide
+  await page.waitFor(`pileRead && !$('composer').classList.contains('folded')`, { what: 'champ public déplié' });
   assert.equal(await value(), 'chapeau public');
   assert.equal(await page.eval(`inputImages.length === 1 && drawOn && ${SHOWN} && paintedPixels() > 0`), true,
     'image, dessin et tracé publics');
@@ -625,10 +623,10 @@ test('espaces : fermée par le Mac, la saisie privée attend le retour dans la p
   page.assertNoErrors();
 });
 
-// messages affichés depuis l'appel (chaque texte posé dans #toast, même remplacé aussitôt par un autre)
+// messages affichés depuis l'appel (chaque texte posé dans #toastBox, même remplacé aussitôt par un autre)
 const watchToasts = () => page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
-  window.toastWatch = new MutationObserver(() => seenToasts.push($('toast').textContent));
-  toastWatch.observe($('toast'), { childList: true, characterData: true, subtree: true }); })()`);
+  window.toastWatch = new MutationObserver(() => seenToasts.push($('toastBox').textContent));
+  toastWatch.observe($('toastBox'), { childList: true, characterData: true, subtree: true }); })()`);
 const CLOSED = 'Espace privé fermé : retour dans l\'espace public';
 
 test('espaces : fermé sans « Sortir », le champ perd le curseur et un message dit le retour dans l\'espace public', async () => {
@@ -640,7 +638,7 @@ test('espaces : fermé sans « Sortir », le champ perd le curseur et un message
   await closedByMac();                             // 15 minutes sans requête privée
   assert.equal(await page.eval(`document.activeElement === $('prompt')`), false, 'le champ a perdu le curseur');
   assert.deepEqual(await page.eval(`seenToasts`), [CLOSED]);
-  assert.equal(await page.eval(`$('toast').classList.contains('on')`), true);
+  assert.equal(await page.eval(`$('toastBox').classList.contains('on')`), true);
 
   await enterPrivate();                            // espace supprimé depuis le Mac pendant qu'on tape
   await page.eval(`$('prompt').focus()`);
@@ -686,7 +684,7 @@ test('espaces : une demande privée acceptée après la fermeture par le Mac ne 
   page.assertNoErrors();
 });
 
-test('Créer : un texte tapé pendant l\'envoi reste quand la demande est acceptée', async () => {
+test('Saisie : un texte tapé pendant l\'envoi reste quand la demande est acceptée', async () => {
   await fresh();
   await page.typePrompt('premier texte');
   refusal = 'hold'; held = Promise.withResolvers();

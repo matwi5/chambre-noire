@@ -14,6 +14,7 @@ class QueueOrderTest(bench.BenchCase):
         ids = [generate(f"SLOW=0.05 image {k}", steps=8)["id"] for k in range(3)]
         self.assertEqual([bench.job(i)["queue_position"] for i in ids], [0, 1, 2])
         wait_job(ids[0])
+        wait_job(ids[1], until=("running",))          # la suivante prise par worker() (sinon [1, 2] un instant)
         self.assertEqual([bench.job(i)["queue_position"] for i in ids[1:]], [0, 1])
         done = [wait_job(i) for i in ids]
         self.assertEqual([j["status"] for j in done], ["done"] * 3)
@@ -129,19 +130,6 @@ class QueueListTest(bench.BenchCase):
         call("POST", f"/api/job/{a}/cancel")
         call("POST", f"/api/job/{b}/cancel")
 
-    def test_incognito_entry_has_neither_id_nor_prompt(self):
-        a = generate("SLOW=0.2 visible", steps=6)["id"]
-        b = generate("zq7marker secret", incognito=True)["id"]
-        q = queue()
-        self.assertEqual(q[1]["kind"], "incognito")
-        self.assertNotIn("id", q[1])
-        self.assertNotIn("prompt", q[1])
-        self.assertNotIn("mode", q[1])
-        self.assertNotIn(b, str(q))
-        self.assertNotIn("zq7marker", str(q))
-        wait_job(a)
-        wait_job(b)
-
     def test_finished_generations_leave_the_queue(self):
         wait_job(generate("quick")["id"])
         self.assertEqual(queue(), [])
@@ -164,11 +152,11 @@ class SpacesQueueTest(bench.BenchCase):
         return job
 
     def mixed_queue(self, first="zq9secret first"):
-        """Une génération normale qui tourne, puis, en attente : privée, incognito, privée, normale."""
+        """Une génération normale qui tourne, puis, en attente : privée, normale, privée, normale."""
         a = generate("SLOW=1 zq9public running", steps=20)["id"]
         wait_job(a, ("running",))
         p1 = self.private(first, mode="edit", ref_images=[bench.data_url(bench.png_bytes())])
-        i = generate("zq9incognito", incognito=True, page="pageInc1")["id"]
+        i = generate("zq9public second")["id"]
         p2 = self.private("zq9secret second")
         n = generate("zq9public waiting")["id"]
         return a, p1, i, p2, n
@@ -178,13 +166,13 @@ class SpacesQueueTest(bench.BenchCase):
         s = self.status()
         q = s["queue"]
         self.assertEqual([(e.get("id"), e["kind"], e["status"], e["position"]) for e in q],
-                         [(a, "normal", "running", 0), (None, "incognito", "queued", 1), (n, "normal", "queued", 2)])
+                         [(a, "normal", "running", 0), (i, "normal", "queued", 1), (n, "normal", "queued", 2)])
         self.assertNotIn(p1["id"], str(s))
         self.assertNotIn(p2["id"], str(s))
         self.assertNotIn("zq9secret", str(s))
         self.assertEqual((s["queued"], s["current_job"]), (2, a))
-        # travail caché devant : rien devant la génération en cours ; la première privée devant l'incognito, les deux
-        # devant la normale, comptées pour leur estimation vue depuis l'espace privé
+        # travail caché devant : rien devant la génération en cours ; la première privée devant la deuxième publique,
+        # les deux devant la dernière, comptées pour leur estimation vue depuis l'espace privé
         hidden = [e["estimate"] for e in self.status(private=True)["queue"]]
         self.assertEqual(q[0]["ahead"], 0)
         self.assertAlmostEqual(q[1]["ahead"], hidden[0], delta=0.2)
@@ -206,9 +194,9 @@ class SpacesQueueTest(bench.BenchCase):
         self.assertNotIn(a, str(q))
         self.assertNotIn(n, str(q))
         self.assertNotIn("zq9public", str(q))
-        self.assertNotIn("incognito", str(q))
         self.assertEqual((s["queued"], s["current_job"], s["last_job"]), (2, None, None))
-        # devant la première : ce qui reste de la génération publique en cours ; devant la seconde, en plus, l'incognito
+        # devant la première : ce qui reste de la génération publique en cours ; devant la seconde, en plus, la
+        # deuxième publique
         left = pub[0]["estimate"] - pub[0]["elapsed"]
         self.assertGreater(q[0]["ahead"], 0)
         self.assertAlmostEqual(q[0]["ahead"], left, delta=1.5)
@@ -223,7 +211,7 @@ class SpacesQueueTest(bench.BenchCase):
         self.assertEqual([(e["position"], e["ahead"]) for e in s["queue"]][0], (0, 0))
         pub = self.status()
         self.assertIsNone(pub["current_job"])
-        self.assertEqual([(e["kind"], e["position"]) for e in pub["queue"]], [("incognito", 1), ("normal", 2)])
+        self.assertEqual([(e["kind"], e["position"]) for e in pub["queue"]], [("normal", 1), ("normal", 2)])
         for j in (p1["id"], p2["id"]):
             call("POST", f"/api/job/{j}/cancel", private=self.session)
         bench.release("p1")
@@ -232,7 +220,7 @@ class SpacesQueueTest(bench.BenchCase):
         a = generate("HOLD zq9public running")["id"]
         wait_job(a, ("running",))
         p1 = self.private("zq9secret first")["id"]
-        i = generate("zq9incognito", incognito=True)["id"]
+        i = generate("zq9public second")["id"]
         p2 = self.private("zq9secret second")["id"]
         n = generate("zq9public waiting")["id"]
         for kw in ({}, {"remote": True}):            # hors de l'espace privé : inconnue
@@ -240,7 +228,7 @@ class SpacesQueueTest(bench.BenchCase):
         self.assertEqual(call("POST", f"/api/job/{n}/first", {})[0], 200)
         hidden = [e["estimate"] for e in self.status(private=True)["queue"]]
         pub = self.status()["queue"]
-        self.assertEqual([(e.get("id"), e["position"]) for e in pub], [(a, 0), (n, 1), (None, 2)])
+        self.assertEqual([(e["id"], e["position"]) for e in pub], [(a, 0), (n, 1), (i, 2)])
         self.assertEqual(pub[1]["ahead"], 0, "plus rien de caché devant la normale passée en tête")
         self.assertAlmostEqual(pub[2]["ahead"], hidden[0], delta=0.2)
         priv = self.status(private=True)["queue"]
@@ -248,7 +236,7 @@ class SpacesQueueTest(bench.BenchCase):
         self.assertAlmostEqual(priv[0]["ahead"], pub[1]["estimate"] + pub[0]["estimate"] - pub[0]["elapsed"], delta=1.5)
         self.assertEqual(call("POST", f"/api/job/{p2}/first", {}, private=self.session)[0], 200)
         self.assertEqual([e["id"] for e in self.status(private=True)["queue"]], [p2, p1])
-        self.assertEqual([e.get("id") for e in self.status()["queue"]], [a, n, None])
+        self.assertEqual([e["id"] for e in self.status()["queue"]], [a, n, i])
         bench.release()
         for j in (p1, p2):
             wait_job(j, private=self.session)

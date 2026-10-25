@@ -63,8 +63,10 @@ def start():
     launch.CONFIG, launch.CALIB = launch.P("tools", "config.json"), launch.P("tools", "calibration.json")
     launch.CONFIG_LOCAL = launch.P("tools", "config.local.json")
     launch.THUMBS, launch.INPUTS = launch.P("outputs", ".thumbs"), launch.P("outputs", ".inputs")
+    launch.PILE = launch.P("outputs", ".pile")
     launch.PUSH_KEY, launch.PUSH_SUBS = launch.P("tools", "push_vapid.pem"), launch.P("tools", "push_subscriptions.json")
     launch.ACCESS_FILE = launch.P("tools", "access_code.txt")
+    launch.ENTRY_TOKEN, launch.ENTRY_PAGE = launch.P("tools", "entry_token"), launch.P("tools", "entry.html")
     launch.PROMPTS_FILE = launch.P("tools", "saved_prompts.json")
     launch.PRIVATE = launch.P("private")
     launch.SCRYPT_N = 2 ** 10                       # dérivation du code privé rapide au banc (2**18 en vrai)
@@ -86,7 +88,7 @@ def start():
     install_fake_engine()
     launch.print = lambda *a, **kw: LOG.append(" ".join(str(x) for x in a))
     launch.H.log_message = lambda self, fmt, *a: None if launch.quiet_request(fmt % a) else LOG.append(fmt % a)
-    # code d'accès actif, comme avec --lan : le client local passe, un autre appareil doit présenter le cookie
+    # code d'accès, que main() pose toujours : tout appareil, le Mac compris, présente le cookie (call, cookie=True)
     S.access_code = ACCESS_CODE
     S.access_token = launch.access_token(ACCESS_CODE)
     _server = launch.Server(("127.0.0.1", 0), launch.H)
@@ -128,21 +130,28 @@ def release(name="hold"):
 def call(method, path, body=None, remote=False, cookie=True, headers=None, private=None, wifi=False):
     """Requête HTTP au serveur du banc : (code, réponse JSON ou octets). Trois origines : le Mac lui-même (par défaut) ;
     remote, un autre appareil par l'adresse HTTPS de Tailscale (relayée par « tailscale serve » depuis 127.0.0.1) ;
-    wifi, un autre appareil en http:// direct sur le Wi-Fi (adresse source qui n'est pas celle du Mac). Les deux
-    dernières portent le cookie d'accès si cookie est vrai ; private : valeur du cookie de session de l'espace privé.
+    wifi, un autre appareil en http:// direct sur le Wi-Fi (adresse source qui n'est pas celle du Mac). Toutes portent
+    le cookie d'accès si cookie est vrai, le Mac compris ; private : valeur du cookie de session de l'espace privé.
     Les POST portent Content-Type: application/json."""
     return call_full(method, path, body, remote, cookie, headers, private, wifi)[:2]
 
 
-def call_full(method, path, body=None, remote=False, cookie=True, headers=None, private=None, wifi=False):
-    """Comme call(), avec en plus les en-têtes de la réponse : (code, réponse, en-têtes)."""
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Une redirection est rendue telle quelle (code 3xx, Location), pas suivie."""
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def call_full(method, path, body=None, remote=False, cookie=True, headers=None, private=None, wifi=False, follow=True):
+    """Comme call(), avec en plus les en-têtes de la réponse : (code, réponse, en-têtes). follow=False : une redirection
+    est rendue telle quelle (303 et Location de /entrer), pas suivie."""
     h = {"Content-Type": "application/json"} if method == "POST" else {}
     cookies = []
     if remote:
         h["Host"], h["X-Forwarded-For"] = HTTPS_HOST, "192.0.2.10"
     if wifi:
         h["Host"] = f"{WIFI_HOST}:{S.ui_port}"
-    if (remote or wifi) and cookie:
+    if cookie:
         cookies.append(f"{launch.ACCESS_COOKIE}={S.access_token}")
     if private:
         cookies.append(f"{launch.PRIVATE_COOKIE}={private}")
@@ -154,7 +163,8 @@ def call_full(method, path, body=None, remote=False, cookie=True, headers=None, 
     # un appareil du Wi-Fi arrive d'une autre adresse que 127.0.0.1 : le serveur ne voit plus d'adresse locale
     with mock.patch.object(launch, "LOCAL_CLIENTS", ()) if wifi else contextlib.nullcontext():
         try:
-            with urllib.request.urlopen(req, timeout=30) as r:
+            opener = urllib.request.build_opener() if follow else urllib.request.build_opener(_NoRedirect)
+            with opener.open(req, timeout=30) as r:
                 code, raw, hdrs = r.status, r.read(), r.headers
         except urllib.error.HTTPError as e:
             code, raw, hdrs = e.code, e.read(), e.headers
@@ -263,7 +273,7 @@ def gen_body(prompt="a red car", mode="t2i", **kw):
     """Corps de /api/generate tel que l'envoie l'interface (512×512, 4 étapes, sans aperçu)."""
     body = {"mode": mode, "prompt": prompt, "width": 512, "height": 512, "steps": 4, "cfg": 1, "seed": -1,
             "preview": False, "preview_interval": 5, "ref_images": [], "init_image": None, "mask_image": None,
-            "strength": 1.0, "incognito": False}
+            "strength": 1.0}
     body.update(kw)
     return body
 
@@ -309,10 +319,10 @@ def wait_until(cond, timeout=10, what="la condition"):
 def idle():
     """Thread de calcul au repos : file vide, aucune génération en cours (worker() ne rend S.current qu'après avoir
     rangé les fichiers et décidé la notification d'un lot), et dossiers de travail des générations annulées ou
-    incognito déjà supprimés."""
+    privées déjà supprimés."""
     jobs = list(S.jobs.values())
     return (S.current is None and not S.pending and not any(j.get("status") in ("queued", "running") for j in jobs)
-            and not any(os.path.exists(j["dir"]) for j in jobs if j.get("status") == "cancelled" or j.get("incognito")))
+            and not any(os.path.exists(j["dir"]) for j in jobs if j.get("status") == "cancelled" or j.get("private")))
 
 
 def wait_idle(timeout=30):
@@ -336,14 +346,23 @@ def data_url(raw):
     return "data:image/png;base64," + base64.b64encode(raw).decode()
 
 
+def all_files():
+    """Tous les fichiers du dossier du banc (sauf le lien vers l'interface du dépôt), triés."""
+    root = launch.ROOT
+    return sorted(fp for fp in glob.glob(os.path.join(root, "**", "*"), recursive=True)
+                  if os.path.isfile(fp) and not fp.startswith(os.path.join(root, "tools", "ui")))
+
+
 def files(*pattern):
     """Fichiers du dossier temporaire qui répondent au motif (chemin relatif à la racine du banc)."""
     return sorted(glob.glob(launch.P(*pattern)))
 
 
 def journal():
+    """Lignes du journal des images, lues sous JOURNAL_LOCK : une génération passe « done » dans le même bloc que sa
+    ligne (to_pile), qui est donc écrite quand le suivi le dit."""
     try:
-        with open(launch.P("outputs", "journal.jsonl"), encoding="utf-8") as f:
+        with launch.JOURNAL_LOCK, open(launch.P("outputs", "journal.jsonl"), encoding="utf-8") as f:
             return [json.loads(line) for line in f if line.strip()]
     except OSError:
         return []

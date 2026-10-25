@@ -2,20 +2,24 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
 
   Windows : venv\Scripts\python.exe tools\launch.py [--port 7860] [--backend vulkan|cuda|cpu] [--model q4|q8] [--no-browser]
   macOS   : venv/bin/python tools/launch.py [--port 7860] [--model q4|q8] [--no-browser]
+  Entrée dans l'interface déjà lancée, sans taper le code : venv/bin/python tools/launch.py --enter [--port 7860]
 
-- L'interface écoute sur 127.0.0.1:<port> et sert tools/ui/index.html. Avec --lan, elle écoute aussi sur le Wi-Fi
-  (téléphone, tablette) : les appareils autres que le Mac doivent saisir une fois le code d'accès de
-  tools/access_code.txt, créé au premier lancement ; sur macOS, le Mac ne se met pas en veille tant que le lanceur tourne.
+- L'interface écoute sur 127.0.0.1:<port> et sert tools/ui/index.html. Tout appareil, le Mac lui-même compris, saisit
+  une fois le code d'accès de tools/access_code.txt, créé au premier lancement, avec ou sans --lan ; sur l'ordinateur,
+  le lancement (hors --no-browser) et --enter ouvrent le navigateur par une entrée à usage unique (tools/entry.html,
+  qui redirige vers GET /entrer?jeton=… : jeton de tools/entry_token, une minute, une fois). Avec --lan, elle
+  écoute aussi sur le Wi-Fi (téléphone, tablette) ; sur macOS, le Mac ne se met pas en veille tant que le lanceur
+  tourne.
 - Chaque génération lance sd-cli (rechargement quasi instantané grâce à --mmap et au cache disque),
-  lit sa progression (étape k/N, secondes par étape), expose des aperçus intermédiaires optionnels et enregistre
-  le PNG final dans outputs/.
-- Mode incognito ({"incognito": true} dans /api/generate) : rien n'est gardé sur le disque. Les fichiers de travail
-  (références, aperçus, PNG final) vivent dans jobs/incognito_<id>/, supprimé dès la fin du job ; l'image reste en
-  mémoire jusqu'à ce que l'interface la récupère (GET /api/job/<id>/result), puis l'interface fait oublier le job
-  (POST /api/job/<id>/forget). Ni journal, ni galerie, ni calibration, ni ligne dans logs/.
-- Espace privé ({"private": true} dans /api/generate, session de l'espace exigée) : comme l'incognito pendant le
-  calcul (jobs/private_<id>/, ni journal, ni calibration, ni logs/), puis l'image, sa miniature, ses entrées et ses
-  réglages sont chiffrés avec la clé publique de l'espace dans private/items/<id au hasard>/ ; voir DECISIONS.md.
+  lit sa progression (étape k/N, secondes par étape), expose des aperçus intermédiaires optionnels et écrit le PNG
+  dans son dossier de travail jobs/<id>/ ; fini, il passe dans la pile (outputs/.pile/), à trier : Garder le fait
+  passer dans les tirages (outputs/), Jeter l'efface avec tout ce qui s'y rattache.
+- Espace privé ({"private": true} dans /api/generate, session de l'espace exigée) : pendant le calcul, fichiers de
+  travail dans jobs/private_<id>/, supprimé dès la fin du job (ni journal, ni calibration ; dans logs/, rien que la
+  ligne commune « [job] génération terminée »), puis l'image, sa
+  miniature, ses entrées et ses réglages sont chiffrés avec la clé publique de l'espace dans
+  private/items/<id au hasard>/ ; voir DECISIONS.md. Une demande {"incognito": true} (mode retiré) est refusée
+  (400).
 - Lots : {"count": 2 à 4} dans /api/generate (tous les modes, jamais avec une campagne) lance autant de générations
   de la même demande, à la suite dans la file, chacune avec sa graine ; {"campaign": [{"image", "width", "height"}, …]}
   (mode Éditer, 10 photos au plus) lance une édition par photo, avec cette seule photo en référence ; le lot porte
@@ -23,13 +27,15 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   tête (POST /api/lot/<id>/first) et notifiées ensemble.
 - API : POST /api/generate, GET /api/job/<id>, GET /api/job/<id>/preview, POST /api/job/<id>/cancel, POST /api/lot/<id>/cancel,
         POST /api/job/<id>/first et POST /api/lot/<id>/first (« Passer en tête »),
-        GET /api/job/<id>/result et POST /api/job/<id>/forget (incognito ; forget aussi pour une génération privée),
-        espace privé : POST /api/private/create|unlock|lock|code|reset|delete, GET /api/private/history,
+        POST /api/job/<id>/forget (génération privée),
+        espace privé : POST /api/private/create|unlock|lock|code|reset|delete|keep|discard,
+        GET /api/private/history|pile,
         GET /api/private/image|thumb?id=<id>, GET /api/private/input?id=<id>&file=<init.png|ref_N.png>,
         prompts enregistrés de l'espace privé (private/prompts, chiffré) : GET /api/private/prompts,
         POST /api/private/prompts, POST /api/private/prompts/delete, POST /api/private/prompts/used,
         GET /api/result?name=<png>[&download=1], GET /api/status,
-        historique : GET /api/history, GET /api/thumb?name=<png>, POST /api/delete {"name": <png>},
+        tirages et pile : GET /api/history, GET /api/pile, GET /api/thumb?name=<png>, POST /api/keep {"name": <png>},
+        POST /api/discard {"name": <png>}, POST /api/delete {"name": <png>},
         images d'entrée d'une image : GET /api/input?name=<png>&file=<init.png|ref_N.png>[&thumb=1][&download=1],
         notifications de fin de génération : GET /api/push/key, POST /api/push/subscribe {"subscription": …},
         POST /api/push/unsubscribe {"endpoint": …},
@@ -41,9 +47,8 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   tools/push_vapid.pem, appareils abonnés dans tools/push_subscriptions.json (non versionnés). Jamais le prompt.
 Aucun droit administrateur, aucune modification système : tout reste dans ce dossier.
 """
-import argparse, base64, datetime, glob, hashlib, hmac, io, json, math, os, re, secrets, shutil, socket, subprocess, sys
-import threading, time, uuid, webbrowser
-from http.cookies import SimpleCookie
+import argparse, base64, datetime, errno, glob, hashlib, hmac, io, json, math, os, re, secrets, shutil, socket
+import pathlib, subprocess, sys, threading, time, uuid, webbrowser
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlsplit
 try:
@@ -82,8 +87,10 @@ TAKING_RE = re.compile(r"taking ([\d.]+)\s*s")
 CALIB = P("tools", "calibration.json")
 MAX_VARIANTS = 4                          # images d'un lot de variantes (tous les modes, hors campagne)
 MAX_CAMPAIGN = 10                         # photos d'une campagne (mode Éditer), comme les références d'une édition
-INCOGNITO_TTL = 24 * 3600                 # image incognito jamais récupérée par sa page (page tuée) : oubliée après ce délai
-PAGE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")   # jeton opaque de la page qui lance une génération (voir queue_entry)
+PRIVATE_JOB_TTL = 24 * 3600               # génération privée finie, jamais oubliée par sa page : oubliée après ce délai
+# ligne de fin de toute génération réussie, normale ou privée, sans chemin ni durée : une seule source, pour que rien
+# dans logs/ ne distingue une génération privée (décision du 23/10/2026)
+DONE_LINE = "[job] génération terminée"
 # Répartition par backend. CUDA : tout sur la carte (l'encodeur int8 convrot a un chemin CUDA natif, RTX 20xx+) ;
 # --offload-to-cpu garde les poids en RAM et les copie à la demande, ce qui s'adapte à toute taille de VRAM.
 # --mmap : rechargement quasi instantané du modèle d'une génération à l'autre grâce au cache disque.
@@ -105,11 +112,21 @@ BACKENDS = {
 
 
 def record_calib(job):
-    """Ajoute la mesure de la génération aux données de calibration (voir tools/estimate.py)."""
-    sample = estimate.make_sample(job, S.engine)
-    if not sample:
+    """Ajoute la mesure de la génération aux données de calibration (voir tools/estimate.py). Seules les générations de
+    tools/calibrate.py en parlent : dans logs/, une ligne de calibration ne suivrait que les générations normales et les
+    distinguerait des privées (décision du 23/10/2026)."""
+    talk = job.get("calibration")
+    try:
+        sample = estimate.make_sample(job, S.engine)
+        if not sample:
+            return
+        S.store.add(S.backend, S.model, sample)
+    except Exception as e:
+        if talk:
+            print(f"[calibration] ignorée : {e}", flush=True)
         return
-    S.store.add(S.backend, S.model, sample)
+    if not talk:
+        return
     c = S.store.coefficients(S.backend, S.model, S.engine)
     print(f"[calibration] {S.backend}/{S.model} : étape {sample['step']:.2f} s ({sample['w']}×{sample['h']}"
           f"{', ' + str(len(job.get('ref_px') or [])) + ' réf.' if job.get('ref_px') else ''}), "
@@ -181,6 +198,17 @@ def default_backend(cfg):
 
 ACCESS_FILE = P("tools", "access_code.txt")
 ACCESS_COOKIE = "qwen_access"
+# entrée depuis l'ordinateur sans taper le code (launch.py --enter, GET /entrer) : jeton à usage unique, valable
+# ENTRY_TTL s, et page de redirection qui le porte ; tous deux lisibles par le seul compte, jamais suivis par git
+ENTRY_TOKEN = P("tools", "entry_token")
+ENTRY_PAGE = P("tools", "entry.html")
+ENTRY_TTL = 60
+# un jeton ne sert qu'une fois, même à deux requêtes simultanées, et ne s'écrit pas pendant sa lecture : dans un même
+# processus seulement. launch.py --enter en est un autre : chacun de ses deux fichiers est remplacé d'un coup, mais pas
+# la paire ; deux --enter rapprochés gardent le dernier jeton, et l'onglet resté sur l'ancien, s'il a déjà le cookie,
+# est renvoyé vers / (_enter), sinon il reçoit la page du code
+ENTRY_LOCK = threading.Lock()
+ENTRY_USED = set()                              # empreintes des jetons servis : refusés même si leur fichier reste
 LOCAL_CLIENTS = ("127.0.0.1", "::1")
 # fichiers de tools/ui servis sans code d'accès pour l'installation sur le téléphone (rien de personnel)
 PUBLIC_FILES = {
@@ -191,54 +219,72 @@ PUBLIC_FILES = {
     "/icon-maskable-512.png": ("icon-maskable-512.png", "image/png"),
     "/apple-touch-icon.png": ("apple-touch-icon.png", "image/png"),
     "/logo.svg": ("logo.svg", "image/svg+xml"),
+    # police pixel du nom et des titres (Pixelify Sans, licence OFL : tools/ui/OFL.txt), aussi pour la page du code
+    "/PixelifySans.woff2": ("PixelifySans.woff2", "font/woff2"),
 }
 LOGIN_PAGE = """<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Chambre noire</title>
 <link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
-<meta name="theme-color" content="#0b0a16" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#eceef7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0a08">
 <style>
-:root{color-scheme:dark;--void:#0b0a16;--ink:#f6f4ff;--ink2:rgba(236,233,255,.68);--iris:#8f7cff;--iris2:#b9a9ff;--err:#ff6b7a;
---glass:rgba(255,255,255,.07);--glass-hi:rgba(255,255,255,.15);--field:rgba(8,6,20,.32);--rim:rgba(255,255,255,.14)}
-@media (prefers-color-scheme:light){:root{color-scheme:light;--void:#eceef7;--ink:#15131f;--ink2:rgba(21,19,31,.64);--iris:#6a52ff;
---iris2:#8f7cff;--err:#d93a4a;--glass:rgba(255,255,255,.42);--glass-hi:rgba(255,255,255,.78);--field:rgba(255,255,255,.55);--rim:rgba(255,255,255,.75)}}
+:root{color-scheme:dark;--void:#0d0a08;--surf:#17120f;--field:#100c0a;--line:rgba(241,230,210,.13);--ink:#f1e6d2;
+--ink2:rgba(241,230,210,.68);--accent:#ffa53a;--on-accent:#1c1006;--halo:rgba(190,28,18,.22);--err:#ff4f45;--r-m:6px}
 *{box-sizing:border-box}
 body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:16px;background:var(--void);color:var(--ink);
 font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-body::before{content:"";position:fixed;inset:-20%;z-index:-1;pointer-events:none;
-background:radial-gradient(40% 35% at 20% 18%,rgba(143,124,255,.6),transparent 70%),radial-gradient(38% 32% at 85% 30%,rgba(255,120,190,.35),transparent 70%),
-radial-gradient(45% 40% at 60% 92%,rgba(60,200,255,.3),transparent 70%)}
-form{width:100%;max-width:360px;padding:28px 22px 22px;border-radius:30px;text-align:center;border:1px solid var(--rim);
-background:linear-gradient(180deg,var(--glass-hi),var(--glass));-webkit-backdrop-filter:blur(26px) saturate(185%);backdrop-filter:blur(26px) saturate(185%);
-box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 18px 50px -18px rgba(0,0,0,.6)}
-.logo{display:block;width:52px;height:52px;margin:0 auto 14px;border-radius:23%;
-box-shadow:0 10px 26px -6px rgba(143,124,255,.75)}
-h1{font-size:22px;letter-spacing:-.02em;margin:0 0 6px}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+background:radial-gradient(90% 55% at 50% -8%,var(--halo),transparent 72%)}
+body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.32;background-size:180px;
+background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E\
+%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E\
+%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .9 0 0 0 0 .82 0 0 0 .5 0'/%3E%3C/filter%3E\
+%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E")}
+form{width:100%;max-width:360px;padding:28px 22px 22px;border-radius:var(--r-m);text-align:center;
+border:1px solid var(--line);background:var(--surf);box-shadow:0 18px 40px -22px rgba(0,0,0,.9)}
+.logo{display:block;width:52px;height:52px;margin:0 auto 14px;border-radius:23%;box-shadow:0 0 0 1px var(--line)}
+@font-face{font-family:"Pixelify Sans";src:url(/PixelifySans.woff2) format("woff2");font-weight:400 700;
+font-display:swap}
+h1{font:500 24px/1.3 "Pixelify Sans",system-ui,sans-serif;margin:0 0 6px}
 p{color:var(--ink2);margin:0 0 20px;font-size:14.5px}
-input{width:100%;font:inherit;font-size:24px;font-weight:650;letter-spacing:.16em;text-align:center;padding:14px;border-radius:18px;
-border:1px solid var(--rim);background:var(--field);color:var(--ink);outline:none}
-input:focus{border-color:var(--iris2)}
+code{font:13.5px ui-monospace,Menlo,monospace;color:var(--ink)}
+input{width:100%;font:inherit;font-size:24px;font-weight:650;letter-spacing:.16em;text-align:center;padding:14px;
+border-radius:var(--r-m);border:1px solid var(--line);background:var(--field);color:var(--ink);outline:none}
+input:focus{border-color:var(--accent)}
 input::placeholder{color:var(--ink2);opacity:.5}
-button{width:100%;margin-top:12px;font:inherit;font-size:17px;font-weight:700;padding:15px;border:0;border-radius:999px;color:#fff;cursor:pointer;
-background:linear-gradient(180deg,color-mix(in srgb,var(--iris2) 70%,var(--iris)),var(--iris));
-box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 10px 26px -8px var(--iris)}
+button{width:100%;margin-top:12px;font:inherit;font-size:17px;font-weight:700;padding:15px;border:0;
+border-radius:var(--r-m);color:var(--on-accent);cursor:pointer;background:var(--accent)}
 button:disabled{opacity:.6}
 #err{color:var(--err);font-size:14px;min-height:21px;margin-top:10px}
+#err:not(:empty)::before{content:"";display:inline-block;width:.95em;height:.95em;margin-right:.4em;
+vertical-align:-.12em;background:currentColor;
+--ico-err:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' \
+shape-rendering='crispEdges'%3E%3Cpath fill-rule='evenodd' \
+d='M1 0h7v1h1v7h-1v1h-7v-1h-1v-7h1zM4 2h1v3h-1zM4 6h1v1h-1z'/%3E\
+%3C/svg%3E");-webkit-mask:var(--ico-err) center/contain no-repeat;mask:var(--ico-err) center/contain no-repeat}
 .shake{animation:shake .4s}
 @keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 @media (prefers-reduced-motion:reduce){.shake{animation:none}}
 </style></head><body><form id="f"><img class="logo" src="/logo.svg" alt=""><h1>Chambre noire</h1>
-<p>Saisissez le code d'accès affiché sur le Mac, sous le bouton « Téléphone » en haut de l'interface. Il n'est demandé qu'une fois sur cet appareil.</p>
+<p>Saisissez le code d'accès affiché sur le Mac : touchez la lampe d'état, en haut à droite de l'interface, puis
+« Ouvrir depuis le téléphone ». Il n'est demandé qu'une fois sur cet appareil.</p><!--mac-->
 <input id="c" aria-label="Code d'accès" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="xxxx-xxxx" autofocus>
 <button id="b">Entrer</button><div id="err" role="alert"></div></form>
 <script>
+// onglet marqué (sortie de l'espace privé pas encore acceptée par le Mac) : la session est fermée dès maintenant, sans
+// attendre le code ; la marque reste, l'interface la lève une fois le code saisi
+try{ if(sessionStorage.getItem('relock')==='1') fetch('/api/private/lock',{method:'POST',credentials:'same-origin',
+ headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{}); }catch(e){}
 const f=document.getElementById('f'), b=document.getElementById('b'), err=document.getElementById('err');
 f.onsubmit=async e=>{e.preventDefault(); b.disabled=true; err.textContent='';
  const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:document.getElementById('c').value})});
  if(r.ok) return location.replace('/');
  b.disabled=false; err.textContent='Code incorrect.'; f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake');};
 </script></body></html>"""
+# ajouté à la page du code pour une requête de l'ordinateur lui-même (_local), à la place de <!--mac--> : pas sur le
+# téléphone ; « ordinateur » et non « Mac » : la même page sert sous Windows
+LOGIN_MAC = ("<p>Sur cet ordinateur : ouvrez Chambre noire par son raccourci, ou saisissez le code de "
+             "<code>tools/access_code.txt</code>.</p>")
 
 
 THUMBS = P("outputs", ".thumbs")
@@ -416,6 +462,7 @@ PRIVATE_COOKIE = "qwen_private"                # session de l'espace privé, pro
 PRIVATE_IDLE = 15 * 60                         # session fermée après 15 min sans requête privée
 PRIVATE_LOCK = threading.RLock()               # dérivations du code privé, écritures des clés et des images : une à la fois
 REKEY = ".rekey"                               # dossier de travail d'un changement de code, dans private/
+META_TMP = "meta.tmp"                          # fiche réécrite par Garder, dans private/, avant de remplacer l'ancienne
 MIN_PRIVATE_CODE, MAX_PRIVATE_CODE = 8, 256
 SCRYPT_N = 2 ** 18                             # 256 Mio et ≈ 0,3 s par essai sur le Mac ; gardé dans space.json
 KEY_AAD = b"qwen-image-local private key v1"   # données associées du chiffrement de la clé privée
@@ -470,13 +517,15 @@ def sync_fd(fd, full=True):
     os.fsync(fd)
 
 
-def open_private(fp):
-    """Ouvre en écriture binaire un fichier de private/, créé lisible par son seul propriétaire (0o600) : jamais
-    lisible par un autre compte du Mac, même le temps de l'écrire ; un fichier qui existait reprend ces droits."""
-    fd = os.open(fp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0), 0o600)
+def open_private(fp, append=False):
+    """Ouvre en écriture binaire (ou en ajout : append) un fichier lisible par son seul propriétaire (0o600) : fichiers
+    de private/, journal des images ; jamais lisible par un autre compte du Mac, même le temps de l'écrire ; un fichier
+    qui existait reprend ces droits."""
+    flags = os.O_APPEND if append else os.O_TRUNC
+    fd = os.open(fp, os.O_WRONLY | os.O_CREAT | flags | getattr(os, "O_BINARY", 0), 0o600)
     try:
         os.chmod(fp, 0o600)
-        return os.fdopen(fd, "wb")
+        return os.fdopen(fd, "ab" if append else "wb")
     except BaseException:
         os.close(fd)
         raise
@@ -500,8 +549,8 @@ def private_dir(d, exist_ok=False):
 
 
 def write_synced(fp, data, full=True):
-    """Écrit un fichier de private/ (droits 0o600, open_private) et attend qu'il soit sur le disque : une coupure de
-    courant ne le laisse ni vide ni tronqué derrière un renommage qui, lui, aurait été écrit."""
+    """Écrit un fichier de private/ ou le journal réécrit (droits 0o600, open_private) et attend qu'il soit sur le
+    disque : une coupure de courant ne le laisse ni vide ni tronqué derrière un renommage qui, lui, aurait été écrit."""
     with open_private(fp) as f:
         f.write(data)
         f.flush()
@@ -564,7 +613,8 @@ def unseal(blob, private_key, label):
 def store_private(public, meta, image, inputs):
     """Range une image dans l'espace privé : private/items/<128 bits au hasard>/ avec meta (réglages, en JSON), image,
     thumb (miniature fabriquée en mémoire) et input_<k> (images d'entrée), chacun scellé à part. Écrit dans un dossier
-    caché puis renommé : la galerie privée ne voit jamais une image à moitié rangée. Renvoie son identifiant.
+    caché puis renommé : ni la pile ni les tirages privés ne voient une image à moitié rangée. Renvoie son
+    identifiant.
     public : la clé publique notée au lancement de la génération ; si le code a changé
     depuis, l'image est scellée avec la clé qui l'a remplacée ; si l'espace a été supprimé ou recréé entre-temps, elle
     est abandonnée (RuntimeError) plutôt que rangée avec une clé disparue. Jamais pendant un changement de code."""
@@ -616,10 +666,12 @@ def rekey_space(old_key, code):
     try:
         # reste d'un enregistrement des prompts privés coupé par une panne : scellé avec l'ancienne clé, il partirait
         # lisible par l'ancien code
-        try:
-            os.remove(os.path.join(PRIVATE, "prompts.tmp"))
-        except FileNotFoundError:
-            pass
+        # de même pour une fiche réécrite par Garder (sort_private)
+        for leftover in ("prompts.tmp", META_TMP):
+            try:
+                os.remove(os.path.join(PRIVATE, leftover))
+            except FileNotFoundError:
+                pass
         private_dir(os.path.join(staging, "items"))
         # fichiers et dossiers copiés : fsync seul ; le F_FULLFSYNC de write_space, avant la bascule, les met tous sur
         # le disque d'un coup (un F_FULLFSYNC par fichier viderait le cache du disque autant de fois)
@@ -687,9 +739,10 @@ def read_private(private_key, item, role):
     return unseal(blob, private_key, f"{item}/{role}")
 
 
-def private_history(private_key):
+def private_items(private_key, pile):
     """Images de l'espace privé, la plus récente d'abord : réglages déchiffrés et identifiant (une image illisible avec
-    cette clé est ignorée)."""
+    cette clé est ignorée) ; pile : celles de la pile (fiche marquée « pile », toujours chiffrée), sinon les tirages
+    (les images d'avant la pile en sont). La marque ne part pas vers l'interface."""
     items = []
     for d in glob.glob(os.path.join(PRIVATE, "items", "*")):
         item = os.path.basename(d)
@@ -697,9 +750,75 @@ def private_history(private_key):
             meta = json.loads(read_private(private_key, item, "meta") or b"null")
         except (InvalidTag, ValueError):
             continue
-        if isinstance(meta, dict):
-            items.append({**meta, "id": item, "private": True})
-    return sorted(items, key=lambda x: x.get("time") or 0, reverse=True)
+        if isinstance(meta, dict) and bool(meta.pop("pile", False)) == pile:
+            # time est à la seconde : deux images d'un lot finies la même seconde se départagent par leur dossier
+            try:
+                finished = os.stat(d).st_mtime_ns
+            except FileNotFoundError:           # jetée ou supprimée pendant la lecture
+                continue
+            items.append(((meta.get("time") or 0, finished), {**meta, "id": item, "private": True}))
+    return [it for _, it in sorted(items, key=lambda x: x[0], reverse=True)]
+
+
+def space_public(private_key):
+    """Clé publique de space.json, si private_key est encore la clé de l'espace ; sinon StaleKey (code changé ou
+    espace supprimé pendant la requête). Sous PRIVATE_LOCK, après finish_rekey()."""
+    public = (read_space() or {}).get("public")
+    if public != b64e(private_key.public_key().public_bytes_raw()):
+        raise StaleKey("espace privé verrouillé")
+    return public
+
+
+def replace_synced(tmp, fp, data, full=True):
+    """Remplace fp par data d'un coup : écrit dans tmp, mis sur le disque (droits 600), puis os.replace ; tmp ne reste
+    pas après un échec."""
+    try:
+        write_synced(tmp, data, full)
+        os.replace(tmp, fp)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def remove_private_item(item):
+    """Supprime le dossier d'une image privée (Jeter, /api/private/delete), renommé d'abord en dossier caché (purgé au
+    démarrage) : un effacement coupé ne laisse pas une image sans fiche, que ni la pile ni les tirages ne montreraient
+    plus. Sous PRIVATE_LOCK, après finish_rekey() : un changement de code interrompu en rangerait sinon la copie
+    rechiffrée à sa place."""
+    hidden = os.path.join(PRIVATE, "items", "." + item)
+    os.rename(os.path.join(PRIVATE, "items", item), hidden)
+    S.rev["private"] += 1
+    shutil.rmtree(hidden)
+
+
+def sort_private(action, private_key, item):
+    """Garder (keep) ou Jeter (discard) une image de la pile privée avec la clé d'une session : (code, réponse). Sous
+    PRIVATE_LOCK, après finish_rekey() ; 404 « déjà triée » si l'image n'est pas (ou plus) dans la pile : le premier
+    geste arrivé l'emporte. Garder déchiffre la fiche (meta), en retire la marque « pile » et la rescelle avec la clé
+    publique de space.json (fichier temporaire private/meta.tmp mis sur le disque, puis remplacement atomique) ; image,
+    vignette et entrées restent telles quelles. Jeter supprime le dossier de l'image (remove_private_item).
+    StaleKey si la clé n'est plus celle de l'espace ; une fiche illisible lève InvalidTag ou ValueError."""
+    with PRIVATE_LOCK:
+        finish_rekey()
+        public = space_public(private_key)
+        raw = read_private(private_key, item, "meta") if isinstance(item, str) else None
+        meta = json.loads(raw) if raw else None
+        if not (isinstance(meta, dict) and meta.get("pile")):
+            return 404, {"error": "déjà triée"}
+        if action == "discard":
+            remove_private_item(item)
+            return 200, {"ok": True}
+        d = os.path.join(PRIVATE, "items", item)
+        del meta["pile"]
+        # fsync seul : le F_FULLFSYNC de sync_dir(d) met aussi le fichier temporaire sur le disque
+        replace_synced(os.path.join(PRIVATE, META_TMP), os.path.join(d, "meta"),
+                       seal(json.dumps(meta, ensure_ascii=False).encode(), public, f"{item}/meta"), full=False)
+        sync_dir(d)
+        S.rev["private"] += 1                   # après le changement : une page qui relit la pile le voit
+        return 200, {"ok": True}
 
 
 class StaleKey(Exception):
@@ -715,9 +834,7 @@ def private_prompts(private_key, update=None):
     fp = os.path.join(PRIVATE, "prompts")
     with PRIVATE_LOCK:
         finish_rekey()
-        public = (read_space() or {}).get("public")
-        if public != b64e(private_key.public_key().public_bytes_raw()):
-            raise StaleKey("espace privé verrouillé")
+        public = space_public(private_key)
         try:
             with open(fp, "rb") as f:
                 prompts = prompt_list(json.loads(unseal(f.read(), private_key, "prompts")))
@@ -726,15 +843,7 @@ def private_prompts(private_key, update=None):
         changed = update(prompts) if update else None
         if changed is None:
             return prompts
-        try:
-            write_synced(fp + ".tmp", seal(json.dumps(changed, ensure_ascii=False).encode(), public, "prompts"))
-            os.replace(fp + ".tmp", fp)
-        except BaseException:
-            try:
-                os.remove(fp + ".tmp")
-            except OSError:
-                pass
-            raise
+        replace_synced(fp + ".tmp", fp, seal(json.dumps(changed, ensure_ascii=False).encode(), public, "prompts"))
         sync_dir(PRIVATE)
         return changed
 
@@ -758,8 +867,7 @@ def notify_job(job):
         return
     if job.get("status") == "done":
         dims = "×".join(str(d) for d in job.get("dims") or [])
-        title = "Image incognito prête" if job.get("incognito") else "Image prête"
-        push_notify({"title": title,
+        push_notify({"title": "Image prête",
                      "body": f"Générée en {duration_text(job.get('seconds') or 0)}" + (f" · {dims}" if dims else "")})
     else:
         push_notify({"title": "Échec de la génération", "body": "Ouvrez l'application pour voir le détail."})
@@ -767,7 +875,7 @@ def notify_job(job):
 
 def notify_lot(lot):
     """Une seule notification pour tout un lot, quand sa dernière génération se termine : images prêtes et en échec ;
-    rien si tout le lot a été annulé. Compte d'après les statuts seuls (une génération incognito a déjà oublié sa demande).
+    rien si tout le lot a été annulé. Compte d'après les statuts seuls (une génération privée a déjà oublié sa demande).
     Un lot privé notifie comme un lot normal."""
     jobs = lot["jobs"]
     done, failed = (sum(j.get("status") == s for j in jobs) for s in ("done", "failed"))
@@ -775,8 +883,7 @@ def notify_lot(lot):
         return
     if done:
         s = "s" if done > 1 else ""
-        kind = " incognito" if lot["incognito"] else ""
-        title = f"{done} image{s}{kind} prête{s}" + (f", {failed} en échec" if failed else "")
+        title = f"{done} image{s} prête{s}" + (f", {failed} en échec" if failed else "")
         span = max(j.get("finished") or 0 for j in jobs) - min(j["started"] for j in jobs if j.get("started"))
         what = f"Campagne de {len(jobs)} photos terminée" if lot["campaign"] else f"Lot de {len(jobs)} images terminé"
         push_notify({"title": title, "body": f"{what} en {duration_text(span)}"})
@@ -814,8 +921,12 @@ def push_notify(payload):
             push_subscriptions(lambda l: [x for x in l if x.get("endpoint") not in gone])
         print(f"[push] notification envoyée à {sent} appareil{'s' if sent > 1 else ''}", flush=True)
     threading.Thread(target=send, daemon=True).start()
-INPUTS = P("outputs", ".inputs")      # images d'entrée de chaque image de outputs/ : .inputs/<nom sans .png>/
+INPUTS = P("outputs", ".inputs")      # images d'entrée d'un tirage ou d'une image de la pile : .inputs/<nom sans .png>/
 INPUT_RE = re.compile(r"(init|ref_\d+)\.png")
+# pile de l'espace public : images terminées à trier ; Garder les fait passer dans outputs/ (les tirages), Jeter les
+# efface. Vignettes et images d'entrée sont rangées par nom d'image et ne bougent pas quand elle passe aux tirages.
+PILE = P("outputs", ".pile")
+JOB_ID_RE = re.compile(r"\d{8}_\d{6}_[0-9a-f]{6}")   # identifiant d'une génération normale (new_job)
 
 
 def input_files(job_dir):
@@ -831,59 +942,257 @@ def save_inputs(job_dir, out_png):
         dst = os.path.join(INPUTS, os.path.basename(out_png)[:-4])
         os.makedirs(dst, exist_ok=True)
         for n in names:
-            shutil.copy2(os.path.join(job_dir, n), os.path.join(dst, n))
+            # copyfile, pas copy2 : la copie prend les droits du masque (restrict_new_files), pas ceux de la source
+            shutil.copyfile(os.path.join(job_dir, n), os.path.join(dst, n))
 
 
-def output_path(name):
-    """Chemin d'une image de outputs/ à partir de son nom, ou None si le nom sort du dossier ou n'est pas un PNG."""
+def image_in(folder, name):
+    """Chemin d'une image de folder à partir de son nom, ou None si le nom sort du dossier, n'est pas un PNG ou n'y
+    est pas."""
     name = os.path.basename(str(name or ""))
     if not name or name.startswith(".") or not name.lower().endswith(".png"):
         return None
-    fp = P("outputs", name)
+    fp = os.path.join(folder, name)
     return fp if os.path.isfile(fp) else None
 
 
-# écriture du journal des images : un seul écrivain aujourd'hui (fin de génération), verrou gardé pour qu'une future
-# écriture ne se mêle pas à celle-ci
-JOURNAL_LOCK = threading.Lock()
+def output_path(name):
+    """Chemin d'un tirage (image de outputs/), ou None."""
+    return image_in(P("outputs"), name)
+
+
+def pile_path(name):
+    """Chemin d'une image de la pile, ou None."""
+    return image_in(PILE, name)
+
+
+def image_path(name):
+    """Chemin d'un tirage ou d'une image de la pile : ce que l'image, sa vignette et ses images d'entrée servent."""
+    return output_path(name) or pile_path(name)
+
+
+def on_image(name, use):
+    """use(chemin) sur un tirage ou une image de la pile, ou None si elle n'existe pas (ou plus) : une image gardée
+    entre la recherche et la lecture (passée de la pile aux tirages) est cherchée une seconde fois, plutôt qu'un 404
+    pour une image qui existe."""
+    for _ in range(2):
+        fp = image_path(name)
+        if not fp:
+            return None
+        try:
+            return use(fp)
+        except FileNotFoundError:
+            pass
+    return None
+
+
+# journal des images et tri : l'arrivée d'une image dans la pile avec sa ligne (to_pile), Garder, Jeter et Supprimer
+# (vérification, déplacement ou effacements, réécriture du journal), comme la lecture des tirages et de la pile, se
+# font chacun d'un bloc sous ce verrou ; le premier geste arrivé l'emporte. RLock : ces blocs appellent des fonctions
+# qui le prennent aussi.
+JOURNAL_LOCK = threading.RLock()
+
+
+def journal_line(line):
+    """Ligne du journal (octets) : (nom de l'image, réglages), ou None pour une ligne illisible (pas du JSON en UTF-8,
+    pas un objet). Lecture et réécriture du journal la jugent de la même façon."""
+    try:
+        m = json.loads(line)
+    except ValueError:                          # UnicodeDecodeError compris
+        return None
+    return (os.path.basename(str(m.get("file") or "")), m) if isinstance(m, dict) else None
 
 
 def journal_entries():
     """Lignes du journal des images (outputs/journal.jsonl) par nom d'image (la dernière si plusieurs)."""
     entries = {}
-    try:
-        with open(P("outputs", "journal.jsonl"), encoding="utf-8") as f:
-            for line in f:
-                try:
-                    m = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(m, dict):
-                    entries[os.path.basename(m.get("file") or "")] = m
-    except OSError:
-        pass
+    with JOURNAL_LOCK:
+        try:
+            with open(P("outputs", "journal.jsonl"), "rb") as f:
+                for line in f:
+                    entry = journal_line(line)
+                    if entry:
+                        entries[entry[0]] = entry[1]
+        except OSError:
+            pass
     return entries
 
 
 def append_journal(meta):
-    """Ajoute la ligne d'une image au journal, sous JOURNAL_LOCK."""
+    """Ajoute la ligne d'une image au journal, sous JOURNAL_LOCK ; le journal (des prompts) n'est lisible que par son
+    propriétaire (0o600), un journal d'avant reprend ces droits."""
     with JOURNAL_LOCK:
-        with open(P("outputs", "journal.jsonl"), "a", encoding="utf-8") as f:
-            f.write(json.dumps(meta, ensure_ascii=False) + "\n")
+        with open_private(P("outputs", "journal.jsonl"), append=True) as f:
+            f.write((json.dumps(meta, ensure_ascii=False) + "\n").encode("utf-8"))
+
+
+def to_pile(job, meta):
+    """Fin d'une génération normale réussie : son image passe du dossier de travail dans la pile, puis sa ligne du
+    journal (meta) et ses images d'entrée, d'un bloc sous JOURNAL_LOCK : ni la lecture de la pile ni un tri ne voient
+    l'image sans sa ligne. L'image d'abord : une panne ensuite laisse une image de la pile que Jeter efface en entier,
+    jamais une ligne du journal (son prompt) sans image. Le passage dans la pile et le statut « done » se font sous
+    S.turn, comme une annulation (cancel_job) : une génération annulée entre-temps n'arrive pas dans la pile, False
+    (run_job la jette). jobs/ et outputs/ sont sous ROOT, sur le même disque : os.replace déplace sans copier (un
+    outputs/ sur un autre disque ferait échouer la génération). Le PNG est mis sur le disque avant d'être déplacé :
+    une coupure ne laisse pas dans la pile un fichier vide derrière un renommage écrit."""
+    try:                                        # fsync seul : le F_FULLFSYNC de sync_dir(PILE) suit le déplacement
+        with open(job["out"], "rb") as f:
+            sync_fd(f.fileno(), full=False)
+    except OSError:                             # Windows (fsync d'un fichier ouvert en lecture) : os.replace tranche
+        pass
+    with JOURNAL_LOCK:
+        os.makedirs(PILE, exist_ok=True)
+        dst = os.path.join(PILE, os.path.basename(job["out"]))
+        os.chmod(job["out"], 0o600)             # lisible par le seul propriétaire dès la pile (os.replace le garde)
+        with S.turn:
+            if job.get("status") == "cancelled":
+                return False
+            os.replace(job["out"], dst)
+            # réussie dès qu'elle est dans la pile : un échec du journal ou des entrées ne la retire pas (fail_job)
+            job["out"], job["status"], job["phase"] = dst, "done", "terminé"
+        sync_dir(PILE)
+        S.rev["public"] += 1
+        append_journal({**meta, "file": dst})
+        try:
+            save_inputs(job["dir"], dst)
+        except OSError:
+            print("[job] images d'entrée non conservées", flush=True)   # sans détail : chemin de l'image
+    return True
+
+
+def hidden_png(fp):
+    """Nom caché d'un PNG pendant son effacement : un point devant, dans le même dossier ; images_in (glob « *.png »)
+    et les routes (image_in) ne voient pas les noms en point."""
+    return os.path.join(os.path.dirname(fp), "." + os.path.basename(fp))
 
 
 def delete_output(fp):
-    """Supprime une image de outputs/ avec ses miniatures et ses images d'entrée (sa ligne du journal reste)."""
-    os.remove(fp)
-    delete_extras(os.path.basename(fp)[:-4])
+    """Efface une image (tirage ou image de la pile) et tout ce qui s'y rattache (décisions du 23/10/2026). Le PNG est
+    d'abord renommé en nom caché (hidden_png) : sous Windows, un fichier ouvert refuse ce renommage tout de suite, avant
+    que rien ne soit effacé. Puis ses miniatures, ses images d'entrée, son dossier de travail jobs/<id>/ (identifiant
+    tiré du nom, validé par JOB_ID_RE) et ses lignes du journal, et le PNG en dernier, seulement si tout le reste est
+    parti : une pièce qui résiste (ou toute autre exception) lui rend son nom, et l'image reste là où elle était, qu'un
+    second geste efface en entier, au lieu d'une ligne du journal (son prompt) que plus rien ne retirerait ; une panne
+    entre-temps est rattrapée au démarrage (restore_hidden_images). Une pièce déjà absente est sautée (le démarrage ne
+    garde que 20 dossiers de travail) ; une pièce qui résiste n'arrête pas les suivantes : la première erreur est levée
+    à la fin. Sous JOURNAL_LOCK (sort_image)."""
+    name, hidden = os.path.basename(fp), hidden_png(fp)
+    os.replace(fp, hidden)
+    try:
+        jid = name[:-4].rsplit("_", 1)[0]
+        steps = [lambda: delete_extras(name[:-4]), lambda: drop_from_journal(name)]
+        if JOB_ID_RE.fullmatch(jid):
+            steps.insert(1, lambda: remove_tree(P("jobs", jid)))
+        error = None
+        for step in steps:
+            try:
+                step()
+            except OSError as e:
+                error = error or e
+        if not error:
+            os.remove(hidden)
+            return
+    except BaseException:
+        unhide(hidden, fp)
+        raise
+    unhide(hidden, fp)
+    raise error
+
+
+def unhide(hidden, fp):
+    """Rend son nom au PNG d'un effacement qui n'a pas abouti ; s'il résiste, le démarrage le rattrapera
+    (restore_hidden_images) : l'erreur que voit l'appelant reste celle d'origine."""
+    try:
+        os.replace(hidden, fp)
+    except OSError:
+        pass
+
+
+def restore_hidden_images():
+    """Démarrage : un PNG resté sous son nom caché (delete_output coupé par une panne) reprend son nom ; l'image revient
+    dans la pile ou les tirages, et un nouveau geste l'efface en entier. Seuls les noms d'images du serveur
+    (identifiant JOB_ID_RE) sont rendus, pas un fichier caché d'un autre outil (« ._X.png » des volumes exFAT ou SMB) ;
+    si le nom d'origine est déjà pris, la copie cachée, en double, est supprimée. Un renommage qui échoue est retenté
+    au démarrage suivant."""
+    for folder in (P("outputs"), PILE):
+        for fp in glob.glob(os.path.join(folder, ".*.png")):
+            name = os.path.basename(fp)[1:]
+            if not JOB_ID_RE.fullmatch(name[:-4].rsplit("_", 1)[0]):
+                continue
+            dst = os.path.join(folder, name)
+            try:
+                if os.path.exists(dst):
+                    os.remove(fp)
+                else:
+                    os.replace(fp, dst)
+            except OSError:
+                pass
+
+
+def drop_from_journal(name):
+    """Retire du journal les lignes de l'image name, sous JOURNAL_LOCK : le journal réécrit dans un fichier temporaire
+    mis sur le disque (droits 600), puis remplacé d'un coup, jamais à moitié réécrit. Les lignes illisibles sont
+    recopiées telles quelles."""
+    fp = P("outputs", "journal.jsonl")
+    with JOURNAL_LOCK:
+        try:
+            with open(fp, "rb") as f:
+                lines = f.readlines()
+        except FileNotFoundError:
+            return
+        kept = [line for line in lines if (journal_line(line) or ("",))[0] != name]
+        if len(kept) == len(lines):
+            return
+        # fsync seul : le F_FULLFSYNC de sync_dir met aussi le fichier temporaire sur le disque
+        replace_synced(fp + ".tmp", fp, b"".join(kept), full=False)
+        sync_dir(P("outputs"))
+
+
+# Garder et Jeter visent la pile, Supprimer les tirages : où chercher l'image, et la réponse quand elle n'y est pas
+SORTS = {"keep": (pile_path, "déjà triée"), "discard": (pile_path, "déjà triée"),
+         "delete": (output_path, "fichier inconnu")}
+
+
+def sort_image(action, name):
+    """Garder (keep : de la pile aux tirages, PNG seul déplacé, de façon atomique) ou Jeter (discard : effacement
+    complet) une image de la pile, Supprimer (delete : effacement complet) un tirage ; (code, réponse). D'un bloc sous
+    JOURNAL_LOCK : le premier geste arrivé l'emporte, le second ne trouve plus l'image (404)."""
+    find, unknown = SORTS[action]
+    with JOURNAL_LOCK:
+        fp = find(name)
+        if not fp:
+            return 404, {"error": unknown}
+        dst = P("outputs", os.path.basename(fp))
+        if action == "keep" and os.path.lexists(dst):   # os.replace écraserait le tirage
+            return 409, {"error": "un tirage du même nom existe déjà"}
+        S.rev["public"] += 1
+        try:
+            if action == "keep":
+                os.replace(fp, dst)
+                sync_dir(P("outputs"))
+            else:
+                delete_output(fp)       # sans ligne au journal du serveur : une suppression privée n'en écrit pas
+        except OSError:
+            return 500, {"error": "image gardée dans la pile : déplacement impossible" if action == "keep"
+                         else "effacement incomplet"}
+    return 200, {"ok": True}
 
 
 def delete_extras(stem):
-    """Miniatures et images d'entrée d'une image de outputs/ déjà supprimée."""
+    """Miniatures et images d'entrée d'un tirage ou d'une image de la pile déjà supprimés."""
     for th in [os.path.join(THUMBS, stem + ".jpg"), *glob.glob(os.path.join(THUMBS, glob.escape(stem) + "__*.jpg"))]:
         if os.path.exists(th):
             os.remove(th)
-    shutil.rmtree(os.path.join(INPUTS, stem), ignore_errors=True)
+    remove_tree(os.path.join(INPUTS, stem))
+
+
+def remove_tree(d):
+    """Supprime un dossier ; déjà absent, rien ; un fichier qui résiste lève l'erreur (delete_output garde alors le
+    PNG)."""
+    try:
+        shutil.rmtree(d)
+    except FileNotFoundError:
+        pass
 
 
 def read_inputs(d):
@@ -895,20 +1204,35 @@ def read_inputs(d):
     return inputs
 
 
-def history():
-    """Images de outputs/, la plus récente d'abord, avec les réglages notés dans outputs/journal.jsonl."""
-    meta = journal_entries()
+def images_in(folder):
+    """Images d'un dossier (outputs/ ou la pile), la plus récente d'abord, avec les réglages notés dans
+    outputs/journal.jsonl ; sous JOURNAL_LOCK : une image et sa ligne y arrivent ensemble (to_pile), un tri n'efface
+    rien pendant la lecture."""
     items = []
-    for fp in glob.glob(P("outputs", "*.png")):
-        name, st = os.path.basename(fp), os.stat(fp)
-        m = meta.get(name, {})
-        items.append({"name": name, "time": int(st.st_mtime), "size": st.st_size, "mode": m.get("mode"),
-                      "prompt": m.get("prompt"), "width": m.get("width"), "height": m.get("height"),
-                      "steps": m.get("steps"), "seconds": m.get("seconds"), "model": m.get("model"), "seed": m.get("seed"),
-                      # identifiant, rang, taille et marqueur de campagne d'une image de lot ; None pour une image seule
-                      "lot": m.get("lot"),
-                      "inputs": input_files(os.path.join(INPUTS, name[:-4]))})
-    return sorted(items, key=lambda x: x["time"], reverse=True)
+    with JOURNAL_LOCK:
+        meta = journal_entries()
+        for fp in glob.glob(os.path.join(folder, "*.png")):
+            name, st = os.path.basename(fp), os.stat(fp)
+            m = meta.get(name, {})
+            item = {"name": name, "time": int(st.st_mtime), "size": st.st_size, "mode": m.get("mode"),
+                    "prompt": m.get("prompt"), "width": m.get("width"), "height": m.get("height"),
+                    "steps": m.get("steps"), "seconds": m.get("seconds"), "model": m.get("model"),
+                    "seed": m.get("seed"),
+                    # identifiant, rang, taille et marqueur de campagne d'une image de lot ; None pour une image seule
+                    "lot": m.get("lot"),
+                    "inputs": input_files(os.path.join(INPUTS, name[:-4]))}
+            items.append((st.st_mtime_ns, item))   # à la nanoseconde : deux images d'un lot finies la même seconde
+    return [it for _, it in sorted(items, key=lambda x: x[0], reverse=True)]
+
+
+def history():
+    """Tirages (images de outputs/), le plus récent d'abord ; les images d'avant la pile en sont."""
+    return images_in(P("outputs"))
+
+
+def pile():
+    """Pile de l'espace public, la dernière arrivée d'abord."""
+    return images_in(PILE)
 
 
 def thumb_jpeg(src):
@@ -923,14 +1247,25 @@ def thumb_jpeg(src):
 
 
 def thumbnail(fp, th=None):
-    """Miniature d'une image de outputs/, gardée dans outputs/.thumbs/ et refaite si l'image change."""
+    """Miniature d'un tirage, d'une image de la pile ou d'une de leurs images d'entrée (fp), gardée dans
+    outputs/.thumbs/ et refaite si l'image change. Mise en place sous JOURNAL_LOCK, et seulement si fp existe
+    encore : une miniature finie après Jeter ou Supprimer ne reste pas ; FileNotFoundError alors."""
     th = th or os.path.join(THUMBS, os.path.basename(fp)[:-4] + ".jpg")
     if not os.path.exists(th) or os.path.getmtime(th) < os.path.getmtime(fp):
         os.makedirs(THUMBS, exist_ok=True)
         tmp = f"{th}.{threading.get_ident()}.tmp"   # écrite à côté puis renommée : jamais lue à moitié écrite
-        with open(tmp, "wb") as f:
-            f.write(thumb_jpeg(fp))
-        os.replace(tmp, th)
+        try:
+            with open(tmp, "wb") as f:
+                f.write(thumb_jpeg(fp))
+            with JOURNAL_LOCK:
+                if not os.path.exists(fp):
+                    raise FileNotFoundError(fp)
+                os.replace(tmp, th)
+        finally:
+            try:
+                os.remove(tmp)
+            except FileNotFoundError:
+                pass
     return th
 
 
@@ -943,19 +1278,188 @@ def access_token(code):
     return hashlib.sha256(("qwen-image-local:" + normalize_code(code)).encode()).hexdigest()
 
 
-def load_access_code():
-    """Code d'accès des appareils du Wi-Fi : créé au premier lancement avec --lan, gardé dans tools/access_code.txt."""
-    if os.path.exists(ACCESS_FILE):
-        code = open(ACCESS_FILE, encoding="utf-8").read().strip()
-        if len(normalize_code(code)) >= 6:
+def read_access_code():
+    """Code d'accès de tools/access_code.txt, remis en 0o600, ou None s'il manque ou compte moins de 6 signes ; ne crée
+    rien (aussi lu par tests/run_tests.py). Un fichier illisible (droits, encodage, dossier) lève OSError ou
+    ValueError (UnicodeDecodeError)."""
+    try:
+        with open(ACCESS_FILE, encoding="utf-8") as f:
+            code = f.read().strip()
+    except FileNotFoundError:
+        return None
+    try:
+        os.chmod(ACCESS_FILE, 0o600)                 # créé autrement (à la main, copie) : fermé aux autres comptes
+    except OSError:
+        pass
+    return code if len(normalize_code(code)) >= 6 else None
+
+
+class AccessPending(Exception):
+    """Fichier du code créé par un autre lancement, encore vide ou incomplet au bout de l'attente."""
+
+
+def wait_access_code():
+    """Code de tools/access_code.txt relu pendant 2 s au plus : un autre lancement peut l'avoir créé à l'instant
+    (O_EXCL) sans l'avoir encore écrit ; None s'il reste absent ou trop court."""
+    for _ in range(40):
+        code = read_access_code()
+        if code:
             return code
+        time.sleep(0.05)
+    return None
+
+
+def load_access_code():
+    """Code d'accès de tous les appareils, le Mac compris : créé au premier lancement, avec ou sans --lan, gardé dans
+    tools/access_code.txt (0o600). Un fichier illisible n'est jamais écrasé (OSError, ValueError : setup_access
+    arrête le lancement) ; un fichier lisible mais trop court est remplacé, s'il l'est encore après l'attente d'un
+    autre lancement qui l'écrirait (wait_access_code) : un fichier vide n'est jamais effacé sous ce lancement-là."""
+    code = read_access_code()
+    if code:
+        return code
+    if os.path.exists(ACCESS_FILE):
+        code = wait_access_code()                    # peut-être en cours d'écriture par un autre lancement
+        if code:
+            return code
+        try:
+            os.remove(ACCESS_FILE)                   # resté trop court : remplacé par un nouveau code
+        except FileNotFoundError:
+            pass
     alphabet = "abcdefghjkmnpqrstuvwxyz23456789"          # sans caractères ambigus (0/o, 1/l/i)
     raw = "".join(secrets.choice(alphabet) for _ in range(8))
     code = raw[:4] + "-" + raw[4:]
-    with open(ACCESS_FILE, "w", encoding="utf-8") as f:
+    try:                                             # création exclusive, d'emblée en 0o600
+        fd = os.open(ACCESS_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:                          # créé entre-temps par un autre lancement : son code est gardé
+        code = wait_access_code()
+        if code:
+            return code
+        raise AccessPending()
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(code + "\n")
-    os.chmod(ACCESS_FILE, 0o600)
     return code
+
+
+def setup_access():
+    """Code d'accès chargé ou créé, et empreinte du cookie qui le prouve : posés par main() à chaque lancement, avec ou
+    sans --lan (le Mac lui-même demande le code). Fichier illisible, ou encore en cours d'écriture par un autre
+    lancement : arrêt, avec un message qui ne cite pas son contenu."""
+    try:
+        S.access_code = load_access_code()
+    except AccessPending:                            # pas « supprimez-le » : ce serait perdre le code de l'autre
+        sys.exit("[launch] un autre lancement crée tools/access_code.txt : patientez, puis relancez.")
+    except (OSError, ValueError):
+        sys.exit("[launch] tools/access_code.txt est illisible : supprimez-le, puis relancez (un nouveau code d'accès "
+                 "sera créé, que chaque appareil redemandera).")
+    S.access_token = access_token(S.access_code)
+
+
+def access_cookie_header():
+    """Cookie d'accès posé après le code (/api/login) ou le jeton d'entrée (/entrer). Lax et non Strict : Chrome Android
+    compte l'ouverture de l'application installée (écran d'accueil) comme une arrivée d'un autre site et n'enverrait
+    pas un cookie Strict, d'où le code redemandé à chaque ouverture. Lax n'est envoyé d'un autre site que pour
+    l'ouverture d'une page (GET, sans effet) ; les POST restent protégés par _post_refused."""
+    return f"{ACCESS_COOKIE}={S.access_token}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax"
+
+
+def write_owner_only(path, text):
+    """Écrit text dans path sans qu'un autre compte puisse le lire, même un instant : fichier temporaire au nom tiré au
+    hasard, créé en 0o600 par création exclusive (O_EXCL : jamais un lien symbolique suivi), à côté, puis remplacement
+    atomique (un ancien fichier, quels que soient ses droits, disparaît d'un coup). Pas replace_synced : son temporaire
+    a un nom fixe, ouvert sans O_EXCL (un lien posé à sa place serait suivi), et il sert l'espace privé, qu'on ne
+    touche pas ici ; pas de fsync non plus : un jeton d'entrée perdu à une coupure se refait."""
+    tmp = f"{path}.{secrets.token_hex(8)}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def make_entry(port):
+    """Jeton d'entrée tiré au hasard (128 bits, tools/entry_token) et page de redirection vers
+    http://127.0.0.1:<port>/entrer?jeton=<jeton> (tools/entry.html) ; renvoie le chemin de la page. Le navigateur
+    ouvre ce fichier : le jeton ne passe jamais sur une ligne de commande, que ps montre aux autres comptes."""
+    token = secrets.token_urlsafe(16)
+    url = f"http://127.0.0.1:{port}/entrer?jeton={token}"
+    with ENTRY_LOCK:                             # pas de jeton à moitié remplacé pendant un /entrer du même processus
+        write_owner_only(ENTRY_TOKEN, token + "\n")
+        write_owner_only(ENTRY_PAGE, '<!doctype html><html lang="fr"><head><meta charset="utf-8">'
+                         '<meta name="referrer" content="no-referrer">'
+                         f'<meta http-equiv="refresh" content="0;url={url}"><title>Chambre noire</title></head>'
+                         '<body><p>Ouverture de Chambre noire…</p></body></html>\n')
+    return ENTRY_PAGE
+
+
+def open_entry(port):
+    """Ouvre l'interface dans le navigateur par la page de redirection (son chemin), jamais par l'adresse qui porte le
+    jeton (launch.py --enter, et main() au lancement). Le système ouvre ce fichier .html avec son application
+    habituelle : un éditeur réglé pour les .html l'ouvrirait à la place du navigateur (recours : l'adresse et le
+    code)."""
+    webbrowser.open(pathlib.Path(make_entry(port)).as_uri())
+
+
+def open_browser(port):
+    """Navigateur ouvert au lancement : par l'entrée à usage unique ; si elle ne peut pas s'écrire (dossier en lecture
+    seule, disque plein), par l'adresse simple, sans jeton, où le code est demandé (une ligne neutre au journal)."""
+    try:
+        open_entry(port)
+    except (OSError, ValueError):
+        print("[launch] entrée sans code impossible : le code d'accès sera demandé", flush=True)
+        webbrowser.open(f"http://127.0.0.1:{port}/")
+
+
+def remove_entry():
+    """Efface le jeton et sa page ; un fichier qui résiste (tenu ouvert sous Windows) reste, sans erreur : un jeton
+    servi est de toute façon refusé ensuite (ENTRY_USED)."""
+    for path in (ENTRY_TOKEN, ENTRY_PAGE):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def use_entry_token(token):
+    """Vrai si token est le jeton d'entrée en cours : il est alors effacé, page de redirection comprise (usage unique).
+    Un jeton de plus de ENTRY_TTL s est effacé et refusé ; un mauvais jeton n'efface rien (un autre compte effacerait
+    sinon le jeton du porteur avant son navigateur). Comparaison en temps constant, en octets."""
+    with ENTRY_LOCK:
+        try:
+            with open(ENTRY_TOKEN, encoding="utf-8") as f:
+                # âge du fichier lu, pas d'un autre : un --enter qui le remplace entre-temps garde son jeton neuf
+                age = time.time() - os.fstat(f.fileno()).st_mtime
+                expected = f.read().strip()
+        except (OSError, ValueError):
+            return False
+        if abs(age) > ENTRY_TTL:
+            remove_entry()
+            return False
+        if not expected or not hmac.compare_digest(token.encode(), expected.encode()):
+            return False
+        used = hashlib.sha256(expected.encode()).hexdigest()
+        if used in ENTRY_USED:                   # déjà servi, fichier resté (effacement refusé)
+            return False
+        ENTRY_USED.add(used)
+        remove_entry()
+        return True
+
+
+def cookie_value(header, name):
+    """Valeur du cookie name dans un en-tête Cookie, ou None. Découpé à la main sur « ; » : SimpleCookie perd tout
+    l'en-tête sur une seule paire mal formée, ou lève CookieError, et l'ordinateur partage ses cookies avec tout serveur
+    de 127.0.0.1 ou localhost (autres applications). Guillemets autour de la valeur retirés."""
+    for pair in header.split(";"):
+        key, sep, value = pair.partition("=")
+        if sep and key.strip() == name:
+            value = value.strip()
+            return value[1:-1] if len(value) >= 2 and value[0] == value[-1] == '"' else value
+    return None
 
 
 def lan_address():
@@ -1014,7 +1518,7 @@ class State:
     engine = estimate.LEGACY_ENGINE   # release de sd.cpp du moteur choisi
     model = "q4"
     store = None
-    access_code = None       # avec --lan : code demandé aux appareils autres que le Mac
+    access_code = None       # code demandé à tout appareil, le Mac compris (posé par setup_access, à chaque lancement)
     access_token = None      # valeur du cookie posé après saisie du code (empreinte du code, pas le code)
     lan_urls = []            # adresses affichées pour le téléphone
     lan_hosts = set()        # noms d'hôte admis en plus des noms locaux (ceux de lan_urls et le nom HTTPS de Tailscale)
@@ -1022,9 +1526,9 @@ class State:
     cfg = {}
     ui_port = 7860
     jobs = {}
-    lots = {}                # lots en cours par identifiant : {"jobs": [...], "incognito", "private", "campaign"} ;
-                             # garde les générations d'un lot même quand une génération incognito ou privée a quitté
-                             # S.jobs, jusqu'à la fin du lot
+    lots = {}                # lots en cours par identifiant : {"jobs": [...], "campaign"} ; garde les
+                             # générations d'un lot même quand une génération privée a quitté S.jobs, jusqu'à la fin
+                             # du lot
     private_sessions = {}    # sessions de l'espace privé : {jeton du cookie : {"key": clé privée, "seen": dernière requête privée}}
     rekeyed = {}             # clé publique remplacée par un changement de code → la suivante : une génération privée lancée
                              # avant le changement est rangée avec la nouvelle clé (store_private)
@@ -1035,6 +1539,10 @@ class State:
                                    # une seule opération ; cancel_job y annule (la fin d'une génération, done ou
                                    # failed, s'écrit sans lui)
     current = None
+    # compteur de chaque espace, augmenté à chaque image arrivée dans sa pile et à chaque Garder, Jeter, Supprimer
+    # (sous le verrou du changement) : l'interface relit pile et tirages quand celui de son espace change. Il part de
+    # l'heure du lancement, pour qu'un redémarrage ne redonne pas une valeur qu'une page a déjà vue.
+    rev = dict.fromkeys(("public", "private"), time.time_ns() // 1_000_000)
     started = None           # version du code au lancement du serveur (code_version) : launch.py n'est relu qu'au
                              # redémarrage, l'interface à chaque requête
 
@@ -1226,51 +1734,48 @@ def run_job(job):
         except Exception:
             job["dims"] = [job["req"]["width"], job["req"]["height"]]
         job["size"] = os.path.getsize(job["out"])
-        if job.get("incognito"):                 # image gardée en mémoire seulement ; dossier supprimé par worker()
-            with open(job["out"], "rb") as f:
-                job["png"] = f.read()
-            job["status"] = "done"
-            job["phase"] = "terminé"
-            return
         if job.get("private"):                   # chiffrée dans l'espace privé ; dossier supprimé par worker()
-            job["item"] = keep_private(job)
+            item = keep_private(job)
+            # annulée ou oubliée pendant le rangement : « done » n'écrase pas « cancelled », sous S.turn comme
+            # cancel_job, et l'image rangée est supprimée (décision du 23/10/2026)
+            with S.turn:
+                cancelled = job.get("status") == "cancelled"
+                if not cancelled:
+                    job["item"], job["status"], job["phase"] = item, "done", "terminé"
+            if cancelled:                         # une erreur du disque ici la laisse dans la pile privée, à jeter
+                with PRIVATE_LOCK:
+                    finish_rekey()
+                    remove_private_item(item)
+                return
+            with PRIVATE_LOCK:                   # dans la pile privée : après « done », comme to_pile
+                S.rev["private"] += 1
+            print(DONE_LINE, flush=True)
+            return
+        if job.get("calibration"):                # les générations de tools/calibrate.py restent hors du journal
             job["status"] = "done"
             job["phase"] = "terminé"
-            return
-        job["status"] = "done"
-        job["phase"] = "terminé"
-        if not job.get("calibration"):            # les générations de tools/calibrate.py restent hors du journal
+        else:                                     # dans la pile, à trier
             meta = {"mode": job["req"].get("mode"), "prompt": job["req"]["prompt"], "width": job["req"]["width"], "height": job["req"]["height"],
                     "steps": job["req"]["steps"], "seed": job["req"].get("seed"), "seconds": job["seconds"], "encode_seconds": job.get("encode_seconds"),
-                    "sec_per_it": job.get("sec_per_it"), "file": job["out"], "size": job["size"], "backend": S.backend, "model": S.model}
+                    "sec_per_it": job.get("sec_per_it"), "size": job["size"], "backend": S.backend, "model": S.model}
             if job.get("lot"):
                 meta["lot"] = job["lot"]
-            append_journal(meta)
-            try:
-                save_inputs(job["dir"], job["out"])
-            except OSError as e:
-                print(f"[job] images d'entrée non conservées : {e}", flush=True)
-            print(f"[job] PNG enregistré : {job['out']} ({job['size']} octets, {job['seconds']} s)", flush=True)
-        try:
-            record_calib(job)
-        except Exception as e:
-            print(f"[calibration] ignorée : {e}", flush=True)
+            if not to_pile(job, meta):            # annulée pendant la fin du calcul : rien n'en reste
+                discard_cancelled(job)
+                return
+        print(DONE_LINE, flush=True)
+        record_calib(job)
     else:
         job["status"] = "failed"
         job["error"] = "sd-cli code " + str(rc) + " — " + " | ".join((job.get("error_lines") or tail)[-4:])
-        # en incognito, le détail (qui peut citer le prompt) reste en mémoire pour l'interface, hors de logs/
-        print("[job] échec : " + (f"génération {kind_of(job)}, sd-cli code {rc}" if secret(job) else job["error"]), flush=True)
+        # même ligne pour toutes les générations : le détail (qui peut citer le prompt) reste en mémoire pour
+        # l'interface, hors de logs/, et rien n'y distingue une génération privée
+        print(f"[job] échec : génération, sd-cli code {rc}", flush=True)
 
 
 def secret(job):
-    """Génération incognito ou privée : rien d'elle ne doit rester en clair (journal, calibration, logs/, disque)."""
-    return bool(job.get("incognito") or job.get("private"))
-
-
-def kind_of(job):
-    """Genre d'une génération secrète, pour un message de journal qui n'en dit pas plus : « incognito » aussi pour une
-    génération privée, pour que logs/ ne révèle pas l'espace privé."""
-    return "incognito"
+    """Génération privée : rien d'elle ne doit rester en clair (journal, calibration, logs/, disque)."""
+    return bool(job.get("private"))
 
 
 def keep_private(job):
@@ -1280,7 +1785,7 @@ def keep_private(job):
     r = job["req"]
     meta = {"mode": job["mode"], "prompt": r["prompt"], "width": r["width"], "height": r["height"], "steps": r["steps"],
             "seed": r.get("seed"), "seconds": job["seconds"], "model": S.model, "lot": job.get("lot"), "time": int(job["finished"]),
-            "dims": job.get("dims")}
+            "dims": job.get("dims"), "pile": True}   # à trier : la marque reste dans la fiche chiffrée
     with open(job["out"], "rb") as f:
         image = f.read()
     return store_private(job["public"], meta, image, read_inputs(job["dir"]))
@@ -1299,9 +1804,8 @@ def discard_cancelled(job):
 
 
 def forget_files(job):
-    """Fin d'un job incognito ou privé : supprime son dossier de travail et retire de la mémoire le prompt, les images
-    d'entrée et la ligne de commande ; seule l'image finale d'un job incognito (job["png"]) reste, jusqu'à sa
-    récupération par l'interface."""
+    """Fin d'un job privé : supprime son dossier de travail et retire de la mémoire le prompt, les images d'entrée et la
+    ligne de commande."""
     shutil.rmtree(job["dir"], ignore_errors=True)
     for k in ("req", "cmd", "error_lines", "preview", "step_times"):
         job.pop(k, None)
@@ -1318,13 +1822,14 @@ def fail_job(job, e):
         discard_cancelled(job)
         return
     if job.get("status") == "done":             # image produite, journal ou calibration en échec : elle reste réussie
-        print("[job] fin de génération incomplète" + ("" if secret(job) else f" : {e}"), flush=True)
+        print("[job] fin de génération incomplète", flush=True)   # sans détail, qui peut citer un fichier
         return
     job["status"], job["phase"] = "failed", "échec"
     job["error"] = f"génération impossible : {e}"
     job.setdefault("finished", time.time())
-    # en incognito, le détail (qui peut citer un fichier de travail) reste en mémoire pour l'interface, hors de logs/
-    print("[job] échec : " + (f"génération {kind_of(job)}, erreur de préparation" if secret(job) else job["error"]), flush=True)
+    # même ligne pour toutes les générations : le détail (qui peut citer un fichier de travail) reste en mémoire pour
+    # l'interface, hors de logs/
+    print("[job] échec : génération, erreur de préparation", flush=True)
 
 
 ACTIVE = ("queued", "running")             # statuts d'une génération de la file
@@ -1347,23 +1852,23 @@ def cancel_job(job):
 
 
 def forget_job(job):
-    """Génération incognito récupérée par sa page, ou page quittée : arrêtée si elle tournait encore, puis plus rien en
-    mémoire (le dossier de travail est supprimé par worker() à la fin de la génération)."""
+    """Génération privée que sa page fait oublier, ou trop ancienne (sweep) : arrêtée si elle tournait encore, puis plus
+    rien en mémoire (le dossier de travail est supprimé par worker() à la fin de la génération)."""
     cancel_job(job)
     S.jobs.pop(job["id"], None)
-    job.pop("png", None)
 
 
 def sweep():
-    """Ménage fait à chaque requête : une génération incognito terminée (réussie, en échec ou annulée) que sa page n'a
-    jamais fait oublier (page tuée sans prévenir) est oubliée INCOGNITO_TTL secondes après sa fin ; une session de
-    l'espace privé sans requête privée depuis PRIVATE_IDLE secondes est fermée (clé privée oubliée)."""
+    """Ménage fait à chaque requête : une génération privée terminée (réussie, en échec ou annulée) que sa page n'a
+    jamais fait oublier (page fermée ou tuée avant la fin) est oubliée PRIVATE_JOB_TTL secondes après sa fin ; une
+    session de l'espace privé sans requête privée depuis PRIVATE_IDLE secondes est fermée (clé privée oubliée)."""
     now = time.time()
     for token, session in list(S.private_sessions.items()):
         if now - session["seen"] > PRIVATE_IDLE:
             S.private_sessions.pop(token, None)
     for job in list(S.jobs.values()):
-        if secret(job) and job.get("status") not in ACTIVE and now - (job.get("finished") or job["created"]) > INCOGNITO_TTL:
+        if (secret(job) and job.get("status") not in ACTIVE
+                and now - (job.get("finished") or job["created"]) > PRIVATE_JOB_TTL):
             forget_job(job)
 
 
@@ -1390,8 +1895,8 @@ def worker():
                 fail_job(job, e)
             if job.get("status") in ("done", "failed") and not job.get("lot"):
                 notify_job(job)
-        except Exception as e:
-            print("[job] erreur du thread de calcul" + ("" if secret(job) else f" : {e}"), flush=True)
+        except Exception:
+            print("[job] erreur du thread de calcul", flush=True)   # sans détail : même ligne pour toutes
         finally:
             # S.current rendu en dernier : « plus de génération en cours » veut dire fichiers rangés et notification
             # du lot décidée (le banc s'y synchronise au lieu d'attendre au hasard)
@@ -1407,7 +1912,7 @@ def worker():
 
 def end_of_lot(job):
     """Après chaque génération d'un lot, terminée ou annulée en file : le lot est fini quand aucune de ses générations
-    n'attend ni ne tourne. Il quitte alors S.lots (rien n'en reste en mémoire pour un lot incognito oublié par sa page)
+    n'attend ni ne tourne. Il quitte alors S.lots (rien n'en reste en mémoire pour un lot privé oublié par sa page)
     et sa notification part, une seule fois : une génération annulée en file passe encore par worker() après la fin
     du lot, mais ne le trouve plus."""
     lot = S.lots.get(job["lot"]["id"])
@@ -1415,8 +1920,8 @@ def end_of_lot(job):
         S.lots.pop(job["lot"]["id"], None)
         try:
             notify_lot(lot)
-        except Exception as e:
-            print("[push] notification du lot impossible" + ("" if secret(lot["jobs"][0]) else f" : {e}"), flush=True)
+        except Exception:
+            print("[push] notification du lot impossible", flush=True)   # sans détail : même ligne pour tous
 
 
 def request_error(req):
@@ -1449,10 +1954,8 @@ def request_error(req):
         return "mode : texte attendu"
     if req.get("private") is not None and not isinstance(req["private"], bool):
         return "private : vrai ou faux attendu"
-    if req.get("private") and req.get("incognito"):
-        return "private et incognito s'excluent"
-    if req.get("page") is not None and not (isinstance(req["page"], str) and PAGE_TOKEN_RE.fullmatch(req["page"])):
-        return "page : jeton de 1 à 64 lettres, chiffres, - ou _ attendu"
+    if req.get("incognito"):                    # ancienne page restée ouverte : jamais une image en clair à sa place
+        return "L'incognito n'existe plus : passez par l'espace privé."
     count = req.get("count")
     if count is not None:
         if not is_int(count) or not 1 <= count <= MAX_VARIANTS:
@@ -1527,7 +2030,7 @@ def moved_first(jobs, error):
 
 
 def in_space(job, private):
-    """La génération est-elle de cet espace : privée pour l'espace privé, normale ou incognito pour l'espace public."""
+    """La génération est-elle de cet espace : privée pour l'espace privé, normale pour l'espace public."""
     return bool(job.get("private")) == private
 
 
@@ -1578,34 +2081,22 @@ def job_estimate(job, r, coefs):
 
 
 def queue_entry(job, position, ahead, coefs):
-    """Entrée de la liste de la file (/api/status), vue depuis l'espace de la génération. Une génération incognito
-    (espace public) n'y montre que son genre, le jeton de sa page et son étiquette (tag) : ni identifiant (seule la page
-    qui l'a lancée peut la suivre, l'annuler ou la faire passer en tête), ni prompt, ni mode, ni réglages, ni marqueur
-    de campagne (son lot ne dit que son rang et sa taille). Une génération privée n'est vue que depuis l'espace privé,
-    où elle a une entrée complète comme une génération normale, genre « private ». ahead : durée restante estimée des
-    générations de l'autre espace placées devant elle. None si la génération vient de finir."""
+    """Entrée de la liste de la file (/api/status), vue depuis l'espace de la génération. Une génération privée n'est
+    vue que depuis l'espace privé, où elle a une entrée complète comme une génération normale, genre « private ».
+    ahead : durée restante estimée des générations de l'autre espace placées devant elle. None si la génération vient
+    de finir."""
     r = job.get("req")
     if r is None:
         return None
     est, lot = job_estimate(job, r, coefs), job.get("lot")
-    e = {"status": job["status"], "position": position, "ahead": round(ahead, 1),
-         # lot incognito : ni son identifiant (connu de sa seule page, comme ceux de ses générations) ni son marqueur
-         # de campagne (sa page l'a dans sa réponse de /api/generate) : son rang et sa taille
-         "lot": lot and ({k: lot[k] for k in ("rank", "size")} if job.get("incognito") else dict(lot)),
-         "estimate": round(est, 1),
-         "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None}
-    if job.get("incognito"):
-        # jeton de la page qui l'a lancée et étiquette de la génération, que sa page seule connaît : elle y reconnaît
-        # sa ligne ; ni l'un ni l'autre n'ouvre de route (ni suivi, ni annulation)
-        e.update(kind="incognito", page=job.get("page"), tag=job.get("tag"))
-    else:
-        prompt = " ".join(r["prompt"].split())
-        # réglages de la demande : proportions de la vignette et ligne des réglages de la file (une incognito les tait,
-        # sa page les connaît)
-        e.update(kind="private" if job.get("private") else "normal", id=job["id"], mode=job["mode"],
-                 width=r["width"], height=r["height"], steps=r["steps"],
-                 prompt=prompt[:80] + ("…" if len(prompt) > 80 else ""))
-    return e
+    prompt = " ".join(r["prompt"].split())
+    # réglages de la demande : proportions de la vignette et ligne des réglages de la file
+    return {"status": job["status"], "position": position, "ahead": round(ahead, 1), "lot": lot and dict(lot),
+            "estimate": round(est, 1),
+            "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None,
+            "kind": "private" if job.get("private") else "normal", "id": job["id"], "mode": job["mode"],
+            "width": r["width"], "height": r["height"], "steps": r["steps"],
+            "prompt": prompt[:80] + ("…" if len(prompt) > 80 else "")}
 
 
 def queue_view(private, coefs):
@@ -1628,24 +2119,25 @@ def queue_view(private, coefs):
 
 def new_job(req, inputs, lot=None):
     """Génération en attente pour une demande validée (sa graine déjà fixée), avec son dossier de travail. Identifiant
-    d'une génération incognito : 128 bits tirés au hasard, impossible à deviner pour un autre appareil (lui seul ouvre
-    son suivi, son image et son annulation) ; celui d'une génération normale dit sa date."""
-    incognito, private = req.get("incognito") is True, req.get("private") is True
-    jid = secrets.token_hex(16) if incognito or private else datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+    d'une génération privée : 128 bits tirés au hasard, impossible à deviner pour un autre appareil ; celui d'une
+    génération normale dit sa date."""
+    private = req.get("private") is True
+    jid = (secrets.token_hex(16) if private
+           else datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6])
     mode = re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
-    d = P("jobs", ("incognito_" if incognito else "private_" if private else "") + jid)
+    d = P("jobs", ("private_" if private else "") + jid)
     os.makedirs(d, exist_ok=True)
-    # en incognito et en privé, le PNG reste dans le dossier de travail (supprimé en fin de job)
-    out = os.path.join(d, f"{jid}_{mode}.png") if incognito or private else P("outputs", f"{jid}_{mode}.png")
+    if private:                                 # PNG en clair et prompt dans ses métadonnées : pour le seul compte,
+        os.chmod(d, 0o700)                      # même sans le masque de restrict_new_files
+    # le PNG s'écrit dans le dossier de travail : une génération normale le fait passer dans la pile une fois fini
+    # (to_pile), la pile ne voit jamais une image à moitié écrite ; une privée le chiffre (keep_private)
+    out = os.path.join(d, f"{jid}_{mode}.png")
     return {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
-            "incognito": incognito, "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot,
+            "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot,
             # noms des images d'entrée que build_cmd écrit et que save_inputs garde (init.png, puis ref_N.png) : la page
             # qui suit la génération les montre, même après l'oubli de la demande
             "input_names": (["init.png"] if req.get("init_image") else [])
             + [f"ref_{i + 1}.png" for i in range(len(req.get("ref_images") or []))],
-            "page": req.get("page") if incognito else None,   # jeton de la page, montré dans queue à la place de l'id
-            # étiquette d'une incognito, montrée dans queue : sa page y reconnaît sa ligne même après un déplacement
-            "tag": secrets.token_hex(8) if incognito else None,
             "public": private and (read_space() or {}).get("public")}    # clé publique de l'espace au lancement
 
 
@@ -1655,30 +2147,44 @@ def public(job):
     d = {k: job.get(k) for k in keys}
     d["queue_position"] = queue_position(job)
     d["elapsed"] = round(time.time() - job["started"], 1) if job.get("started") and not job.get("finished") else job.get("seconds")
-    d["incognito"], d["private"] = bool(job.get("incognito")), bool(job.get("private"))
-    d["item"] = job.get("item")                   # image privée rangée : identifiant dans la galerie privée
+    d["private"] = bool(job.get("private"))
+    d["item"] = job.get("item")                   # image privée rangée : identifiant dans la pile privée
     d["lot"], d["seed"] = job.get("lot"), job.get("seed")
     d["mode"], d["inputs"] = job.get("mode"), job.get("input_names") or []   # vrai mode, images d'entrée gardées
     # prompt complet, pour la page qui reprend une génération (la file n'en montre que le début) : tant que la demande
-    # est en mémoire (une privée l'oublie à sa fin), jamais pour une incognito (sa seule page le connaît déjà) ; une
-    # privée n'est suivie que dans l'espace privé (_hidden)
-    d["prompt"] = None if job.get("incognito") else (job.get("req") or {}).get("prompt")
+    # est en mémoire (une privée l'oublie à sa fin) ; une privée n'est suivie que dans l'espace privé (_hidden)
+    d["prompt"] = (job.get("req") or {}).get("prompt")
     d["path"] = job["out"] if job.get("status") == "done" and not secret(job) else None
     d["name"] = os.path.basename(job["out"])
     return d
 
 
-def launched(job):
-    """Génération telle que /api/generate la rend à la page qui l'a lancée : son suivi (public), plus l'étiquette d'une
-    génération incognito, qui ne se lit nulle part ailleurs que dans sa ligne de queue."""
-    return {**public(job), "tag": job["tag"]} if job.get("tag") else public(job)
+QUIET_ROUTES = ("/api/status", "/api/job/", "/api/private/", "/api/lot/", "/api/generate", "/entrer")
+REQUEST_PATH_RE = re.compile(r'"[A-Z]+ ([^ ?#]*)')   # chemin de la ligne de requête, sans ce qui suit « ? »
 
 
 def quiet_request(msg):
-    """Requêtes tues dans le journal du serveur : interrogations répétées (état, suivi des générations) et tout ce qui
+    """Requêtes tues dans le journal du serveur même en erreur (les réussies n'y vont jamais : H.log_request), d'après
+    leur chemin seul (une chaîne de requête ne fait rien taire) : suivi de l'état et des générations, et tout ce qui
     peut toucher à l'espace privé (rien n'en va dans logs/), annulation et passage en tête d'une génération ou d'un lot
-    compris (leur identifiant)."""
-    return "/api/status" in msg or "/api/job/" in msg or "/api/private/" in msg or "/api/lot/" in msg
+    compris (leur identifiant), et toute demande de génération, ses refus propres (403, 503) ne venant que de l'espace
+    privé (décision du 23/10/2026). Ainsi tus, les refus d'accès d'une demande de génération (401, 403, 415) ne sont
+    plus suivis non plus."""
+    m = REQUEST_PATH_RE.match(msg)
+    if m:
+        return m.group(1).startswith(QUIET_ROUTES)
+    return any(route in msg for route in QUIET_ROUTES)
+
+
+# erreurs d'écriture d'une connexion que l'appareil a fermée : macOS donne parfois EPROTOTYPE ou ENOTCONN, un simple
+# OSError, au lieu de EPIPE
+CUT_ERRNOS = {getattr(errno, n) for n in ("EPIPE", "ECONNRESET", "ECONNABORTED", "ESHUTDOWN", "EPROTOTYPE", "ENOTCONN")
+              if hasattr(errno, n)}
+
+
+def cut_connection(e):
+    """L'erreur vient-elle d'une connexion fermée par l'appareil ?"""
+    return isinstance(e, ConnectionError) or isinstance(e, OSError) and e.errno in CUT_ERRNOS
 
 
 class Server(ThreadingHTTPServer):
@@ -1687,8 +2193,23 @@ class Server(ThreadingHTTPServer):
     # fabrique, les suivantes étaient refusées (« Connection reset by peer », miniature cassée sur le téléphone)
     request_queue_size = 128
 
+    def handle_error(self, request, client_address):
+        # connexion coupée par l'appareil (page quittée pendant un chargement) : une ligne neutre au lieu de la pile
+        # d'appels de Python, qui nommerait une route privée, l'adresse de l'appareil et des chemins du Mac
+        if cut_connection(sys.exc_info()[1]):
+            print("[ui] connexion interrompue", flush=True)
+            return
+        super().handle_error(request, client_address)
+
 
 class H(BaseHTTPRequestHandler):
+    def log_request(self, code="-", size="-"):
+        # seules les requêtes en erreur vont au journal : la suite des requêtes réussies (image et miniature lues après
+        # une génération normale seulement) trahirait les générations privées (décision du 23/10/2026)
+        if isinstance(code, int) and code < 400:   # int ou HTTPStatus
+            return
+        super().log_request(code, size)
+
     def log_message(self, fmt, *args):
         msg = fmt % args
         if not quiet_request(msg):
@@ -1748,18 +2269,18 @@ class H(BaseHTTPRequestHandler):
         return None
 
     def _allowed(self):
-        """Le Mac lui-même passe toujours ; un autre appareil doit avoir saisi le code d'accès (cookie). Sans --lan, pas de
-        code : seul le Mac passe, une requête relayée par Tailscale est refusée."""
-        if self._local():
-            return True
-        if not S.access_code:
-            return not self._proxied()
-        morsel = SimpleCookie(self.headers.get("Cookie", "")).get(ACCESS_COOKIE)
-        return bool(morsel) and hmac.compare_digest(morsel.value, S.access_token)
+        """Tout appareil, le Mac lui-même compris, doit avoir saisi le code d'accès (cookie), avec ou sans --lan.
+        Passent sans lui, avant ce contrôle : les fichiers publics (PUBLIC_FILES), GET /entrer (jeton d'entrée),
+        POST /api/login (saisie du code) et POST /api/private/lock (ne ferme que la session de l'appareil). Sans code
+        chargé, rien ne passe."""
+        if not S.access_token:
+            return False
+        value = cookie_value(self.headers.get("Cookie", ""), ACCESS_COOKIE)
+        # en octets : compare_digest lève TypeError sur un texte non ASCII (cookie mal formé, jamais une erreur)
+        return value is not None and hmac.compare_digest(value.encode(), S.access_token.encode())
 
     def _private_token(self):
-        morsel = SimpleCookie(self.headers.get("Cookie", "")).get(PRIVATE_COOKIE)
-        return morsel.value if morsel else None
+        return cookie_value(self.headers.get("Cookie", ""), PRIVATE_COOKIE)
 
     def _private_session(self, touch=False):
         """Session de l'espace privé de cet appareil (cookie), ou None ; touch : requête privée, qui la prolonge."""
@@ -1799,7 +2320,7 @@ class H(BaseHTTPRequestHandler):
         return token
 
     def _private_get(self, path, q):
-        """Lectures de l'espace privé, session exigée (elles la prolongent) : history, thumb, image, input."""
+        """Lectures de l'espace privé, session exigée (elles la prolongent) : history, pile, thumb, image, input."""
         if not HAVE_CRYPTO:
             return self._send(503, {"error": "espace privé indisponible : bibliothèque cryptography non installée"})
         if not self._secure():
@@ -1808,8 +2329,8 @@ class H(BaseHTTPRequestHandler):
         if not session:
             return self._send(403, {"error": "espace privé verrouillé"})
         key, item, action = session["key"], q.get("id"), path[len("/api/private/"):]
-        if action == "history":
-            return self._send(200, private_history(key))
+        if action in ("history", "pile"):        # tirages ou pile de l'espace
+            return self._send(200, private_items(key, pile=action == "pile"))
         if action == "prompts":                   # prompts enregistrés de l'espace, le dernier utilisé d'abord
             try:
                 saved = sorted(private_prompts(key), key=lambda p: -p["used"])
@@ -1840,7 +2361,8 @@ class H(BaseHTTPRequestHandler):
         return self._send(200, raw, ctype, extra)
 
     def _private_post(self, path, raw):
-        """Routes POST de l'espace privé : create, unlock, lock, code, reset, delete. Rien n'en va dans les journaux."""
+        """Routes POST de l'espace privé, derrière _allowed : create, unlock, code, reset, delete, keep, discard,
+        prompts (lock est traité avant, dans do_POST). Rien n'en va dans les journaux."""
         if not HAVE_CRYPTO:
             return self._send(503, {"error": "espace privé indisponible : bibliothèque cryptography non installée"})
         try:
@@ -1850,17 +2372,34 @@ class H(BaseHTTPRequestHandler):
         if not isinstance(body, dict):
             return self._send(400, {"error": "objet JSON attendu"})
         action = path[len("/api/private/"):]
-        if action not in ("lock", "reset") and not self._secure():   # verrouiller : partout ; reset : le Mac seul
+        if action != "reset" and not self._secure():   # reset : le Mac seul, vérifié plus bas
             return self._send(403, {"error": PRIVATE_HTTPS_ONLY})
         if action == "delete":                  # supprimer une image privée, session exigée
             if not self._private_session(touch=True):
                 return self._send(403, {"error": "espace privé verrouillé"})
             item = body.get("id")
             with PRIVATE_LOCK:                  # jamais pendant un changement de code (l'image y serait recopiée)
-                if not (isinstance(item, str) and ITEM_RE.fullmatch(item) and os.path.isdir(os.path.join(PRIVATE, "items", item))):
-                    return self._send(404, {"error": "image privée inconnue"})
-                shutil.rmtree(os.path.join(PRIVATE, "items", item))
+                try:
+                    finish_rekey()
+                    if not (isinstance(item, str) and ITEM_RE.fullmatch(item)
+                            and os.path.isdir(os.path.join(PRIVATE, "items", item))):
+                        return self._send(404, {"error": "image privée inconnue"})
+                    remove_private_item(item)
+                except (OSError, ValueError):   # changement de code en cours de réparation, disque, space.json
+                    return self._send(500, {"error": "image privée non supprimée : réessayez dans un instant"})
             return self._send(200, {"ok": True})
+        if action in ("keep", "discard"):       # Garder, Jeter une image de la pile privée, session exigée
+            session = self._private_session(touch=True)
+            if not session:
+                return self._send(403, {"error": "espace privé verrouillé"})
+            try:
+                return self._send(*sort_private(action, session["key"], body.get("id")))
+            except StaleKey:
+                return self._send(403, {"error": "espace privé verrouillé"})
+            except (InvalidTag, ValueError):
+                return self._send(500, {"error": "image privée illisible"})
+            except OSError:                     # changement de code en cours de réparation, disque
+                return self._send(500, {"error": "image privée non triée : réessayez dans un instant"})
         m = re.fullmatch(r"prompts(?:/(delete|used))?", action)
         if m:                                   # prompts enregistrés de l'espace, session exigée
             session = self._private_session(touch=True)
@@ -1876,9 +2415,6 @@ class H(BaseHTTPRequestHandler):
                 return self._send(403, {"error": "espace privé verrouillé"})
             except (OSError, InvalidTag, ValueError):
                 return self._send(500, {"error": "prompts privés non modifiés"})
-        if action == "lock":
-            S.private_sessions.pop(self._private_token(), None)
-            return self._send_private(200, {"ok": True})
         if action == "reset":                   # sans le code (oublié) : tout l'espace est effacé, sessions comprises
             if not self._local():               # depuis le Mac lui-même seulement (décision du porteur du 14/10/2026)
                 return self._send(403, {"error": "l'espace privé ne se supprime sans le code que sur le Mac lui-même"})
@@ -1933,17 +2469,41 @@ class H(BaseHTTPRequestHandler):
             return self._send(403, {"error": "code privé incorrect"})
         return self._send_private(200, {"ok": True}, token)   # code : cookie effacé (toutes les sessions sont fermées)
 
+    def _send_login(self):
+        """Page du code d'accès ; pour l'ordinateur lui-même (_local), avec la phrase qui dit comment entrer."""
+        return self._send(200, LOGIN_PAGE.replace("<!--mac-->", LOGIN_MAC if self._local() else ""),
+                          "text/html; charset=utf-8")
+
+    def _enter(self, query):
+        """GET /entrer?jeton=… (page de redirection de launch.py --enter) : depuis l'ordinateur lui-même seulement
+        (_local, qui exclut une requête relayée et le Wi-Fi), bon jeton de moins de ENTRY_TTL s → cookie d'accès et
+        303 vers / ; refusée, un navigateur qui a déjà le cookie (adresse rouverte depuis l'historique, onglet d'un
+        --enter plus ancien) est renvoyé vers / sans toucher au jeton, les autres reçoivent la page du code. Route tue
+        par le journal (QUIET_ROUTES) : le jeton n'y va jamais."""
+        entered = self._local() and S.access_token and use_entry_token(parse_qs(query).get("jeton", [""])[0])
+        if not entered and not self._allowed():
+            return self._send_login()
+        self.send_response(303)
+        self.send_header("Location", "/")
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        if entered:
+            self.send_header("Set-Cookie", access_cookie_header())
+        self.end_headers()
+
     def do_GET(self):
         if not self._host_ok():
             return self._send(403, {"error": "nom d'hôte refusé"})
         sweep()
         path, _, query = self.path.partition("?")
+        if path == "/entrer":      # avant _allowed : le jeton d'entrée tient lieu de code (launch.py --enter)
+            return self._enter(query)
         if path in PUBLIC_FILES:   # manifeste, icônes, service worker : demandés par le navigateur sans le cookie d'accès
             name, ctype = PUBLIC_FILES[path]
             return self._send(200, open(P("tools", "ui", name), "rb").read(), ctype)
         if not self._allowed():
             if path in ("/", "/index.html"):
-                return self._send(200, LOGIN_PAGE, "text/html; charset=utf-8")
+                return self._send_login()
             return self._send(401, {"error": "code d'accès requis"})
         if path in ("/", "/index.html"):
             return self._send(200, open(P("tools", "ui", "index.html"), "rb").read(), "text/html; charset=utf-8")
@@ -1951,11 +2511,11 @@ class H(BaseHTTPRequestHandler):
             missing = [k for k, v in MODELS.items() if not os.path.exists(v)]
             # espace de l'appareil : la file, la génération en cours et la dernière image ne montrent que les siennes
             inside = self._in_private()
-            # un job incognito n'est jamais repris après un rechargement de la page : il est perdu avec elle
+            # dernière génération normale (jamais une privée)
             last = None if inside else max((j for j in list(S.jobs.values()) if not secret(j)), key=lambda j: j["created"],
                                            default=None)
             # génération en cours lue une seule fois : relu plus bas, S.current pourrait déjà désigner la suivante (une
-            # incognito, dont l'identifiant partirait dans current_job)
+            # privée, dont l'identifiant partirait dans current_job hors de l'espace privé)
             current_id = S.current
             coefs, current = S.store.coefficients(S.backend, S.model, S.engine), S.jobs.get(current_id) or {}
             queue = queue_view(inside, coefs)
@@ -1964,30 +2524,27 @@ class H(BaseHTTPRequestHandler):
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model,
                                     "queued": sum(e["status"] == "queued" for e in queue),
                                     "queue": queue,
-                                    # identifiant d'une génération incognito : connu de sa seule page
-                                    "current_job": current_id if current and in_space(current, inside)
-                                                   and not current.get("incognito") else None,
+                                    "current_job": current_id if current and in_space(current, inside) else None,
                                     "last_job": public(last) if last else None,
                                     "estimates": coefs,
+                                    # pile et tirages de l'espace de l'appareil (hors de l'espace privé : le public)
+                                    "rev": S.rev["private" if inside else "public"],
                                     # code servi (git) : l'interface maintenant, le serveur à son lancement
                                     "version": code_version(), "server_version": S.started,
-                                    # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même
-                                    "phone": {"urls": S.lan_urls, "code": S.access_code} if S.access_code and self._local() else None,
+                                    # adresse et code pour le téléphone : montrés seulement sur le Mac lui-même, avec
+                                    # --lan (noms du Wi-Fi et de Tailscale admis)
+                                    "phone": ({"urls": S.lan_urls, "code": S.access_code}
+                                              if S.lan_hosts and self._local() else None),
                                     # espace privé : existe-t-il, est-on dedans sur cet appareil (sans prolonger la session),
                                     # peut-il s'ouvrir par cette adresse (HTTPS ou le Mac) et y être supprimé sans le code
                                     # (le Mac lui-même seulement)
                                     "private": {"available": HAVE_CRYPTO, "exists": HAVE_CRYPTO and os.path.exists(os.path.join(PRIVATE, "space.json")),
                                                 "unlocked": inside, "secure": self._secure(), "local": self._local()}})
-        m = re.match(r"^/api/job/([\w-]+)(/preview|/result)?$", path)
+        m = re.match(r"^/api/job/([\w-]+)(/preview)?$", path)
         if m:
             job = S.jobs.get(m.group(1))
             if not job or self._hidden(job):
                 return self._send(404, {"error": "job inconnu"})
-            if m.group(2) == "/result":           # image d'un job incognito, gardée en mémoire seulement
-                png = job.get("png")
-                if not png:
-                    return self._send(404, {"error": "image incognito indisponible"})
-                return self._send(200, png, "image/png")
             if m.group(2):                        # aperçu (privé : par une requête sûre seulement, _hidden)
                 if not job.get("preview"):
                     return self._send(404, {"error": "pas d'aperçu"})
@@ -1999,14 +2556,17 @@ class H(BaseHTTPRequestHandler):
         q = {k: v[0] for k, v in parse_qs(query).items()}
         if path.startswith("/api/private/"):
             return self._private_get(path, q)
-        if path == "/api/result":
-            fp = output_path(q.get("name"))
-            if not fp:
+        if path == "/api/result":                 # un tirage ou une image de la pile
+            found = on_image(q.get("name"), lambda fp: (os.path.basename(fp), open(fp, "rb").read()))
+            if not found:                         # inconnue, ou jetée entre-temps
                 return self._send(404, {"error": "fichier inconnu"})
-            extra = {"Content-Disposition": f'attachment; filename="{os.path.basename(fp)}"'} if q.get("download") else None
-            return self._send(200, open(fp, "rb").read(), "image/png", extra)
+            name, data = found
+            extra = {"Content-Disposition": f'attachment; filename="{name}"'} if q.get("download") else None
+            return self._send(200, data, "image/png", extra)
         if path == "/api/history":
             return self._send(200, history())
+        if path == "/api/pile":
+            return self._send(200, pile())
         if path == "/api/prompts":                # prompts enregistrés, le dernier utilisé d'abord
             try:
                 saved = sorted(saved_prompts(), key=lambda p: -p["used"])
@@ -2016,27 +2576,34 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/push/key":
             key = push_public_key()
             return self._send(200, {"key": key}) if key else self._send(503, {"error": "pywebpush non installé"})
-        if path == "/api/input":                  # image d'entrée d'une image de la galerie
-            out, f = output_path(q.get("name")), q.get("file", "")
+        if path == "/api/input":                  # image d'entrée d'un tirage ou d'une image de la pile
+            out, f = image_path(q.get("name")), q.get("file", "")
             fp = os.path.join(INPUTS, os.path.basename(out)[:-4], f) if out and INPUT_RE.fullmatch(f) else None
             if not fp or not os.path.isfile(fp):
                 return self._send(404, {"error": "image d'entrée inconnue"})
             if q.get("thumb"):
-                try:
+                try:   # l'envoi reste hors du try : une connexion coupée n'est pas une miniature impossible
                     th = thumbnail(fp, os.path.join(THUMBS, f"{os.path.basename(out)[:-4]}__{f[:-4]}.jpg"))
-                    return self._send(200, open(th, "rb").read(), "image/jpeg")
+                    data = open(th, "rb").read()
+                except FileNotFoundError:         # image jetée ou supprimée entre-temps
+                    return self._send(404, {"error": "image d'entrée inconnue"})
                 except Exception as e:
                     return self._send(500, {"error": f"miniature impossible : {e}"})
+                return self._send(200, data, "image/jpeg")
             extra = {"Content-Disposition": f'attachment; filename="{os.path.basename(out)[:-4]}_{f}"'} if q.get("download") else None
-            return self._send(200, open(fp, "rb").read(), "image/png", extra)
-        if path == "/api/thumb":
-            fp = output_path(q.get("name"))
-            if not fp:
-                return self._send(404, {"error": "fichier inconnu"})
             try:
-                return self._send(200, open(thumbnail(fp), "rb").read(), "image/jpeg")
+                data = open(fp, "rb").read()
+            except FileNotFoundError:             # image jetée ou supprimée entre-temps
+                return self._send(404, {"error": "image d'entrée inconnue"})
+            return self._send(200, data, "image/png", extra)
+        if path == "/api/thumb":
+            try:       # l'envoi reste hors du try : une connexion coupée n'est pas une miniature impossible
+                data = on_image(q.get("name"), lambda fp: open(thumbnail(fp), "rb").read())
             except Exception as e:
                 return self._send(500, {"error": f"miniature impossible : {e}"})
+            if data is None:                      # inconnue, ou jetée entre-temps
+                return self._send(404, {"error": "fichier inconnu"})
+            return self._send(200, data, "image/jpeg")
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -2049,6 +2616,7 @@ class H(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b"{}"
+        # sans code chargé, pas de connexion possible : la requête va à _allowed, qui refuse tout (401)
         if path == "/api/login" and S.access_code:
             try:
                 code = json.loads(raw).get("code", "")
@@ -2061,28 +2629,28 @@ class H(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
-            # Lax et non Strict : Chrome Android compte l'ouverture de l'application installée (écran d'accueil) comme une
-            # arrivée d'un autre site et n'enverrait pas un cookie Strict, d'où le code redemandé à chaque ouverture.
-            # Lax n'est envoyé d'un autre site que pour l'ouverture d'une page (GET, sans effet) ; les POST restent
-            # protégés par _post_refused.
-            self.send_header("Set-Cookie", f"{ACCESS_COOKIE}={S.access_token}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax")
+            self.send_header("Set-Cookie", access_cookie_header())
             self.end_headers()
             self.wfile.write(body)
             return
+        # verrouiller passe sans le cookie d'accès (code redemandé, cookie effacé) : la page qui se ferme ou sort ferme
+        # quand même sa session, au lieu de la laisser ouverte jusqu'à PRIVATE_IDLE. Partout (adresse sûre ou non),
+        # corps ignoré, même sans cryptography (aucune session n'existe alors) : seule la session du cookie privé de
+        # l'appareil se ferme, et la réponse est la même qu'il y en ait une ou non ; toute autre route privée reste
+        # derrière _allowed
+        if path == "/api/private/lock":
+            S.private_sessions.pop(self._private_token(), None)
+            return self._send_private(200, {"ok": True})
         if not self._allowed():
             return self._send(401, {"error": "code d'accès requis"})
         if path.startswith("/api/private/"):
             return self._private_post(path, raw)
-        if path == "/api/delete":
+        if path in ("/api/delete", "/api/keep", "/api/discard"):   # Supprimer un tirage ; Garder, Jeter
             try:
-                fp = output_path(json.loads(raw).get("name"))
-            except Exception:
-                fp = None
-            if not fp:
-                return self._send(404, {"error": "fichier inconnu"})
-            delete_output(fp)
-            print(f"[historique] supprimé : {os.path.basename(fp)}", flush=True)
-            return self._send(200, {"ok": True})
+                name = json.loads(raw).get("name")
+            except Exception:                     # pas du JSON, pas un objet, trop imbriqué
+                name = None
+            return self._send(*sort_image(path[len("/api/"):], name))
         if path in ("/api/push/subscribe", "/api/push/unsubscribe"):
             try:
                 body = json.loads(raw)
@@ -2113,10 +2681,11 @@ class H(BaseHTTPRequestHandler):
             error = prompt_error(action, body)
             if error:
                 return self._send(400, {"error": error})
-            try:
-                return self._send(*change_prompt(action, body))
+            try:       # l'envoi reste hors du try : une connexion coupée n'est pas un enregistrement manqué
+                reply = change_prompt(action, body)
             except (OSError, ValueError) as e:
                 return self._send(500, {"error": f"prompts enregistrés non modifiés : {e}"})
+            return self._send(*reply)
         if path == "/api/generate":
             try:
                 req = json.loads(raw)
@@ -2135,33 +2704,20 @@ class H(BaseHTTPRequestHandler):
             campaign = req.get("campaign") is not None
             reqs = expand_request(req)
             n = len(reqs)
-            # identifiant d'un lot incognito : connu de sa seule page, aussi impossible à deviner que ses générations
-            secret_lot = req.get("incognito") is True or req.get("private") is True
-            lot = {"id": secrets.token_hex(16) if secret_lot else uuid.uuid4().hex[:12], "size": n,
+            # identifiant d'un lot privé : aussi impossible à deviner que ses générations
+            lot = {"id": secrets.token_hex(16) if req.get("private") is True else uuid.uuid4().hex[:12], "size": n,
                    "campaign": campaign} if n > 1 else None
             # variantes : mêmes images d'entrée et dimensions pour toutes, lues une fois ; campagne : une photo chacune
             inputs = [request_inputs(r) for r in reqs] if campaign else [request_inputs(reqs[0])] * n
             jobs = [new_job(r, inputs[k], lot and {**lot, "rank": k + 1}) for k, r in enumerate(reqs)]
             if lot:
-                S.lots[lot["id"]] = {"jobs": jobs, "incognito": jobs[0]["incognito"], "private": jobs[0]["private"],
-                                     "campaign": campaign}
+                S.lots[lot["id"]] = {"jobs": jobs, "campaign": campaign}
             with S.turn:                         # générations d'un lot : à la suite dans la file, dans l'ordre
                 for job in jobs:
                     S.jobs[job["id"]] = job
                     S.pending.append(job)
                 S.turn.notify()
-            return self._send(202, {"lot": lot, "jobs": [launched(j) for j in jobs]} if lot else launched(jobs[0]))
-        if path == "/api/forget":                # page fermée ou rechargée : ses générations incognito, en un seul envoi
-            try:
-                ids = json.loads(raw).get("ids")
-            except Exception:
-                ids = None
-            if not (isinstance(ids, list) and all(isinstance(i, str) for i in ids)):
-                return self._send(400, {"error": "ids : liste d'identifiants attendue"})
-            jobs = [j for j in (S.jobs.get(i) for i in ids) if j and j.get("incognito")]   # une génération normale reste
-            for job in jobs:
-                forget_job(job)
-            return self._send(200, {"forgotten": len(jobs)})
+            return self._send(202, {"lot": lot, "jobs": [public(j) for j in jobs]} if lot else public(jobs[0]))
         m = re.match(r"^/api/lot/([\w-]+)/(cancel|first)$", path)
         if m:                                    # toutes les générations non terminées du lot, ou celles qui attendent
             lot = S.lots.get(m.group(1))
@@ -2183,8 +2739,8 @@ class H(BaseHTTPRequestHandler):
             if m.group(2) == "first":            # testé après _hidden : l'état d'une génération privée ne se devine pas
                 return self._send(*moved_first([job], "génération plus en attente"))
             if m.group(2) == "forget" and not secret(job):
-                return self._send(400, {"error": "seul un job incognito ou privé peut être oublié"})
-            if m.group(2) == "forget":            # image récupérée par l'interface, ou page quittée : plus rien en mémoire
+                return self._send(400, {"error": "seul un job privé peut être oublié"})
+            if m.group(2) == "forget":            # privée finie (rangée, en échec ou annulée) : plus rien en mémoire
                 forget_job(job)
                 return self._send(200, {"ok": True})
             cancel_job(job)
@@ -2194,7 +2750,7 @@ class H(BaseHTTPRequestHandler):
 
 def exclude_from_backup(path):
     """Exclut le dossier de travail de Time Machine (tmutil, sans droits administrateur) : une sauvegarde faite pendant
-    une génération incognito ou privée ne capte pas ses fichiers de passage. Un échec est noté sans bloquer."""
+    une génération privée ne capte pas ses fichiers de passage. Un échec est noté sans bloquer."""
     try:
         r = subprocess.run(["tmutil", "addexclusion", path], capture_output=True, text=True, timeout=15)
         if r.returncode:
@@ -2222,7 +2778,35 @@ def setup_state(cfg, backend, model):
     S.store = estimate.Store(CALIB)
 
 
+def restrict_new_files():
+    """Tout ce que le processus crée ensuite, et sd-cli avec lui (PNG privé en clair, qui porte le prompt ; vignettes ;
+    copies d'images d'entrée ; tirages ; dossiers de travail), n'est lisible que par le compte qui le fait tourner
+    (masque 0o077 : fichiers en 0o600, dossiers en 0o700 ; décision du 23/10/2026). Les fichiers déjà créés gardent
+    leurs droits ; les dossiers du serveur créés avant sont fermés par close_folders. Appelée en tête de main() et de
+    tools/calibrate.py ; sans effet sous Windows."""
+    os.umask(0o077)
+
+
+def close_folders():
+    """Ferme aux autres comptes (0o700) les dossiers du serveur créés avant le masque de restrict_new_files (par
+    setup.py ou un serveur d'avant) : ils ne peuvent plus y lister les noms des images ni voir apparaître les dossiers
+    de travail privés (décision du 23/10/2026). Un dossier absent est sauté ; un dossier qui refuse (autre propriétaire,
+    volume sans droits Unix) est noté sans bloquer le démarrage ; sans effet sous Windows."""
+    refused = False
+    for d in (P("outputs"), PILE, THUMBS, INPUTS, P("jobs"), P("logs")):
+        try:
+            os.chmod(d, 0o700)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            refused = True
+    if refused:                                  # sans chemin : logs/ ne cite pas les dossiers du Mac
+        print("[launch] dossiers non fermés aux autres comptes", flush=True)
+
+
 def main():
+    restrict_new_files()
+    close_folders()                              # avant toute sortie précoce : logs/ fermé même si le lancement échoue
     cfg = load_config()
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=cfg["ui_port"])
@@ -2231,9 +2815,14 @@ def main():
                     help="q4 (Q4_K_M, par défaut), q8 (Q8_0, plus fidèle, setup.py --q8) ; uc-q4, uc-q8 : variante "
                          "communautaire (setup.py --uc)")
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--enter", action="store_true",
+                    help="ouvre l'interface déjà lancée sans taper le code (jeton à usage unique), sans serveur")
     ap.add_argument("--lan", action="store_true", default=bool(cfg.get("lan")),
-                    help="accessible aussi depuis le Wi-Fi (téléphone), avec un code d'accès ; Mac maintenu éveillé")
+                    help="accessible aussi depuis le Wi-Fi (téléphone), avec le code d'accès ; Mac maintenu éveillé")
     a = ap.parse_args()
+    if a.enter:                                  # raccourci, interface déjà lancée : seulement la page d'entrée
+        open_entry(a.port)
+        return
     S.ui_port = a.port
     setup_state(cfg, a.backend, a.model)
     S.started = code_version()
@@ -2243,13 +2832,22 @@ def main():
         finish_rekey()                                 # (rien n'est écrit au journal sur l'espace privé)
     except (OSError, ValueError):                      # ValueError : space.json illisible ; le serveur démarre quand même
         pass
-    # restes d'un job incognito ou privé interrompu par un arrêt brutal, et d'une image privée à moitié rangée
-    for old in glob.glob(P("jobs", "incognito_*")) + glob.glob(P("jobs", "private_*")) + glob.glob(os.path.join(PRIVATE, "items", ".*")):
+    # restes d'un job privé interrompu par un arrêt brutal, d'une image privée à moitié rangée ou jetée, et d'un job
+    # incognito d'avant son retrait (images en clair : porteur, 22/10/2026)
+    for old in (glob.glob(P("jobs", "private_*")) + glob.glob(os.path.join(PRIVATE, "items", ".*"))
+                + glob.glob(P("jobs", "incognito_*"))):
         shutil.rmtree(old, ignore_errors=True)
+    try:                                               # fiche à moitié réécrite par Garder (sort_private)
+        os.remove(os.path.join(PRIVATE, META_TMP))
+    except FileNotFoundError:
+        pass
+    restore_hidden_images()                            # PNG caché d'un effacement coupé : l'image revient
     if sys.platform == "darwin":
         exclude_from_backup(P("jobs"))
-    for fp in glob.glob(P("outputs", "*.png")):        # images antérieures à la conservation des entrées : reprises
-        stem = os.path.basename(fp)[:-4]                # depuis leur dossier de travail tant qu'il existe
+    # tirages antérieurs à la conservation des entrées, et images de la pile dont les entrées n'ont pas pu être
+    # gardées (to_pile) : reprises depuis leur dossier de travail tant qu'il existe
+    for fp in glob.glob(P("outputs", "*.png")) + glob.glob(os.path.join(PILE, "*.png")):
+        stem = os.path.basename(fp)[:-4]
         if not os.path.isdir(os.path.join(INPUTS, stem)):
             try:
                 save_inputs(P("jobs", stem.rsplit("_", 1)[0]), fp)
@@ -2257,10 +2855,9 @@ def main():
                 pass
     for old in sorted(glob.glob(P("jobs", "*")))[:-20]:   # ne garde que les 20 derniers dossiers de travail
         shutil.rmtree(old, ignore_errors=True)
+    setup_access()                                     # avec ou sans --lan : le Mac aussi demande le code
     threading.Thread(target=worker, daemon=True).start()
     if a.lan:
-        S.access_code = load_access_code()
-        S.access_token = access_token(S.access_code)
         name, ip = lan_address()
         ts = tailscale_hosts()
         S.lan_urls = [f"http://{h}:{a.port}/" for h in dict.fromkeys(x for x in (name, ip, *ts) if x)]
@@ -2280,8 +2877,10 @@ def main():
     print(f"[launch] backend {S.backend}, modèle {S.model} — interface : {url}  (Ctrl+C pour arrêter)", flush=True)
     if a.lan:
         print(f"[launch] depuis le Wi-Fi : {' ou '.join(S.lan_urls)} — code d'accès dans tools/access_code.txt", flush=True)
-    if not a.no_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    else:                                       # le Mac aussi demande le code : où le lire, jamais le code lui-même
+        print("[launch] code d'accès dans tools/access_code.txt", flush=True)
+    if not a.no_browser:                         # par la page d'entrée : le Mac aussi demande le code
+        threading.Timer(1.0, lambda: open_browser(a.port)).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

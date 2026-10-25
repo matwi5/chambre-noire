@@ -1,5 +1,6 @@
 // Aides du pilote (driver.mjs) et délais des tests d'interface : page.leaks trouve un marqueur laissé dans une variable
-// globale, un texte caché, un attribut ou un élément détaché ; bench.disk voit un fichier écrit ; page.eval et
+// globale, un texte caché, un attribut ou un élément détaché ; bench.disk voit un fichier écrit ; chrome.phonePage
+// est connectée au banc (le Mac demande le code d'accès : sans le cookie, il reçoit la page du code) ; page.eval et
 // bench.idle échouent dans leur délai ; un test bloqué lancé par check.py échoue dans le délai par test, sans laisser
 // Chrome ni le serveur du banc.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/pilote.test.mjs
@@ -18,7 +19,7 @@ before(async () => {
   chrome = await launchChrome();
   page = await chrome.phonePage();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
 });
 
 after(async () => {
@@ -52,7 +53,7 @@ test('page.leaks : un marqueur laissé dans l\'état global ou caché dans la pa
 });
 
 test('bench.disk : une image enregistrée est vue, rien quand rien n\'est écrit', async () => {
-  await page.waitFor(`$('status').className === 'ok'`, { what: 'moteur prêt affiché' });
+  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
   const disk = bench.disk();
   assert.deepEqual(disk.written(), []);
   await page.generate('zp1 disque');
@@ -60,6 +61,23 @@ test('bench.disk : une image enregistrée est vue, rien quand rien n\'est écrit
   const written = disk.written();
   assert.ok(written.length > 0 && written.some(f => f.startsWith('outputs')), written.join(', '));
   page.assertNoErrors();
+});
+
+test('chrome.phonePage : connectée au banc ; sans le cookie, le Mac lui-même reçoit la page du code', async () => {
+  const alone = await launchChrome();              // profil à part : ses cookies effacés ne touchent pas page
+  try {
+    const p = await alone.phonePage();
+    await p.goto(bench.url + '/');
+    await p.waitFor(`$('lamp').classList.contains('ok')`, { what: 'interface ouverte, sans saisie du code' });
+    await p.send('Network.clearBrowserCookies');
+    await p.goto(bench.url + '/');
+    await p.waitFor(`!!document.getElementById('c')`, { what: 'champ du code d\'accès' });
+    assert.match(await p.eval(`document.body.innerText`),
+      /Sur cet ordinateur : ouvrez Chambre noire par son raccourci/);
+    assert.deepEqual((await bench.api('/api/status')).queue, [], 'bench.api : le Mac, avec le cookie');
+  } finally {
+    await alone.close();
+  }
 });
 
 test('délais : page.eval et bench.idle échouent au lieu d\'attendre sans fin', async () => {

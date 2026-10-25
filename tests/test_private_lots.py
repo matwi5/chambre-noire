@@ -3,8 +3,7 @@ sur le disque ni dans la file."""
 import unittest
 
 import bench
-from bench import call, files, wait_job
-from test_private_gen import all_files
+from bench import all_files, call, files, wait_job
 
 CODE = "Mot2passe!"
 
@@ -19,8 +18,8 @@ class PrivateLotTest(bench.BenchCase):
         self.assertEqual(code, 202, reply)
         return reply
 
-    def history(self):
-        return call("GET", "/api/private/history", private=self.session)[1]
+    def pile(self):
+        return call("GET", "/api/private/pile", private=self.session)[1]
 
     def test_private_variants_are_each_sealed_with_one_notification(self):
         with bench.capture_push() as sent:
@@ -35,7 +34,7 @@ class PrivateLotTest(bench.BenchCase):
         self.assertNotIn("zq9lot", str(sent))
         self.assertEqual(sent[0]["body"][:len("Lot de 3 images terminé en ")], "Lot de 3 images terminé en ")
         self.assertNotIn("priv", str(sent).lower())
-        items = self.history()
+        items = self.pile()
         self.assertEqual(sorted(i["lot"]["rank"] for i in items), [1, 2, 3])
         self.assertFalse(any(i["lot"]["campaign"] for i in items))
         self.assertEqual(len({i["seed"] for i in items}), 3)
@@ -60,7 +59,7 @@ class PrivateLotTest(bench.BenchCase):
                 self.assertEqual(wait_job(j["id"], private=self.session)["status"], "done")
             sent.wait(1)
         self.assertEqual(sent[0]["title"], "2 images prêtes")
-        items = sorted(self.history(), key=lambda i: i["lot"]["rank"])
+        items = sorted(self.pile(), key=lambda i: i["lot"]["rank"])
         self.assertEqual([i["inputs"] for i in items], [["ref_1.png"], ["ref_1.png"]])
         self.assertEqual([i["lot"]["campaign"] for i in items], [True, True])
         for item, photo in zip(items, photos):

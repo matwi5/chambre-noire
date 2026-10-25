@@ -1,6 +1,6 @@
 """Espace privé : création, déverrouillage propre à chaque appareil, verrouillage (à la main et après inactivité),
 changement de code, suppression ; aucun secret en clair sur le disque."""
-import glob, json, os, time, unittest
+import glob, http.client, io, json, os, time, unittest
 from unittest import mock
 
 import bench
@@ -70,6 +70,80 @@ class PrivateSpaceTest(bench.PrivateFilesCheck, bench.BenchCase):
         self.assertIn("Max-Age=0", headers.get("Set-Cookie", ""))
         self.assertFalse(private_status(session)["unlocked"])
 
+    def test_lock_closes_the_session_even_without_the_access_cookie(self):
+        # code d'accès redemandé (cookie effacé, code changé) : le verrouillage de la page ferme quand même la session,
+        # depuis le Mac, le relais et le Wi-Fi (verrouiller ne demande pas une adresse sûre)
+        bench.create_private(CODE)
+        for origin in ({}, {"remote": True}, {"wifi": True}):
+            with self.subTest(**origin):
+                session = bench.unlock_private(CODE, remote=origin.get("remote", False))
+                self.assertTrue(private_status(session)["unlocked"], "session pas ouverte (prémisse)")
+                code, reply, headers = bench.call_full("POST", "/api/private/lock", {}, cookie=False, private=session,
+                                                       **origin)
+                self.assertEqual((code, reply), (200, {"ok": True}))
+                self.assertIn("Max-Age=0", headers.get("Set-Cookie", ""))
+                self.assertNotIn(session, bench.S.private_sessions)
+
+    def test_lock_ignores_its_body(self):
+        # corps qu'aucune page n'envoie : très imbriqué (RecursionError de json.loads), illisible, pas un objet
+        session = bench.create_private(CODE)
+        bench.LOG.clear()
+        bodies = (b"[" * 200000, b"pas du json", b"[]", b"")
+        with mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            for body in bodies:
+                with self.subTest(body=body[:10]):
+                    conn = http.client.HTTPConnection("127.0.0.1", bench.S.ui_port, timeout=30)
+                    try:
+                        conn.request("POST", "/api/private/lock", body=body, headers={
+                            "Host": f"127.0.0.1:{bench.S.ui_port}", "Content-Type": "application/json",
+                            "Cookie": f"{bench.launch.PRIVATE_COOKIE}={session}"})
+                        r = conn.getresponse()
+                        self.assertEqual((r.status, json.loads(r.read())), (200, {"ok": True}))
+                    finally:
+                        conn.close()
+        self.assertNotIn(session, bench.S.private_sessions)
+        self.assertNotIn("Traceback", err.getvalue())
+        self.assertFalse([line for line in bench.LOG if "Traceback" in line or "Error" in line], bench.LOG)
+
+    def test_lock_answers_the_same_without_cryptography(self):
+        # un appareil sans le code n'apprend pas si le module de chiffrement est installé : même réponse, sans effet
+        with_crypto = bench.call_full("POST", "/api/private/lock", {}, cookie=False)
+        with mock.patch("launch.HAVE_CRYPTO", False):
+            for cookie in (False, True):
+                with self.subTest(cookie=cookie):
+                    without = bench.call_full("POST", "/api/private/lock", {}, cookie=cookie)
+                    self.assertEqual((without[0], without[1], without[2]["Set-Cookie"]),
+                                     (with_crypto[0], with_crypto[1], with_crypto[2]["Set-Cookie"]))
+
+    def test_lock_without_any_cookie_says_nothing_about_sessions(self):
+        session = bench.create_private(CODE)
+        replies = [bench.call_full("POST", "/api/private/lock", {}, cookie=False, private=other)
+                   for other in (None, "jeton-inconnu")]
+        replies.append(bench.call_full("POST", "/api/private/lock", {}, private="jeton-inconnu"))
+        self.assertEqual({(c, json.dumps(r), h.get("Set-Cookie")) for c, r, h in replies},
+                         {(200, '{"ok": true}', "qwen_private=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict")})
+        self.assertTrue(private_status(session)["unlocked"], "session d'un autre appareil fermée")
+
+    def test_other_private_routes_still_need_the_access_cookie(self):
+        session = bench.create_private(CODE)
+        for path, body in (("/api/private/unlock", {"code": CODE}), ("/api/private/create", {"code": CODE}),
+                           ("/api/private/reset", {"confirm": "SUPPRIMER"}), ("/api/private/delete", {"id": "x"}),
+                           ("/api/private/keep", {"id": "x"}), ("/api/private/code", {"old": CODE, "new": "Autre-1x"}),
+                           ("/api/private/prompts", {"title": "t", "text": "x", "usage": "t2i"}),
+                           ("/api/private/lock/x", {}), ("/api/private/lockx", {})):
+            with self.subTest(path=path):
+                self.assertEqual(call("POST", path, body, cookie=False, private=session)[0], 401)
+        self.assertTrue(private_status(session)["unlocked"])
+
+    def test_lock_from_another_site_is_still_refused(self):
+        session = bench.create_private(CODE)
+        for headers in ({"Sec-Fetch-Site": "cross-site"}, {"Origin": "http://ailleurs.example"},
+                        {"Content-Type": "text/plain"}):
+            with self.subTest(**headers):
+                code = call("POST", "/api/private/lock", {}, cookie=False, private=session, headers=headers)[0]
+                self.assertIn(code, (403, 415))
+        self.assertTrue(private_status(session)["unlocked"])
+
     def test_session_expires_after_inactivity_and_status_does_not_keep_it_alive(self):
         with mock.patch("launch.PRIVATE_IDLE", 0.5):
             session = bench.create_private(CODE)
@@ -127,7 +201,7 @@ class PrivateSpaceTest(bench.PrivateFilesCheck, bench.BenchCase):
         bench.create_private(CODE)
         name = bench.wait_job(bench.generate("an image that stays public")["id"])["name"]
         self.assertEqual(call("POST", "/api/private/adopt", {"name": name, "code": CODE})[0], 404)
-        self.assertIn(name, [it["name"] for it in call("GET", "/api/history")[1]])
+        self.assertIn(name, [it["name"] for it in call("GET", "/api/pile")[1]])
 
 
 if __name__ == "__main__":

@@ -25,12 +25,13 @@ class VariantsTest(bench.BenchCase):
         done = [wait_job(j["id"]) for j in jobs]
         self.assertEqual([j["status"] for j in done], ["done"] * 3)
         self.assertTrue(all(a["finished"] <= b["started"] for a, b in zip(done, done[1:])))   # à la suite, dans l'ordre
-        self.assertEqual(len(files("outputs", "*.png")), 3)
+        self.assertEqual(len(files("outputs", ".pile", "*.png")), 3)
 
     def test_server_draws_distinct_seeds_written_to_the_journal(self):
         jobs = generate_lot(count=4)["jobs"]
         for j in jobs:
             wait_job(j["id"])
+        bench.wait_idle()           # « done » posé avant la ligne du journal (to_pile) : attendre la fin du rangement
         lines = journal()
         seeds = [m["seed"] for m in lines]
         self.assertEqual(len(set(seeds)), 4)
@@ -57,17 +58,6 @@ class VariantsTest(bench.BenchCase):
         jobs = generate_lot("SLOW=0.05 lot", count=2, steps=8)["jobs"]
         q = call("GET", "/api/status")[1]["queue"]
         self.assertEqual([e["lot"] for e in q], [j["lot"] for j in jobs])
-        for j in jobs:
-            wait_job(j["id"])
-
-    def test_incognito_lot_hides_its_id_and_campaign_marker_from_the_queue(self):
-        # la ligne d'une génération incognito ne dit que son genre ; sa page lit le marqueur dans sa propre réponse
-        jobs = generate_lot("SLOW=0.05 secret", count=2, steps=8, incognito=True)["jobs"]
-        lot = jobs[0]["lot"]["id"]
-        self.assertEqual(jobs[0]["lot"]["campaign"], False)
-        s = call("GET", "/api/status", remote=True)[1]
-        self.assertEqual([e["lot"] for e in s["queue"]], [{"rank": 1, "size": 2}, {"rank": 2, "size": 2}])
-        self.assertNotIn(lot, str(s))
         for j in jobs:
             wait_job(j["id"])
 
@@ -106,7 +96,7 @@ class LotCancelTest(bench.BenchCase):
             self.assertEqual((code, reply["cancelled"]), (200, 3))
             self.assertEqual([wait_job(j["id"])["status"] for j in jobs], ["cancelled"] * 3)
             bench.wait_idle()
-            self.assertEqual(files("outputs", "*.png"), [])
+            self.assertEqual(files("outputs", ".pile", "*.png"), [])
             self.assertEqual(files("jobs", "*"), [])
             self.assertEqual((sent.decided, list(sent)), ([], []))   # tout le lot annulé : aucune notification
 
@@ -115,7 +105,7 @@ class LotCancelTest(bench.BenchCase):
         wait_job(jobs[0]["id"])
         call("POST", f"/api/lot/{jobs[0]['lot']['id']}/cancel")
         self.assertEqual([wait_job(j["id"])["status"] for j in jobs], ["done", "cancelled", "cancelled"])
-        self.assertEqual(len(files("outputs", "*.png")), 1)
+        self.assertEqual(len(files("outputs", ".pile", "*.png")), 1)
 
     def test_unknown_or_finished_lot(self):
         self.assertEqual(call("POST", "/api/lot/inconnu/cancel")[0], 404)
@@ -166,11 +156,6 @@ class LotNotificationTest(bench.BenchCase):
             self.assertEqual(msg["title"], "2 images prêtes")
             self.assertTrue(msg["body"].startswith("Lot de 2 images terminé en "), msg["body"])
 
-    def test_incognito_lot(self):
-        with bench.capture_push() as sent:
-            self.wait_lot(generate_lot("secret", count=2, incognito=True)["jobs"])
-            self.assertEqual(self.only(sent)["title"], "2 images incognito prêtes")
-
     def test_lot_ending_with_cancelled_generations_notifies_once(self):
         with bench.capture_push() as sent:
             jobs = generate_lot("SLOW=0.05 lot", count=3, steps=8)["jobs"]
@@ -180,25 +165,19 @@ class LotNotificationTest(bench.BenchCase):
             self.assertEqual(self.only(sent)["title"], "2 images prêtes")
 
 
-class HistoryLotTest(bench.BenchCase):
-    def test_history_gives_the_lot_of_each_image_and_nothing_for_a_single_one(self):
+class PileLotTest(bench.BenchCase):
+    def test_pile_gives_the_lot_of_each_image_and_nothing_for_a_single_one(self):
         jobs = generate_lot(count=2)["jobs"]
         single = bench.generate("alone")
         for j in jobs + [single]:
             wait_job(j["id"])
-        items = {it["name"]: it for it in call("GET", "/api/history")[1]}
+        items = {it["name"]: it for it in call("GET", "/api/pile")[1]}
         self.assertEqual(len(items), 3)
         self.assertEqual([items[j["name"]]["lot"] for j in jobs], [j["lot"] for j in jobs])
         self.assertEqual([items[j["name"]]["lot"]["campaign"] for j in jobs], [False, False])
         self.assertEqual([e["lot"]["campaign"] for e in journal() if e.get("lot")], [False, False])
         self.assertIsNone(items[single["name"]]["lot"])
         self.assertTrue(all(isinstance(it["seed"], int) for it in items.values()))
-
-    def test_incognito_lot_stays_out_of_the_history(self):
-        jobs = generate_lot("secret", count=2, incognito=True)["jobs"]
-        for j in jobs:
-            wait_job(j["id"])
-        self.assertEqual(call("GET", "/api/history")[1], [])
 
 
 if __name__ == "__main__":

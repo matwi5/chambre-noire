@@ -1,8 +1,9 @@
 """Contrôles de tests/check.py qui ne se voient pas en le lançant sur le dépôt : un fichier nouveau, pas encore ajouté à
 git, est contrôlé comme un fichier suivi ; une adresse donnée à la main à une image affichée est refusée ; une ligne
 trop longue est refusée par --lines, par le hook avant commit et par le contrôle complet, qui s'arrête alors avant le
-banc ; --link-venv relie les notes du dossier principal dans un worktree."""
-import argparse, contextlib, io, os, shutil, subprocess, sys, tempfile, unittest
+banc ; --link-venv relie les notes du dossier principal dans un worktree ; les fichiers d'interface tournent sur
+plusieurs Chrome à la fois ; l'avis « zone sensible » ne regarde que le travail de la branche en cours."""
+import argparse, contextlib, io, os, shutil, subprocess, sys, tempfile, threading, unittest
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -124,7 +125,7 @@ class UiNameTest(unittest.TestCase):
         titles = check.ui_titles(["tests/ui/smoke.test.mjs"])
         self.assertGreater(len(titles), 0)
         self.assertTrue(all(isinstance(t, str) and t for t in titles))
-        self.assertTrue(any(t.startswith("« Générer » mène à la page En cours") for t in titles), titles)
+        self.assertTrue(any(t.startswith("« Révéler » suit la génération sur le Labo") for t in titles), titles)
 
     def test_a_pattern_without_test_fails_at_once(self):
         args = argparse.Namespace(no_bench=False, quick=False, ui=["tests/ui/smoke.test.mjs"], name="zz-aucun-test",
@@ -145,12 +146,72 @@ class UiNameTest(unittest.TestCase):
         self.assertIn("aucun test ne correspond au motif « zz-aucun-test »", out.getvalue())
         self.assertEqual(out.getvalue().strip().splitlines()[-1],
                          "Contrôles : ÉCHEC : Interface : motif « zz-aucun-test » sans test")
-        args.name = "Générer"                         # un motif qui vise un test : l'interface est lancée
+        args.name = "Révéler"                         # un motif qui vise un test : l'interface est lancée
         with mock.patch.object(check, "run_ui", return_value=(True, [], [])) as ui, \
                 mock.patch.object(check, "run_bench", return_value=(True, [], [])), \
                 mock.patch.object(check, "sensitive_notice"), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(check.run_checks(args), {})
         ui.assert_called_once()
+
+
+class UiParallelTest(unittest.TestCase):
+    """Les fichiers d'interface tournent sur UI_JOBS Chrome à la fois (chacun son banc, ses ports et son dossier
+    temporaire) ; les lignes et les totaux restent dans l'ordre des fichiers."""
+    def test_files_run_side_by_side_and_report_in_order(self):
+        both = threading.Barrier(2, timeout=10)          # a et b doivent tourner ensemble : sinon le test échoue
+
+        def fake(f, flags, env):
+            if f in ("a.test.mjs", "b.test.mjs"):
+                both.wait()
+            return f"ℹ tests 2\nℹ pass {1 if f == 'b.test.mjs' else 2}\nℹ fail {1 if f == 'b.test.mjs' else 0}", \
+                int(f == "b.test.mjs")
+        with mock.patch.object(check, "run_ui_file", fake):
+            ok, lines, faults = check.run_ui(["a.test.mjs", "b.test.mjs", "c.test.mjs"], jobs=2)
+        self.assertFalse(ok)
+        self.assertEqual(faults, ["b.test.mjs"])
+        per_file = [line.split(" : ")[1] for line in lines
+                    if line.startswith("Interface : ") and ".test.mjs : " in line]
+        self.assertEqual(per_file, ["a.test.mjs", "b.test.mjs", "c.test.mjs"])
+        self.assertTrue(any("3 fichier(s), 6 tests, 5 réussis, 1 en échec" in line for line in lines), lines)
+
+
+class NoticeBaseTest(RepoCase):
+    """L'avis « zone sensible » compare à la base de la branche en cours (celle d'un groupe : là où elle a quitté
+    dev ; dev lui-même : le dernier commit), pas à origin/main : il ne cite plus les groupes déjà fusionnés."""
+    def notice(self):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            check.sensitive_notice(check.notice_base())
+        return out.getvalue()
+
+    def test_merged_work_does_not_raise_the_notice_again(self):
+        sh(self.root, "git", "checkout", "-q", "-b", "dev")
+        self.write("tools/vieux.js", "inPrivate();\n")
+        sh(self.root, "git", "add", ".")
+        sh(self.root, "git", *GIT_USER, "commit", "-q", "-m", "groupe fusionné")
+        self.assertEqual(self.notice(), "", "dev propre : rien de neuf")
+        self.write("tools/neuf.js", "privState;\n")
+        self.assertIn("privState dans tools/neuf.js", self.notice())
+        sh(self.root, "git", "checkout", "-q", "-b", "worktree-groupe-x")
+        sh(self.root, "git", "add", ".")
+        sh(self.root, "git", *GIT_USER, "commit", "-q", "-m", "ticket du groupe")
+        notice = self.notice()
+        self.assertIn("privState dans tools/neuf.js", notice)
+        self.assertNotIn("vieux.js", notice)
+
+    def test_main_a_detached_head_or_no_dev_count_only_what_is_not_committed(self):
+        self.write("tools/vieux.js", "inPrivate();\n")
+        sh(self.root, "git", "add", ".")
+        sh(self.root, "git", *GIT_USER, "commit", "-q", "-m", "travail fusionné")
+        sh(self.root, "git", "checkout", "-q", "-b", "autre")          # branche de groupe, sans branche dev
+        self.assertEqual(self.notice(), "")
+        sh(self.root, "git", "checkout", "-q", "--detach")              # tête détachée (CI d'une PR)
+        self.assertEqual(self.notice(), "")
+        self.write("tools/neuf.js", "privState;\n")
+        self.assertIn("privState dans tools/neuf.js", self.notice())
+
+    def test_outside_git_there_is_no_notice(self):
+        with mock.patch.object(check, "git", side_effect=OSError("git absent")):
+            self.assertIsNone(check.notice_base())
 
 
 class LinkNotesTest(unittest.TestCase):
@@ -200,7 +261,7 @@ class ImageSrcTest(unittest.TestCase):
     def test_a_displayed_image_only_gets_its_address_through_showImage(self):
         html = "\n".join([
             "$('vImg').src=url;",                     # 1 : refusée
-            "const a = $( \"stageImg\" ).src = '';",  # 2 : refusée
+            "const a = $( \"ivImg\" ).src = '';",     # 2 : refusée
             "if($('ivImg').src==u) go();",            # comparaison : permise
             "$('vImgX').src=u; img.src=url;",         # autre élément, ou variable (showImage) : permis
             "$('vBg').src  =  thumb;",                # 5 : refusée

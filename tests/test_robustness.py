@@ -56,11 +56,14 @@ class PreparationFailureTest(bench.BenchCase):
         self.assertIn("illisible", j["error"])
         self.assertEqual(wait_job(good)["status"], "done")
 
-    def test_unreadable_incognito_reference_leaves_nothing(self):
-        bad = generate("make it blue", mode="edit", incognito=True, ref_images=["data:image/png;base64,!!!"])["id"]
-        self.assertEqual(wait_job(bad)["status"], "failed")
+    def test_unreadable_private_reference_leaves_nothing(self):
+        session = bench.create_private("Mot2passe!")
+        code, reply = call("POST", "/api/generate", gen_body("make it blue", mode="edit", private=True,
+                                                             ref_images=["data:image/png;base64,!!!"]), private=session)
+        self.assertEqual(code, 202, reply)
+        self.assertEqual(wait_job(reply["id"], private=session)["status"], "failed")
         bench.wait_idle()
-        self.assertEqual(bench.files("jobs", "incognito_*"), [])
+        self.assertEqual(bench.files("jobs", "*"), [])
         self.assertFalse(any("make it blue" in line for line in bench.LOG))
         self.assertEqual(wait_job(generate("next one")["id"])["status"], "done")
 
@@ -94,7 +97,7 @@ class CancelDuringPreparationTest(bench.BenchCase):
         done = bench.job(jid)
         self.assertEqual((done["status"], done["seconds"]), ("cancelled", None))   # seconds : posé après le moteur
         self.assertIsNotNone(done["finished"])
-        self.assertEqual(bench.files("outputs", "*.png"), [])
+        self.assertEqual(bench.files("outputs", ".pile", "*.png"), [])
         self.assertEqual(bench.files("jobs", jid), [])
 
     def test_cancel_as_the_engine_starts_stops_it_at_once(self):
@@ -116,29 +119,29 @@ class CancelDuringPreparationTest(bench.BenchCase):
             bench.wait_idle()                      # HOLD : sans l'arrêt du moteur, il ne finirait jamais
         self.assertEqual(started, [jid])
         self.assertEqual(bench.job(jid)["status"], "cancelled")
-        self.assertEqual((bench.files("outputs", "*.png"), bench.files("jobs", jid)), ([], []))
+        self.assertEqual((bench.files("outputs", ".pile", "*.png"), bench.files("jobs", jid)), ([], []))
 
 
 class CancelAtStartTest(bench.BenchCase):
     """Annulation posée au moment où worker() vient de prendre la génération en tête de file, avant son lancement."""
 
-    def cancel_at_start(self, body):
+    def cancel_at_start(self, body, session=None):
         """Lance la demande ; à la prise en tête de sa première génération, lit sa ligne de la file et l'annule (par
-        son identifiant, que la page qui l'a lancée connaît). Renvoie la réponse de /api/generate et cette ligne."""
+        son identifiant, que la page qui l'a lancée connaît ; session : celle de l'espace privé, pour une génération
+        privée). Renvoie la réponse de /api/generate et cette ligne."""
         real, done = bench.launch.run_job, threading.Event()
         entry = cancelled = None
 
         def cancel_then_run(job):               # fenêtre entre le passage en cours (sous S.turn) et run_job
             nonlocal entry, cancelled
             if not done.is_set():
-                queue = call("GET", "/api/status")[1]["queue"]
-                mine = job.get("tag") or job["id"]   # une ligne incognito ne porte que son étiquette
-                entry = next((e for e in queue if (e.get("tag") or e.get("id")) == mine), None)
-                cancelled = call("POST", f"/api/job/{job['id']}/cancel")[1]
+                queue = call("GET", "/api/status", private=session)[1]["queue"]
+                entry = next((e for e in queue if e["id"] == job["id"]), None)
+                cancelled = call("POST", f"/api/job/{job['id']}/cancel", private=session)[1]
                 done.set()
             return real(job)
         with mock.patch.object(bench.launch, "run_job", cancel_then_run):
-            code, reply = call("POST", "/api/generate", body)
+            code, reply = call("POST", "/api/generate", body, private=session)
             self.assertEqual(code, 202, reply)
             self.assertTrue(done.wait(10), "génération jamais prise en tête")
             bench.wait_idle()
@@ -146,8 +149,8 @@ class CancelAtStartTest(bench.BenchCase):
         self.assertIsNotNone(entry, "ligne de la génération absente de la file")
         return reply, entry
 
-    def assert_never_computed(self, jid):
-        j = bench.job(jid)
+    def assert_never_computed(self, jid, session=None):
+        j = bench.job(jid, session)
         self.assertEqual((j["status"], j["seconds"]), ("cancelled", None))   # seconds : posé après le moteur
         self.assertIsNotNone(j["finished"])
 
@@ -159,18 +162,19 @@ class CancelAtStartTest(bench.BenchCase):
             self.assert_never_computed(first["id"])
             self.assertEqual(bench.job(second["id"])["status"], "done")
             self.assertEqual(len(sent.decided), 1, sent.decided)
-        self.assertEqual(len(bench.files("outputs", "*.png")), 1)
+        self.assertEqual(len(bench.files("outputs", ".pile", "*.png")), 1)
         self.assertEqual(bench.files("jobs", first["id"]), [])
         self.assertEqual([e.get("seed") for e in bench.journal()], [bench.job(second["id"])["seed"]])
 
-    def test_cancel_as_an_incognito_generation_starts_leaves_nothing(self):
+    def test_cancel_as_a_private_generation_starts_leaves_nothing(self):
+        session = bench.create_private("Mot2passe!")
         bench.LOG.clear()
-        reply, entry = self.cancel_at_start(gen_body("zq9secret", incognito=True))
+        reply, entry = self.cancel_at_start(gen_body("zq9secret", private=True), session)
         self.assertEqual(entry["status"], "running")
-        self.assert_never_computed(reply["id"])
+        self.assert_never_computed(reply["id"], session)
         self.assertEqual((bench.files("outputs", "*"), bench.files("jobs", "*"), bench.journal()), ([], [], []))
-        self.assertTrue(bench.LOG)                 # la demande est bien passée par le journal du serveur
-        self.assertFalse([line for line in bench.LOG if "zq9secret" in line or reply["id"] in line])
+        # requêtes réussies tues, annulation sans ligne : rien au journal (hors notifications d'un test précédent)
+        self.assertEqual([line for line in bench.LOG if not line.startswith("[push]")], [])
 
 
 class RankWhileFinishingTest(bench.BenchCase):
@@ -198,13 +202,15 @@ class CalibrationTest(bench.BenchCase):
         S, launch = bench.S, bench.launch
         saved = (S.cfg, S.backend, S.model, S.engine, S.store, dict(launch.MODELS))
         argv = ["calibrate.py", "--backend", S.backend, "--model", "q4", "--steps", "2"]
-        out = io.StringIO()
+        out, umask = io.StringIO(), os.umask(0o022)
+        os.umask(umask)
         try:
             with mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(out):
                 calibrate.main()                   # échec : sys.exit, qui fait échouer le test avec son message
         finally:
             S.cfg, S.backend, S.model, S.engine, S.store, models = saved
             launch.MODELS.update(models)
+            os.umask(umask)                        # masque de restrict_new_files : pas pour la suite du banc
         self.assertIn("[calibration] terminée", out.getvalue())
 
 
@@ -227,12 +233,6 @@ class CancelFinishedTest(bench.BenchCase):
         call("POST", f"/api/job/{b}/cancel")
         self.assertEqual(call("POST", f"/api/job/{b}/cancel")[1]["status"], "cancelled")
         self.assertEqual(wait_job(a)["status"], "done")
-
-    def test_cancelling_a_finished_incognito_generation_keeps_its_image(self):
-        jid = generate("secret", incognito=True)["id"]
-        wait_job(jid)
-        self.assertEqual(call("POST", f"/api/job/{jid}/cancel")[1]["status"], "done")
-        self.assertEqual(call("GET", f"/api/job/{jid}/result")[0], 200)
 
 
 if __name__ == "__main__":

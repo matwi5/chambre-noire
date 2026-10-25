@@ -33,8 +33,11 @@ tools/config.local.json
 Chambre noire.command
 Qwen-Image.command
 
-# code d'accès des appareils du Wi-Fi (launch.py --lan)
+# code d'accès de tous les appareils, et jeton d'entrée à usage unique avec sa page (launch.py --enter)
 tools/access_code.txt
+tools/entry_token
+tools/entry.html
+tools/entry*.tmp
 # notifications : clé d'envoi de la machine et appareils abonnés
 tools/push_vapid.pem
 tools/push_subscriptions.json

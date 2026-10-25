@@ -20,6 +20,7 @@ EDIT = "Make the bicycle blue, keep everything else unchanged"
 
 
 def main():
+    launch.restrict_new_files()
     cfg = launch.load_config()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--backend", choices=launch.PLATFORM_BACKENDS, default=launch.default_backend(cfg))

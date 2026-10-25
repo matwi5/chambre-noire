@@ -4,6 +4,585 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-25 · Constats de la revue de sécurité du groupe G
+
+- **Contexte** : revue de sécurité du groupe G (lecture seule, `git diff 64d7a92..29a3a00`) : aucune faille critique
+  ni haute ; constats posés au porteur avec une recommandation chacun.
+- **Décision** (porteur, 25/10/2026, réponse « ok pour tes reco ») : « Trancher les constats de la revue de sécurité
+  du groupe G. Elle n'a trouvé aucune faille critique ni haute, donc livrer sans les corriger reste défendable. Je
+  n'ai rien corrigé : Moyenne : comme le cookie d'accès, le cookie de session de l'espace privé part aussi vers les
+  autres ports de 127.0.0.1. Un autre compte du Mac qui y attirerait ton navigateur pendant que ton espace privé est
+  ouvert pourrait s'en servir. Le texte du risque accepté ne parle que du cookie d'accès. ➡️ Je propose d'élargir ce
+  texte dans le README et `DECISIONS.md` ; je l'écris sur ton oui. Faible : un refus 401 au moment de reverrouiller
+  laisse la session privée ouverte jusqu'à 15 minutes. ➡️ Je recommande de corriger avant l'envoi : le verrouillage
+  passerait sans cookie d'accès, toujours derrière le contrôle anti-autre-site. C'est un petit changement du serveur,
+  avec un test et une passe « bogues ». Faible : si le service est arrêté, un autre compte qui prend le port 7860
+  pourrait montrer une fausse page du code au raccourci. ➡️ Piste. Faible : un cookie posé par un autre port peut
+  bloquer le Mac, sans fuite. ➡️ Piste. » → les quatre recommandations : risque accepté élargi au cookie de session
+  privée (README) ; `POST /api/private/lock` admis sans cookie d'accès, après `_host_ok` et `_post_refused` ; les deux
+  derniers constats restent des pistes (`ETAT_DU_PROJET.md`).
+- **Écarté pour l'instant** : vérifier le propriétaire du port avant `--enter` ; accepter l'une quelconque des valeurs
+  `qwen_access` présentes ; porter la session privée par un en-tête plutôt qu'un cookie.
+
+## 2026-10-25 · Choix retenus par Claude pour l'entrée du Mac par jeton (délégation du porteur)
+
+- **Contexte** : ticket G2 « Entrer depuis le Mac sans taper le code, par un jeton à usage unique », sa revue
+  Standards/Spec et sa passe « bogues » ; choix faits par Claude sous la délégation du porteur (« Choix confiés à
+  Claude jusqu'à la fin du parcours de la refonte », plus bas).
+- **Choix retenus** (question → recommandation retenue) :
+  - Réponse à une entrée refusée (Wi-Fi, relais, jeton mauvais, vieux ou déjà servi) ? → la page du code, pas un
+    simple 403 ; un navigateur qui a déjà le cookie est renvoyé vers `/` sans toucher au jeton (historique,
+    autocomplétion, second onglet) ;
+  - Jeton de plus de 60 s ? → effacé quel que soit le jeton présenté, âge pris sur le fichier ouvert et en valeur
+    absolue (un fichier daté dans le futur est refusé) ;
+  - Deux requêtes simultanées ? → un verrou (`ENTRY_LOCK`) entoure l'écriture, la lecture, la vérification et
+    l'effacement dans un même processus ; un jeton servi est retenu en mémoire (`ENTRY_USED`) et refusé ensuite, même
+    si son fichier n'a pas pu être effacé ;
+  - Fichiers du jeton et de la page ? → créés de façon exclusive en 0o600 sous un nom tiré au hasard, puis remplacés
+    d'un coup ; ignorés par git, temporaires compris ;
+  - Ce que reçoit le navigateur ? → l'adresse `file://` de la page de redirection, jamais l'adresse qui porte le
+    jeton ; limite écrite dans le README : un ordinateur qui ouvre les `.html` dans un éditeur n'affiche aucun
+    navigateur, recours par l'adresse et le code ;
+  - Entrée impossible à écrire, ou `--enter` qui échoue ? → le lancement ouvre l'adresse simple (le code est alors
+    demandé), le raccourci macOS aussi (`--enter || open http://127.0.0.1:7860/`) ;
+  - Raccourci ? → `tools/make_shortcut.py` découpé en fonctions pour être testé ; le README dit de le relancer après
+    une mise à jour (consigne pour tout utilisateur du dépôt).
+- **Écarté** : donner au navigateur l'adresse qui porte le jeton ; laisser un navigateur déjà connecté sur la page du
+  code ; laisser le porteur sans navigateur ouvert quand l'entrée échoue.
+
+## 2026-10-25 · Choix retenus par Claude pour le code d'accès demandé au Mac (délégation du porteur)
+
+- **Contexte** : ticket G1 « Demander le code d'accès sur le Mac aussi », sa revue Standards/Spec et sa passe
+  « bogues » ; choix faits par Claude sous la délégation du porteur (« Choix confiés à Claude jusqu'à la fin du
+  parcours de la refonte », plus bas).
+- **Choix retenus** (question → recommandation retenue) :
+  - Où la page du code dit-elle comment entrer depuis l'ordinateur ? → seulement pour une requête de l'ordinateur
+    lui-même, en plus du paragraphe du téléphone : « Sur cet ordinateur : ouvrez Chambre noire par son raccourci, ou
+    saisissez le code de `tools/access_code.txt`. » (« cet ordinateur » plutôt que « ce Mac » : juste sous Windows) ;
+  - « Ouvrir depuis le téléphone » sans `--lan` ? → masqué (le champ `phone` de `/api/status` suit les adresses du
+    Wi-Fi, sinon il montrerait une adresse vide) ;
+  - Une requête quand aucun code n'est chargé ? → refusée partout (401), Wi-Fi compris ;
+  - Au lancement sans `--lan` ? → le terminal dit où est le code (`tools/access_code.txt`), jamais le code ;
+  - Fichier du code illisible (encodage, droits, dossier à sa place) ? → le lancement s'arrête avec un message qui
+    dit quoi faire, sans jamais écraser le fichier ; un fichier lisible mais trop court est remplacé comme avant ;
+  - Droits et création du fichier du code ? → resserrés à 0o600 à chaque lecture ; création exclusive, et un code
+    créé entre-temps par un autre lancement est relu, pas écrasé ;
+  - Lecture des cookies ? → par le serveur lui-même, tolérante aux paires mal formées d'autres applications locales
+    (les cookies ne distinguent pas les ports), comparaison en octets sans jamais lever ;
+  - Le cookie d'accès du Mac part aussi vers les autres ports de 127.0.0.1 ? → risque accepté et écrit dans le README
+    (élargi le 25/10/2026 au cookie de session privée, entrée « Constats de la revue de sécurité du groupe G ») :
+    il faut qu'un autre compte écoute sur un port local et y attire le navigateur du porteur ; pas de correction simple
+    ;
+  - Un onglet ouvert sans cookie valable (avant la mise en service, cookies effacés, code changé) ? → un 401 de
+    `/api/status` recharge la page une fois, sur la page du code, sans boucle ;
+  - Un 401 au reverrouillage de l'espace privé vaut-il « verrouillé » (décision du 24/10, « une erreur de la famille
+    4xx (comme « accès refusé ») ») ? → non, c'est l'exception : depuis que le Mac demande le code d'accès, un 401 veut
+    dire que la requête n'a pas atteint la session privée, qui peut rester ouverte ; la marque de l'onglet est gardée
+    et l'espace reverrouillé une fois le code d'accès saisi. Les autres 4xx et le 503 « indisponible » restent des
+    verrouillages ;
+  - Tests d'interface ? → connectés à un seul endroit du pilote (`driver.mjs`) pour les bancs directs ; un banc relayé
+    garde `bench.login(page)` ; le banc pose son propre code sans passer par `setup_access`.
+- **Écarté** : écraser un fichier de code illisible ; prendre un 401 pour un verrouillage accepté ; laisser un onglet
+  bloqué sur « Moteur indisponible ».
+
+## 2026-10-24 · Choix retenus par Claude pour les suites du groupe E (délégation du porteur)
+
+- **Contexte** : correctifs des suites du groupe E après la revue Standards/Spec et deux passes « bogues » ; choix
+  faits par Claude, une partie avant la délégation (déclarés au tableau de bord), le reste sous la délégation du
+  porteur (« Choix confiés à Claude jusqu'à la fin du parcours de la refonte », ci-dessous).
+- **Choix retenus** (question → recommandation retenue) :
+  - Une sortie de l'espace privé refusée par le Mac laisse-t-elle la pile privée telle quelle ? → non : elle est
+    relue (sinon un « Sortir » appuyé avant la première lecture, puis refusé, la laissait vide) ;
+  - Nom de la marque de l'onglet ? → `relock`, valeur `1`, sans aucune donnée privée ;
+  - Qu'est-ce qu'une « saisie en cours » qu'une notification ne ferme pas ? → un champ de texte de la feuille où
+    l'utilisateur a tapé (frappe, collage, dictée) depuis son ouverture ; un interrupteur ou un champ rempli par la
+    page ne compte pas ;
+  - Une fermeture de la page hors de l'espace oublie-t-elle la saisie privée mise de côté après une fermeture par le
+    Mac ? → oui, comme au retour, plus tôt ;
+  - Une fermeture de la page pendant l'envoi du code privé ? → traitée comme une fermeture dans l'espace : envoi du
+    code annulé, verrouillage, marque, saisie privée oubliée, message au retour ; une page revenue avant la réponse
+    refuse l'entrée (« Page fermée pendant l'envoi : retapez le code. ») ;
+  - Une page fermée pendant le reverrouillage qui précède l'envoi du code ? → le code ne part pas, à retaper ;
+  - « Sortir » refusé clairement par le Mac (4xx, 503 « espace privé indisponible ») ? → sortie appliquée, même règle
+    que le reverrouillage ;
+  - Une page marquée dont l'état n'a pas pu être relu ? → traitée à sa fermeture comme peut-être dans l'espace
+    (verrouillage, marque) ;
+  - Après un rechargement marqué dont le verrouillage échoue, la ligne « Espace privé » reste-t-elle visible ? → non :
+    elle n'apparaît qu'une fois le verrouillage accepté (aucun état appliqué avant), comportement écrit dans le
+    README ;
+  - Regrouper les gardes de « Sortir » en une seule porte sur les adresses privées ? → pas dans ce parcours : piste
+    notée.
+- **Écarté** : rentrer dans l'espace sur une réponse arrivée après une fermeture ; appliquer une partie de l'état
+  avant le reverrouillage accepté.
+
+## 2026-10-24 · Choix confiés à Claude jusqu'à la fin du parcours de la refonte
+
+- **Contexte** : suites du groupe E en cours, groupe G (code d'accès demandé aussi sur le Mac) restant ; chaque choix
+  de confidentialité ou de conception était jusqu'ici posé au porteur.
+- **Décision** (porteur, 24/10/2026) : « Continu de maniere autonome, tu choisi tes propres recommandations jusqu'a la
+  fin de tout les tickets du parcours. » Jusqu'à la fin des tickets du parcours « Refonte UI et pile à trier »,
+  Claude retient sa propre recommandation à chaque choix, zones sensibles comprises, l'écrit ici (question et
+  recommandation retenue) et la déclare au tableau de bord. La délégation vaut dans la discussion principale où elle
+  a été donnée : le groupe G s'y fait donc, pas dans une session liée (une session liée ne peut pas tenir un accord
+  du porteur d'un message d'une autre session). Restent au porteur : pousser, ouvrir la pull request, fusionner vers
+  `main`, le compte rendu du parcours et la livraison.
+- **Écarté** : lancer G en session liée, qui buterait sur chaque choix à faire confirmer par le porteur.
+
+## 2026-10-24 · Marque de l'onglet posée dès l'entrée dans l'espace, refus clair du verrouillage
+
+_Précisée le 25/10/2026 (un 401 n'est pas un verrouillage depuis que le Mac demande le code d'accès) par « Choix
+retenus par Claude pour le code d'accès demandé au Mac »._
+
+- **Contexte** : revue Standards/Spec et passe « bogues » des suites du groupe E ; deux constats touchant l'espace
+  privé posés au porteur avec une recommandation chacun.
+- **Décision** (porteur, 24/10/2026, réponse « ok pour tes reco ») :
+  - « La marque qui fait reverrouiller l'espace au chargement suivant n'est posée qu'au moment où la page se ferme
+    (`pagehide`). Or un téléphone ferme souvent une application restée en arrière-plan sans prévenir la page. Dans ce
+    cas, ni la marque ni le verrouillage ne partent, et l'onglet rechargé rentre dans l'espace sans code s'il le fait
+    dans les 15 minutes. Chrome sur Android le fait par exemple pour libérer de la mémoire. A) (Recommandé) Poser la
+    marque dès l'entrée dans l'espace, et la retirer quand tu sors ou quand le Mac accepte le verrouillage. Ça couvre
+    aussi l'onglet fermé sans prévenir. Le coût est de même nature que ce que tu as déjà accepté : la marque, toujours
+    sans donnée privée, est présente pendant tout le temps passé dans l'espace, pas seulement après la fermeture.
+    B) La poser aussi quand l'application passe en arrière-plan (changement d'application, écran verrouillé), tant
+    que tu es dans l'espace. Ça couvre presque les mêmes cas, avec une marque posée un peu plus tard. C) Garder la
+    marque seulement à la fermeture, comme aujourd'hui. » → A ;
+  - « Refus durable du verrouillage. Aujourd'hui, toute réponse du Mac qui n'est pas un « oui » vaut « pas encore » :
+    la page réessaie et n'affiche rien. Comme la marque survit au rechargement, un refus qui dure bloque l'onglet
+    (lampe rouge, rien d'affiché) jusqu'à sa fermeture. Le cas le plus probable est un serveur relancé sans le module
+    de chiffrement : il répond « espace privé indisponible ». A) (Recommandé) Prendre comme « verrouillé » un refus
+    clair venant du Mac lui-même : une erreur de la famille 4xx (comme « accès refusé »), ou « espace privé
+    indisponible ». Dans les deux cas, l'espace ne peut de toute façon pas être ouvert. Continuer de réessayer sur
+    une coupure réseau ou une panne sans réponse claire, par exemple celle du relais Tailscale, pour ne jamais
+    rentrer dans une session peut-être encore ouverte. B) Garder le blocage tel quel. » → A.
+- **Écarté** : la marque posée seulement à la fermeture ou au passage en arrière-plan ; un onglet bloqué par un refus
+  durable ; toute réponse HTTP prise pour un verrouillage accepté.
+- **Limite connue** : une application tuée puis relancée depuis l'écran d'accueil repart sans marque (mémoire de
+  l'onglet vide) ; seule la fermeture de l'espace par le Mac au bout de 15 minutes protège ce cas, comme avant.
+
+## 2026-10-24 · Suites du groupe E : verrouillage à la fermeture, lampe sans animation, notification et feuilles
+
+- **Contexte** : compte rendu du groupe E (questions de confidentialité et d'ergonomie laissées ouvertes par sa
+  session) ; questions posées au porteur avec une recommandation chacune.
+- **Décision** (porteur, 24/10/2026, réponse « ok pour tes reco ») :
+  - « Rechargement normal après un verrouillage perdu. Si le verrouillage envoyé à la fermeture n'arrive pas au Mac
+    (réseau coupé), une page rechargée ou rouverte normalement dans les 15 minutes rentre encore dans l'espace sans
+    code. Ce défaut existait avant le groupe E. A) Reverrouiller à tout chargement qui suit une fermeture dans
+    l'espace. La page laisse une marque « cet onglet était dans l'espace privé » dans la mémoire de l'onglet du
+    navigateur (`sessionStorage`, effacée à la fermeture de l'onglet, sans aucune donnée privée). Coût : quelqu'un qui
+    ouvre les outils de développement du navigateur pourrait voir que l'espace a servi. B) Reverrouiller à chaque
+    chargement, sans aucune marque. Coût : ouvrir l'application dans un deuxième onglet fait sortir le premier de
+    l'espace privé. C) Laisser comme aujourd'hui. Je penche pour A : le cas B est plus gênant au quotidien, et la
+    marque ne dit rien de ce qu'il y a dans l'espace. » → A ;
+  - « Champ de code restauré. Une feuille privée restée ouverte à la fermeture revient par « Retour » avec son champ
+    de code rempli. Je recommande de vider ces champs au retour. » → oui ;
+  - « Course au reverrouillage. Si un verrouillage est encore en route quand tu retapes le code privé, il arrive après
+    et referme l'espace que tu viens d'ouvrir. Il n'y a pas de fuite, mais l'espace paraît se refermer seul. Je
+    recommande que l'entrée attende la fin du verrouillage. » → oui ;
+  - « Effacer dès la fermeture plutôt qu'au retour. Tant que le navigateur garde la page en mémoire pour un éventuel
+    « Retour », il garde aussi les images privées déchiffrées et la saisie. Effacer dès `pagehide` (l'événement de
+    fermeture de la page), en gardant l'effacement au retour, change ta décision du 23/10 (« au retour »). Je
+    recommande oui. » → oui : la décision du 23/10 est complétée (effacement à la fermeture, et encore au retour) ;
+  - « Avec « réduire les animations » activé sur le téléphone, la lampe ne pulse plus : « Calcul en cours » et
+    « Prêt » ont alors la même couleur. Je recommande un aspect fixe différent pendant le calcul (par exemple un
+    anneau au lieu d'un point plein). » → oui ;
+  - « Toucher une notification ferme n'importe quelle feuille ouverte, y compris une modification de prompt pas
+    encore enregistrée. Je recommande de passer au Labo sans fermer une feuille qui a une saisie en cours. » → oui ;
+  - « Elle a rendu son compte rendu mais apparaît encore dans la liste des sessions. Est-ce que je l'arrête et
+    supprime son worktree ? Sa branche est fusionnée, rien ne serait perdu. » → oui.
+  Faites dans la discussion principale, sur `dev`, avant le groupe G, avec une passe « bogues » (espace privé).
+- **Écarté** : reverrouiller à chaque chargement sans marque (un deuxième onglet ferait sortir le premier) ; laisser
+  le rechargement rentrer sans code ; effacer seulement au retour ; la même lampe pour « Prêt » et « Calcul » quand
+  les animations sont réduites ; une notification qui ferme une saisie en cours.
+
+## 2026-10-24 · Page restaurée par « Retour » : saisie privée effacée, espace reverrouillé
+
+- **Contexte** : ticket « Trier dans l'espace privé en lumière verte » du groupe E (page restaurée depuis la mémoire
+  du navigateur après le verrouillage, spec section 12, ajout du 23/10/2026) ; deux choix touchant la confidentialité
+  posés au porteur dans la session du groupe.
+- **Décision** (porteur, 24/10/2026) :
+  - « Ticket E3, page restaurée par « Retour » après la fermeture de la page dans l'espace privé. À la fermeture, la
+    page a verrouillé l'espace. Au retour, l'affichage privé est effacé tout de suite (c'est ta décision du 23/10).
+    Que devient le texte et les images que tu avais tapés dans l'espace privé ? » Options : « Effacés, comme Sortir
+    (Recommandé) : Fermer la page vaut « Sortir » : la saisie privée est effacée de la page. Un message dit « Espace
+    privé verrouillé à la fermeture de la page ». Rien de privé ne reste en mémoire. » ; « Gardés en mémoire : Comme
+    la fermeture par le Mac après 15 minutes : la saisie privée reste en mémoire de la page (jamais dans le
+    navigateur), et revient si tu rentres dans l'espace depuis cette même page. » → « Effacés, comme Sortir
+    (Recommandé) » ;
+  - « Même cas. Le verrouillage envoyé à la fermeture de la page peut ne pas arriver au Mac (réseau coupé à ce
+    moment-là). Au retour, la page redemande l'état au Mac : s'il dit l'espace encore ouvert, la page y rentrerait et
+    réafficherait tout le privé. On fait quoi ? » Options : « Reverrouiller au retour (Recommandé) : Au retour, la
+    page renvoie d'abord « verrouiller » au Mac, puis redemande l'état : l'espace reste fermé, il faut retaper le
+    code privé. C'est ce que promet le README (« se verrouille à la fermeture de l'application »). » ; « Suivre le
+    Mac : La page redemande seulement l'état : si le verrouillage n'est pas arrivé, elle rentre dans l'espace privé
+    sans code. » → « Reverrouiller au retour (Recommandé) ».
+- **Écarté** : garder la saisie privée en mémoire après la fermeture de la page ; rentrer dans l'espace au retour si
+  le verrouillage de la fermeture n'est pas arrivé.
+
+## 2026-10-24 · Cadrage réécrit pour le Labo et les Tirages, état vide des Tirages avec le logo
+
+- **Contexte** : avant de lancer le groupe E, deux points qui demandaient le porteur : le texte de `BRIEF.md`
+  (spec, section 13) et l'illustration de l'état vide des Tirages (spec, section 11), nouveau visuel.
+- **Décision** (porteur, 24/10/2026, réponse « 1 oui, 2 a ») :
+  - « Texte de `BRIEF.md` (ton accord est requis). Il parle encore des pages Créer, En cours et Galerie. Je
+    l'écrirais moi-même ici, avant le lancement, pour que la session n'ait pas à t'attendre. » (changements proposés,
+    écrits tels quels dans `BRIEF.md` : nom « Chambre noire », Labo, révélation en pixels, pile à trier, Tirages,
+    espace privé en lumière verte avec l'entrée dans la feuille de la lampe ; ligne de l'accès par téléphone laissée
+    au groupe G) → oui ;
+  - « Illustration de l'état vide des Tirages (ticket 2). La spec demande « une illustration en pixels » au-dessus de
+    « Aucun tirage pour l'instant ». C'est un nouveau visuel, et tu valides d'habitude un visuel avant qu'il soit
+    intégré. a) (Recommandé) Reprendre le logo, le paysage en carrés que tu as déjà validé (`logo.svg`), agrandi et
+    atténué. Aucun nouveau dessin, donc rien à valider, et la session ne s'arrête pas. b) La session dessine une
+    illustration nouvelle et s'arrête pour te montrer ses rendus avant de l'intégrer. » → a.
+- **Écarté** : un nouveau dessin pour l'état vide ; `BRIEF.md` laissé au groupe E.
+
+## 2026-10-24 · Avis « zone sensible » limité au travail de la branche, notification qui ramène au Labo
+
+- **Contexte** : ticket d'outillage fait sur `dev` (`237c7d6`) ; texte de `CLAUDE.md` (section « Vérifications ») et
+  point du groupe E restés en suspens soumis au porteur.
+- **Décision** (porteur, 24/10/2026, réponse « 1 oui, 2 oui ») :
+  - « Texte de `CLAUDE.md` (section Vérifications) à remplacer. Ce paragraphe remplace celui qui commence par
+    « `--quick` (en local, jamais en CI)… » » (paragraphe proposé, écrit tel quel dans `CLAUDE.md`) « Deux points à
+    valider en connaissance de cause : La CI GitHub n'affichera plus jamais cet avis. La phrase « C'est un indice… »
+    étend à tous les groupes la règle que tu as fixée pour E et G seulement : la passe « bogues » ne tourne que sur
+    les tickets jugés sensibles au découpage. » → oui ;
+  - « Notifications (ticket E1, groupe E). Toucher une notification devrait-il ramener au Labo même quand
+    l'application est déjà ouverte ? Aujourd'hui, le fichier qui reçoit les notifications (`sw.js`) n'ouvre le Labo
+    que si l'application est fermée. ➡️ Je recommande oui : je l'ajoute à E1 par un commentaire « mise à jour du
+    porteur ». » → oui ; commentaire ajouté au ticket E1.
+- **Écarté** : un avis « zone sensible » en CI ; une passe « bogues » décidée par l'avis plutôt qu'au découpage.
+
+## 2026-10-24 · Suites du groupe D : deux cas de Jeter, méthode des groupes E et G
+
+- **Contexte** : compte rendu du groupe D (revue de sécurité : deux constats sur Jeter) et enquête sur sa durée
+  (≈ 6 h, dont 46 % d'attente des revues et 29 % de contrôles) ; questions posées au porteur avec une recommandation.
+- **Décision** (porteur, 24/10/2026, réponse « ok pour tes reco ») :
+  - « Double appui sur « Jeter » dans la visionneuse. Le second appui tombe sur l'image suivante et envoie tout de
+    suite la suppression de la première, sans ses 5 s d'« Annuler ». Même risque sur ✓ et ✕ de la pile, entre 220 et
+    300 ms. On bloque le bouton jusqu'à ce que l'image suivante soit affichée (300 ms au moins) ? » → oui ;
+  - « Jeter privé pendant « Sortir ». Si tu sors de l'espace privé pendant les 5 s d'« Annuler », la suppression peut
+    partir quand même. On l'abandonne dès le début de la sortie ? L'image resterait alors dans la pile privée, selon
+    ton principe « le doute garde l'image ». » → oui ; les deux corrections faites dans la discussion principale, sur
+    `dev`, avant le groupe E ;
+  - « Passe « bogues » seulement sur les tickets sensibles par leur contenu (espace privé, suppression, contrôle
+    d'accès) : E3, G1, G2, mais pas E1 ni E2. Et l'avis de `check.py` comparé à la base de la branche du groupe, pas
+    à `main`. D'accord ? » → oui ;
+  - « Corriger les constats Standards/Spec pendant que la passe « bogues » tourne, au lieu de l'attendre sans rien
+    faire. Rien ne change dans les règles : le commit reste après les deux revues. D'accord ? » → oui ;
+  - « Aller plus loin : commiter avant la revue et commencer le ticket suivant pendant qu'elle tourne, les correctifs
+    arrivant dans un commit à part. Gain d'environ une heure de plus, mais c'est contraire à ta règle « un commit par
+    ticket, après sa revue ». » → recommandation « Non, on garde la règle » acceptée ;
+  - « Un petit ticket d'outillage fait ici, sur `dev`, avant de lancer E. `check.py --ui` lancerait les fichiers
+    d'interface sur 2 ou 3 Chrome en parallèle : environ 40 % de temps en moins par contrôle complet, selon
+    l'estimation de l'enquête. L'avis « zone sensible » serait comparé à la base de la branche du groupe. D'accord ? »
+    → oui ;
+  - « Est-ce que j'arrête les sessions A, B, C et F et que je supprime leurs worktrees ? Leurs branches sont
+    fusionnées, rien ne serait perdu, et la liste de tes sessions serait plus lisible. » (et D, ajouté ensuite) →
+    oui.
+- **Écarté** : passe « bogues » sur tout ticket où `check.py` affiche l'avis ; attendre la passe « bogues » sans rien
+  faire ; commit avant la revue ; garder les sessions terminées.
+
+## 2026-10-24 · Code d'accès demandé aussi au Mac, entrée par un jeton à usage unique
+
+- **Contexte** : le porteur a répondu « b » à la question reposée sur l'accès local (entrée du 23/10 ci-dessous) : le
+  Mac demandera lui aussi le code d'accès. Trois choix de mise en œuvre lui ont été posés.
+- **Décision** (porteur, 24/10/2026, réponse « ok pour tes reco ») :
+  - « Un code même sans l'option Wi-Fi (`--lan`) ? Aujourd'hui, sans `--lan`, il n'y a aucun code, et le serveur
+    n'écoute que l'adresse `127.0.0.1`. Mais les autres comptes du Mac y ont justement accès. » → recommandation
+    acceptée : un code toujours, créé au premier lancement dans `tools/access_code.txt` ;
+  - « Comment tu entres depuis le Mac ? (a) Sans rien taper. Le raccourci `Chambre noire.command` (et l'ouverture
+    automatique du navigateur au lancement) ouvre une adresse de connexion à usage unique : un jeton valable une
+    minute, utilisable une seule fois, jamais le code lui-même. Il ne sert donc à rien s'il reste dans l'historique du
+    navigateur. Seul ton compte peut le créer, puisqu'il faut lire un fichier qui t'est réservé. Ensuite, le navigateur
+    garde la connexion un an, comme sur le téléphone. (b) Taper le code, lu dans `tools/access_code.txt`, une fois par
+    navigateur. » → « (a) » ;
+  - « Quand le faire ? Il faut adapter le banc et une bonne part des tests d'interface, que le groupe D est en train de
+    réécrire, et la page du code d'accès, que le groupe E modifie aussi. (a) Un groupe G à part, après le groupe E, en
+    session liée (effort high), avec une revue de sécurité obligatoire. Je rédige d'abord la section de la spec et je
+    te propose le ou les tickets. (b) Tout de suite, en parallèle du groupe D, au prix de conflits dans les tests. » →
+    « (a) ».
+- **Écarté** : garder le Mac sans code ; un code seulement avec `--lan` ; taper le code sur le Mac ; le faire en
+  parallèle du groupe D.
+- **Conséquences** : spec, section 14 ; groupe G après le groupe E.
+
+## 2026-10-23 · Journal du service et dossiers d'avant fermés aux autres comptes, accès local sans code noté
+
+- **Contexte** : passe « bogues » du ticket des droits des fichiers (`41dab97`) ; trois traces antérieures à la refonte
+  qui concernent un autre compte du Mac.
+- **Décision** (porteur, 23/10/2026, réponse « ok pour tes reco ») :
+  - « Journal du service (`logs/service.log`). Il est créé par le système de lancement de macOS, avant le serveur,
+    donc sans le masque : il est lisible par les autres comptes. Il contient le nom réseau du Mac et ses adresses
+    Tailscale, mais aucun prompt. On ajoute le masque dans la définition du service (`make_service.py`) ? Il faudrait
+    réinstaller le service. » → oui ;
+  - « Dossiers déjà créés. `outputs/`, `jobs/` et `logs/` restent lisibles par les autres comptes : ils peuvent y
+    lister les noms des images, et voir apparaître les dossiers `jobs/private_<id>`, donc quand tu génères en privé. Ils
+    ne peuvent pas ouvrir les fichiers. On ferme une fois ces dossiers au lancement du serveur ? » → oui ;
+  - « Accès par l'adresse locale du Mac. Le Mac lui-même n'a pas besoin du code d'accès. Un autre compte du Mac peut
+    donc lire l'espace public par l'interface : prompts, tirages, images d'entrée. L'espace privé, lui, demande
+    toujours son code. (a) Le noter dans la doc comme limite connue : ton Mac est mono-compte. (b) Demander le code
+    d'accès aussi depuis le Mac. Ce serait plus contraignant pour toi. » → recommandation (a) acceptée.
+- **Écarté** : laisser le journal du service et les dossiers d'avant lisibles ; demander le code d'accès sur le Mac.
+- **Conséquences** : le service porte `Umask` 63 (0o077) et se réinstalle par `tools/make_service.py` ; au lancement,
+  le serveur ferme ses dossiers (0o700) ; l'accès local sans code reste une limite écrite dans le README.
+- **Réserve** : la question sur l'accès local sous-estimait l'exposition (relevé de la passe « bogues ») : un autre
+  compte du Mac peut aussi lire le code d'accès du téléphone, lancer des générations, jeter ou supprimer des images et
+  modifier les prompts enregistrés. Question reposée au porteur avec l'exposition réelle ; le README la décrit déjà.
+- **Remplacée en partie le 24/10/2026** (accès local) : question reposée, « Y a-t-il, ou y aura-t-il, d'autres comptes
+  que le tien sur ce Mac ? (a) Non, il est à moi seul. On garde l'accès sans code depuis le Mac, et la limite reste
+  écrite. (b) Oui. Le Mac demanderait lui aussi le code d'accès, une seule fois par navigateur. Le code est dans
+  `tools/access_code.txt`, que les autres comptes ne peuvent pas lire. Un autre compte devrait alors le connaître
+  pour entrer. » → « b ». La mise en œuvre (code sans `--lan`, entrée du Mac) est à cadrer avec le porteur.
+
+## 2026-10-23 · PNG renommé avant l'effacement, fichiers du serveur pour le seul porteur
+
+- **Contexte** : passe « bogues » du durcissement de la pile (`e1f05d9`).
+- **Décision** (porteur, 23/10/2026, réponse « ok pour tes reco ») :
+  - « PNG verrouillé sous Windows. Windows refuse d'effacer un fichier ouvert, par exemple pendant le calcul de sa
+    vignette. Le PNG étant effacé en dernier, il peut rester seul : le reste est déjà parti, y compris le prompt.
+    Garder une telle image en ferait un tirage sans prompt. Sur le Mac, le cas n'arrive pas. (a) Renommer d'abord le
+    PNG en nom caché : sous Windows, ce renommage échoue aussi sur un fichier ouvert, donc tout de suite, avant
+    d'avoir rien effacé. Ensuite, tout effacer, et remettre le nom d'origine si une pièce résiste. (b) Laisser
+    ainsi : la seule plateforme concernée n'est pas la tienne, et l'image se rejette. » → recommandation (a) acceptée ;
+  - « Fichiers de travail lisibles par les autres comptes du Mac. Pendant le calcul d'une image privée, sd-cli écrit
+    le PNG en clair dans `jobs/private_<id>/`, et ce PNG contient le prompt dans ses métadonnées. Le dossier et le
+    fichier sont lisibles par les autres comptes du Mac jusqu'à la fin de la génération. Les vignettes, les copies
+    d'images d'entrée et les anciens tirages le sont aussi. Ça existait avant la refonte. (a) Créer tout ce que le
+    serveur et sd-cli écrivent en lecture pour ton seul compte (masque de création 0o077 au lancement du serveur),
+    dans un petit ticket à part. (b) Laisser ainsi : ton Mac n'a sans doute qu'un compte. » → recommandation (a)
+    acceptée.
+- **Écarté** : laisser le PNG seul sous Windows ; garder les droits de création du système.
+- **Conséquences** : un PNG caché resté après une panne reprend son nom au démarrage (l'image revient, on la rejette) ;
+  les fichiers déjà créés gardent leurs droits, seuls les nouveaux sont pour le seul porteur.
+
+## 2026-10-23 · Suites du groupe B : effacement PNG en dernier, annulation privée, droits des fichiers, page restaurée
+
+_Complétée le 24/10/2026 (page restaurée) par « Suites du groupe E : verrouillage à la fermeture, lampe sans
+animation, notification et feuilles » : l'affichage privé est aussi effacé dès la fermeture de la page (`pagehide`)._
+
+- **Contexte** : compte rendu du groupe B (pile côté serveur) et passe « bogues » du ticket des couleurs ; questions
+  posées au porteur avec une recommandation chacune.
+- **Décision** (porteur, 23/10/2026, réponse « ok pour tes reco ») :
+  - « Page restaurée par « Retour ». Une page restaurée depuis la mémoire du navigateur après le verrouillage réaffiche
+    le contenu privé quelques secondes. On confie la correction au ticket « Trier dans l'espace privé en lumière
+    verte » du groupe E ? » → oui ;
+  - « Suppression privée durcie par la revue du groupe B. `/api/private/delete` reprend d'abord un éventuel changement
+    de code interrompu, puis renomme le dossier avant de l'effacer. C'est ce qu'exige déjà le piège « Verrous » de
+    `CLAUDE.md`. Le relecteur a voulu défaire ce changement, mais le contrôle de permissions l'a bloqué comme un
+    affaiblissement de la sécurité. On garde ? » → oui ;
+  - « Ordre d'effacement de Jeter et Supprimer. Aujourd'hui, le PNG est effacé d'abord, comme le dit la spec. Si une
+    pièce suivante résiste, la ligne du journal, qui contient le prompt, peut rester sans plus rien pour la retirer.
+    Faut-il effacer le PNG en dernier ? Un échec laisserait alors l'image visible, et on pourrait la rejeter. Je
+    modifierais la spec en conséquence. » → oui ;
+  - « Dates de la fiche privée. Garder une image privée ne réécrit que sa fiche chiffrée : ses dates de fichier
+    changent, pas celles de l'image. Sur le disque ou dans une sauvegarde, on peut donc deviner quelles images
+    privées ont été gardées, et combien attendent encore. C'est la fuite que ton choix de la marque chiffrée devait
+    éviter. (a) L'accepter et l'écrire dans `DECISIONS.md` et la spec. Le README dit déjà que les dates, tailles et
+    nombres de fichiers privés restent visibles sur le disque ; ce serait une limite de plus, de même nature. (b)
+    Remettre les dates d'origine. Ce n'est que partiel : la date de changement du système de fichiers reste. (c)
+    Réécrire toute l'image dans un dossier neuf. C'est la seule option qui ferme la fuite, mais elle coûte cher et ne
+    doit pas risquer de perdre l'image. » → recommandation (a) acceptée ;
+  - « Annulation pendant le rangement d'une génération privée. Une course existait avant la refonte : une annulation
+    qui arrive pile pendant le rangement laisse l'image privée dans la pile, marquée « terminée ». Le côté public est
+    déjà protégé. On corrige de la même façon ? Une annulation arrivée à ce moment-là ne laisserait alors aucune
+    image. » → oui ;
+  - « Droits des fichiers. Le journal des images (qui contient les prompts) et les PNG de la pile sont créés lisibles
+    par les autres comptes de la Mac (0o644). Les passer en lecture par toi seul (0o600) ? Il faudrait un nouveau
+    ticket Asana, qui couvrirait aussi les tests de refus d'accès de `/api/keep` et `/api/discard` » → oui ;
+  - texte du piège « Verrous » de `CLAUDE.md` proposé par le groupe B → « D'accord pour l'écrire tel quel ? » → oui.
+- **Écarté** : défaire le durcissement de `/api/private/delete` ; effacer le PNG d'abord ; remettre les dates de la
+  fiche ou réécrire toute l'image privée ; laisser la course d'une annulation privée ; garder les droits 0o644.
+- **Conséquences** : remplace, dans « Pile : emplacement des images à trier… » et la spec (section 2), l'ordre « PNG
+  d'abord » : Jeter et Supprimer effacent vignettes, images d'entrée, dossier de travail et ligne du journal, puis le
+  PNG en dernier, et seulement si tout le reste est parti ; le récit 74 de la spec (rien sur le disque ne dit combien
+  d'images privées attendent) devient vrai au contenu près, pas aux dates.
+
+## 2026-10-23 · Journal du serveur : connexions coupées, refus de génération et suppressions sans trace propre
+
+- **Contexte** : la passe « bogues » des suites du groupe A relève trois traces antérieures à la refonte, dans le
+  journal du serveur (`logs/service.log`), qui laissent encore deviner l'espace privé.
+- **Décision** (porteur, 23/10/2026, réponse « ok pour tes reco » aux recommandations) :
+  - « Erreurs de connexion coupée » (traceback de Python qui nomme `_private_get`, l'adresse du téléphone et un chemin
+    `/Users/…`) → recommandation acceptée : toutes remplacées par une ligne neutre, « [ui] connexion interrompue » ;
+  - « Refus que seul l'espace privé déclenche » (`POST /api/generate` refusé en 403 ou 503) → « (a) » : taire toutes
+    les requêtes `/api/generate` dans le journal, même en erreur (ses 400 compris) ;
+  - « La ligne [historique] supprimé : <nom> » (écrite pour la seule suppression d'une image normale) →
+    recommandation acceptée : ligne supprimée.
+- **Écarté** : ne taire que les refus propres au privé ; garder le détail des erreurs de connexion.
+- **Conséquences** : les refus d'accès d'une demande de génération (401, 403, 415) ne sont plus suivis dans `logs/` ;
+  une requête est tue d'après son chemin seul (une chaîne de requête ne fait rien taire) ; une erreur d'écriture que
+  macOS rend en simple `OSError` (EPROTOTYPE, ENOTCONN) compte comme une connexion coupée.
+
+## 2026-10-23 · Suites du groupe A : journal muet sur les réussites, ancien réglage incognito, page hors ligne
+
+- **Contexte** : après la fusion du groupe A (retrait de l'incognito), sa session relève que le journal du serveur
+  (`logs/`) distingue encore une génération privée d'une normale, et qu'un ancien réglage incognito du navigateur est
+  ignoré sans message ; la session du groupe F relève que la page « Ordinateur injoignable » de `tools/ui/sw.js` garde
+  les anciennes couleurs, hors du périmètre de la spec.
+- **Décision** (porteur, 23/10/2026, réponse « ok pour tes reco » aux recommandations) :
+  - « Page « Ordinateur injoignable » : on l'ajoute au ticket des couleurs du groupe C ? » → oui (recommandation :
+    « Oui ») ;
+  - « Le journal du serveur trahit encore les générations privées » (« [job] PNG enregistré : <chemin>… » et
+    « [calibration] … » écrites pour une génération normale seulement ; `POST /api/generate` suivi de `/api/result`
+    et `/api/thumb` pour une normale seulement) → « (b) » : une même ligne pour toutes les réussites (« [job]
+    génération terminée », sans chemin ni durée), plus de ligne de calibration, et le journal du serveur ne garde plus
+    que les requêtes en erreur (4xx, 5xx) ;
+  - « Ancien réglage incognito resté dans le navigateur » → oui : un message affiché une seule fois au chargement
+    (« L'incognito n'existe plus : vos images sont enregistrées. Pour la confidentialité, passez par l'espace
+    privé. »), puis le réglage est effacé.
+- **Écarté** : garder le détail des réussites ou la trace des requêtes réussies dans `logs/` ; ignorer l'ancien réglage
+  sans message ; laisser la page hors ligne aux anciennes couleurs.
+- **Conséquences** : la session du groupe A fait les deux changements du journal et du message comme mise à jour du
+  ticket « Refuser l'incognito au serveur et rendre neutres les échecs du journal » ; la page hors ligne entre dans le
+  ticket « Passer l'interface en lumière inactinique, sombre seulement » (groupe C).
+
+## 2026-10-22 · Icône de l'application : le paysage en carrés sous la lumière inactinique
+
+- **Contexte** : groupe F de la refonte (ticket « Choisir et intégrer la nouvelle icône pixel ») ; le porteur avait
+  demandé au cadrage de garder le paysage en carrés « mais tester B et C (plusieurs versions) ». Choix fait dans la
+  session du groupe, sur deux planches ; phrases du porteur relayées par le compte rendu de la session.
+- **Décision** (porteur, 22/10/2026) : « Quelle icône retiens-tu pour Chambre noire ? »
+  - première planche (A1 et A2 : paysage recoloré ; B1 lampe, B2 cuve, B3 film ; C1 tirage à marge, C2 tirage qui
+    sèche) → « J'aime bien A1, A2 et C2. C2 n'est pas adapté pour la version ronde, modifie. Fait moi d'autre
+    porpositions dans cette directement en gardant ces 3 là » ;
+  - deuxième planche (A1, A2, C2 recentré, A3, A4, A5, C3, C4) → « A1 · paysage recoloré ».
+  - Palette de l'icône : plaque mate `#0d0a08`, halo rouge `#be1c12`, grain léger, soleil ambre `#ffa53a`, montagnes
+    papier `#f1e6d2` ; `tools/ui/logo.svg` reste la source des quatre PNG (192 et 512 à coins transparents, adaptable
+    et Apple en plein cadre).
+- **Écarté** : les motifs lampe, cuve et film ; le paysage dans un cadre de tirage ; les autres variantes du paysage.
+
+## 2026-10-22 · Retrait de l'incognito : journaux sans détail, restes incognito supprimés au démarrage
+
+- **Contexte** : session du groupe A de la refonte (retrait de l'incognito). La spec rend neutres les trois lignes
+  d'échec d'une génération dans le journal du serveur et retire le ménage des dossiers `jobs/incognito_*` au démarrage ;
+  la session relève deux autres lignes qui distinguent encore une génération privée, et un reste possible en clair.
+- **Décision** (porteur, 22/10/2026, dans la session du groupe A) :
+  - « Journal du serveur : la spec rend neutres les trois lignes d'échec d'une génération (fait). Deux autres lignes
+    donnent encore un détail pour une génération normale et rien pour une privée, donc les distinguent : « [job] erreur
+    du thread de calcul : <erreur> » et « [push] notification du lot impossible : <erreur> ». Les rendre neutres
+    aussi, sans détail pour personne ? » → « Oui, neutres aussi (Recommandé) » ;
+  - « La spec retire aussi le ménage au démarrage des dossiers jobs/incognito_*. Un tel dossier ne reste que si
+    l'ancien serveur s'est arrêté brutalement pendant une génération incognito ; il contient alors images d'entrée et
+    PNG en clair, et le nouveau serveur ne le supprimerait plus. Que faire ? » → « Garder ce ménage (Recommandé) ».
+- **Écarté** : garder le détail de ces deux lignes pour les générations normales ; retirer le ménage de
+  `jobs/incognito_*` comme la spec le prévoyait.
+- **Conséquences** : `tools/launch.py` écrit « [job] erreur du thread de calcul » et « [push] notification du lot
+  impossible » sans détail pour toutes les générations, et supprime toujours `jobs/incognito_*` au démarrage.
+
+## 2026-10-22 · Refonte : groupes B et C en parallèle, icône à part
+
+- **Contexte** : les cinq groupes de la refonte touchent tous `README.md`, et tous sauf l'icône `tools/ui/index.html`
+  ou `tools/launch.py` ; la règle du tableau de bord les ferait tourner l'un après l'autre. B (pile côté serveur :
+  journal, galerie, espace privé de `launch.py`) et C (CSS d'`index.html`, `LOGIN_PAGE` et `PUBLIC_FILES` de
+  `launch.py`, section « Crédits et licences » du README) ne modifient pas les mêmes zones.
+- **Décision** (porteur, 22/10/2026) : « Le meilleur enchaînement possible serait donc : A, puis B et C en même temps,
+  puis D, puis E, avec l'icône à côté dès maintenant. » → « ok ». L'icône devient le groupe F, lançable tout de suite.
+- **Conséquences** : B et C partent tous deux de `dev` après la fusion de A ; le second fusionné dans `dev` règle les
+  conflits de texte de `launch.py`, `README.md` et `docs/agents/carte-du-code.md`, puis relance `tests/check.py --ui`
+  avant le commit de fusion.
+
+## 2026-10-22 · Pile : emplacement des images à trier, effacement complet, journaux neutres
+
+_Remplacée en partie le 23/10/2026 (ordre d'effacement : PNG en dernier) par « Suites du groupe B : effacement PNG en
+dernier, annulation privée, droits des fichiers, page restaurée »._
+
+- **Contexte** : rédaction de la spec de la refonte (`docs/specs/2026-10-22_refonte-chambre-noire.md`). Faits lus dans
+  `tools/launch.py` : le journal ne fait que s'allonger ; « Supprimer » laisse la ligne du journal (avec le prompt) et
+  le dossier de travail `jobs/<id>/` ; une image privée est un dossier de fichiers scellés chacun à part (`meta`,
+  image, vignette, entrées) ; un échec privé s'écrit « génération incognito » dans `logs/`, déguisement qui ne tient
+  plus sans l'incognito.
+- **Décision** (porteur, 22/10/2026, réponse « 1 oui, 2 a, 3 a, 4 oui, 5 oui, 6 a ») :
+  - « Points de test » (banc du serveur et pilote d'interface, plus une aide de balayage tactile dans le pilote) →
+    « oui » ;
+  - « Où vit une image publique à trier, et ce que Jeter efface » → « a » : dans `outputs/.pile/` ; Garder la déplace
+    dans `outputs/` en une opération atomique ; Jeter efface PNG, vignette, images d'entrée, dossier de travail
+    `jobs/<id>/` et ligne du journal (réécrit sous `JOURNAL_LOCK`, fichier temporaire puis remplacement) ; les images
+    d'avant restent dans `outputs/`, tirages d'office ;
+  - « La marque « à trier » d'une image privée » → « a » : dans sa fiche chiffrée (`meta`), que Garder déchiffre,
+    modifie et rescelle sous `PRIVATE_LOCK` après `finish_rekey()`, sans toucher à l'image ni à la vignette ;
+  - « « Supprimer » un tirage » (aussi complet que Jeter ?) → « oui » ;
+  - « Deux appareils trient la même image » (premier arrivé l'emporte, le second reçoit 404 « déjà triée » ; Jeter ne
+    vise que la pile ; bandeau Annuler dans la page seulement) → « oui » ;
+  - « Lignes d'échec dans le journal du serveur » → « a » : tous les échecs écrivent la même ligne neutre (« échec :
+    génération, sd-cli code N » ou « échec : génération, erreur de préparation »), le détail reste en mémoire pour
+    l'interface.
+- **Décision** (porteur, 22/10/2026, à la relecture de la spec, réponse « 1 oui, 2 oui, 3 oui ») :
+  - « Si tu changes d'espace pendant le bandeau Annuler, la demande Jeter part dans l'espace où elle a commencé. Si
+    cet espace s'est fermé entre-temps, elle est abandonnée et l'image reste dans la pile. D'accord ? » → « oui » ;
+  - « Un seul bandeau à la fois : jeter une deuxième image envoie tout de suite la suppression de la première, dont le
+    délai d'annulation s'arrête là. D'accord ? » → « oui » ;
+  - « Une ancienne page restée ouverte qui demanderait une génération incognito est refusée avec un message
+    (« L'incognito n'existe plus : passez par l'espace privé »), au lieu d'être acceptée en génération normale. […]
+    D'accord ? » → « oui ».
+- **Écarté** : marque « à trier » dans le journal ; fichier témoin en clair pour une image privée ; « Supprimer » qui
+  garde la ligne du journal ; neutralité réservée aux échecs privés ; Jeter envoyé dans l'espace affiché après un
+  changement d'espace ; plusieurs bandeaux Annuler empilés ; demande incognito acceptée en génération normale.
+
+## 2026-10-22 · Refonte « Chambre noire » : lumière inactinique, pixel, Labo et Tirages, pile à trier
+
+- **Contexte** : après le renommage, le porteur demande : « Je veux modifier complètement les couleurs de l'app, l'UI,
+  l'UX, l'icon etc... pour refléter ce changement de nom. De plus reprendre garder et reprendre dans l'app le coté
+  pixel de l'icon de l'app. » Cadrage par grilling, quatre tours ; réponses recopiées telles quelles.
+- **Décision** (porteur, 22/10/2026) :
+  - « Périmètre de « UX » » (a identité seule, b mise en page, c tout, parcours compris) → « C » ;
+  - « Direction artistique » → « A » : **lumière inactinique** (noir chaud, accent de lampe de labo, textes papier
+    photo, matières mates au lieu du verre liquide, grain léger) ;
+  - « Place du pixel dans l'app » → « B » : touches (logo, icônes de navigation, révélation, états vides) + nom et
+    titres en police pixel, texte courant en police normale ;
+  - « Motif de l'icône » (garder le paysage en carrés recoloré ?) → « oui garder mais tester B et C (plusieurs
+    versions) » (B : nouveau motif pixel, lampe, cuve ou film ; C : paysage dans un cadre de tirage) ;
+  - « Mode clair » (le supprimer ?) → « oui » ;
+  - « Pages et navigation » (deux pages « Labo » et « Tirages » ?) → « B. Un swip de la génération l'ajoute au
+    tirages (enregistrer), un swip vers la gauche la supprime, les générations se superposent comme une pile » ;
+  - « Ce qui te gêne aujourd'hui » (réglages qui débordent, en-tête chargé, bouton Rafraîchir, états vides) → « oui
+    pour les 4 » ;
+  - « Vocabulaire de labo » → « B » : bouton « Révéler », pages « Labo » et « Tirages », le reste en mots clairs ;
+  - « Thèmes incognito et espace privé » (incognito noir et blanc, privé en lumière inactinique verte) → « oui » ;
+  - « Accent et couleurs d'état » → « a » : accent orange-ambre, halo rouge dans l'ambiance, rouge vif réservé aux
+    erreurs, toujours avec une icône ;
+  - « Coins et formes » → « a » : petits arrondis (4 à 6 px), boutons rectangulaires ;
+  - « Typographie » (police pixel libre OFL servie par le serveur, texte courant en police du téléphone, chiffres
+    techniques en chasse fixe) → « oui » ;
+  - « Animation de la génération » → « a » : carrés au hasard avant le premier aperçu, puis aperçu en mosaïque qui
+    s'affine étape après étape ;
+  - « Où vit une image pas encore triée ? » → « a » : sur le disque dès la fin du calcul, marquée « à trier », sans
+    limite de temps ;
+  - « Que se passe-t-il quand on balaie une image vers la gauche ? » → « a » : bandeau « Image jetée · Annuler »
+    quelques secondes, suppression sur le disque à la fin du délai seulement ; si l'app se ferme pendant le délai,
+    l'image reste dans la pile ;
+  - « Images déjà dans la galerie » (deviennent des tirages ?) → « oui » ;
+  - « Vocabulaire » (Pile, Tirage, Garder, Jeter ; Variantes : « on garde celles qu'on veut ») → « ok » ;
+  - « Ordre de la pile » (dernière terminée sur le dessus, génération en cours derrière ou sur le dessus si la pile
+    est vide, « +N en attente », notification qui ouvre la pile) → « oui » ;
+  - « Carte en cours ou en attente » (pas balayable, bouton « Annuler » confirmé) → « oui » ;
+  - « Lots, variantes et campagnes » (une carte par image, « 2/4 », « Garder celle-ci » retiré) → « oui » ;
+  - « Pile en incognito » → « on retire le mode incognito puisque le fait de balayer la génération à gauche est comme
+    le mode incognito, la confidentialité se passe dans l'espace privé » ; écarts montrés (prompt écrit en clair dans
+    le journal et le dossier de travail pendant le calcul, mesure de calibration gardée, suppression non physique),
+    puis « Retrait de l'incognito » → « a » : retiré, Jeter efface l'image, sa vignette, ses images d'entrée, son
+    dossier de travail et sa ligne de journal ;
+  - « Pile de l'espace privé » (pile propre et étanche, Garder vers les tirages privés, Jeter supprime le fichier
+    chiffré avec le même bandeau) → « oui » ;
+  - « Autres actions sur une carte » (toucher = visionneuse, boutons ✕ et ✓ sous la pile) → « oui » ;
+  - « Disposition du Labo » (pile au centre, champ replié en bas, déplié quand la pile est vide, réglages en grille
+    qui ne déborde pas) → « oui » ;
+  - « En-tête » (logo, nom en pixel, lampe d'état qui ouvre la feuille Moteur et « Ouvrir depuis le téléphone ») →
+    « oui » ;
+  - « Page Tirages » (mise à jour seule, sans Rafraîchir, cadenas au même endroit) → « oui mais mettre dle cadenas de
+    l'espace privé autre part », puis « Où mettre le cadenas de l'espace privé ? » → « a » : dans la feuille de la
+    lampe d'état ; dans l'espace, « Sortir » reste en haut à droite ;
+  - « Vue large sur le Mac » (une colonne centrée, Tirages plus larges) → « oui » ;
+  - « Validation par maquettes » → « non tu fais directement » ;
+  - « Livraison » (`/to-spec`, `/to-tickets`, groupes : retrait de l'incognito, pile côté serveur, identité, Labo et
+    pile, Tirages-en-tête-espace privé) → « ok » ;
+  - résumé final, avec deux points : rendus des icônes B et C sur une planche avant intégration, police pixel choisie
+    par Claude et signalée → « ok ».
+- **Écarté** : maquettes de l'interface avant le code ; corbeille « Rebuts » ; image non triée gardée en mémoire
+  seulement ; garder la page « En cours » ; police pixel partout ; garder l'incognito en option.
+- **Conséquences** : remplace « Une seule page Créer, une page En cours pour la file et les résultats » (19/10/2026)
+  pour les pages, l'emplacement du cadenas de « Espaces public et privé étanches » (15/10/2026), et toutes les
+  décisions sur l'incognito (dont « « Éditer » et « Dessiner » sur une image incognito allument aussi l'incognito »,
+  21/10/2026), qui seront marquées « remplacées » par la spec. Tant que le retrait n'est pas livré, l'incognito reste
+  dans le code et le glossaire.
+
 ## 2026-10-22 · Renommage en « Chambre noire »
 
 - **Contexte** : « Qwen-Image 2.1 local » décrit le modèle, pas ce que l'app promet (génération d'images privée, sur
@@ -37,6 +616,9 @@ les messages de commit.
 
 ## 2026-10-21 · « Éditer » et « Dessiner » sur une image incognito allument aussi l'incognito
 
+_Remplacée le 22/10/2026 par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo et Tirages, pile à trier »
+(incognito retiré)._
+
 - **Contexte** : la passe « bogues » du ticket incognito du groupe D trouve un comportement antérieur au parcours :
   « Éditer » ou « Dessiner » sur une image incognito, interrupteur éteint, met l'image dans la saisie publique ; un
   « Générer » ensuite part en normal et le serveur copie l'image incognito dans `outputs/.inputs/` (image d'entrée de
@@ -47,6 +629,9 @@ les messages de commit.
   lequel la frappe suivante l'écrit (formulation du README gardée).
 
 ## 2026-10-21 · Une image incognito reste incognito quand on la reprend ou la relance
+
+_Remplacée le 22/10/2026 par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo et Tirages, pile à trier »
+(incognito retiré)._
 
 - **Contexte** : à la fin du groupe D, « Relancer » suivait l'interrupteur incognito du moment (choix de la
   rédaction de la spécification, pas du porteur) : relancer une image incognito interrupteur éteint enregistrait la
@@ -71,6 +656,9 @@ les messages de commit.
 
 ## 2026-10-20 · Suites du groupe B : lot en tête, « Rien en cours », terminées incognito
 
+_Révisée le 22/10/2026 (terminées incognito hors du plafond) par « Refonte « Chambre noire » : lumière inactinique,
+pixel, Labo et Tirages, pile à trier » (incognito retiré)._
+
 - **Contexte** : la session du groupe B (page En cours) remonte trois écarts entre la lettre des textes et ce qu'elle a
   fait.
 - **Décision** (porteur, 20/10/2026 : « oui pour les points 1 à 4 ») : « Passer en tête » d'un lot n'est offert que si
@@ -82,6 +670,9 @@ les messages de commit.
 
 ## 2026-10-20 · Suites du groupe A : marqueur de campagne caché des lignes incognito, annulation au démarrage
 
+_Révisée le 22/10/2026 (ligne incognito de la file) par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo
+et Tirages, pile à trier » (incognito retiré)._
+
 - **Contexte** : la revue de sécurité du groupe A (file réordonnable, variantes en édition) relève que le marqueur de
   campagne, posé aussi sur la ligne d'un lot incognito comme le demandait la spécification, dit aux autres appareils
   qu'il s'agit d'une campagne ; la session du groupe retrouve aussi une piste ouverte le 14/10/2026 : une annulation
@@ -92,6 +683,12 @@ les messages de commit.
   devient un ticket du groupe B. Pièges de `CLAUDE.md` complétés (`S.turn`, étiquette `tag` qui n'ouvre aucune route).
 
 ## 2026-10-19 · Une seule page Créer, une page En cours pour la file et les résultats
+
+_Révisée le 22/10/2026 (parties sur l'incognito : file, terminées, étiquette `tag`) par « Refonte « Chambre noire » :
+lumière inactinique, pixel, Labo et Tirages, pile à trier » (incognito retiré)._
+_Remplacée le 24/10/2026 par la même refonte : deux pages, le Labo (pile à trier, génération en cours, file dans une
+feuille, champ de création) et les Tirages (mis à jour seuls, sans bouton Rafraîchir) ; la page En cours, ses
+terminées et la Galerie disparaissent._
 
 - **Contexte** : trois onglets (Créer, Éditer, Dessiner) font la même chose à une image d'entrée près ; l'image en
   cours et le résultat s'affichent sous le compositeur ; la file d'attente, dans une feuille ouverte par la pastille du
@@ -186,6 +783,11 @@ les messages de commit.
 
 ## 2026-10-15 · Espaces public et privé étanches
 
+_Révisée le 22/10/2026 (« Génération incognito » dans la file) par « Refonte « Chambre noire » : lumière inactinique,
+pixel, Labo et Tirages, pile à trier » (incognito retiré)._
+_Remplacée en partie le 24/10/2026 (emplacement du cadenas) par la même refonte : l'entrée est la ligne « Espace
+privé » au cadenas de la feuille de la lampe d'état._
+
 - **Contexte** : en essayant l'espace privé sur le téléphone, le porteur voit passer d'un espace à l'autre ce qui
   devrait rester d'un seul côté : un prompt enregistré dans l'espace privé apparaît dans l'espace public (la spec du
   14/10/2026 laissait les prompts enregistrés hors de l'espace privé), la file d'attente montre à chaque espace les
@@ -225,6 +827,9 @@ les messages de commit.
   file en clair.
 
 ## 2026-10-15 · Espace privé durci après la revue de sécurité
+
+_Révisée le 22/10/2026 (notification incognito) par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo et
+Tirages, pile à trier » (incognito retiré)._
 
 - **Contexte** : la revue de sécurité du groupe D a relevé ce qui trahit ou expose l'espace privé hors du chiffrement
   du disque : le texte des notifications, le contenu laissé à l'écran après la sortie, la suppression sans code depuis
@@ -284,6 +889,9 @@ les messages de commit.
 ## 2026-10-14 · Espace privé discret : on y entre, on en sort
 
 _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par « Espaces public et privé étanches »._
+
+_Révisée le 22/10/2026 (bouton Incognito masqué dans l'espace) par « Refonte « Chambre noire » : lumière inactinique,
+pixel, Labo et Tirages, pile à trier » (incognito retiré)._
 
 - **Contexte** : la spécification prévoyait un bouton « Privé » à côté de « Générer » et un mode Privé à allumer.
   En voyant l'interface, le porteur ne veut rien qui signale l'espace privé à l'arrivée sur l'application.
@@ -390,6 +998,9 @@ _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par �
 
 ## 2026-10-13 · Notification de fin de génération par Web Push
 
+_Révisée le 22/10/2026 (message « Image incognito prête ») par « Refonte « Chambre noire » : lumière inactinique, pixel,
+Labo et Tirages, pile à trier » (incognito retiré)._
+
 - **Contexte** : le porteur veut être prévenu à la fin d'une génération (souvent plus de 10 minutes) sur son téléphone,
   où Android met en pause une application en arrière-plan.
 - **Décision** (porteur) : l'ordinateur envoie une notification Web Push (bibliothèque `pywebpush`, qui ajoute
@@ -403,6 +1014,13 @@ _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par �
   doit pouvoir joindre le service de notification (Internet).
 
 ## 2026-10-13 · Barre d'état du téléphone : couleur calculée plutôt que plein écran
+
+_Révisée le 23/10/2026 (couleur hors de la visionneuse) par « Refonte « Chambre noire » : lumière inactinique, pixel,
+Labo et Tirages, pile à trier » (spec, section 4) : même but, mais hors de la visionneuse la couleur est celle, fixe,
+du fond de l'espace (normal ou privé), puisque le fond ne montre plus d'image floutée ; la visionneuse garde son
+calcul à partir de l'image, sauf dans l'espace privé (couleur du fond : aucune image privée n'est lue pour la
+calculer). Hors de la visionneuse, une couleur fixe évite aussi le bug Chromium 559396686 cité plus
+bas._
 
 - **Contexte** : le porteur veut que l'application installée « continue » sous la barre d'état d'Android, sans bande
   de couleur.
@@ -424,6 +1042,9 @@ _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par �
 
 ## 2026-10-13 · Images d'entrée conservées avec chaque image
 
+_Révisée le 22/10/2026 (exception de l'incognito) par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo et
+Tirages, pile à trier » (incognito retiré)._
+
 - **Contexte** : le porteur veut revoir depuis la galerie les images de départ d'une édition ou d'un dessin guidé, et
   repartir de l'une d'elles. Elles n'existaient que dans `jobs/<id>/`, dont seuls les 20 derniers sont gardés.
 - **Décision** : en fin de job (hors incognito et calibration), copier `init.png` et `ref_N.png` dans
@@ -434,6 +1055,9 @@ _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par �
 - **Conséquences** : plus de place sur le disque (une ou plusieurs images PNG par édition).
 
 ## 2026-10-13 · Incognito : fermer l'application arrête la génération
+
+_Remplacée le 22/10/2026 par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo et Tirages, pile à trier »
+(incognito retiré)._
 
 - **Contexte** : une génération incognito a été perdue après un redémarrage de l'application sur le téléphone. Sur
   Android, le système peut aussi libérer une application restée en arrière-plan.
@@ -448,6 +1072,9 @@ _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par �
   (adresse `http://` du Wi-Fi), au lieu d'afficher un bouton qui échoue.
 
 ## 2026-10-13 · Mode incognito : image gardée en mémoire, remise une seule fois
+
+_Remplacée le 22/10/2026 par « Refonte « Chambre noire » : lumière inactinique, pixel, Labo et Tirages, pile à trier »
+(incognito retiré)._
 
 - **Contexte** : le porteur veut une image téléchargeable mais gardée nulle part sur l'ordinateur, perdue à la
   génération suivante ou au rechargement de l'application, avec tout ce qui s'y rattache (job, aperçus).
@@ -493,6 +1120,9 @@ _Révisée le 15/10/2026 (cadenas discret, héritage des onglets marqués) par �
   Toute requête de l'interface doit envoyer `Content-Type: application/json`.
 
 ## 2026-10-13 · Accès du téléphone par un code et un cookie
+
+_Remplacée en partie le 24/10/2026 (le Mac passait sans code) par « Code d'accès demandé aussi au Mac, entrée par un
+jeton à usage unique »._
 
 - **Décision** : avec `--lan`, tout appareil autre que le Mac saisit une fois un code de 8 caractères tiré au hasard
   (`tools/access_code.txt`, non versionné). Le cookie, valable un an, est l'empreinte SHA-256 du code, pas le code.
