@@ -176,42 +176,92 @@ class UiParallelTest(unittest.TestCase):
 
 
 class NoticeBaseTest(RepoCase):
-    """L'avis « zone sensible » compare à la base de la branche en cours (celle d'un groupe : là où elle a quitté
-    dev ; dev lui-même : le dernier commit), pas à origin/main : il ne cite plus les groupes déjà fusionnés."""
+    """L'avis « zone sensible » compte depuis le dernier commit (le ticket en cours, arbre de travail et fichiers
+    nouveaux compris ; décision du 25/10/2026), quelle que soit la branche : un ticket n'hérite plus des mots des
+    tickets d'avant. Il compte aussi la suppression de données et nomme la fonction (ou la route) de chaque ligne."""
     def notice(self):
         with contextlib.redirect_stdout(io.StringIO()) as out:
-            check.sensitive_notice(check.notice_base())
+            check.sensitive_notice(check.ticket_base())
         return out.getvalue()
 
-    def test_merged_work_does_not_raise_the_notice_again(self):
-        sh(self.root, "git", "checkout", "-q", "-b", "dev")
-        self.write("tools/vieux.js", "inPrivate();\n")
+    def commit(self, message):
         sh(self.root, "git", "add", ".")
-        sh(self.root, "git", *GIT_USER, "commit", "-q", "-m", "groupe fusionné")
-        self.assertEqual(self.notice(), "", "dev propre : rien de neuf")
-        self.write("tools/neuf.js", "privState;\n")
-        self.assertIn("privState dans tools/neuf.js", self.notice())
-        sh(self.root, "git", "checkout", "-q", "-b", "worktree-groupe-x")
-        sh(self.root, "git", "add", ".")
-        sh(self.root, "git", *GIT_USER, "commit", "-q", "-m", "ticket du groupe")
-        notice = self.notice()
-        self.assertIn("privState dans tools/neuf.js", notice)
-        self.assertNotIn("vieux.js", notice)
+        sh(self.root, "git", *GIT_USER, "commit", "-q", "-m", message)
 
-    def test_main_a_detached_head_or_no_dev_count_only_what_is_not_committed(self):
+    def test_only_the_ticket_in_progress_counts(self):
+        sh(self.root, "git", "branch", "dev")
+        sh(self.root, "git", "checkout", "-q", "-b", "worktree-groupe-x")             # branche de groupe, partie de dev
         self.write("tools/vieux.js", "inPrivate();\n")
-        sh(self.root, "git", "add", ".")
-        sh(self.root, "git", *GIT_USER, "commit", "-q", "-m", "travail fusionné")
-        sh(self.root, "git", "checkout", "-q", "-b", "autre")          # branche de groupe, sans branche dev
-        self.assertEqual(self.notice(), "")
-        sh(self.root, "git", "checkout", "-q", "--detach")              # tête détachée (CI d'une PR)
-        self.assertEqual(self.notice(), "")
-        self.write("tools/neuf.js", "privState;\n")
-        self.assertIn("privState dans tools/neuf.js", self.notice())
+        self.commit("ticket d'avant, sur la même branche")
+        self.assertEqual(self.notice(), "", "ticket d'avant commité : plus d'avis")
+        self.write("tools/neuf.js", "privState;\n")                 # fichier nouveau, pas encore ajouté
+        self.write("tools/vieux.js", "inPrivate();\nconst x = 1;\n")
+        notice = self.notice()
+        self.assertIn("tools/neuf.js", notice)
+        self.assertIn("privState", notice)
+        self.assertNotIn("vieux.js", notice)
+        sh(self.root, "git", "checkout", "-q", "--detach")              # tête détachée (CI d'une PR) : pareil
+        self.assertIn("tools/neuf.js", self.notice())
+
+    def test_deleting_data_is_sensitive_too(self):
+        self.write("tools/ui/index.html", "<script>\nfunction discardItem(it){\n  keep(it);\n}\n</script>\n")
+        self.commit("interface")
+        self.write("tools/ui/index.html", "<script>\nfunction discardItem(it){\n  keep(it);\n  commitDiscard(it);\n}\n"
+                                          "</script>\n")
+        notice = self.notice()
+        self.assertIn("passe bogues /code-review requise", notice)
+        self.assertIn("discardItem (commitDiscard)", notice)
+
+    def test_the_notice_names_the_function_or_route_of_each_line(self):
+        before = ["def sort_image(action, name):",
+                  "    return 200, {}",
+                  "",
+                  "class H:",
+                  "    def do_POST(self, path):",
+                  "        if path in (\"/api/keep\", \"/api/other\"):",
+                  "            return sort_image(path, None)",
+                  "        return 404",
+                  ""]
+        self.write("tools/launch.py", "\n".join(before))
+        self.commit("serveur")
+        after = before[:1] + ["    delete_output(name)"] + before[1:6] + ["            secret(None)"] + before[6:]
+        self.write("tools/launch.py", "\n".join(after))
+        notice = self.notice()
+        self.assertIn("tools/launch.py : sort_image (delete_output)", notice)
+        self.assertIn("H.do_POST [/api/keep, /api/other] (secret()", notice)
 
     def test_outside_git_there_is_no_notice(self):
         with mock.patch.object(check, "git", side_effect=OSError("git absent")):
-            self.assertIsNone(check.notice_base())
+            self.assertIsNone(check.ticket_base())
+
+
+class QuickTest(RepoCase):
+    """--quick saute le banc quand aucun .py n'a changé depuis le dernier commit, même si la branche en a changé depuis
+    main (sur dev et sur une branche de groupe, c'est toujours le cas) ; un .py modifié ou nouveau le relance."""
+    def bench_pattern(self):
+        args = argparse.Namespace(no_bench=False, quick=True, ui=None, name=None, lines=False, link_venv=False,
+                                  map=None)
+        with mock.patch.object(check, "check_python", return_value=[]), \
+                mock.patch.object(check, "check_js", return_value=[]), \
+                mock.patch.object(check, "check_line_length", return_value=[]), \
+                mock.patch.object(check, "check_rules", return_value=[]), \
+                mock.patch.object(check, "run_bench", return_value=(True, [], [])) as bench, \
+                mock.patch.object(check, "sensitive_notice"), contextlib.redirect_stdout(io.StringIO()):
+            check.run_checks(args)
+        bench.assert_called_once()
+        return bench.call_args.args[0] if bench.call_args.args else None
+
+    def test_quick_compares_to_the_last_commit(self):
+        sh(self.root, "git", "checkout", "-q", "-b", "dev")
+        self.write("tools/a.py", "x = 1\n")
+        sh(self.root, "git", "add", ".")
+        sh(self.root, "git", *GIT_USER, "commit", "-q", "-m", "un .py changé depuis main")
+        self.assertEqual(self.bench_pattern(), "test_public_repo.py", "rien depuis le dernier commit : banc sauté")
+        self.write("tools/a.py", "x = 2\n")
+        self.assertIsNone(self.bench_pattern(), "un .py modifié : banc entier")
+        sh(self.root, "git", "checkout", "--", "tools/a.py")
+        self.write("tests/test_neuf.py", "y = 1\n")
+        self.assertIsNone(self.bench_pattern(), "un .py nouveau : banc entier")
 
 
 class LinkNotesTest(unittest.TestCase):

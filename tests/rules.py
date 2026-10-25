@@ -263,6 +263,54 @@ def missing_map_names(text, code):
             if name not in words]
 
 
+ROUTE_RE = re.compile(r"[\"'](/api/[\w/<>.-]*)[\"']")
+
+
+def _py_scopes(text):
+    """Fonctions et classes d'un source Python : [(première ligne, dernière ligne, nom qualifié « Classe.méthode »)] ;
+    [] s'il ne se lit pas."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return []
+    out = []
+
+    def visit(node, prefix):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                name = prefix + child.name
+                out.append((child.lineno, child.end_lineno, name))
+                visit(child, name + ".")
+            else:
+                visit(child, prefix)
+    visit(tree, "")
+    return out
+
+
+def enclosing_name(path, text, k):
+    """Où se trouve la ligne k de text (fichier path) : nom de la fonction qui la contient (la plus intérieure,
+    « Classe.méthode » en Python ; dernière fonction de premier niveau d'avant pour un HTML ou un JavaScript), suivi
+    entre crochets des routes de la condition qui l'entoure (« H.do_POST [/api/keep, /api/discard] ») ; « premier
+    niveau » hors de toute fonction."""
+    lines = text.splitlines()
+    if path.endswith(".py"):
+        scopes = [s for s in _py_scopes(text) if s[0] <= k <= s[1]]
+        if not scopes:
+            return "premier niveau"
+        start, _, name = max(scopes)
+        indent = len(lines[k - 1]) - len(lines[k - 1].lstrip()) if k <= len(lines) else 0
+        for j in range(k - 1, start - 1, -1):        # condition englobante (moins en retrait) qui nomme des routes
+            line = lines[j - 1]
+            if line.strip() and len(line) - len(line.lstrip()) < indent:
+                routes = ROUTE_RE.findall(line)
+                if routes:
+                    return f"{name} [{', '.join(routes)}]"
+                indent = len(line) - len(line.lstrip())
+        return name
+    before = [name for line, name in code_index(path, text) if line <= k]
+    return before[-1] if before else "premier niveau"
+
+
 def code_index(path, text):
     """Fonctions, classes et constantes de premier niveau d'un fichier Python ou des blocs <script> d'un HTML :
     [(ligne, nom)]."""

@@ -1050,10 +1050,10 @@ Sur Mac : `venv/bin/python -m unittest discover -s tests`. Le faux moteur n'a é
 Tous les contrôles en une commande : `venv/bin/python tests/check.py` compile les fichiers Python, vérifie la syntaxe
 du JavaScript de l'interface avec Node.js (`node --check`), refuse une ligne ajoutée de plus de 120 caractères
 depuis la séparation d'avec `origin/main`, lance le banc et affiche son résultat (`--no-bench` pour le sauter ;
-`--quick` le saute si aucun fichier Python n'a changé depuis cette séparation). Il échoue aussi si un fichier du
+`--quick` le saute si aucun fichier Python n'a changé depuis le dernier commit). Il échoue aussi si un fichier du
 dépôt contient un repère propre à une machine (chemin de dossier personnel, adresse IP privée, nom Tailscale) : le
-dépôt est public. Un avis, sans échec, signale un changement de code qui touche l'espace privé (sur une branche de
-travail, depuis son départ de `dev` ; sur `dev` ou `main`, ce qui n'est pas encore commité). Sur
+dépôt est public. Un avis, sans échec, signale un changement de code pas encore commité qui touche l'espace privé ou
+la suppression d'images, et nomme la fonction (ou la route) de chaque ligne touchée. Sur
 GitHub, la même commande, complète, tourne sur chaque pull request vers `main` et chaque envoi sur `dev`
 (`.github/workflows/checks.yml`, sur macOS).
 

@@ -4,7 +4,7 @@
   venv/bin/python tests/check.py --no-bench # sans le banc (quelques secondes)
   venv/bin/python tests/check.py --ui       # en plus, les tests d'interface (Chrome sans écran, en local seulement)
   venv/bin/python tests/check.py --ui tests/ui/x.test.mjs   # un seul fichier d'interface (ou plusieurs)
-  venv/bin/python tests/check.py --quick    # banc sauté si aucun .py n'a changé depuis la base (jamais en CI)
+  venv/bin/python tests/check.py --quick    # banc sauté si aucun .py n'a changé depuis le dernier commit
   python3 tests/check.py --lines            # seulement la longueur des lignes ajoutées (moins d'une seconde)
   python3 tests/check.py --link-venv        # worktree : liens vers venv et les notes du dossier principal, hook
 
@@ -22,16 +22,17 @@ un fichier créé passe les contrôles avant son premier commit.
    --lines --cached juge l'index (ce que le prochain commit enregistre : hook .githooks/pre-commit) ;
    si l'un de ces trois contrôles échoue, check.py s'arrête là, sans lancer le banc ni l'interface ;
 4. lance le banc (unittest discover -s tests), recopie telles quelles sa ligne « Ran N tests … » et son verdict, et
-   affiche sa durée ; avec --quick et aucun .py changé depuis la base (non suivis compris ; sans base, le banc tourne),
-   seul tests/test_public_repo.py tourne ;
+   affiche sa durée ; avec --quick et aucun .py changé depuis le dernier commit (ticket_base : non suivis compris ;
+   hors git, le banc tourne), seul tests/test_public_repo.py tourne ;
 5. avec --ui : les tests d'interface tests/ui/*.test.mjs, ou les seuls fichiers donnés (pilote Chrome, voir
    tests/ui/driver.mjs), UI_JOBS fichiers à la fois (3 par défaut, QWEN_UI_JOBS), chacun avec sa durée, en même
    temps que le banc : chacun son Chrome, et son serveur sur un port libre, depuis son propre dossier temporaire
    (bench.start()), avec l'interface dans un autre processus (tests/ui/serve.py) ; résultats dans l'ordre des
    fichiers ;
-6. avis, sans échec, « zone sensible : passe bogues /code-review requise » quand une ligne ajoutée dans tools/ touche
-   l'espace privé (SENSITIVE), depuis la base de la branche en cours (notice_base) : sur une branche de groupe, là où
-   elle a quitté dev ; sur dev ou main, et donc en CI, seuls les changements pas encore commités comptent.
+6. avis, sans échec, « zone sensible : passe bogues /code-review requise » quand une ligne ajoutée dans tools/ depuis
+   le dernier commit (ticket_base : le ticket en cours, arbre de travail compris ; donc aucun avis en CI) touche
+   l'espace privé ou la suppression de données (SENSITIVE) ; il nomme la fonction (ou la route) de chaque ligne. Un
+   indice : la ligne « Zone sensible » du ticket fait foi.
 
 La sortie complète va aussi dans un journal (chemin imprimé à la fin) ; la dernière ligne récapitule les fautes
 (fichier:ligne, test du banc, fichier d'interface), pour qu'une sortie coupée par tail les montre encore.
@@ -49,13 +50,11 @@ VENV_PY = os.path.join("Scripts", "python.exe") if os.name == "nt" else os.path.
 SCRIPT_RE = re.compile(r"<script\b([^>]*)>(.*?)</script\s*>", re.S | re.I)
 LINE_MAX = 120                                       # caractères au plus par ligne ajoutée (CODING_STANDARDS.md)
 LINE_FILES = ("*.py", "*.md", "*.mjs", "*.js")
-# mots d'une ligne ajoutée qui demandent la passe bogues de /code-review (confidentialité : incognito, espace privé)
+# mots d'une ligne ajoutée qui demandent la passe bogues de /code-review : confidentialité (incognito, espace privé)
+# et suppression de données (Jeter, Supprimer, effacement des fichiers d'une image)
 SENSITIVE = ("localStorage", "incognito", "inPrivate", "privState", "asideInput", "secret(", "/api/private/",
-             "private/")
-# l'avis compte le travail de la branche en cours (notice_base) ; sur l'une de celles-ci (« HEAD » : tête détachée,
-# comme en CI), seulement ce qui n'est pas encore commité
-DEV_BRANCH = "dev"                                   # branche où se fusionnent les groupes
-SHARED_REFS = (DEV_BRANCH, "main", "HEAD")
+             "private/", "/api/discard", "/api/delete", "discardItem", "commitDiscard", "sortTop", "deleteItem",
+             "delete_output", "delete_extras", "remove_private_item")
 # images de l'interface que seul showImage remplit (sinon l'image d'avant reste à l'écran jusqu'au chargement)
 IMAGE_IDS = ("vImg", "vBg", "ivImg", "paintImg")
 IMAGE_SRC_RE = re.compile(r"\$\(\s*['\"](" + "|".join(IMAGE_IDS) + r")['\"]\s*\)\.src\s*=(?!=)")
@@ -401,48 +400,37 @@ def print_index(pattern):
     return 0
 
 
-def notice_base():
-    """Base de l'avis « zone sensible » : le travail de la branche en cours, pas ce que d'autres groupes ont déjà
-    fusionné (décision du 24/10/2026). Sur une branche de groupe, là où elle a quitté dev ; sur dev ou sans dev, le
-    dernier commit (seuls les changements pas encore commités comptent) ; hors git, None (pas d'avis)."""
+def ticket_base():
+    """Base du travail du ticket en cours : le dernier commit (arbre de travail et fichiers nouveaux comptent ; décision
+    du 25/10/2026), quelle que soit la branche. Sert à l'avis « zone sensible » et à --quick. Hors git, None."""
     try:
-        if git("rev-parse", "--abbrev-ref", "HEAD").strip() not in SHARED_REFS:
-            try:
-                return git("merge-base", "HEAD", DEV_BRANCH).strip() or None
-            except subprocess.CalledProcessError:       # pas de branche dev : le dernier commit, comme sur dev
-                pass
         return git("rev-parse", "HEAD").strip() or None
-    except (OSError, subprocess.CalledProcessError):    # hors git, ou git absent : pas d'avis
+    except (OSError, subprocess.CalledProcessError):    # hors git, ou git absent
         return None
 
 
 def sensitive_notice(base):
-    """Avis (jamais un échec) quand une ligne ajoutée depuis base (notice_base) dans le code de l'application (tools/,
-    hors .md) touche une zone sensible (SENSITIVE) : le ticket demande alors la passe bogues de /code-review. Les
-    tests, qui nomment ces zones pour les vérifier, ne déclenchent pas l'avis."""
+    """Avis (jamais un échec) quand une ligne ajoutée depuis base (ticket_base) dans le code de l'application (tools/,
+    hors .md) touche une zone sensible (SENSITIVE) : le ticket demande peut-être la passe bogues de /code-review (la
+    ligne « Zone sensible » du ticket fait foi). L'avis nomme, par fichier, la fonction (ou la route) de chaque ligne
+    touchée et ses mots. Les tests, qui nomment ces zones pour les vérifier, ne déclenchent pas l'avis."""
     if not base:
         return
-    hits, current = {}, None
-    for line in git("diff", "--unified=0", "--no-color", "--no-ext-diff", base, "--", "tools/",
-                    ":!*.md").splitlines():
-        if line.startswith("+++ "):
-            current = line[6:] if line.startswith("+++ b/") else None
-        elif line.startswith("+") and current:
-            for word in SENSITIVE:
-                if word in line:
-                    hits.setdefault(word, set()).add(current)
-    for f in new_files("tools/", ":!*.md"):          # fichier nouveau : toutes ses lignes sont ajoutées
+    parts = []
+    for f, numbers in sorted(added_lines(base, "tools/", ":!*.md").items()):
         try:
-            with open(os.path.join(ROOT, f), encoding="utf-8") as fh:
-                text = fh.read()
-        except (OSError, UnicodeDecodeError):
+            text = read(f)
+        except (OSError, UnicodeDecodeError):           # image, fichier supprimé
             continue
-        for word in SENSITIVE:
-            if word in text:
-                hits.setdefault(word, set()).add(f)
-    if hits:
-        print("Avis : zone sensible : passe bogues /code-review requise ("
-              + " ; ".join(f"{w} dans {', '.join(sorted(fs))}" for w, fs in hits.items()) + ")")
+        lines, where = text.splitlines(), {}
+        for k in sorted(numbers):
+            words = [w for w in SENSITIVE if k <= len(lines) and w in lines[k - 1]]
+            if words:
+                where.setdefault(rules.enclosing_name(f, text, k), set()).update(words)
+        if where:
+            parts.append(f"{f} : " + ", ".join(f"{name} ({', '.join(sorted(ws))})" for name, ws in where.items()))
+    if parts:
+        print("Avis : zone sensible : passe bogues /code-review requise (" + " ; ".join(parts) + ")")
 
 
 def py_changed(base):
@@ -631,8 +619,8 @@ def run_checks(args):
     jobs = []                                         # banc et interface : en parallèle (bancs indépendants)
     if args.no_bench:
         pass
-    elif args.quick and not py_changed(base):
-        print("Banc : sauté (--quick, aucun .py changé depuis la base) ; seul le test du dépôt public tourne")
+    elif args.quick and not py_changed(ticket_base()):
+        print("Banc : sauté (--quick, aucun .py changé depuis le dernier commit) ; seul le test du dépôt public tourne")
         jobs.append(("Banc", lambda: run_bench("test_public_repo.py")))
     else:
         jobs.append(("Banc", run_bench))
@@ -646,7 +634,7 @@ def run_checks(args):
             print("\n".join(lines))
             if not ok:
                 failed[name] = faults
-    sensitive_notice(notice_base())
+    sensitive_notice(ticket_base())
     return failed
 
 
@@ -654,7 +642,7 @@ def main():
     ap = argparse.ArgumentParser(description="Contrôles du projet (compilation, JavaScript, lignes, banc, interface)")
     ap.add_argument("--no-bench", action="store_true", help="sauter le banc de test")
     ap.add_argument("--quick", action="store_true",
-                    help="sauter le banc si aucun .py n'a changé depuis la base (le test du dépôt public tourne)")
+                    help="sauter le banc si aucun .py n'a changé depuis le dernier commit (test du dépôt public lancé)")
     ap.add_argument("--ui", nargs="*", metavar="FICHIER",
                     help="lancer aussi les tests d'interface (Chrome, en local), tous ou les seuls fichiers donnés")
     ap.add_argument("--name", metavar="MOTIF", help="avec --ui : seuls les tests dont le nom correspond (expression "
