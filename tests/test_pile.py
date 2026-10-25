@@ -308,6 +308,7 @@ class FileModesTest(bench.BenchCase):
 
     def test_journal_and_pile_images_are_owner_only(self):
         j = wait_job(generate("visible")["id"])
+        bench.wait_idle()                                # « done » est posé avant l'écriture du journal
 
         def mode(*p):
             return os.stat(bench.launch.P(*p)).st_mode & 0o777
@@ -315,6 +316,7 @@ class FileModesTest(bench.BenchCase):
         self.assertEqual(mode("outputs", ".pile", j["name"]), 0o600)
         os.chmod(bench.launch.P("outputs", "journal.jsonl"), 0o644)   # journal d'avant : remis en 600 au suivant
         wait_job(generate("second")["id"])
+        bench.wait_idle()
         self.assertEqual(mode("outputs", "journal.jsonl"), 0o600)
         self.assertEqual(call("POST", "/api/keep", {"name": j["name"]})[0], 200)
         self.assertEqual(mode("outputs", j["name"]), 0o600)
