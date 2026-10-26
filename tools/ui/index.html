@@ -1349,7 +1349,8 @@ function answer(v){ const r=askResolve; askResolve=null; closeSheet(); if(r) r(v
 // page toute image privée, même cachée, et abandonne celles qui chargeaient encore.
 const ready=new Map(), READY_MAX=10;              // adresse → { el : Image, im : image décodée (null : illisible), p : promesse }
 // secretLoads : chargements d'images privées (et d'aperçus) encore en route, même évincés de ready ; abandonnés à la
-// sortie de l'espace (abortPrivateLoads : gone, rien n'est plus montré d'eux)
+// sortie de l'espace, et les aperçus d'une génération finie ou devenue inconnue (abortPrivateLoads : gone, rien n'est
+// plus montré d'eux)
 const secretLoads=new Set();
 const FADE_MS=350;                                // fondu de fermeture de .viewer (CSS, 0,3 s)
 // « Sortir » en attente du Mac (leavingPrivate) : aucune image de l'espace (secretUrl) n'est demandée ni posée, quel
@@ -1400,9 +1401,10 @@ const dropLink = a => { a.removeAttribute('href'); a.removeAttribute('download')
 const secretUrl = u => !!u && (u.startsWith('/api/private/') || u.startsWith('/api/job/'));
 // chargements en cours d'images de l'espace privé (et d'aperçus) abandonnés : rien n'arrive après la sortie, et rien
 // n'est encore demandé quand la session se ferme (privLock). Marqués gone : une image qui en attendait un, même
-// détachée de la page par un nouveau dessin de la pile, ne reçoit rien ni ne redemande l'adresse à son échec
-function abortPrivateLoads(){ for(const e of [...secretLoads]){ e.gone=true; secretLoads.delete(e); e.el.src='';
-  if(ready.get(e.url)===e) ready.delete(e.url); } }
+// détachée de la page par un nouveau dessin de la pile, ne reçoit rien ni ne redemande l'adresse à son échec.
+// prefix : seulement les adresses qui commencent ainsi (les aperçus d'une génération finie, finish)
+function abortPrivateLoads(prefix=''){ for(const e of [...secretLoads]){ if(!e.url.startsWith(prefix)) continue;
+  e.gone=true; secretLoads.delete(e); e.el.src=''; if(ready.get(e.url)===e) ready.delete(e.url); } }
 function forgetPrivateImages(){ if(reveal.img) clearReveal();   // canevas de la carte en cours (aperçus : /api/job/)
   abortPrivateLoads(); for(const u of [...ready.keys()]) if(secretUrl(u)) ready.delete(u);
   document.querySelectorAll('img').forEach(i=>{   // affichée, ou attendue (chargement en cours : ignorée à son arrivée)
@@ -1909,7 +1911,7 @@ async function pollJobs(){
         if(!pageJobs.includes(p)) continue;        // sortie de l'espace pendant l'appel : elle n'est plus suivie
         // privée « inconnue » : espace fermé (la page ne le sait pas encore) ou oubliée par la page qui l'a lancée ;
         // elle quitte la page sans message d'échec (elle continue, ou est déjà rangée, dans l'espace)
-        if(!r.ok && p.private){ drop(p); ended=true; continue; }
+        if(!r.ok && p.private){ abortPrivateLoads('/api/job/'+p.id+'/'); drop(p); ended=true; continue; }
         p.j = r.ok ? await r.json() : {...p.j, status:'failed', error:'génération introuvable (serveur relancé ?)'};
         if(!isActive(p)){ finish(p); ended=true; } }
       if(ended){ saveOwn(); refreshStatus(); }     // la carte et la file suivent tout de suite (la suivante a démarré)
@@ -1917,6 +1919,9 @@ async function pollJobs(){
   finally{ polling=false; } }
 function finish(p){                                // génération terminée : son image arrive dans la pile, ou elle sort de la page
   const j=p.j;
+  // aperçus encore en route de toute génération finie (inutiles désormais) : abandonnés, avant l'oubli d'une privée
+  // (servis après lui, ils répondraient 404 : génération inconnue)
+  abortPrivateLoads('/api/job/'+j.id+'/');
   if(j.private){                                   // image rangée chiffrée dans l'espace privé ; le serveur oublie la génération
     if(!p.adopted) forgetJob(j.id);                // (seule la page qui l'a lancée : les autres la suivent encore)
     if(!inPrivate()) return drop(p);         // sorti entre-temps : rien à l'écran ni rien qui signale l'espace (l'image y est rangée)

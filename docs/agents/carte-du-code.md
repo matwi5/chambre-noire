@@ -212,8 +212,8 @@ dernier bloc, après le HTML.
     `preload` et `ready` (les 10 dernières images décodées : miniatures des voisines de la visionneuse, image complète
     de la suivante dans le sens du parcours `vStep`, première image d'entrée),
     `clearImage`, `abortPrivateLoads` (chargements privés en route abandonnés, aussi avant la fermeture de la session
-    par « Sortir » : `secretLoads`, même évincés de `ready`, marqués `gone` : une image qui en attendait un, même
-    détachée, ne reçoit rien), `forgetPrivateImages` (sortie de
+    par « Sortir », et ceux d'une génération finie avec un préfixe d'adresse : `secretLoads`, même évincés de `ready`,
+    marqués `gone` : une image qui en attendait un, même détachée, ne reçoit rien), `forgetPrivateImages` (sortie de
     l'espace privé : images privées et aperçus affichés, attendus ou chargés en avance, chargements en cours
     abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne
     jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
@@ -244,7 +244,8 @@ dernier bloc, après le HTML.
     tourne, sinon la prochaine dans l'ordre de calcul) et `nextActive` (la même, parmi les générations de l'espace
     affiché), `track` (suit une génération, avec sa demande `req` si la page l'a envoyée, un objet par lot, en mémoire
     de la page seulement ; `pollJobs` chaque seconde ; une privée « inconnue » quitte la page sans message), `finish`
-    (fin d'une génération : la pile relue, l'échec gardé pour sa carte, l'annulée retirée), `drop` (retire une
+    (fin d'une génération : ses aperçus en route abandonnés, publique ou privée, avant l'oubli d'une privée, la pile
+    relue, l'échec gardé pour sa carte, l'annulée retirée), `drop` (retire une
     génération de la page) ; bouton `#go` ; reprise : `followQueue` (suit des entrées de la file), `resumeOwn`
     (générations normales de
     ce navigateur, après un rechargement et au retour dans l'espace public), `resume`, `adoptPrivate` (dans l'espace

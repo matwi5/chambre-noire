@@ -857,7 +857,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   génération tourne ; recalculé à chaque lecture ; `seed` : graine utilisée ; `lot` ; `prompt` : le prompt complet,
   tant que la demande est en mémoire, `null` pour une privée une fois finie, rangée, en échec ou annulée ; `mode` ;
   `inputs` : noms des images d'entrée gardées avec l'image, `init.png` puis `ref_1.png`…, ceux qu'attend
-  `/api/input`), `GET /api/job/<id>/preview`, `POST /api/job/<id>/cancel` (sans effet sur une génération déjà
+  `/api/input`), `GET /api/job/<id>/preview` (dernier aperçu ; 204 sans corps quand il n'y en a pas ou plus, par
+  exemple pour une génération annulée ou privée finie ; 404 pour une génération inconnue, oubliée ou privée hors de
+  l'espace privé), `POST /api/job/<id>/cancel` (sans effet sur une génération déjà
   terminée, réussie, en échec ou annulée), `POST /api/job/<id>/first` (« Passer en tête » : la génération passe en
   tête des générations en attente, juste après celle en cours, tous espaces confondus ; 200 `{"ok": true}`, aussi
   quand elle y est déjà ; 404 pour un identifiant inconnu ou une génération privée hors de l'espace privé, comme

@@ -229,6 +229,17 @@ class PrivateTrackingTest(bench.PrivateFilesCheck, bench.BenchCase):
         self.assertEqual(call("GET", f"/api/job/{jid}", remote=True, private=other)[0], 200)
         self.assertEqual(call("POST", f"/api/job/{jid}/cancel", {}, private=self.session)[1]["status"], "cancelled")
 
+    def test_a_finished_private_preview_is_204_inside_and_unknown_outside_or_once_forgotten(self):
+        jid = self.launch(preview=True, steps=12)["id"]
+        wait_job(jid, ("running",), check=lambda j: j.get("preview_version"), private=self.session)
+        self.assertEqual(wait_job(jid, private=self.session)["status"], "done")   # forget_files a retiré l'aperçu
+        self.assertEqual(call("GET", f"/api/job/{jid}/preview", private=self.session), (204, b""))
+        for who in self.outsiders():                                        # hors de l'espace : comme avant, inconnue
+            code, reply = call("GET", f"/api/job/{jid}/preview", **who)
+            self.assertEqual((code, reply), (404, {"error": "job inconnu"}), who)
+        self.assertEqual(call("POST", f"/api/job/{jid}/forget", {}, private=self.session)[0], 200)
+        self.assertEqual(call("GET", f"/api/job/{jid}/preview", private=self.session), (404, {"error": "job inconnu"}))
+
     def test_cancelling_a_private_lot_needs_the_private_space(self):
         lot = self.launch(count=2, steps=8)["lot"]["id"]
         for who in self.outsiders():

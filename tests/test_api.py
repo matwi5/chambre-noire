@@ -299,6 +299,18 @@ class GenerationTest(bench.BenchCase):
         self.assertEqual((code, raw[:4]), (200, b"\x89PNG"))
         self.assertEqual(wait_job(jid)["status"], "done")
 
+    def test_a_preview_gone_with_its_cancelled_generation_answers_204(self):
+        # décision du 26/10/2026 : un aperçu demandé juste après la fin n'est pas une erreur (Chrome écrit un 404 dans
+        # la console) ; un identifiant inconnu reste un 404
+        jid = generate("SLOW=0.1 zq9 annulée", steps=40, preview=True)["id"]   # 4 s : le temps d'annuler
+        wait_job(jid, ("running",), check=lambda j: (j.get("preview_version") or 0) >= 1)
+        self.assertEqual(call("POST", f"/api/job/{jid}/cancel")[1]["status"], "cancelled")
+        self.assertEqual(wait_job(jid)["status"], "cancelled")     # dossier de travail supprimé
+        code, raw, headers = bench.call_full("GET", f"/api/job/{jid}/preview")
+        self.assertEqual((code, raw, headers.get("Content-Length"), headers.get("Content-Type")),
+                         (204, b"", None, None))
+        self.assertEqual(call("GET", "/api/job/inconnu/preview"), (404, {"error": "job inconnu"}))
+
     def test_engine_failure_fails_the_generation(self):
         j = wait_job(generate("FAIL")["id"])
         self.assertEqual(j["status"], "failed")

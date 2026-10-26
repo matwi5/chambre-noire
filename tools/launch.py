@@ -2221,8 +2221,9 @@ class H(BaseHTTPRequestHandler):
         elif isinstance(body, str):
             body = body.encode("utf-8")
         self.send_response(code)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(body)))
+        if code != 204:                           # 204 : ni corps, ni Content-Type, ni Content-Length (RFC 9110)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         for k, v in (headers or {}).items():
             self.send_header(k, v)
@@ -2546,12 +2547,15 @@ class H(BaseHTTPRequestHandler):
             if not job or self._hidden(job):
                 return self._send(404, {"error": "job inconnu"})
             if m.group(2):                        # aperçu (privé : par une requête sûre seulement, _hidden)
-                if not job.get("preview"):
-                    return self._send(404, {"error": "pas d'aperçu"})
-                try:
-                    return self._send(200, open(job["preview"], "rb").read(), "image/png")
-                except OSError:
-                    return self._send(404, {"error": "aperçu en cours d'écriture"})
+                # pas (ou plus) d'aperçu pour une génération visible : 204 sans corps, pas une erreur (annulée,
+                # dossier supprimé ; privée finie, aperçu retiré par forget_files ; décision du 26/10/2026) ; une
+                # génération inconnue, cachée ou oubliée a eu son 404 plus haut, le même qu'avant
+                preview = job.get("preview")      # lu une fois : forget_files peut le retirer à tout moment
+                try:                              # la lecture seule : une coupure pendant l'envoi reste une erreur
+                    data = pathlib.Path(preview).read_bytes() if preview else None
+                except OSError:                   # dossier supprimé, ou fichier en cours d'écriture
+                    data = None
+                return self._send(200, data, "image/png") if data is not None else self._send(204, b"")
             return self._send(200, public(job))
         q = {k: v[0] for k, v in parse_qs(query).items()}
         if path.startswith("/api/private/"):
