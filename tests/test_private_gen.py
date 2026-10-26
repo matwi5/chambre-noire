@@ -42,7 +42,6 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
         done = self.wait_job(job["id"])
         self.assertEqual(done["status"], "done")
         self.assertIsNone(done["path"])
-        bench.wait_idle()
         [item] = self.pile()
         code, png = call("GET", f"/api/private/image?id={item['id']}", private=self.session)
         self.assertEqual((code, png[:4]), (200, b"\x89PNG"))
@@ -68,7 +67,6 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
         job = self.generate(mode="edit", ref_images=[bench.data_url(bench.png_bytes(fmt="WEBP"))])
         done = self.wait_job(job["id"])
         self.assertEqual(done["status"], "done", done.get("error"))
-        bench.wait_idle()
         [item] = self.pile()
         code, inp = call("GET", f"/api/private/input?id={item['id']}&file=ref_1.png", private=self.session)
         self.assertEqual((code, inp[:8]), (200, b"\x89PNG\r\n\x1a\n"))
@@ -137,7 +135,6 @@ class PrivateGenerationTest(bench.PrivateFilesCheck, bench.BenchCase):
     def test_failed_private_generation_leaves_nothing(self):
         job = self.generate("FAIL zq9private")
         self.assertEqual(self.wait_job(job["id"])["status"], "failed")
-        bench.wait_idle()
         self.assertEqual(files("jobs", "*"), [])
         self.assertEqual(self.pile(), [])
         self.assertFalse([line for line in bench.LOG if "zq9private" in line])
@@ -231,6 +228,17 @@ class PrivateTrackingTest(bench.PrivateFilesCheck, bench.BenchCase):
         other = bench.unlock_private(CODE, remote=True)          # autre appareil dans l'espace
         self.assertEqual(call("GET", f"/api/job/{jid}", remote=True, private=other)[0], 200)
         self.assertEqual(call("POST", f"/api/job/{jid}/cancel", {}, private=self.session)[1]["status"], "cancelled")
+
+    def test_a_finished_private_preview_is_204_inside_and_unknown_outside_or_once_forgotten(self):
+        jid = self.launch(preview=True, steps=12)["id"]
+        wait_job(jid, ("running",), check=lambda j: j.get("preview_version"), private=self.session)
+        self.assertEqual(wait_job(jid, private=self.session)["status"], "done")   # forget_files a retiré l'aperçu
+        self.assertEqual(call("GET", f"/api/job/{jid}/preview", private=self.session), (204, b""))
+        for who in self.outsiders():                                        # hors de l'espace : comme avant, inconnue
+            code, reply = call("GET", f"/api/job/{jid}/preview", **who)
+            self.assertEqual((code, reply), (404, {"error": "job inconnu"}), who)
+        self.assertEqual(call("POST", f"/api/job/{jid}/forget", {}, private=self.session)[0], 200)
+        self.assertEqual(call("GET", f"/api/job/{jid}/preview", private=self.session), (404, {"error": "job inconnu"}))
 
     def test_cancelling_a_private_lot_needs_the_private_space(self):
         lot = self.launch(count=2, steps=8)["lot"]["id"]

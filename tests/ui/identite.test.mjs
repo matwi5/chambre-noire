@@ -56,7 +56,7 @@ test('page du code d\'accès, téléphone en mode clair : noir chaud, sans verre
 
 test('interface, téléphone en mode clair : noir chaud, sans verre ; espace privé en lumière verte', async () => {
   await bench.login(page);
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   let l = await looks();
   assert.ok(dark(l.bg) && l.bg[0] > l.bg[2], `fond noir chaud : ${l.bg}`);
   await page.waitFor(barOfVoid, { what: 'barre d\'état du fond' });

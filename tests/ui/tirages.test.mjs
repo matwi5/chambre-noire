@@ -16,7 +16,7 @@ before(async () => {
   other = await chrome.phonePage();
   for (const p of [page, other]) {
     await p.goto(bench.url + '/');
-    await p.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+    await p.ready();
   }
   await page.eval(`window.zqSansRecharger = true`);   // disparaît si la page est rechargée
 });

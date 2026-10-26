@@ -37,7 +37,7 @@ test('connexion : la lampe est grise tant que le Mac n\'a pas répondu, puis amb
   await page.send('Fetch.disable');
   await Promise.all(paused.map(requestId => page.send('Fetch.continueRequest', { requestId }).catch(() => {})));
   await page.eval(`refreshStatus()`);
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   assert.deepEqual(await lamp(), { cls: 'ok', label: 'Moteur prêt · Q4', pulse: 'none' });
   assert.equal(await page.eval(`!!$('phoneBtn') || !!$('statusChip') || !!$('status') || !!$('island')`), false,
     'anciens éléments de l\'en-tête retirés');
@@ -72,7 +72,7 @@ test('calcul : ambre pulsée tant qu\'une génération tourne ; rouge quand le M
   // l'erreur garde une icône (rouge jamais seul) : le point devient le pictogramme d'erreur en pixels
   assert.notEqual(await page.eval(`getComputedStyle($('lamp'), '::after').maskImage`), 'none');
   await page.eval(`refreshStatus()`);
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur de nouveau prêt' });
+  await page.ready('moteur de nouveau prêt');
   page.assertNoErrors();
 });
 

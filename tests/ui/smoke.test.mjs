@@ -16,7 +16,7 @@ before(async () => {
   chrome = await launchChrome();
   page = await chrome.phonePage();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
 });
 
 after(async () => {
@@ -99,7 +99,7 @@ test('code d\'accès redemandé : la page se recharge une fois sur la page du co
     await h.release();
   }
   await bench.login(page);
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'interface rouverte' });
+  await page.ready('interface rouverte');
   // (les réponses 401, et elles seules, sont notées en erreur par Chrome)
   page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/status of 401 \(Unauthorized\)/.test(e)));
   page.assertNoErrors();
@@ -116,7 +116,7 @@ test('code d\'accès redemandé de nouveau après une réponse du Mac : la page 
   await page.eval(`void refreshStatus()`);
   await loginShown();
   await bench.login(page);
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'interface rouverte' });
+  await page.ready('interface rouverte');
   page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/status of 401 \(Unauthorized\)/.test(e)));
   page.assertNoErrors();
 });

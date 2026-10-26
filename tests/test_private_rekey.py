@@ -40,7 +40,6 @@ class ChangeCodeTest(bench.PrivateFilesCheck, bench.BenchCase):
                 for p, kw in (("zq9 first", {}), ("zq9 second", {"mode": "edit", "ref_images": [bench.data_url(self.ref)]}))]
         for j in jobs:
             self.assertEqual(wait_job(j["id"], private=session)["status"], "done")
-        bench.wait_idle()
         self.before = self.contents(session)
         self.assertEqual(len(self.before), 2)
 

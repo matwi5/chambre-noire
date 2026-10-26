@@ -13,7 +13,7 @@ before(async () => {
   chrome = await launchChrome();
   page = await chrome.phonePage();
   await bench.login(page);
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
 });
 
 after(async () => {

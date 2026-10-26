@@ -11,9 +11,12 @@ les tests viennent de bugs passés à travers les revues par ticket.
   `tools/ui/index.html`, tableaux Markdown et blocs de code : une ligne plus longue se lit mal dans un diff et sur un
   écran étroit. Vérifiée par `tests/check.py` sur les seules lignes ajoutées depuis la base (`git merge-base HEAD
   origin/main`) : les lignes existantes ne sont reprises que quand on les touche. `check.py --lines` (moins d'une
-  seconde) et le hook avant commit la vérifient seule ; `tests/rewrap.py` recoupe un Markdown sans le casser.
-- **Un comportement qui change change partout où il est décrit** : chercher son ancienne formulation (`grep`) dans le
-  README, les docstrings et commentaires, et la carte du code, et la reprendre dans le même commit.
+  seconde), le hook avant commit et celui de Claude Code après chaque écriture (`check.py --hook`) la vérifient
+  seule ; `check.py --lines --fix` recoupe les seules lignes fautives (Markdown, commentaires, docstrings).
+- **Un comportement qui change change partout où il est décrit** : chercher son ancienne formulation par `git grep`
+  sur tout le dépôt suivi (README, docstrings et commentaires, carte du code, et textes de l'interface :
+  `tools/ui/index.html`, `LOGIN_PAGE` de `tools/launch.py`, page hors ligne de `tools/ui/sw.js`), et la reprendre dans
+  le même commit. Un ancien libellé était resté dans l'interface après un renommage.
 
 ## Données et disque
 
@@ -64,10 +67,16 @@ les tests viennent de bugs passés à travers les revues par ticket.
 - **Une correction de l'interface reçoit un test dans `tests/ui/`** quand le banc ne peut pas la voir : deux bugs
   d'interface ne sont apparus que dans Chrome, banc au vert.
 - **Le test d'une garde d'une zone sensible (espace privé, suppression) est prouvé rouge** sur le code
-  sans la branche qu'il protège (retirée le temps de l'essai), puis vert ; le message du commit le dit.
+  sans la branche qu'il protège (retirée le temps de l'essai), puis vert ; le message du commit le dit. L'essai passe
+  par `tests/mutate.py <fichier> --old <texte> --new <texte> -- <commande>`, qui rend toujours le fichier (échec,
+  interruption), pas par un script jetable qui modifie l'arbre.
 - **Une assertion « rien ne change » attend d'abord la fin de l'action qui pourrait changer quelque chose** (réponse
   reçue, Mac au repos : `bench.idle()`) : vérifiée trop tôt, elle passe avant que le changement arrive.
 - **Un fichier de test se termine par `if __name__ == "__main__": unittest.main()`**, pour se lancer seul.
+- **Réécrire un test garde l'assertion qui porte son titre ; un échec se diagnostique, il ne se supprime pas** : un
+  test réécrit avait perdu l'assertion qui prouvait ce que dit son nom, et passait sans plus rien vérifier. Un test
+  qui échoue se comprend d'abord (`check.py --repeat`, journal gardé) ; l'affaiblir ou le retirer se dit dans le
+  commit, avec la raison.
 
 ## Vérifiées par `tests/check.py`
 
@@ -83,3 +92,19 @@ relire, un échec dit la ligne et la raison.
 - `wait_job(…, ("running",))` attend une génération dont le prompt porte `HOLD` ou `SLOW` : sinon elle peut finir
   avant d'être vue en cours (CI rouge du 21/10/2026).
 - Chaque nom cité entre accents graves dans `docs/agents/carte-du-code.md` existe dans le code.
+- `index.html` : une couleur (`#hex`, `rgb(`, `rgba(`) ne s'écrit que dans le bloc des jetons (ligne qui déclare un
+  `--jeton`), pas ailleurs ; une `@keyframes` est nommée par une `animation` ; une adresse d'image peut-être privée
+  (`privImage`, `privThumb`, `thumbOf`, `srcOf`, `/api/private/`) n'est posée sur une image (`.src=`, `src="${…}"`)
+  que par `showImage` ou `preload`, qui la refusent pendant « Sortir » (listes connues : `PRIVATE_SRC_KNOWN` de
+  `tests/rules.py`) ; chaque id de `IMAGE_IDS` (`tests/check.py`) existe.
+- Tests d'interface (`tests/ui/*.test.mjs`) : pas d'attente fixe (`new Promise(r => setTimeout(r, N))`) : une condition
+  (`page.waitFor`), ou `elapse(ms)` du pilote pour un délai voulu ; une aide de premier niveau (`function`, `const … =
+  (…) =>`) ou une attente `page.waitFor` d'au moins 30 caractères déjà écrite dans un autre fichier va dans
+  `driver.mjs` ; l'espace privé se ferme (`/api/private/lock`, `pagehide` ou `pageshow` simulés, `closedByMac()` qui
+  n'attend pas le repos lui-même) juste après `await page.privateIdle()` (ligne de code précédente) ; on y entre par
+  `page.enterPrivate(code)`, pas par `/api/private/create` ou `/unlock`. Un cas voulu porte `// règle levée : <raison>`
+  sur sa ligne ou celle d'avant.
+- Sur des fichiers entiers, avant le banc : aucun `print` de `tools/launch.py` ne dépend de `secret(…)` ; chaque route
+  `/api/…` du serveur est dans sa docstring ; un bloc `with PRIVATE_LOCK:` qui appelle quelque chose passe par
+  `finish_rekey()` (sauf `store_private` et la suppression de tout l'espace) ; un import interne (`from bench import
+  x`, `launch.x`) nomme un nom qui existe.

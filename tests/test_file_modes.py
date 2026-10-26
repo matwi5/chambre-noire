@@ -106,7 +106,6 @@ class PrivateWorkFolderTest(bench.BenchCase):
             code, job = bench.call("POST", "/api/generate", bench.gen_body("zq9", private=True), private=session)
             self.assertEqual(code, 202, job)
             bench.wait_job(job["id"], private=session)
-            bench.wait_idle()
         self.assertEqual(seen, [0o700])
 
 

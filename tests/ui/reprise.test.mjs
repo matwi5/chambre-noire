@@ -40,7 +40,7 @@ test('rechargement : un lot repris montre le prompt complet et « Reprendre » r
   await page.goto(bench.url + '/');
   await page.eval(`localStorage.clear()`);
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   await page.eval(`opt.count = 2; saveOpt(); refreshChoices();`);
   await page.typePrompt(LONG);
   await page.click('#go');
@@ -68,7 +68,7 @@ test('rechargement : un lot repris montre le prompt complet et « Reprendre » r
 
 test('espace privé : une génération privée lancée d\'un autre appareil est reprise avec son prompt complet', async () => {
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   assert.equal(await post('/api/private/create', { code: CODE }), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
@@ -108,7 +108,7 @@ async function fresh() {
   await page.goto(bench.url + '/');
   await page.eval(`localStorage.clear()`);
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
 }
 async function enterPrivate() {
   const exists = await page.eval(`privState.exists`);

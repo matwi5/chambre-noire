@@ -20,7 +20,6 @@ class PrivatePileTest(bench.PrivateFilesCheck, bench.BenchCase):
         self.assertEqual(code, 202, job)
         done = wait_job(job["id"], private=self.session)
         self.assertEqual(done["status"], "done")
-        bench.wait_idle()
         return done
 
     def list(self, what, session=None):

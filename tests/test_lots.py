@@ -31,7 +31,6 @@ class VariantsTest(bench.BenchCase):
         jobs = generate_lot(count=4)["jobs"]
         for j in jobs:
             wait_job(j["id"])
-        bench.wait_idle()           # « done » posé avant la ligne du journal (to_pile) : attendre la fin du rangement
         lines = journal()
         seeds = [m["seed"] for m in lines]
         self.assertEqual(len(set(seeds)), 4)
@@ -112,7 +111,6 @@ class LotCancelTest(bench.BenchCase):
         jobs = generate_lot(count=2)["jobs"]
         for j in jobs:
             wait_job(j["id"])
-        bench.wait_idle()
         self.assertEqual(call("POST", f"/api/lot/{jobs[0]['lot']['id']}/cancel")[0], 404)   # lot fini : oublié
         self.assertEqual(bench.S.lots, {})
 
@@ -121,7 +119,6 @@ class LotNotificationTest(bench.BenchCase):
     def wait_lot(self, jobs):
         for j in jobs:
             wait_job(j["id"])
-        bench.wait_idle()
 
     def only(self, sent):
         """La seule notification envoyée : le calcul au repos, toutes les notifications sont décidées (sent.decided)."""

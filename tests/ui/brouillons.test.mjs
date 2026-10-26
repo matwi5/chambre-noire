@@ -38,7 +38,7 @@ async function fresh() {
   await page.goto(bench.url + '/');
   await page.eval(`localStorage.clear()`);
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
 }
 // « Révéler », refusé par le Mac
 async function refusedGenerate() {
@@ -56,13 +56,13 @@ test('incognito retiré : ancien réglage signalé une fois, brouillon retenu, d
   await fresh();
   await page.eval(`localStorage.setItem('qwen-opt', JSON.stringify({ v: 2, ratio: '16:9', incognito: true }))`);
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   await page.waitFor(`$('toastBox').textContent === ${JSON.stringify(INCOG_GONE)}`, { what: 'ancien réglage signalé' });
   await page.waitFor(`!('incognito' in JSON.parse(localStorage.getItem('qwen-opt')))`,
     { what: 'ancien réglage oublié une fois le message affiché jusqu\'au bout' });
   assert.equal(await page.eval(`JSON.parse(localStorage.getItem('qwen-opt')).ratio`), '16:9', 'autres réglages gardés');
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   assert.notEqual(await page.eval(`$('toastBox').textContent`), INCOG_GONE, 'signalé une seule fois');
   assert.deepEqual(await page.eval(`[!!document.getElementById('incog'),
     document.documentElement.classList.contains('incog')]`), [false, false], 'ni bouton ni thème incognito');
@@ -109,7 +109,7 @@ async function withOldDrafts(old) {
   await page.eval(`localStorage.clear();
     Object.entries(${JSON.stringify(old)}).forEach(([k, v]) => localStorage.setItem(k, v))`);
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
 }
 
 test('brouillons d\'avant : celui de Créer, sinon le premier non vide d\'Éditer puis de Dessiner', async () => {
@@ -127,7 +127,7 @@ test('brouillons d\'avant : celui de Créer, sinon le premier non vide d\'Édite
   // une fois la clé unique écrite, une ancienne clé ne la remplace plus
   await page.eval(`localStorage.setItem('qwen-t2i_prompt', "revenu d'un vieil onglet")`);
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
   assert.equal(await page.eval(`$('prompt').value`), 'texte de Dessiner');
   assertNoOtherErrors();
 });

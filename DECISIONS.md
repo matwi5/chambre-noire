@@ -4,6 +4,42 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-26 · Aperçu disparu : 204 au lieu de 404 ; textes des pistes de la rétro acceptés
+
+- **Contexte** : compte rendu de la session des pistes de la rétro (R1 à R22) ; une piste en attente (R3, cause du
+  test instable de saisie) et les textes proposés pour `CLAUDE.md` et `docs/agents/session-deleguee.md`.
+- **Décision** (porteur, 26/10/2026, réponses à quatre questions) :
+  - « R3 · Un aperçu demandé juste avant la fin de sa génération reçoit un 404, que Chrome écrit dans la console
+    (cause du test instable de saisie). Que faire ? » → « 204 si l'aperçu n'existe plus (Recommandé) » : pour une
+    génération visible dont l'aperçu a disparu (annulée, finie), le Mac répond 204 sans corps ; 404 reste pour une
+    génération inconnue, cachée ou oubliée (espace privé inchangé) ; la page abandonne en plus ses aperçus en route à
+    « Sortir » ;
+  - « Textes proposés pour CLAUDE.md (…) : je les écris tels quels ? » → « Oui, tels quels (Recommandé) » ;
+  - « Nouveau texte complet de docs/agents/session-deleguee.md (…) : je remplace le fichier ? » → « Oui, je remplace
+    (Recommandé) » ;
+  - « La session « Pistes » a fini : je l'arrête et je retire son worktree ? » → « Oui, après R3 (Recommandé) ».
+- **Écarté** : corriger seulement côté page ; laisser le 404.
+
+## 2026-10-25 · Pistes de la rétro du parcours de la refonte : avis par ticket, hook de longueur, second contrôle
+
+- **Contexte** : rétro globale du parcours « Refonte UI et pile à trier » ; le porteur a retenu les 22 pistes de ce
+  dépôt (R1 à R22) pour une session liée ; quatre choix posés avant son lancement.
+- **Décision** (porteur, 25/10/2026, réponses à quatre questions) :
+  - « R2 · L'avis « zone sensible » doit compter les lignes ajoutées depuis quand ? » → « Depuis le ticket
+    (Recommandé) » : base = le dernier commit plus l'arbre de travail ; remplace la base « départ de la branche » du
+    24/10 ;
+  - « R14 · Ajouter au dépôt (public) un hook Claude Code qui lance check.py --lines après chaque Edit ou Write ? » →
+    « Oui, dans .claude/settings.json (Recommandé) » ;
+  - « R12 · Quand check.py voit un arbre identique à un contrôle complet déjà vert, il ne relance pas. La règle
+    « deux contrôles complets par ticket » devient « le second seulement si l'arbre a changé » ? » → « Oui
+    (Recommandé) » ;
+  - « Textes soumis à ton accord : CLAUDE.md (R2, R5, R17, R20) n'est pas écrivable depuis un worktree, et
+    CODING_STANDARDS.md (R16) change des règles de revue. Comment faire ? » → « Session écrit CODING_STANDARDS,
+    propose CLAUDE.md (Recommandé) » : la session écrit les deux règles de R16 et met le texte proposé pour CLAUDE.md
+    dans son compte rendu ; la discussion principale l'écrit après l'accord du porteur.
+- **Écarté** : garder la base « départ de la branche » ; corriger les lignes sans hook ; toujours deux contrôles
+  complets ; proposer aussi CODING_STANDARDS.md avant de l'écrire.
+
 ## 2026-10-25 · Constats de la revue de sécurité du groupe G
 
 - **Contexte** : revue de sécurité du groupe G (lecture seule, `git diff 64d7a92..29a3a00`) : aucune faille critique

@@ -17,7 +17,7 @@ before(async () => {
   chrome = await launchChrome();
   page = await chrome.phonePage();
   await page.goto(bench.url + '/');
-  await page.waitFor(`$('lamp').classList.contains('ok')`, { what: 'moteur prêt affiché' });
+  await page.ready();
 });
 
 after(async () => {
@@ -187,6 +187,64 @@ test('révélation : carrés au hasard, puis chaque aperçu en mosaïque de plus
   bench.release('dessus');
   await bench.idle({ page });
   page.assertNoErrors();
+});
+
+// un aperçu demandé juste avant la fin de sa génération arrivait au Mac quand il n'existait plus : 404, que Chrome
+// écrit dans la console (le test instable de saisie.test.mjs : génération privée finie, puis oubliée par la page).
+// Décision du 26/10/2026 : le Mac répond 204 pour une génération visible dont l'aperçu a disparu (annulée, privée
+// finie), et la page abandonne les aperçus en route d'une génération finie avant de l'oublier (une génération oubliée
+// reste un 404). Rejoué en retenant les requêtes des aperçus
+const PREVIEWS = ['*/api/job/*/preview*'];
+const NO_PREVIEW_LOADING = `![...ready.keys()].some(u => u.includes('/preview'))`;
+
+test('aperçu servi après l\'annulation (204) : rien d\'affiché, aucune erreur dans la console', async () => {
+  await page.eval(`opt.steps = 'high'; opt.res = 'low'; $('previewChk').checked = true; saveOpt(); refreshChoices()`);
+  const h = await page.holdRequests(PREVIEWS, () => true);
+  let id;
+  try {
+    await page.generate('SLOW=0.3 zq5 annulée pendant un aperçu');
+    await waitUntil(() => h.held.length > 0, { what: 'aperçu demandé (retenu)', timeout: 30000 });
+    id = await page.eval(`pageJobs.at(-1).id`);
+    await page.holdFetch(`u => u === '/api/job/${id}'`);   // la page ne sait pas encore la génération annulée
+    assert.equal((await post(`/api/job/${id}/cancel`)).status, 200);
+    await bench.idle();                             // annulée : son dossier de travail est supprimé
+    await h.release();                              // les aperçus arrivent au Mac après la fin : 204
+    await page.waitFor(NO_PREVIEW_LOADING, { what: 'aperçus répondus' });
+    // toujours en cours pour la page : les aperçus ont bien été servis (204), pas abandonnés par finish
+    assert.equal(await page.eval(`pageJobs.some(p => p.id === '${id}' && isActive(p))`), true);
+    assert.equal(await page.eval(`reveal.img`), null, 'aperçu vide affiché');
+  } finally {
+    await h.release();
+    await page.releaseFetch();
+  }
+  await bench.idle({ page });
+  page.assertNoErrors();
+});
+
+test('génération privée finie pendant un aperçu en route : abandonné avant l\'oubli, aucune erreur', async () => {
+  await page.enterPrivate(CODE);
+  await page.eval(`opt.steps = 'high'; opt.res = 'low'; $('previewChk').checked = true; saveOpt(); refreshChoices()`);
+  await page.eval(`(() => { const f = window.zqFetch = window.fetch; window.zqForgets = [];   // oublis envoyés (finish)
+    window.fetch = (u, ...a) => { const r = f(u, ...a); if (String(u).endsWith('/forget')) zqForgets.push(r);
+      return r; }; })()`);
+  const h = await page.holdRequests(PREVIEWS, () => true);
+  try {
+    await page.generate('SLOW=0.3 zq5 privée pendant un aperçu');
+    await waitUntil(() => h.held.length > 0, { what: 'aperçu demandé (retenu)', timeout: 30000 });
+    await bench.idle({ page });                     // finie : la page l'a vue finie et l'oublie
+    await page.waitFor(`zqForgets.length > 0 && Promise.all(zqForgets).then(() => true)`,
+      { what: 'génération oubliée par le Mac' });
+    await h.release();                              // les aperçus retenus arrivent après l'oubli
+    await page.waitFor(NO_PREVIEW_LOADING, { what: 'aperçus abandonnés ou répondus' });
+    await page.eval(`fetch('/api/status').then(r => r.ok)`);   // un aller-retour : une erreur en route est arrivée
+    page.assertNoErrors();
+  } finally {
+    await h.release();
+    await page.eval(`window.zqFetch && (window.fetch = zqFetch)`);
+    await page.privateIdle();
+    await page.click('#privExit');
+    await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+  }
 });
 
 test('pile non vide : la carte en cours passe juste derrière, au bord de la pile', async () => {
