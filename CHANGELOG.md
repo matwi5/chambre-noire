@@ -3,6 +3,31 @@
 Les versions suivent [SemVer](https://semver.org/lang/fr/) ; tant que l'application est en 0.x, une version mineure
 peut changer un comportement existant.
 
+## 0.6.1 · 2026-10-26
+
+### Ajouté
+
+- **Service occupé ?** `tools/service_busy.py` imprime `True` si une génération tourne, sinon `False`, sans afficher
+  le code d'accès : à demander avant de relancer le service.
+- **Contrôles** : `check.py --show` et `--uses`, `--lines --fix` (recoupe les seules lignes trop longues),
+  `--repeat` pour l'interface ; un contrôle relancé sur un arbre déjà vert ne refait rien (`--force` pour relancer) ;
+  `tests/mutate.py` prouve qu'une garde échoue sans son code.
+
+### Modifié
+
+- **Aperçu d'une génération** : `GET /api/job/<id>/preview` répond 204 sans corps quand l'aperçu n'existe pas ou
+  plus (génération annulée, privée finie) ; 404 reste pour une génération inconnue, oubliée ou privée hors de
+  l'espace privé.
+- Le journal d'un contrôle en échec est gardé (les dix derniers) et sa dernière ligne recopie les comptes du banc et
+  de l'interface ; un test d'interface n'échoue que sur une erreur de console apparue pendant lui.
+
+### Corrigé
+
+- Un aperçu demandé juste avant la fin de sa génération n'écrit plus d'erreur 404 dans la console : la page abandonne
+  les aperçus encore en route d'une génération finie.
+- `tools/make_service.py` attend que l'ancien service soit vraiment arrêté avant de démarrer le nouveau, et réessaie :
+  le service ne reste plus arrêté après une réinstallation ; ses erreurs ne citent plus d'adresse du Mac.
+
 ## 0.6.0 · 2026-10-25
 
 ### Ajouté
