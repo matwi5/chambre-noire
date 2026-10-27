@@ -165,8 +165,10 @@ dernier bloc, après le HTML.
   estimation `#goEta`) ; classe `drawing` quand le dessin est actif : le champ prend toute la hauteur, la pile
   s'efface, sauf à partir de 1024 px ; classe `dropping` pendant le survol d'un fichier), `#pane-tirages` (Tirages,
   grille `#histGrid`) ; barre d'onglets `#tabbar` (icônes en pixels ;
-  onglet Labo : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vSort` : Garder et Jeter une image de
-  la pile) ; bandeau Annuler `#undoBar` ; images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`,
+  onglet Labo : nombre `#runCount`, anneau `#runRing` ; en bas, dans la barre du haut à partir de 1024 px) ; visionneuse
+  `#viewer` (`#vSort` : Garder et Jeter une image de la pile ; à partir de 1024 px, une grille : image à gauche,
+  panneau `.v-panel` en colonne à droite) ; bandeau Annuler `#undoBar` ; images d'entrée `#iv` ; feuilles `.sheet` :
+  `#askSheet`, `#setSheet`,
   `#engineSheet` (feuille de la lampe : état `#engineFacts`, « Ouvrir depuis le téléphone » `#phone` sur le Mac
   seulement, ligne « Espace privé » au cadenas `#privEntry`, journal `#log`), `#lotSheet`, la file `#fileSheet`
   (`#queueNote`, `#queueList`), `#promptSheet`, `#promptEditSheet` et

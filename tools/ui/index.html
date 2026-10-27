@@ -587,10 +587,12 @@
   /* ------------------------------------------------------------ grand écran (à partir de 1024 px : PC, tablette en
      largeur) : le Labo en deux colonnes, la pile et la carte en cours à gauche, le champ toujours déplié à droite
      (applyComposer), sur toute la hauteur de la colonne (dépôt d'images partout dessus, surbrillance dropping) ;
-     largeur totale bornée. --top-h : barre du haut (60px) et haut de main (6px) ; --bottom-h : barre d'onglets du bas et son air */
+     largeur totale bornée. --top-h : barre du haut (60px) et haut de main (6px) ; --bottom-h : le bas de main, sans
+     barre d'onglets à y réserver (elle est dans la barre du haut) */
   @media (min-width: 1024px) {
-    :root { --top-h:calc(66px + env(safe-area-inset-top)); --bottom-h:calc(96px + env(safe-area-inset-bottom));
+    :root { --top-h:calc(66px + env(safe-area-inset-top)); --bottom-h:calc(16px + env(safe-area-inset-bottom));
       --col-h:calc(100svh - var(--top-h) - var(--bottom-h)); }
+    main { padding-bottom:var(--bottom-h); }
     body:not(.m-tirages) main { width:min(100%, 1480px); padding:6px 24px var(--bottom-h); }   /* sans défilement */
     #pane-labo.active { display:grid; grid-template-columns:minmax(0, 1fr) clamp(360px, 32vw, 460px); gap:24px;
       align-items:start; }
@@ -603,7 +605,24 @@
     #composer.drawing:not(.folded) { min-height:0; }
     #composerGrab { display:none; }
     #pane-labo:has(#composer.drawing:not(.folded)) .pilezone { display:flex; }
-    #composer.dropping { outline:2px dashed var(--accent); outline-offset:-2px; } }
+    #composer.dropping { outline:2px dashed var(--accent); outline-offset:-2px; }
+    /* onglets : mêmes boutons, repère, anneau et nombre, centrés dans la barre du haut (6px d'air dans ses 60px) ;
+       le glissement d'onglet au doigt reste (tabSwipe) */
+    .tabbar { top:calc(6px + env(safe-area-inset-top)); bottom:auto; width:300px; height:48px; padding:4px; }
+    .tabbar button { flex-direction:row; gap:8px; font-size:13px; }
+    .lens { top:4px; bottom:4px; left:4px; width:calc((100% - 8px) / 2); }
+    /* visionneuse : l'image à gauche sur toute la hauteur (sous la barre de ses boutons), le panneau en colonne à
+       droite, défilant s'il est long ; le mode immersif le masque toujours */
+    #viewer { display:grid; grid-template-columns:minmax(0, 1fr) 380px; grid-template-rows:auto minmax(0, 1fr); }
+    #viewer .v-top { grid-area:1 / 1; }
+    #viewer .v-stage { grid-area:2 / 1; }
+    #viewer .v-panel { grid-area:1 / 2 / 3 / 3; align-self:start; width:auto; margin:12px 12px 12px 0;
+      max-height:calc(100svh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow:auto;
+      overscroll-behavior:contain; }
+    #viewer.immersive .v-panel { transform:translateX(24px); }
+    /* Tirages : grandes vignettes, marges plus larges */
+    body.m-tirages main { padding-inline:32px; }
+    .hgrid { grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:14px; } }
   /* ------------------------------------------------------------ téléphone (html.lite) : effets allégés pour le GPU
      Rien de flou ni d'animé en fond : le halo et le grain sont fixes, et gardés. Les animations d'interface restent
      courtes. ?lite=1 ou ?lite=0 dans l'adresse force le choix. */

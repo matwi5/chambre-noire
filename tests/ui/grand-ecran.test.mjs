@@ -157,3 +157,108 @@ test('fenêtre redimensionnée PC → téléphone → PC : saisie gardée, champ
   await bench.idle({ page });
   page.assertNoErrors();
 });
+
+// barre d'onglets, visionneuse et Tirages en grand écran
+
+// Tirages affichés dans la vue view, avec au moins une image gardée
+async function tirages(view = PC) {
+  await labo(view);
+  await page.made('grand tirage');
+  await page.keepPile();
+  await page.tab('tirages');
+  await page.waitFor(`histItems.length > 0`, { what: 'Tirages' });
+}
+
+test('PC : onglets dans la barre du haut, centrés, avec l\'anneau et le nombre de la pile ; plus de marge du bas',
+  async () => {
+    await labo();
+    await page.generate('HOLD=grand anneau');
+    try {
+      await page.waitFor(`!$('runCard').hidden`, { what: 'carte en cours' });
+      const bar = await box('#tabbar'), top = await box('.topbar');
+      assert.ok(bar.top >= top.top && bar.bottom <= top.bottom, `onglets hors de la barre du haut : ${
+        JSON.stringify([bar, top])}`);
+      const center = await page.eval(`innerWidth / 2`);
+      assert.ok(Math.abs((bar.left + bar.right) / 2 - center) <= 2, `onglets pas centrés : ${JSON.stringify(bar)}`);
+      assert.equal(await page.visible('#runRing'), true, 'anneau de progression absent');
+      assert.equal(await page.visible('#lens'), true, 'indicateur de l\'onglet absent');
+    } finally { bench.release('grand'); }
+    await page.waitFor(`pileItems.length > 0 && !$('runCount').hidden`, { what: 'image dans la pile' });
+    assert.equal(await page.visible('#runCount'), true, 'nombre de la pile absent');
+    await page.tab('tirages');                       // l'onglet marche du haut
+    await page.tab('labo');
+    // plus de marge du bas pour une barre flottante : le Labo descend jusqu'au bas de la vue, à 24 px près
+    const pane = await box('#pane-labo'), view = await page.eval(`innerHeight`);
+    assert.ok(view - pane.bottom <= 24, `marge du bas de ${view - pane.bottom} px`);
+    await bench.idle({ page });
+    page.assertNoErrors();
+  });
+
+test('tablette en hauteur : les onglets restent en bas ; au doigt, le glissement d\'onglet marche en largeur',
+  async () => {
+    await labo(TABLET);
+    const bar = await box('#tabbar'), view = await page.eval(`innerHeight`);
+    assert.ok(bar.bottom >= view - 40, `onglets pas en bas : ${JSON.stringify(bar)}`);
+    await labo(TABLET_WIDE);
+    await page.swipe('#pileEmpty', -160);
+    await page.waitFor(`mode === 'tirages'`, { what: 'Tirages après un glissement vers la gauche' });
+    await page.swipe('#pane-tirages', 160);
+    await page.waitFor(`mode === 'labo'`, { what: 'Labo après un glissement vers la droite' });
+    page.assertNoErrors();
+  });
+
+test('PC : visionneuse en largeur, image à gauche sur toute la hauteur, panneau à droite ; immersif le masque',
+  async () => {
+    await tirages();
+    await page.viewTirage();
+    const stage = await box('#vStage'), panel = await box('#viewer .v-panel');
+    const view = await page.eval(`({ w: innerWidth, h: innerHeight })`);
+    assert.ok(panel.left >= stage.right, `panneau pas à droite de l'image : ${JSON.stringify([stage, panel])}`);
+    assert.ok(panel.right <= view.w && panel.bottom <= view.h, `panneau hors de la vue : ${JSON.stringify(panel)}`);
+    assert.ok(stage.height >= view.h * 0.8, `image pas sur la hauteur : ${stage.height} px pour ${view.h}`);
+    assert.ok(panel.width >= 320 && panel.width <= 440, `panneau de ${panel.width} px`);
+    await page.swipe('#vImg', 0, 0, { mouse: true });   // un appui sur l'image : mode immersif
+    await page.waitFor(`getComputedStyle(document.querySelector('#viewer .v-panel')).opacity === '0'`,
+      { what: 'panneau masqué en mode immersif' });
+    await page.eval(`closeViewer()`);
+    page.assertNoErrors();
+  });
+
+test('PC : un panneau plus long que la fenêtre défile dans sa colonne', async () => {
+  await tirages();
+  await page.setView({ ...PC, height: 150 });   // (le panneau d'un tirage fait environ 150 px)
+  await page.viewTirage();
+  const panel = await box('#viewer .v-panel'), view = await page.eval(`innerHeight`);
+  assert.ok(panel.bottom <= view, `panneau coupé en bas : ${JSON.stringify(panel)}`);
+  assert.ok(await page.eval(`(p => p.scrollHeight > p.clientHeight && getComputedStyle(p).overflowY === 'auto')
+    (document.querySelector('#viewer .v-panel'))`), 'panneau long qui ne défile pas');
+  await page.eval(`closeViewer()`);
+  await page.setView(PC);
+  page.assertNoErrors();
+});
+
+test('Tirages : vignettes d\'au moins 200 px à partir de 1024 px, celles d\'aujourd\'hui en dessous', async () => {
+  const width = () => page.eval(`Math.round($('histGrid').firstElementChild.getBoundingClientRect().width)`);
+  await tirages();
+  assert.ok(await width() >= 200, `vignette de ${await width()} px au PC`);
+  await page.setView(TABLET);
+  await page.waitFor(`innerWidth === ${TABLET.width}`, { what: 'vue de la tablette' });
+  assert.ok(await width() < 200, `vignette de ${await width()} px à la tablette en hauteur`);
+  await page.setView(PC);
+  page.assertNoErrors();
+});
+
+test('aucun débordement des Tirages et de la visionneuse aux quatre tailles', async () => {
+  for (const view of [PHONE, TABLET, TABLET_WIDE, PC]) {
+    await tirages(view);
+    assert.deepEqual(await page.overflowing(), [], `${view.width}×${view.height}, Tirages`);
+    await page.viewTirage();
+    // (overflowing ne regarde pas la visionneuse) : ses parties tiennent dans la vue
+    const out = await page.eval(`[...document.querySelectorAll('#viewer > :not(.v-bg), #viewer .act')]
+      .filter(el => { const r = el.getBoundingClientRect(); return r.left < -.5 || r.right > innerWidth + .5; })
+      .map(el => el.className)`);
+    assert.deepEqual(out, [], `${view.width}×${view.height}, visionneuse`);
+    await page.eval(`closeViewer()`);
+  }
+  page.assertNoErrors();
+});

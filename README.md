@@ -262,13 +262,15 @@ raccourci `Chambre noire.command` entre alors dans l'interface déjà lancée pa
 
 ## Utilisation
 
-L'interface a deux onglets aux icônes en pixels, dans la barre du bas : **Labo** (en haut, la pile des images à trier et
+L'interface a deux onglets aux icônes en pixels, dans la barre du bas (dans la barre du haut, centrés, à partir de
+1024 px de large) : **Labo** (en haut, la pile des images à trier et
 la génération en cours, la file d'attente dans une feuille ; en bas, le champ de création, replié quand la pile a des
 images : texte → image, édition avec des images d'entrée, ou dessin guidé sur une image) et **Tirages** (les images
 gardées) ; elle s'ouvre sur le Labo. Sur une tablette en hauteur (de 700 à 1023 px de large), le Labo est une seule
 colonne élargie (environ 760 px). À partir de 1024 px (PC, tablette en largeur), il passe en deux colonnes : à gauche,
 la pile et la génération en cours, l'image de la carte du dessus à la hauteur de l'écran ; à droite, le champ de
-création, toujours déplié. Les Tirages prennent toute la largeur. La disposition suit la largeur de la fenêtre, pas
+création, toujours déplié. Les Tirages prennent toute la largeur, et la visionneuse met son panneau en colonne à
+droite de l'image à partir de 1024 px. La disposition suit la largeur de la fenêtre, pas
 l'appareil : une fenêtre redimensionnée passe de l'une à l'autre sans recharger ni perdre la saisie. Sur un écran
 tactile, glisser le doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le
 champ de création déplié, sur la carte en cours et sur la pile, dont les cartes se balaient). Elle s'adapte au téléphone
@@ -459,7 +461,8 @@ le modèle à redessiner l'original.
 ### Tirages
 
 L'onglet **Tirages** montre toutes les images de `outputs\`, la plus récente d'abord : trois colonnes sur le
-téléphone, davantage sur un grand écran. Il se met à jour seul, sans bouton Rafraîchir : une image gardée ou un tirage
+téléphone, davantage sur un grand écran (vignettes d'environ 220 px à partir de 1024 px de large). Il se met à jour
+seul, sans bouton Rafraîchir : une image gardée ou un tirage
 supprimé, ici ou sur un autre appareil, y apparaît ou en disparaît à la vérification suivante de l'état du Mac (toutes
 les 2 à 5 secondes). Vide, il montre le logo, « Aucun tirage pour l'instant » et un bouton **Aller au Labo**. Un appui
 sur une miniature l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèle, durée, et la graine
@@ -467,7 +470,8 @@ quand elle est connue). Glisser sur le côté passe à l'image voisine (flèches
 le bas ferme, un appui sur l'image masque les commandes. Pour zoomer (jusqu'à ×6), pincer l'image : elle passe
 au-dessus de tout, peut couvrir tout l'écran, suit les doigts, et revient à sa taille dès qu'on les relâche. Sur
 ordinateur, la molette zoome, glisser déplace l'image et un clic la remet à sa taille. En haut à droite :
-**Partager**, **Copier** et **Télécharger** ; en bas : **Éditer** (ajoute l'image aux images d'entrée du Labo),
+**Partager**, **Copier** et **Télécharger** ; en bas (à droite de l'image, en colonne qui défile si elle est longue, à
+partir de 1024 px) : **Éditer** (ajoute l'image aux images d'entrée du Labo),
 **Dessiner**, **Reprendre**, **Relancer** et **Supprimer** (définitif, après confirmation : images d'entrée, dossier
 de travail et ligne du journal des générations compris). Le champ de création n'est pas sur les Tirages.
 

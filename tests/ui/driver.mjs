@@ -46,6 +46,7 @@
 //   await page.freshLabo(bench)                  // Labo neuf : page rechargée sans brouillon, pile vidée, générations
 //                                                // courtes ({ short: false } : réglages par défaut)
 //   await page.viewPile('texte')                 // visionneuse ouverte sur l'image de la pile à ce prompt
+//   await page.viewTirage(0)                     // visionneuse ouverte sur le premier des Tirages affichés
 //   await page.openQueue()                       // feuille de la file ouverte par la pastille « +N en attente »
 //   await page.cancelRun()                       // « Annuler » de la carte en cours, confirmé
 //   await page.canvasInk('#revealCanvas')        // { width, height, ink } : pixels non transparents d'un canevas
@@ -520,6 +521,11 @@ async function connect(wsUrl) {
       await page.waitFor(`${at} >= 0`, { what: `« ${prompt} » dans la pile`, timeout: 30000 });
       await page.eval(`openViewer(${at}, pileView())`);
       await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
+    },
+    // visionneuse ouverte sur le tirage de rang index des Tirages affichés, son image chargée
+    async viewTirage(index = 0) {
+      await page.eval(`openViewer(${index}, histItems)`);
+      await page.waitFor(`$('viewer').classList.contains('on') && $('vImg').complete`, { what: 'visionneuse' });
     },
     // feuille ouverte refermée, comme d'un toucher sur le voile hors d'elle (closeSheet de la page) : avant de toucher
     // ce que le voile recouvre (en-tête, Labo)
