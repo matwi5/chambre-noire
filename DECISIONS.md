@@ -4,6 +4,126 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-27 · Interface pour PC et tablette ; bouton Avant pour comparer une édition à son image d'entrée
+
+- **Contexte** : grilling de deux demandes du porteur : « Actuellement l'app est optimisé pour mobile. Je veux que tu
+  l'optimises en plus pour pc et tablette. » et « Je veux que, quand on appui longtemps sur une image généré en mode
+  edit avec une seul image en input, l'image d'origine s'affiche a la place avec les exacte dimension, ca permet de
+  faire une comparaison avant/après hyper rapide et fluide. » Questions posées avec une réponse recommandée ; un
+  « oui » accepte la recommandation.
+- **Décision** (porteur, 27/10/2026). Premier tour, réponse « 1. mac, pc window et tablette andoid / oui pou le
+  reste » :
+  - Q1 « Appareils visés : sur quels appareils comptes-tu t'en servir ? (a) le Mac dans un navigateur (fenêtre large)
+    et un iPad, à tenir dans les deux orientations ; (b) le Mac seulement ; (c) un autre appareil : PC Windows,
+    tablette Android ou taille d'écran précise, à me dire. » → « mac, pc window et tablette andoid ».
+  - Q2 « Le Labo en grand écran : sur un écran large (à partir d'environ 1024 px, soit un iPad en paysage ou un PC),
+    on passe à deux colonnes : à gauche, la pile et la carte en cours, avec une image bien plus grande ; à droite, le
+    champ de création, toujours déplié (on ne le replie plus sur grand écran). Sur tablette en portrait (entre 700 et
+    1023 px), on garde une seule colonne, élargie à environ 760 px. » → oui : « Oui, deux colonnes à partir de
+    1024 px, une colonne élargie entre les deux. »
+  - Q3 « Les onglets en grand écran : la barre flottante du bas (Labo, Tirages) monte dans la barre du haut, à côté
+    du nom, à partir de 1024 px. Sur tablette en portrait, elle reste en bas. » → oui : « Oui, dans la barre du haut
+    à partir de 1024 px. »
+  - Q4 « La visionneuse en grand écran : à partir de 1024 px, l'image occupe tout l'espace à gauche. Le panneau
+    d'infos et d'actions (prompt, Garder/Jeter, Éditer, Relancer…) passe en colonne à droite, au lieu d'être sous
+    l'image. » → oui : « Oui, panneau à droite à partir de 1024 px. »
+  - Q5 « Raccourcis clavier (PC) : un petit jeu de raccourcis : dans la visionneuse, ← et → pour l'image précédente
+    ou suivante, Échap pour fermer ; dans la pile, → pour Garder et ← pour Jeter (le bandeau Annuler reste) ;
+    Ctrl/⌘ + Entrée pour Révéler depuis le champ. Aucun raccourci ne marche pendant la saisie de texte, sauf Ctrl/⌘ +
+    Entrée. » → oui : « Oui, ce jeu-là, sans plus. »
+  - Q6 « Grille des Tirages : sur grand écran, des vignettes plus grandes (environ 220 px au lieu de 150) et des
+    marges plus larges. » → oui : « Oui, environ 220 px à partir de 1024 px. »
+  - Q7 « Où marche l'appui long : dans la visionneuse, pour une image de la pile ou des Tirages ; sur la carte du
+    dessus de la pile, dans le Labo. Ce ne serait pas le cas sur les petites vignettes de la grille des Tirages, trop
+    petites pour comparer. » → oui : « Oui : visionneuse et carte du dessus de la pile. » (l'appui long est ensuite
+    remplacé par le bouton Avant, Q13 et Q20).
+  - Q8 « Quelles générations : toute image produite par une édition qui avait exactement une image d'entrée. Cela
+    inclut chaque image d'un lot de variantes sur une photo, et chaque image d'une campagne, chacune comparée à sa
+    propre photo. » → oui : « Oui, variantes et campagnes comprises. »
+  - Q9 « Le geste : l'image d'origine apparaît après environ 250 ms d'appui immobile, d'un coup, sans fondu ; elle
+    reste tant qu'on maintient le doigt ; au relâché, l'image générée revient instantanément ; une petite étiquette
+    « Avant » s'affiche pendant l'appui. (…) Sur PC, maintenir le clic de la souris fait la même chose. » → oui
+    (délai et seuils remplacés par Q21).
+  - Q10 « Format différent : si la sortie a presque le même rapport largeur/hauteur que l'entrée (écart d'arrondi de
+    quelques pixels), l'entrée est étirée exactement dans le cadre de l'image générée : la superposition est
+    parfaite. Si le rapport est vraiment différent (par exemple une sortie en 1:1 depuis une photo 16:9), l'entrée
+    s'affiche entière, sans déformation, centrée dans le même cadre. » → oui : « Oui : étirée quand l'écart est
+    minime, entière et centrée sinon. »
+  - Q11 « Avec le zoom : dans la visionneuse, si l'image est zoomée, l'image d'origine apparaît avec le même zoom et
+    le même cadrage, pour comparer un détail. » → oui : « Oui, même zoom et même cadrage. »
+  - Q12 « Menu de l'appui long sur iPhone : (…) On le désactive, seulement sur les images comparables. » → oui, puis
+    sans objet (bouton Avant, Q13).
+- **Deuxième tour**, réponse « Q13. Ajouter un bouton avec un appui long qui affiche le avant quand on reste appuyé,
+  on ne fait plus l'appuien long sur l'image mais sur tel. Faire comme les app d'edit photo. / Oui pour le reste » :
+  - Q13 « Menu de l'appui long sur Android et Windows : (…) On le bloque de la même façon, sur les images comparables
+    et seulement pour un appui au doigt. » → remplacée par la réponse citée : un bouton à maintenir, comme les
+    applications de retouche, et plus d'appui long sur l'image.
+  - Q14 « Ajouter des images sur PC : (…) On permet donc de déposer une ou plusieurs images n'importe où sur la
+    colonne du champ, avec un cadre en surbrillance pendant le survol. » → oui : « Oui, dépôt sur toute la colonne du
+    champ, avec surbrillance. »
+  - Q15 « Savoir qu'une image est comparable : (…) une petite marque discrète « ⇆ Avant » dans le coin des images
+    comparables » → devenue le bouton Avant (Q20).
+  - Q16 « Dessin avec masque : on le compare à la photo non peinte (init.png), qui a déjà la taille exacte de la
+    sortie : la superposition est parfaite. La référence peinte est ignorée pour la comparaison. » → oui : « Oui,
+    comparaison avec la photo non peinte. »
+  - Q17 « Dessin avec annotation : la photo d'origine non peinte n'est pas gardée. Trois choix : (a) pas de
+    comparaison pour une annotation ; (b) comparer avec la photo peinte en rouge, celle que le modèle a reçue ;
+    (c) garder désormais aussi la photo non peinte (…) » → oui : « (a) : pas de comparaison pour une annotation. »
+  - Q18 « Espace privé (confidentialité) : la comparaison marche aussi pour les images privées. Elle suit exactement
+    les règles des images d'entrée privées d'aujourd'hui : l'image privée est seulement chargée en mémoire de la page,
+    rien n'est écrit sur le disque ni dans les journaux ; elle est abandonnée et effacée de l'écran à « Sortir », à la
+    fermeture de la page et au retour par « Retour » ; un test d'étanchéité vérifie qu'aucune image « avant » privée
+    ne reste affichée ou en mémoire après « Sortir ». La réserve du sous-agent (image privée déjà décodée peut-être
+    pas marquée comme abandonnée) serait vérifiée pendant ce travail et corrigée si elle se confirme. » → oui : « Oui,
+    comparaison dans l'espace privé avec ces règles, et la réserve vérifiée au passage. »
+  - Q19 « Préchargement : dès qu'une image comparable est affichée (carte du dessus de la pile, image courante de la
+    visionneuse), sa photo d'entrée complète se charge en avance. Si l'appui arrive avant la fin du chargement, la
+    miniature de l'entrée s'affiche dans le cadre, puis l'image complète la remplace. » → oui : « Oui, ce
+    préchargement-là. »
+- **Troisième tour**, réponse « ok » :
+  - Q20 « Où placer le bouton : visionneuse : en bas à droite de l'image, posé dessus en surimpression, à portée de
+    pouce. Il suit l'image quand elle est zoomée ou en mode immersif ; carte du dessus de la pile : même bouton, en
+    bas à droite de l'image de la carte. Le toucher n'ouvre pas la visionneuse et ne lance pas de balayage. Il
+    n'apparaît que sur les images comparables : édition à une seule photo, variantes ou campagne, Dessin avec
+    masque. » → oui : « Oui, en bas à droite de l'image, dans la visionneuse et sur la carte du dessus. »
+  - Q21 « Comportement du bouton : l'image d'origine apparaît dès l'appui, sans délai (le bouton ne sert qu'à ça) ;
+    elle reste tant qu'on maintient le doigt ; au relâché, l'image générée revient, même si le doigt a glissé hors du
+    bouton ; l'étiquette « Avant » s'affiche sur l'image pendant l'appui ; un second doigt peut pincer pour zoomer
+    pendant l'appui (dans la visionneuse). » → oui : « Oui, ce comportement-là. »
+  - Q22 « Au clavier (PC) : maintenir la touche Espace fait la même chose que le bouton (visionneuse ouverte, ou carte
+    du dessus de la pile), sauf pendant une saisie de texte. » → oui : « Oui, Espace maintenue. »
+- **Zones sensibles**, réponse « ok » :
+  - Q23 « Jeter au clavier : (a) ← jette avec le même bandeau Annuler de 5 s qu'au doigt. Ctrl/⌘ + Z (ou la touche Z)
+    annule tant que le bandeau est là. Aucun raccourci pour « Supprimer » un tirage ; (b) pas de raccourci pour
+    Jeter, seulement → pour Garder ; (c) ← jette après une confirmation. » → oui : « (a) : même filet que le geste du
+    doigt, une annulation au clavier, et jamais « Supprimer » au clavier. »
+  - Q24 « Règle à ne jamais enfreindre (suppression) : « Aucune touche ne supprime un tirage, et aucune image de la
+    pile n'est jetée au clavier sans le bandeau Annuler de 5 s. Une touche maintenue ou répétée ne jette jamais plus
+    d'une image avant que la suivante soit affichée. » » → oui : « Oui, cette phrase. »
+- **Spec** (`/to-spec`, 27/10/2026), réponses par boutons :
+  - « Points de test : aucun changement côté serveur (les images d'entrée sont déjà servies), donc tout se teste par
+    le pilote d'interface existant (Chrome sans écran). On lui ajoute seulement deux choses : des vues à la taille
+    d'un PC (1280×800, souris) et d'une tablette Android (800×1280 et 1280×800, tactile), et l'appui et le relâché de
+    touches du clavier (Espace maintenue, flèches). Ça te va ? » → « Oui (Recommandé) ».
+  - « Zoom au doigt : dans la visionneuse, le zoom au pincement revient à la taille normale dès qu'on relâche les
+    doigts (comportement actuel). Sur téléphone et tablette, on ne peut donc pas « être zoomé » puis appuyer sur
+    Avant. Que faire ? » → « Pincer en tenant Avant (Recommandé) » : « On garde le zoom actuel : en tenant Avant
+    d'un doigt, on peut pincer avec deux autres, et la photo d'entrée zoome pareil. Sur PC, molette et glisser
+    marchent normalement avec Espace ou le bouton. » (précise Q11 et Q21).
+  - « Rendu visuel de la version PC et tablette : maquettes à valider avant de coder, ou directement dans
+    l'application avec une planche avant/après montrée à la fin de chaque ticket visuel ? » → « Directement
+    (Recommandé) ».
+  - « Jeter au clavier (suppression) : aujourd'hui, au doigt, un nouveau Jeter valide tout de suite le Jeter
+    précédent, dont l'image est alors supprimée avant la fin de ses 5 s. Au clavier, ← ← ferait pareil. La règle
+    acceptée disait « aucune image jetée au clavier sans le bandeau Annuler de 5 s », ce qui ne colle pas à la
+    lettre. Que retenir ? » → « Comme au doigt (Recommandé) » : « ← se comporte comme le balayage : le bandeau
+    s'affiche, un Jeter suivant valide le précédent. Règle reformulée : « Aucune touche ne supprime un tirage ; au
+    clavier, Jeter passe toujours par le bandeau Annuler, comme au doigt ; une touche maintenue ou répétée ne jette
+    jamais plus d'une image avant que la suivante soit affichée. » » (remplace la phrase de Q24).
+- **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
+  photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
+  le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
+
 ## 2026-10-26 · Aperçu disparu : 204 au lieu de 404 ; textes des pistes de la rétro acceptés
 
 - **Contexte** : compte rendu de la session des pistes de la rétro (R1 à R22) ; une piste en attente (R3, cause du

@@ -65,6 +65,11 @@ _À éviter_ : enregistrer, valider
 Retirer une image de la pile et la supprimer de l'ordinateur (balayage vers la gauche).
 _À éviter_ : supprimer (réservé à un tirage), rejeter
 
+**Avant** :
+Le bouton que l'on maintient sur une image issue d'une édition à une seule image d'entrée pour voir cette image
+d'entrée à sa place, dans le même cadre ; relâcher ramène l'image produite.
+_À éviter_ : appui long, image source, diff
+
 ## Prompts
 
 **Prompt enregistré** :
