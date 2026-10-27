@@ -51,8 +51,11 @@ test('PC : pile à gauche, champ déplié à droite ; image de la carte à la ha
   const view = await page.eval(`({ w: innerWidth, h: innerHeight })`);
   assert.ok(field.right <= view.w && field.top < view.h / 2, `champ hors de la vue : ${JSON.stringify(field)}`);
   const img = await box('#pile [data-k="0"] .pimg'), acts = await box('#pileActs');
-  assert.ok(img.height >= view.h * 0.5, `image de la carte petite : ${img.height} px pour ${view.h} px`);
+  // l'image prend la hauteur de la colonne : ✓ et ✕ tiennent au bas de la vue, sans place perdue dessous (la marge
+  // du bas de la page, 16 px, et 24 px d'air au plus)
   assert.ok(acts.bottom <= view.h, `✓ et ✕ sous le bas de la vue : ${acts.bottom} > ${view.h}`);
+  assert.ok(view.h - acts.bottom <= 40, `place perdue sous ✓ et ✕ : ${view.h - acts.bottom} px`);
+  assert.ok(img.height >= view.h * 0.6, `image de la carte petite : ${img.height} px pour ${view.h} px`);
   assert.equal(await page.visible('#composerGrab'), false, 'poignée du champ affichée');
   assert.ok(await page.eval(`document.documentElement.scrollHeight <= innerHeight`), 'le Labo défile');
   await page.click('#pile [data-k="0"] .pbody');    // toucher de la pile : le champ reste déplié
@@ -114,6 +117,22 @@ test('PC : une image déposée n\'importe où sur la colonne du champ, avec surb
   assert.equal(await lit(), true, 'second survol : pas de surbrillance');
   await page.eval(`$('composer').dispatchEvent(new DragEvent('dragleave', { bubbles: true, relatedTarget: null }))`);
   assert.equal(await lit(), false, 'surbrillance restée après la sortie');
+  page.assertNoErrors();
+});
+
+test('PC : une image glissée sur le champ après « Révéler » le déplie aussi pour la règle du téléphone', async () => {
+  await labo();
+  await page.made('grand glissée');                 // « Révéler » : la règle du téléphone replie le champ
+  await page.eval(`(async () => { const dt = new DataTransfer(), c = document.createElement('canvas');
+    c.width = c.height = 64; const b = await new Promise(r => c.toBlob(r));
+    dt.items.add(new File([b], 'g.png', { type: 'image/png' }));
+    $('prompt').dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true })); })()`);
+  await page.setView(PHONE);                         // au téléphone, une image glissée dessus l'aurait déplié
+  await page.waitFor(`innerWidth === ${PHONE.width}`, { what: 'vue du téléphone' });
+  // (le changement de disposition suit la nouvelle largeur à l'image d'affichage suivante : deux images attendues)
+  await page.eval(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+  assert.equal(await page.visible('#prompt'), true, 'téléphone : champ replié malgré l\'image glissée');
+  await page.setView(PC);
   page.assertNoErrors();
 });
 

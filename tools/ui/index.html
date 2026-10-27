@@ -596,9 +596,10 @@
     body:not(.m-tirages) main { width:min(100%, 1480px); padding:6px 24px var(--bottom-h); }   /* sans défilement */
     #pane-labo.active { display:grid; grid-template-columns:minmax(0, 1fr) clamp(360px, 32vw, 460px); gap:24px;
       align-items:start; }
-    /* image de la carte : la hauteur de la colonne, moins le texte de la carte, ✓ et ✕ et leurs écarts (234px) */
+    /* image de la carte : la hauteur de la colonne, moins le texte de la carte, ✓ et ✕ et leurs écarts (172px,
+       mesurés au PC) */
     .pilezone { position:sticky; top:var(--top-h);
-      --pimg-h:max(240px, calc(var(--col-h) - 234px - var(--less-run, 0px) - var(--less-chip, 0px))); }
+      --pimg-h:max(240px, calc(var(--col-h) - 172px - var(--less-run, 0px) - var(--less-chip, 0px))); }
     .rframe { width:min(100%, calc((var(--col-h) - 120px) * var(--ar, 1))); }
     .empty { aspect-ratio:auto; min-height:min(var(--col-h), 520px); }
     #composer { position:sticky; top:var(--top-h); height:var(--col-h); overflow:auto; overscroll-behavior:contain; }
@@ -1283,7 +1284,7 @@ $('composerLine').onclick=()=>showLabo('composer');
 const dropping=on=>$('composer').classList.toggle('dropping', on);
 ['dragenter', 'dragover'].forEach(t=>$('composer').addEventListener(t, e=>{
   if(![...e.dataTransfer.types].includes('Files')) return;
-  e.preventDefault(); dropping(true); if($('composer').classList.contains('folded')) openComposer(); }));
+  e.preventDefault(); dropping(true); if(!composerOpen) openComposer(); }));   // (l'état tenu : WIDE n'en replie rien)
 $('composer').addEventListener('dragleave', e=>{ if(!$('composer').contains(e.relatedTarget)) dropping(false); });
 $('composer').addEventListener('drop', e=>{ dropping(false);
   if(e.target.closest('#inDrop')) return;            // (la tuile l'ajoute elle-même)
