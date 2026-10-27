@@ -64,14 +64,19 @@ test('PC : pile à gauche, champ déplié à droite ; image de la carte à la ha
   page.assertNoErrors();
 });
 
-test('PC : le champ reste déplié pendant une génération en cours, affichée à gauche', async () => {
+test('PC : le champ reste déplié pendant une génération en cours, affichée à gauche sans faire défiler', async () => {
   await labo();
-  await page.generate('HOLD=grand en cours');
+  // un prompt sur trois lignes et une seconde génération en file (pastille « +1 en attente ») : la carte en cours,
+  // sur le dessus, tient encore dans la colonne
+  await page.generate('HOLD=grand en cours ' + 'une longue description de la scène, de sa lumière et de ses détails '
+    .repeat(4));
+  await page.generate('HOLD=grand en file');
   try {
-    await page.waitFor(`!$('runCard').hidden`, { what: 'carte en cours' });
+    await page.waitFor(`!$('runCard').hidden && !$('queueChip').hidden`, { what: 'carte en cours et file' });
     assert.equal(await unfolded(), true, 'génération en cours : champ replié');
     const run = await box('#runCard'), field = await box('#composer');
     assert.ok(field.left >= run.right, `carte en cours pas à gauche du champ : ${JSON.stringify([run, field])}`);
+    assert.ok(await page.eval(`document.documentElement.scrollHeight <= innerHeight`), 'le Labo défile');
   } finally { bench.release('grand'); }               // (un échec ne laisse pas le Mac occupé pour les suivants)
   await bench.idle({ page });
   page.assertNoErrors();

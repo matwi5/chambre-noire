@@ -600,7 +600,10 @@
        mesurés au PC) */
     .pilezone { position:sticky; top:var(--top-h);
       --pimg-h:max(240px, calc(var(--col-h) - 172px - var(--less-run, 0px) - var(--less-chip, 0px))); }
-    .rframe { width:min(100%, calc((var(--col-h) - 120px) * var(--ar, 1))); }
+    /* carte en cours sur le dessus (pile vide) : la hauteur de la colonne, moins sa ligne d'étape (56px) et son prompt
+       sur trois lignes avec sa marge (75px), soit 136px avec ses bords et un peu d'air (déduits des règles de la carte,
+       pas mesurés), et la pastille de la file quand elle est là (--less-chip, posée sur .pilezone) */
+    .rframe { width:min(100%, calc((var(--col-h) - 136px - var(--less-chip, 0px)) * var(--ar, 1))); }
     .empty { aspect-ratio:auto; min-height:min(var(--col-h), 520px); }
     #composer { position:sticky; top:var(--top-h); height:var(--col-h); overflow:auto; overscroll-behavior:contain; }
     #composer.drawing:not(.folded) { min-height:0; }
