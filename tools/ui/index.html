@@ -392,6 +392,29 @@
   .acts.iv-acts { grid-template-columns:repeat(3, 1fr); }
   .viewer.iv.single .v-nav { display:none; }
   .v-stage img { touch-action:none; }
+  /* ------------------------------------------------------------ bouton Avant : maintenu, l'image d'entrée remplace
+     l'image produite dans le même cadre (.bfr, posé sur le contenu affiché de l'image par placeBefore), sans transition ;
+     l'étiquette « Avant » pendant l'appui. Visuel du bouton : data-look (BEFORE_LOOK), a plaque, b carré, c tampon */
+  .bfr { position:absolute; z-index:2; pointer-events:none; }
+  #vBefore { border-radius:var(--r-m); }
+  .bfr .bimg { position:absolute; inset:0; width:100%; height:100%; max-width:none; max-height:none; object-fit:contain;
+    background:var(--void); border-radius:inherit; box-shadow:none; visibility:hidden; }   /* (visionneuse : mêmes
+     transitions que l'image produite, .v-stage img) */
+  .bfr .bimg.fill { object-fit:fill; }
+  .bfr.on .bimg[src], .bfr.on .btag { visibility:visible; }
+  .btag { position:absolute; left:10px; top:10px; padding:3px 9px; border-radius:var(--r-s); font:500 15px/1.2 var(--pixel);
+    color:var(--accent); background:var(--badge); visibility:hidden; }
+  .bbtn { position:absolute; right:10px; bottom:10px; display:flex; align-items:center; justify-content:center; gap:6px;
+    border:0; color:var(--accent); background:var(--badge); cursor:pointer; pointer-events:auto; touch-action:none;
+    user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+  .bbtn svg { flex:none; width:18px; height:18px; }
+  .bbtn[data-look="a"] { height:36px; padding:0 12px 0 9px; border-radius:var(--r-s); font:500 15px/1 var(--pixel); }
+  .bbtn[data-look="b"] { width:44px; height:44px; border:1.5px solid currentColor; border-radius:var(--r-m); }
+  .bbtn[data-look="b"] span { display:none; }
+  .bbtn[data-look="c"] { height:34px; padding:0 12px; border:2px solid currentColor; border-radius:var(--r-s);
+    font:500 18px/1 var(--pixel); }
+  .bbtn[data-look="c"] svg { display:none; }
+  .bfr.on .bbtn { color:var(--on-accent); background:var(--accent); }
   /* ------------------------------------------------------------ carte en cours : la génération de l'espace se
      révèle en pixels sur un canevas ; sur le dessus quand la pile est vide, sinon juste derrière elle, réduite à un
      bandeau au bord de la pile (vignette, étape, fin prévue), le liseré d'avancement en bas */
@@ -724,6 +747,7 @@
   </div>
   <div class="v-stage" id="vStage">
     <img id="vImg" alt="">
+    <div class="bfr" id="vBefore" hidden><img class="bimg" id="vBeforeImg" alt="" draggable="false"></div>
     <button class="btn-icon mat v-nav prev" onclick="stepViewer(-1)" aria-label="Image précédente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"/></svg></button>
     <button class="btn-icon mat v-nav next" onclick="stepViewer(1)" aria-label="Image suivante"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg></button>
   </div>
@@ -1470,6 +1494,64 @@ function forgetPrivateImages(){ if(reveal.img) clearReveal();   // canevas de la
   document.querySelectorAll('[href]').forEach(a=>{   // liens de téléchargement, et leur nom de fichier (prive_<id>)
     if(secretUrl(a.getAttribute('href'))) dropLink(a); }); }
 
+// ------------------------------------------------------------ bouton Avant : l'image d'entrée à la place de l'image
+// produite, dans le même cadre, tant qu'on le maintient (visionneuse, carte du dessus de la pile)
+// Image comparable (seule source de la règle) : une édition à une seule image d'entrée (variantes sur une photo et
+// campagne comprises, chaque image ayant sa copie) → cette image ; un Dessin avec masque → sa photo non peinte
+// (init.png, déjà à la taille de la sortie, la référence peinte ignorée) ; rien d'autre (texte → image, plusieurs
+// images d'entrée, annotation, dont seule la photo peinte en rouge est gardée)
+function beforeFile(it){ const ins=it.inputs || [];
+  if(it.mode==='edit' && ins.length===1) return ins[0];
+  if(it.mode==='mask' && ins.includes('init.png')) return 'init.png';
+  return null; }
+// bouton montré : image comparable de l'espace public
+const beforeShown = it => !!it && !it.private && !!beforeFile(it);
+const BEFORE_LOOK='a';                             // visuel du bouton (CSS .bbtn[data-look]) : a, b ou c
+const BEFORE_KNOBS = '<span class="btag" aria-hidden="true">Avant</span>'
+  + `<button class="bbtn" type="button" data-look="${BEFORE_LOOK}" aria-label="Maintenir pour voir l'image d'entrée">`
+  + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M12 3v18"/><path d="M3.5 7v10a2 2 0 0 0 2 2H12V5H5.5a2 2 0 0 0-2 2z" fill="currentColor" stroke="none"/></svg>'
+  + '<span>Avant</span></button>';
+const BEFORE_STRETCH=.02;                          // écart de forme au plus étiré (arrondi des dimensions de sortie)
+let beforeHeld=null;                               // cadre dont le bouton est maintenu
+// cadre fr (.bfr) prêt pour l'image it, montrée par l'image produite of : appui en cours relâché, image avant d'une
+// autre image retirée, bouton affiché si it est comparable ; son image d'entrée complète (url) et sa miniature (thumb)
+function aimBefore(fr, it, of){ dropBefore(fr);
+  const f=beforeShown(it) ? beforeFile(it) : null, img=fr.querySelector('.bimg');
+  fr.it=it; fr.of=of; fr.url=f && inputUrl(it, f); fr.thumb=f && inputUrl(it, f, '&thumb=1&t='+it.time);
+  if(!fr.url || img.want!==fr.url) clearImage(img);
+  placeBefore(fr); }
+// le cadre posé sur le contenu affiché de l'image produite : sa boîte (offset*, que le zoom ne change pas), réduite à
+// la forme de l'image (object-fit: contain dans la pile) ; masqué tant que l'image produite n'est pas là. L'image avant
+// y est étirée si les formes diffèrent d'au plus BEFORE_STRETCH, sinon entière et centrée
+function placeBefore(fr){ const of=fr.of, it=fr.it, w=of ? of.offsetWidth : 0, h=of ? of.offsetHeight : 0;
+  const ratio=it && it.width && it.height ? it.width/it.height : of && of.naturalWidth ? of.naturalWidth/of.naturalHeight : 0;
+  if(!fr.url || !ratio || !w || !h || !of.getAttribute('src')){ fr.hidden=true; dropBefore(fr); return; }
+  const cw=Math.min(w, h*ratio), ch=Math.min(h, w/ratio);
+  Object.assign(fr.style, {left:of.offsetLeft+(w-cw)/2+'px', top:of.offsetTop+(h-ch)/2+'px', width:cw+'px', height:ch+'px'});
+  fr.hidden=false;
+  const img=fr.querySelector('.bimg'), r=img.naturalWidth ? img.naturalWidth/img.naturalHeight : 0;
+  img.classList.toggle('fill', !!r && Math.abs(r/ratio-1)<=BEFORE_STRETCH); }
+// appui : l'image avant visible tout de suite (déjà chargée en avance, sinon sa miniature d'abord), par showImage
+function holdBefore(fr){ if(beforeHeld && beforeHeld!==fr) dropBefore(beforeHeld);
+  if(fr.hidden || !fr.url) return;
+  beforeHeld=fr; fr.classList.add('on'); showImage(fr.querySelector('.bimg'), fr.url, {thumb:fr.thumb});
+  placeBefore(fr); }                               // (image déjà prête : sa forme est connue tout de suite)
+// relâché (où que soit le doigt), fenêtre quittée, image changée : l'image produite revient
+function dropBefore(fr=beforeHeld){ if(!fr) return; fr.classList.remove('on'); fr.holder=null;
+  if(beforeHeld===fr) beforeHeld=null; }
+// bouton et étiquette d'un cadre, et son geste (Pointer Events, pointeur capturé : le relâché revient au bouton) ;
+// l'appui ne va ni au balayage de la pile ni au zoom de la visionneuse (qui ignorent un appui parti d'un bouton)
+function armBefore(fr){ fr.insertAdjacentHTML('beforeend', BEFORE_KNOBS);
+  fr.querySelector('.bimg').addEventListener('load', ()=>placeBefore(fr));
+  const b=fr.querySelector('.bbtn'), up=e=>{ if(e.pointerId===fr.holder) dropBefore(fr); };
+  b.addEventListener('pointerdown', e=>{ if(e.button>0 || fr.holder!=null) return; e.preventDefault();
+    fr.holder=e.pointerId; b.setPointerCapture(e.pointerId); holdBefore(fr); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t=>b.addEventListener(t, up));
+  b.addEventListener('contextmenu', e=>e.preventDefault()); }
+addEventListener('blur', ()=>dropBefore());
+// cadres recalés quand l'image produite ou sa place change de taille (fenêtre, carte en cours derrière la pile,
+// miniature puis image complète)
+const beforeSizes=new ResizeObserver(()=>document.querySelectorAll('.bfr').forEach(fr=>{ if(fr.of) placeBefore(fr); }));
 // ------------------------------------------------------------ générations de la page, carte en cours et file
 // La page suit les générations qu'elle a lancées (ou reprises après un rechargement), dans l'ordre : pageJobs. La carte
 // en cours du Labo (runNow, renderRunCard) en montre une (shown) : celle qui tourne, sinon la prochaine ; finie, son
@@ -1585,6 +1667,7 @@ const pileSettings = it => [it.width && it.height ? it.width+'×'+it.height : ''
   it.seconds ? fmt(it.seconds) : ''].filter(Boolean).join(' · ');
 function pileCard(it, k){
   return `<article class="pcard" data-k="${k}" data-key="${esc(pileTag(it))}"><button class="pimg" data-open aria-label="Voir l'image en grand"><img alt="" draggable="false"></button>`
+    + (k ? '' : '<div class="bfr" hidden><img class="bimg" alt="" draggable="false"></div>')
     + (it.lot ? `<b class="plot">${it.lot.rank}/${it.lot.size}</b>` : '') + STAMPS
     + `<div class="pbody"><p class="pprompt">${esc(it.prompt||'')}</p><p class="pset">${esc(pileSettings(it))}</p></div></article>`; }
 function failCard(p, k){
@@ -1602,10 +1685,15 @@ function renderPile(){
   // viserait une carte que le premier n'a pas encore retirée)
   if(key===pileShown) return; pileShown=key;
   dropSwipe();                                     // un geste ne trie jamais une carte qu'il ne tient pas
+  if(beforeHeld && beforeHeld!==$('vBefore')) dropBefore();   // (le bouton Avant de la carte remplacée)
   $('pile').innerHTML=shownNow.map((e, k)=>e.fail ? failCard(e.fail, k) : pileCard(e.it, k)).join('');
   // images par showImage (jamais l'image d'avant), la miniature d'abord ; dessous, la miniature seule
-  shownNow.forEach((e, k)=>{ if(e.fail) return; const img=$('pile').querySelector(`[data-k="${k}"] img`);
-    if(k) showImage(img, thumbOf(e.it)); else showImage(img, srcOf(e.it), {thumb:thumbOf(e.it)}); }); }
+  // carte du dessus : son bouton Avant, et son image d'entrée chargée en avance une fois l'image là
+  shownNow.forEach((e, k)=>{ if(e.fail) return; const img=$('pile').querySelector(`[data-k="${k}"] .pimg img`);
+    if(k) return showImage(img, thumbOf(e.it));
+    const fr=img.closest('.pcard').querySelector('.bfr'); armBefore(fr); aimBefore(fr, e.it, img);
+    img.addEventListener('load', ()=>placeBefore(fr));
+    showImage(img, srcOf(e.it), {thumb:thumbOf(e.it), then:()=>{ if(fr.url) preload(fr.url); }}); }); }
 // ce que montre la carte du dessus dessinée : un échec de la page, ou une image de la pile, retrouvés par leur nom
 function topEntry(){ const c=$('pile').querySelector('[data-k="0"]'), key=c && c.dataset.key; if(!key) return null;
   if(key[0]==='f'){ const p=pileFails().find(q=>q.id===key.slice(1)); return p ? {fail:p} : null; }
@@ -1630,7 +1718,7 @@ function holdSort(shown){ sortHeld=true; const t0=performance.now();   // (minut
 function sortTop(action){ if(sortBusy()) return false; const top=topEntry(); if(!top) return false;
   if(top.fail && action!=='discard') return false;   // ✓ sur un échec : rien ne part, rien n'attend
   // la carte suivante affichée : envol fini et son image posée (ou la pile vide)
-  holdSort(()=>{ const img=$('pile').querySelector('[data-k="0"] img');
+  holdSort(()=>{ const img=$('pile').querySelector('[data-k="0"] .pimg img');
     return !flying && (!img || !!img.getAttribute('src')); });
   if(top.fail){ flyOut('l', ()=>drop(top.fail)); return true; }
   const it=top.it; flyOut(action==='keep' ? 'r' : 'l', ()=>action==='keep' ? keepItem(it) : discardItem(it)); return true; }
@@ -1698,7 +1786,7 @@ let swiped=false, dropSwipe=()=>{};
   $('pile').addEventListener('pointerdown', e=>{ if(!e.isPrimary) return;   // un second doigt ne prend pas le geste
     abandon();                                     // (un geste laissé en route, souris lâchée hors de la pile)
     const c=e.target.closest('.pcard');
-    if(!c || c.dataset.k!=='0' || flying || e.button>0 || e.target.closest('[data-again]')) return;
+    if(!c || c.dataset.k!=='0' || flying || e.button>0 || e.target.closest('[data-again], .bbtn')) return;
     gest={c, id:e.pointerId, x0:e.clientX, y0:e.clientY, dx:0, moving:false, fail:c.dataset.key[0]==='f',
       track:[{x:e.clientX, t:e.timeStamp}]}; });
   $('pile').addEventListener('pointermove', e=>{ if(!gest || e.pointerId!==gest.id) return;
@@ -2259,6 +2347,7 @@ function openViewer(i, list=vList){ if(exiting()) return;   // « Sortir » en a
   // voisines : leurs miniatures, et l'image complète de celle vers qui l'on avance (mémoire et données du téléphone)
   const n=list.length; [list[(i+1)%n], list[(i+n-1)%n]].forEach(x=>{ if(x!==it) preload(thumbOf(x)); });
   const next=list[(i+vStep+n)%n]; if(next!==it) preload(srcOf(next));
+  aimBefore($('vBefore'), it, img);              // bouton Avant de la nouvelle image (son entrée : chargée ci-dessus)
   img.alt=it.prompt||it.name; $('vCount').textContent=`${i+1} / ${list.length}`;
   const date=new Date(it.time*1000).toLocaleString('fr-FR', {dateStyle:'short', timeStyle:'short'});
   $('vChips').innerHTML=[date, MODE_LABELS[it.mode]||it.mode, it.width?it.width+'×'+it.height:'', it.steps?it.steps+' étapes':'', it.model?it.model.toUpperCase():'', it.seconds?fmt(it.seconds):'',
@@ -2273,10 +2362,11 @@ function openViewer(i, list=vList){ if(exiting()) return;   // « Sortir » en a
   syncThemeColor();
 }
 let vEmpty=null, ivEmpty=null;                     // vidage prévu après le fondu (annulé si la vue se rouvre)
-function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor();
+function closeViewer(){ dropBefore($('vBefore')); resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor();
   clearTimeout(vEmpty); vEmpty=setTimeout(emptyViewer, FADE_MS); }   // après le fondu de fermeture
 // visionneuse fermée : plus rien de l'image vue dans la page cachée (image, prompt, réglages, rang, lot, lien)
 function emptyViewer(){ clearTimeout(vEmpty); vList=[]; clearImage($('vImg')); clearImage($('vBg'));   // fond compris
+  aimBefore($('vBefore'), null, $('vImg'));        // image avant comprise
   $('vImg').alt=$('vCount').textContent=$('vLotOpen').textContent=''; $('vChips').innerHTML=$('vInputs').innerHTML='';
   $('vInputs').hidden=$('vLot').hidden=$('vSort').hidden=true; dropLink($('vDl')); }
 function stepViewer(d){ if(vIndex<0 || !vList.length) return; vStep=d; openViewer((vIndex+d+vList.length)%vList.length); }
@@ -2286,12 +2376,13 @@ addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevente
 // visionneuse et images d'entrée : pincer pour zoomer (l'image passe au-dessus de tout et revient à sa taille dès qu'on
 // relâche les doigts) ; sur ordinateur, molette pour zoomer et glisser pour déplacer, un clic pour revenir ; sans zoom,
 // glisser à gauche ou à droite : image voisine (step) ; vers le bas : fermer (close) ; un appui : masquer les
-// commandes. Renvoie la remise à la taille initiale.
-function zoomable(st, img, v, step, close){
+// commandes. twin : autre image qui reçoit la même transformation (l'image avant). Renvoie la remise à la taille initiale.
+function zoomable(st, img, v, step, close, twin){
   const pts=new Map(), MAX=6;
   let z={s:1, x:0, y:0}, one=null, pinch=null, unzoom=null;
   const center=()=>{ const r=st.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2}; };
-  function apply(){ img.style.transform = z.s>1 ? `translate(${z.x}px, ${z.y}px) scale(${z.s})` : ''; clearTimeout(unzoom);
+  const tf=t=>{ img.style.transform=t; if(twin) twin.style.transform=t; };
+  function apply(){ tf(z.s>1 ? `translate(${z.x}px, ${z.y}px) scale(${z.s})` : ''); clearTimeout(unzoom);
     if(z.s>1) v.classList.add('zoomed'); else unzoom=setTimeout(()=>{ if(z.s<=1) v.classList.remove('zoomed'); }, 400); }   // reste au-dessus pendant le retour (0,35 s)
   function zoomAt(s2, px, py, from=z){ const c=center(), k=s2/from.s;   // le point (px, py) de l'écran reste sous les doigts
     z={s:s2, x:(px-c.x)-((px-c.x)-from.x)*k, y:(py-c.y)-((py-c.y)-from.y)*k}; if(s2<=1.01) z={s:1, x:0, y:0}; apply(); }
@@ -2301,7 +2392,7 @@ function zoomable(st, img, v, step, close){
   const mid=()=>{ const [a,b]=[...pts.values()]; return {x:(a.x+b.x)/2, y:(a.y+b.y)/2, d:Math.hypot(a.x-b.x, a.y-b.y)}; };
   st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return;
     pts.set(e.pointerId, {x:e.clientX, y:e.clientY}); st.setPointerCapture(e.pointerId); st.classList.add('drag');
-    if(pts.size===2){ one=null; v.style.opacity=''; if(z.s<=1) img.style.transform=''; pinch={...mid(), from:{...z}}; }
+    if(pts.size===2){ one=null; v.style.opacity=''; if(z.s<=1) tf(''); pinch={...mid(), from:{...z}}; }
     else if(pts.size===1) one={x0:e.clientX, y0:e.clientY, from:{...z}, dx:0, dy:0}; });
   st.addEventListener('pointermove', e=>{ if(!pts.has(e.pointerId)) return; pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
     if(pinch && pts.size>=2){ const m=mid(); zoomAt(Math.min(MAX, Math.max(1, pinch.from.s*m.d/pinch.d)), pinch.x, pinch.y, pinch.from);
@@ -2309,7 +2400,7 @@ function zoomable(st, img, v, step, close){
     if(!one) return; one.dx=e.clientX-one.x0; one.dy=e.clientY-one.y0;
     if(z.s>1){ z.x=one.from.x+one.dx; z.y=one.from.y+one.dy; apply(); return; }     // doigt restant après un pincement, ou souris
     const {dx, dy}=one;
-    img.style.transform = Math.abs(dx)>Math.abs(dy) ? `translateX(${dx}px) rotate(${dx/40}deg)` : `translateY(${Math.max(0,dy)}px) scale(${1-Math.max(0,dy)/1600})`;
+    tf(Math.abs(dx)>Math.abs(dy) ? `translateX(${dx}px) rotate(${dx/40}deg)` : `translateY(${Math.max(0,dy)}px) scale(${1-Math.max(0,dy)/1600})`);
     v.style.opacity = dy>0 && Math.abs(dy)>Math.abs(dx) ? Math.max(.35, 1-dy/500) : ''; });
   const end=e=>{ if(!pts.delete(e.pointerId)) return;
     if(pinch && pts.size===1){ const [q]=[...pts.values()]; pinch=null; one={x0:q.x, y0:q.y, from:{...z}, dx:0, dy:0, pinched:true}; return; }
@@ -2318,16 +2409,18 @@ function zoomable(st, img, v, step, close){
     if(e.pointerType!=='mouse' && (z.s>1 || (was && was.pinched))) return reset();     // doigts relâchés : taille initiale
     st.classList.remove('drag'); if(!was) return;
     const {dx, dy}=was;
-    if(Math.abs(dx)<6 && Math.abs(dy)<6){ if(z.s>1) reset(); else { img.style.transform=''; v.classList.toggle('immersive'); } return; }
+    if(Math.abs(dx)<6 && Math.abs(dy)<6){ if(z.s>1) reset(); else { tf(''); v.classList.toggle('immersive'); } return; }
     if(z.s>1) return;
-    img.style.transform='';
+    tf('');
     if(Math.abs(dx)>70 && Math.abs(dx)>Math.abs(dy)) step(dx<0 ? 1 : -1);
     else if(dy>110) close(); };
   st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
   let wheelEnd=null;
   st.addEventListener('wheel', e=>{ e.preventDefault(); st.classList.add('drag'); clearTimeout(wheelEnd); wheelEnd=setTimeout(()=>st.classList.remove('drag'), 150); zoomAt(Math.min(MAX, Math.max(1, z.s*Math.exp(-e.deltaY*0.002))), e.clientX, e.clientY); }, {passive:false});
   return reset; }
-const resetZoom=zoomable($('vStage'), $('vImg'), $('viewer'), stepViewer, closeViewer);
+const resetZoom=zoomable($('vStage'), $('vImg'), $('viewer'), stepViewer, closeViewer, $('vBeforeImg'));
+armBefore($('vBefore')); $('vImg').addEventListener('load', ()=>placeBefore($('vBefore')));
+[$('vImg'), $('vStage'), $('pile')].forEach(el=>beforeSizes.observe(el));
 async function dataUrlOf(name, url){
   const r=await fetch(url || resultUrl(name)); if(!r.ok) throw new Error('HTTP '+r.status);   // (pas le corps de l'erreur)
   return await readFile(await r.blob()); }

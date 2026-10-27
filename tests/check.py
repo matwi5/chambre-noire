@@ -82,7 +82,7 @@ SENSITIVE = ("localStorage", "incognito", "inPrivate", "privState", "asideInput"
              "private/", "/api/discard", "/api/delete", "discardItem", "commitDiscard", "sortTop", "deleteItem",
              "delete_output", "delete_extras", "remove_private_item")
 # images de l'interface que seul showImage remplit (sinon l'image d'avant reste à l'écran jusqu'au chargement)
-IMAGE_IDS = ("vImg", "vBg", "ivImg", "paintImg")
+IMAGE_IDS = ("vImg", "vBg", "ivImg", "paintImg", "vBeforeImg")
 IMAGE_SRC_RE = re.compile(r"\$\(\s*['\"](" + "|".join(IMAGE_IDS) + r")['\"]\s*\)\.src\s*=(?!=)")
 # notes non suivies du dossier principal, reliées dans chaque worktree par --link-venv (et chaque fichier de
 # docs/agents/, sauf la carte du code, qui est suivie)

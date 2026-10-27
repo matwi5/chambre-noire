@@ -47,6 +47,8 @@
 //                                                // courtes ({ short: false } : réglages par défaut)
 //   await page.viewPile('texte')                 // visionneuse ouverte sur l'image de la pile à ce prompt
 //   await page.viewTirage(0)                     // visionneuse ouverte sur le premier des Tirages affichés
+//   await page.closeViewer()                     // visionneuse fermée, fondu fini (le Labo de nouveau sous le doigt)
+//   await page.imageShown('#vImg')               // image chargée et décodée (miniature ou image complète)
 //   await page.openQueue()                       // feuille de la file ouverte par la pastille « +N en attente »
 //   await page.cancelRun()                       // « Annuler » de la carte en cours, confirmé
 //   await page.canvasInk('#revealCanvas')        // { width, height, ink } : pixels non transparents d'un canevas
@@ -526,6 +528,16 @@ async function connect(wsUrl) {
     async viewTirage(index = 0) {
       await page.eval(`openViewer(${index}, histItems)`);
       await page.waitFor(`$('viewer').classList.contains('on') && $('vImg').complete`, { what: 'visionneuse' });
+    },
+    // visionneuse fermée, fondu de fermeture fini (elle ne recouvre plus le Labo)
+    async closeViewer() {
+      await page.eval(`closeViewer()`);
+      await page.waitFor(`getComputedStyle($('viewer')).visibility === 'hidden'`, { what: 'visionneuse fermée' });
+    },
+    // image selector chargée et décodée (affichée par showImage : miniature ou image complète)
+    imageShown(selector, what = `image ${selector} affichée`) {
+      return page.waitFor(`(img => !!img && img.complete && img.naturalWidth > 0)(document.querySelector(
+        ${JSON.stringify(selector)}))`, { what });
     },
     // feuille ouverte refermée, comme d'un toucher sur le voile hors d'elle (closeSheet de la page) : avant de toucher
     // ce que le voile recouvre (en-tête, Labo)

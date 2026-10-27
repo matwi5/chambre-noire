@@ -513,6 +513,20 @@ par **Éditer** (images d'entrée du Labo) ou **Dessiner** pour repartir d'elle.
 depuis le 13/10/2026 ; pour les images plus anciennes, elles ont été récupérées tant que leur dossier de travail
 existait encore (les 20 derniers).
 
+Pour comparer une édition à sa photo, le bouton **Avant**, en bas à droite de l'image, dans la visionneuse et sur la
+carte du dessus de la pile : tant qu'on le maintient (au doigt ou à la souris), l'image d'entrée remplace l'image
+produite dans exactement le même cadre, d'un coup, avec l'étiquette « Avant » ; l'image produite revient au relâché,
+même si le doigt a glissé hors du bouton, quand la fenêtre perd le focus ou quand on passe à une autre image. Il
+n'apparaît que sur une image comparable : une édition à une seule image d'entrée (chaque image d'un lot de variantes
+sur une photo, et chaque image d'une campagne avec sa propre photo, comprises) ou un dessin avec masque, comparé à la
+photo non peinte ; ni sur une génération sans image d'entrée, ni sur une édition à plusieurs images d'entrée, ni sur
+une annotation (seule la photo peinte en rouge est gardée). La photo est étirée dans le cadre quand les formes ne
+diffèrent que d'un arrondi (2 % au plus, comme au format « Image »), sinon montrée entière et centrée (une sortie en
+1:1 depuis une photo en 16:9). Dans la visionneuse, elle suit le zoom : molette et glisser sur ordinateur, ou pincer
+avec deux autres doigts pendant qu'un doigt tient Avant. Elle est chargée en avance dès que l'image est affichée ;
+sinon sa miniature vient d'abord. Le bouton de la carte ne trie rien et n'ouvre pas la visionneuse. Il n'est pas
+encore proposé dans l'espace privé.
+
 ### Prompts enregistrés
 
 Le bouton **Prompts**, sous le champ de texte du **Labo**, ouvre la liste des prompts

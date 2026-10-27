@@ -147,6 +147,7 @@ dernier bloc, après le HTML.
 - **CSS** : sections « jetons » (lumière inactinique ; `html.priv` : lumière verte), « fond », « surfaces mates »
   (classe `mat`), « barre du haut », « barre d'onglets », « panneaux du bas », « compositeur » (champ replié, grille des
   réglages `setgrid`), « panneau Réglages », « images d'entrée (Labo) et Dessiner », « visionneuse plein écran »,
+  « bouton Avant » (cadre `.bfr`, visuel du bouton choisi par `data-look`),
   « carte en cours » (`runcard`, classe `behind` derrière une pile non vide), « pile du Labo » (cartes `pcard`,
   bandeau Annuler `undo`), « liste de la file (feuille de la file du Labo) » (cartes de la file), « prompts
   enregistrés », « espace privé », « messages et confirmations »,
@@ -166,7 +167,8 @@ dernier bloc, après le HTML.
   s'efface, sauf à partir de 1024 px ; classe `dropping` pendant le survol d'un fichier), `#pane-tirages` (Tirages,
   grille `#histGrid`) ; barre d'onglets `#tabbar` (icônes en pixels ;
   onglet Labo : nombre `#runCount`, anneau `#runRing` ; en bas, dans la barre du haut à partir de 1024 px) ; visionneuse
-  `#viewer` (`#vSort` : Garder et Jeter une image de la pile ; à partir de 1024 px, une grille : image à gauche,
+  `#viewer` (`#vSort` : Garder et Jeter une image de la pile ; cadre du bouton Avant `#vBefore` et son image
+  `#vBeforeImg`, sur l'image `#vImg` ; à partir de 1024 px, une grille : image à gauche,
   panneau `.v-panel` en colonne à droite) ; bandeau Annuler `#undoBar` ; images d'entrée `#iv` ; feuilles `.sheet` :
   `#askSheet`, `#setSheet`,
   `#engineSheet` (feuille de la lampe : état `#engineFacts`, « Ouvrir depuis le téléphone » `#phone` sur le Mac
@@ -225,6 +227,12 @@ dernier bloc, après le HTML.
     abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne
     jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
     de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
+  - « bouton Avant » : `beforeFile` (règle de l'image comparable, seule source : `edit` à une image d'entrée, `mask` →
+    `init.png`), `beforeShown` (bouton montré), `aimBefore` (cadre visé sur une image : visionneuse dans `openViewer`,
+    carte du dessus dans `renderPile`, son entrée chargée en avance), `placeBefore` (cadre posé sur le contenu affiché
+    de l'image produite, étirée ou entière selon `BEFORE_STRETCH`), `holdBefore` et `dropBefore` (appui et relâché,
+    `beforeHeld`, `blur` de la fenêtre), `armBefore` (bouton `BEFORE_KNOBS`, visuel `BEFORE_LOOK`, Pointer Events),
+    `beforeSizes` (cadres recalés quand une taille change).
   - « générations de la page, carte en cours et file » : `pageJobs` (générations lancées par cette page), `ownIds` et
     `saveOwn` (`localStorage` `qwen-own`), `isActive`, `isCampaignLot`, `lotOf`, `progress` (étape, phase, temps
     restant d'une génération de la page), `pageItem` (image d'une génération finie de la page : vrai mode et images
@@ -288,7 +296,8 @@ dernier bloc, après le HTML.
     `renderGallery` (redessinée seulement si les tirages changent, `histShown` ; état vide avec le logo et « Aller au
     Labo »), `openViewer`, `stepViewer`,
     `closeViewer` et `emptyViewer` (contenu vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace
-    privé), gestes : `zoomable` (pincer, molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les
+    privé), gestes : `zoomable` (pincer, molette, glisser ; son image avant reçoit la même transformation, `twin` ;
+    `resetZoom` pour la visionneuse, `resetInputZoom` pour les
     images d'entrée).
   - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;
