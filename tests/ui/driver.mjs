@@ -43,6 +43,8 @@
 //   await page.enterPrivate('code')              // dans l'espace privé (créé la première fois), vu par la page,
 //                                                // puis au repos ; await page.privateIdle() : espace au repos
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
+//   await page.freshLabo(bench)                  // Labo neuf : page rechargée sans brouillon, pile vidée, générations
+//                                                // courtes ({ short: false } : réglages par défaut)
 //   await page.viewPile('texte')                 // visionneuse ouverte sur l'image de la pile à ce prompt
 //   await page.openQueue()                       // feuille de la file ouverte par la pastille « +N en attente »
 //   await page.cancelRun()                       // « Annuler » de la carte en cours, confirmé
@@ -343,12 +345,19 @@ async function connect(wsUrl) {
   await Promise.all([send('Runtime.enable'), send('Log.enable'), send('Page.enable')]);
 
   let held = null;                                   // fin du balayage tenu (page.release)
-  // doigt ou souris posé au centre de l'élément selector (amené à l'écran), après la fin d'un geste tenu d'avant ;
-  // rend l'entrée du geste (send(type, k) : au point de départ décalé de k fois dx, dy) ; held le relève au bout
+  // doigt ou souris posé au centre de l'élément selector (amené à l'écran, puis immobile : un défilement doux de la
+  // page, comme celui de showLabo, déplacerait l'élément sous le doigt), après la fin d'un geste tenu d'avant ; rend
+  // l'entrée du geste (send(type, k) : au point de départ décalé de k fois dx, dy) ; held le relève au bout
   async function press(selector, dx, dy, mouse) {
     await page.release();
-    const c = await page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
-      if (!el) return null; el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
+    const c = await page.eval(`(async () => { const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return null; el.scrollIntoView({ block: 'center' });
+      const frames = () => new Promise(f => requestAnimationFrame(() => requestAnimationFrame(f)));
+      let r = el.getBoundingClientRect();
+      for (let i = 0; i < 120; i++) {               // (deux images de suite à la même place, 4 s au plus)
+        await frames(); const n = el.getBoundingClientRect();
+        if (n.top === r.top && n.left === r.left) break;
+        r = n; }
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
     if (!c) throw new Error(`élément absent : ${selector}`);
     const x = k => c.x + dx * k, y = k => c.y + dy * k;
@@ -492,6 +501,18 @@ async function connect(wsUrl) {
             await new Promise(r => setTimeout(r, 25)); }
           await loadPile(); }
         return n; })()`);
+    },
+    // Labo neuf : bench au repos (une génération encore en file serait reprise par la page rechargée), page rechargée
+    // sans brouillon ni réglages (localStorage vidé), moteur prêt, pile lue puis gardée dans les Tirages ; short :
+    // générations courtes (peu d'étapes, petite taille)
+    async freshLabo(bench, { short = true } = {}) {
+      await bench.idle();
+      await page.goto(bench.url + '/');
+      await page.eval(`localStorage.clear()`);
+      await page.goto(bench.url + '/');
+      await page.waitFor(`$('lamp').classList.contains('ok') && pileRead`, { what: 'moteur prêt, pile lue' });
+      await page.keepPile();
+      if (short) await page.eval(`opt.steps = 'low'; opt.res = 'low'; saveOpt(); refreshChoices()`);
     },
     // visionneuse ouverte sur l'image de la pile affichée dont le prompt est prompt (attendue dans la pile)
     async viewPile(prompt) {

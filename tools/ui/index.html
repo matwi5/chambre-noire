@@ -439,7 +439,7 @@
      la ligne repliée du champ et la barre d'onglets (388px), moins la carte en cours derrière la pile (82px) et la
      pastille de la file (48px) quand elles sont là : ✓ et ✕ restent au-dessus de la ligne repliée */
   .pilezone { --pimg-h:clamp(160px, calc(100svh - 388px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
-    - var(--less-run, 0px) - var(--less-chip, 0px)), 420px); }
+    - var(--less-run, 0px) - var(--less-chip, 0px)), var(--pimg-max, 420px)); }
   .pilezone:has(#runCard.behind:not([hidden])) { --less-run:82px; }
   .pilezone:has(#queueChip:not([hidden])) { --less-chip:48px; }
   .pile { order:2; display:grid; padding-bottom:20px; }
@@ -579,6 +579,31 @@
   .hempty .btn { font-family:var(--sans); }
   :is(#go small, .estimate b, .opt small, .rtxt b, #runPhase, .reta, #vCount, #ivCount, .facts .code, .tabcount, .plot, .pset, .pcount) {
     font-family:var(--mono); }
+  /* ------------------------------------------------------------ tablette en hauteur (700 à 1023 px) : une seule
+     colonne élargie, l'image de la carte peut grandir */
+  @media (min-width: 700px) and (max-width: 1023px) {
+    body:not(.m-tirages) main { width:min(100%, 760px); }
+    .pilezone { --pimg-max:600px; } }
+  /* ------------------------------------------------------------ grand écran (à partir de 1024 px : PC, tablette en
+     largeur) : le Labo en deux colonnes, la pile et la carte en cours à gauche, le champ toujours déplié à droite
+     (applyComposer), sur toute la hauteur de la colonne (dépôt d'images partout dessus, surbrillance dropping) ;
+     largeur totale bornée. --top-h : barre du haut (60px) et haut de main (6px) ; --bottom-h : barre d'onglets du bas et son air */
+  @media (min-width: 1024px) {
+    :root { --top-h:calc(66px + env(safe-area-inset-top)); --bottom-h:calc(96px + env(safe-area-inset-bottom));
+      --col-h:calc(100svh - var(--top-h) - var(--bottom-h)); }
+    body:not(.m-tirages) main { width:min(100%, 1480px); padding:6px 24px var(--bottom-h); }   /* sans défilement */
+    #pane-labo.active { display:grid; grid-template-columns:minmax(0, 1fr) clamp(360px, 32vw, 460px); gap:24px;
+      align-items:start; }
+    /* image de la carte : la hauteur de la colonne, moins le texte de la carte, ✓ et ✕ et leurs écarts (234px) */
+    .pilezone { position:sticky; top:var(--top-h);
+      --pimg-h:max(240px, calc(var(--col-h) - 234px - var(--less-run, 0px) - var(--less-chip, 0px))); }
+    .rframe { width:min(100%, calc((var(--col-h) - 120px) * var(--ar, 1))); }
+    .empty { aspect-ratio:auto; min-height:min(var(--col-h), 520px); }
+    #composer { position:sticky; top:var(--top-h); height:var(--col-h); overflow:auto; overscroll-behavior:contain; }
+    #composer.drawing:not(.folded) { min-height:0; }
+    #composerGrab { display:none; }
+    #pane-labo:has(#composer.drawing:not(.folded)) .pilezone { display:flex; }
+    #composer.dropping { outline:2px dashed var(--accent); outline-offset:-2px; } }
   /* ------------------------------------------------------------ téléphone (html.lite) : effets allégés pour le GPU
      Rien de flou ni d'animé en fond : le halo et le grain sont fixes, et gardés. Les animations d'interface restent
      courtes. ?lite=1 ou ?lite=0 dans l'adresse force le choix. */
@@ -1217,22 +1242,32 @@ function renderInputs(){ const t=$('inThumbs'); t.innerHTML='';
 // touche pas la saisie ; la ligne repliée dit le nombre d'images d'entrée.
 // labIdle : dernier état « rien à trier ni en cours » vu (null : pas encore lu dans cet espace) ; autoOpen : déplié
 // d'office et pas touché depuis
-let labIdle=null, autoOpen=true;
-function setComposer(open){ const c=$('composer');
+// Grand écran (WIDE, à partir de 1024 px : deux colonnes) : le champ reste toujours déplié ; la règle du téléphone
+// continue d'en tenir l'état (composerOpen), repris quand la fenêtre repasse sous 1024 px, saisie gardée
+let labIdle=null, autoOpen=true, composerOpen=true;
+const WIDE=matchMedia('(min-width: 1024px)');
+function setComposer(open){ composerOpen=open; applyComposer(); }
+function applyComposer(){ const c=$('composer'), open=composerOpen || WIDE.matches;
   if(!open && c.contains(document.activeElement)) document.activeElement.blur();   // (clavier du téléphone fermé)
   c.classList.toggle('folded', !open); $('composerLine').setAttribute('aria-expanded', open); }
+WIDE.addEventListener('change', applyComposer);
 function openComposer(){ autoOpen=false; setComposer(true); }
 function foldComposer(){ autoOpen=false; setComposer(false); }
 function followLabIdle(idle){ if(idle===labIdle) return; labIdle=idle;
-  if(idle && $('composer').classList.contains('folded')){ setComposer(true); autoOpen=true; }
+  if(idle && !composerOpen){ setComposer(true); autoOpen=true; }
   else if(!idle && autoOpen) setComposer(false); }
 ['pointerdown', 'focusin', 'input'].forEach(t=>$('composer').addEventListener(t, ()=>{ autoOpen=false; }));
 $('composerLine').onclick=()=>showLabo('composer');
 // une image glissée sur le champ (replié compris) le déplie et rejoint les images d'entrée, comme sur la tuile d'ajout
-// (sinon le navigateur ouvrirait le fichier à la place de la page)
-$('composer').addEventListener('dragover', e=>{ if(![...e.dataTransfer.types].includes('Files')) return;
-  e.preventDefault(); if($('composer').classList.contains('folded')) openComposer(); });
-$('composer').addEventListener('drop', e=>{ if(e.target.closest('#inDrop')) return;   // (la tuile l'ajoute elle-même)
+// (sinon le navigateur ouvrirait le fichier à la place de la page) ; le champ survolé est en surbrillance (classe
+// dropping, dessinée sur grand écran, où le champ est toute la colonne de droite), jusqu'à sa sortie ou au dépôt
+const dropping=on=>$('composer').classList.toggle('dropping', on);
+['dragenter', 'dragover'].forEach(t=>$('composer').addEventListener(t, e=>{
+  if(![...e.dataTransfer.types].includes('Files')) return;
+  e.preventDefault(); dropping(true); if($('composer').classList.contains('folded')) openComposer(); }));
+$('composer').addEventListener('dragleave', e=>{ if(!$('composer').contains(e.relatedTarget)) dropping(false); });
+$('composer').addEventListener('drop', e=>{ dropping(false);
+  if(e.target.closest('#inDrop')) return;            // (la tuile l'ajoute elle-même)
   const files=[...e.dataTransfer.files]; if(!files.length) return; e.preventDefault(); addInputFiles(files); });
 (function foldGesture(){                           // glissement vers le bas sur la poignée, ou un toucher
   const grab=$('composerGrab'); let y0=null;

@@ -265,8 +265,12 @@ raccourci `Chambre noire.command` entre alors dans l'interface déjà lancée pa
 L'interface a deux onglets aux icônes en pixels, dans la barre du bas : **Labo** (en haut, la pile des images à trier et
 la génération en cours, la file d'attente dans une feuille ; en bas, le champ de création, replié quand la pile a des
 images : texte → image, édition avec des images d'entrée, ou dessin guidé sur une image) et **Tirages** (les images
-gardées) ; elle s'ouvre sur le Labo. Sur un grand écran, le Labo est une colonne centrée et les Tirages prennent toute
-la largeur. Sur un écran tactile, glisser le doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le
+gardées) ; elle s'ouvre sur le Labo. Sur une tablette en hauteur (de 700 à 1023 px de large), le Labo est une seule
+colonne élargie (environ 760 px). À partir de 1024 px (PC, tablette en largeur), il passe en deux colonnes : à gauche,
+la pile et la génération en cours, l'image de la carte du dessus à la hauteur de l'écran ; à droite, le champ de
+création, toujours déplié. Les Tirages prennent toute la largeur. La disposition suit la largeur de la fenêtre, pas
+l'appareil : une fenêtre redimensionnée passe de l'une à l'autre sans recharger ni perdre la saisie. Sur un écran
+tactile, glisser le doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le
 champ de création déplié, sur la carte en cours et sur la pile, dont les cartes se balaient). Elle s'adapte au téléphone
 comme à l'ordinateur, toujours sombre, même quand le système est en mode clair :
 lumière inactinique de chambre noire (noir chaud, halo rouge de la lampe, grain léger, textes couleur papier, accent
@@ -380,14 +384,17 @@ Sans image d'entrée, la génération part du texte : écrire la description, aj
 **édition** (voir plus bas). L'exemple affiché dans le champ vide suit la saisie : décrire l'image sans image
 d'entrée, dire quoi changer avec des images.
 
-Le champ de création est en bas du Labo. Quand la pile a des images ou qu'une génération est en cours, il est replié
+Le champ de création est en bas du Labo (à droite à partir de 1024 px de large, où il reste toujours déplié : ce qui
+suit vaut en dessous). Quand la pile a des images ou qu'une génération est en cours, il est replié
 en une ligne « Décrire une image… » (avec le nombre d'images d'entrée), tenue au-dessus de la barre d'onglets, sans
 jamais cacher ✓ et ✕ ; un toucher la déplie, et une image glissée dessus (sur ordinateur) la déplie et rejoint les
 images d'entrée. Il se déplie de lui-même quand il n'y a plus rien à trier ni en cours ; tant qu'on n'y a pas touché,
 il se replie de lui-même dès que le Labo a de nouveau quelque chose (une carte revenue par « Annuler », une image d'un
 autre appareil). Une fois touché, il ne se replie qu'après **Révéler**, en glissant sa poignée vers le bas (ou en la
 touchant) ou en touchant la pile (la visionneuse s'ouvre aussi si l'on a touché l'image) ; replier ne perd rien de la
-saisie. Pendant le dessin, il prend toute la hauteur du Labo et la pile s'efface.
+saisie. Pendant le dessin, il prend toute la hauteur du Labo et la pile s'efface (à partir de 1024 px, il garde sa
+colonne et la pile reste à gauche). À partir de 1024 px, une ou plusieurs images déposées n'importe où sur la colonne
+du champ rejoignent les images d'entrée ; le champ est encadré pendant le survol.
 
 Pour obtenir plusieurs propositions du même prompt, choisir 2, 3 ou 4 **Images** dans les Réglages (la case Images de
 la grille le rappelle sous le texte ; le choix est retenu). Une seule demande lance alors un **lot de variantes** : une

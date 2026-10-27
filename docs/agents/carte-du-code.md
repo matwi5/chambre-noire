@@ -163,7 +163,8 @@ dernier bloc, après le HTML.
   `#mask_mode`, interrupteur Campagne `#campSwitch`, champ unique `#prompt`, grille des réglages `#setGrid` (une case
   `data-set` par réglage, qui ouvre `#setSheet`), Prompts `#promptsBtn`, bouton « Révéler » `#go` (`#goLabel`,
   estimation `#goEta`) ; classe `drawing` quand le dessin est actif : le champ prend toute la hauteur, la pile
-  s'efface), `#pane-tirages` (Tirages, grille `#histGrid`) ; barre d'onglets `#tabbar` (icônes en pixels ;
+  s'efface, sauf à partir de 1024 px ; classe `dropping` pendant le survol d'un fichier), `#pane-tirages` (Tirages,
+  grille `#histGrid`) ; barre d'onglets `#tabbar` (icônes en pixels ;
   onglet Labo : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vSort` : Garder et Jeter une image de
   la pile) ; bandeau Annuler `#undoBar` ; images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`,
   `#engineSheet` (feuille de la lampe : état `#engineFacts`, « Ouvrir depuis le téléphone » `#phone` sur le Mac
@@ -186,12 +187,16 @@ dernier bloc, après le HTML.
     version servie comprise : `fmtVersion`, `staleServer`) ; sur un 401 (code d'accès redemandé), `reauth` recharge
     une fois la page sur `/?reauth`, la page du code (`reauthing`, et l'adresse empêchent une boucle ; `dropReauth`
     retire `?reauth` par `history.replaceState` au premier état lu, pour qu'un 401 plus tard recharge de nouveau).
-  - « champ de création replié ou déplié » : `setComposer`, `openComposer`, `foldComposer`, `followLabIdle` (appelé
-    par `renderRunCard` : déplié d'office quand le Labo n'a plus rien à trier ni en cours ; replié quand il a de
+  - « champ de création replié ou déplié » : la règle du téléphone ci-dessous tient l'état voulu (`composerOpen`) ;
+    `applyComposer` le montre, sauf à partir de 1024 px (`WIDE`, deux colonnes) où le champ reste toujours déplié, et
+    le reprend quand la fenêtre repasse sous 1024 px. `setComposer`, `openComposer`, `foldComposer`, `followLabIdle`
+    (appelé par `renderRunCard` : déplié d'office quand le Labo n'a plus rien à trier ni en cours ; replié quand il a de
     nouveau quelque chose si on n'y a pas touché depuis, `autoOpen` ; `labIdle`, remis à `null` par `changedSpace`),
     `foldGesture` (poignée), toucher sur la pile (`.pilezone`, image comprise, hors ✓, ✕ et autres boutons), dépôt
-    d'une image sur le champ replié (`dragover`, `drop`) ; replié aussi après « Révéler » ; `showLabo('composer')` le
-    déplie. Hauteur de l'image de pile `--pimg-h` : ✓ et ✕ restent au-dessus de la ligne repliée.
+    d'une image sur le champ, replié compris (`dragover`, `drop` ; surbrillance `dropping`, dessinée à partir de
+    1024 px, où le champ est toute la colonne de droite) ; replié aussi après « Révéler » ; `showLabo('composer')` le
+    déplie. Hauteur de l'image de pile `--pimg-h` : ✓ et ✕ restent au-dessus de la ligne repliée ; à partir de
+    1024 px, la hauteur de la colonne de gauche (`--col-h`), section CSS « grand écran ».
   - « images », « dessin » : `toEntry`, `addInputFiles` (choix, dépôt et collage, écouteur `paste` du Labo),
     `refuseWhileDrawing` (ajout refusé pendant le dessin, saisie affichée ou mise de côté), `noteInput` (saisie visée
     par un ajout, notée avant toute attente), `renderInputs` (images d'entrée de la saisie, `inputImages`, puis

@@ -299,14 +299,15 @@ test('une seconde génération de la page passe sur la carte en cours quand elle
   page.assertNoErrors();
 });
 
-test('grand écran : le Labo est une colonne centrée, les Tirages prennent la largeur', async () => {
+// (depuis le Labo en deux colonnes à partir de 1024 px : sa largeur est bornée, plus la colonne de 640 px du téléphone)
+test('grand écran : le Labo est centré et de largeur bornée, les Tirages prennent la largeur', async () => {
   await page.send('Emulation.setDeviceMetricsOverride', { ...PHONE, width: 1280, mobile: false });
   // largeur de la vue sans la barre de défilement : clientWidth
   const column = () => page.eval(`(() => { const r = document.querySelector('main').getBoundingClientRect();
     return [r.left, r.width, document.documentElement.clientWidth - r.right]; })()`);
   await page.tab('labo');
   const [left, width, right] = await column();
-  assert.ok(width <= 640, `Labo : colonne de ${width} px`);
+  assert.ok(width > 640 && width <= 1480, `Labo : largeur de ${width} px`);
   assert.ok(Math.abs(left - right) < 1, `Labo : centré (${left} / ${right})`);
   await page.tab('tirages');
   assert.ok((await column())[1] > 640, 'Tirages : toute la largeur');
