@@ -1504,8 +1504,12 @@ function beforeFile(it){ const ins=it.inputs || [];
   if(it.mode==='edit' && ins.length===1) return ins[0];
   if(it.mode==='mask' && ins.includes('init.png')) return 'init.png';
   return null; }
-// bouton montré : image comparable de l'espace public
-const beforeShown = it => !!it && !it.private && !!beforeFile(it);
+// bouton montré : image comparable, publique ou privée (son entrée par la route privée, inputUrl : une <img> de la
+// page, que forgetPrivateImages vide à la sortie) ; masqué sur une image privée dès l'appui sur « Sortir »
+// (leavingPrivate), l'image d'entrée privée n'étant plus demandée (décision du porteur, groupe B du 27/10/2026)
+const beforeShown = it => !!it && !(it.private && leavingPrivate) && !!beforeFile(it);
+// cadres revisés sur leur image (« Sortir » demandé, ou refusé)
+const reaimBefore = () => document.querySelectorAll('.bfr').forEach(fr=>{ if(fr.of) aimBefore(fr, fr.it, fr.of); });
 const BEFORE_LOOK='a';                             // visuel du bouton (CSS .bbtn[data-look]) : a, b ou c
 const BEFORE_KNOBS = '<span class="btag" aria-hidden="true">Avant</span>'
   + `<button class="bbtn" type="button" data-look="${BEFORE_LOOK}" aria-label="Maintenir pour voir l'image d'entrée">`
@@ -2718,6 +2722,7 @@ let leavingPrivate=false;
 function exiting(){ return inPrivate() && leavingPrivate; }   // dans l'espace, « Sortir » en attente du Mac
 async function privLock(){ if(leavingPrivate) return;   // second appui pendant l'attente : rien de plus
   erasePrivate=true; leavingPrivate=true;
+  reaimBefore();                                   // bouton Avant d'une image privée masqué, appui relâché
   // Jeter privé en attente : abandonné dès l'appui, pas à la réponse du Mac (son bandeau pourrait finir entre-temps) ;
   // l'image reste dans la pile privée, même si la sortie échoue (le doute garde l'image, décision du 24/10/2026).
   // Avant abortPrivateLoads : la pile redessinée par l'abandon n'a plus de chargement privé qui survive à la sortie
@@ -2730,6 +2735,7 @@ async function privLock(){ if(leavingPrivate) return;   // second appui pendant 
   // page fermée pendant l'attente (pagehide) : déjà sortie et effacée, rien n'est redessiné ni annoncé
   if(!inPrivate()){ if(ok) liftRelock(); return; }
   if(!ok){ erasePrivate=false; pileShown=''; histShown=''; reveal.pv=0; renderPile(); loadPile(); renderGallery();
+    reaimBefore();                                 // (bouton Avant de la visionneuse ; la pile, redessinée, a le sien)
     // images de la pile et aperçu redemandés, pile relue (une lecture arrivée pendant la sortie n'a pas été dessinée ;
     // la visionneuse, elle, attend l'image suivante)
     return toast('Sortie impossible : '+(r ? 'erreur '+r.status : 'Mac injoignable'), 'err'); }

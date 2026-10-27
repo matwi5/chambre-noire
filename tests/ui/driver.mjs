@@ -529,6 +529,11 @@ async function connect(wsUrl) {
       await page.eval(`openViewer(${index}, histItems)`);
       await page.waitFor(`$('viewer').classList.contains('on') && $('vImg').complete`, { what: 'visionneuse' });
     },
+    // espace privé verrouillé sur le Mac (son état le dit fermé), par exemple après le reverrouillage d'un « Retour »
+    lockedOnMac() {
+      return page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.private.unlocked)`,
+        { what: 'espace reverrouillé sur le Mac' });
+    },
     // visionneuse fermée, fondu de fermeture fini (elle ne recouvre plus le Labo)
     async closeViewer() {
       await page.eval(`closeViewer()`);

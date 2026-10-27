@@ -4,7 +4,7 @@
 //   venv/bin/python tests/check.py --no-bench --ui tests/ui/avant.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, PC, PHONE } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, PC, PHONE } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -258,4 +258,170 @@ test('étiquette « Avant » seulement avec l\'image d\'entrée à l\'écran, pa
   assert.equal((await beforeState('#pile .bfr')).tag, true, 'puis l\'étiquette');
   await page.release();
   page.assertNoErrors();
+});
+
+// ------------------------------------------------------------ espace privé (ticket 1219940998500742)
+const PCODE = 'code-avant-prive';
+// images de la page dont l'adresse (attribut, ou image peinte) est privée, et adresses privées chargées en avance
+const PRIVATE_LEFT = `({ imgs: [...document.images].filter(i => secretUrl(i.getAttribute('src')) || secretUrl(i.want)
+  || i.currentSrc.includes('/api/private/')).map(i => i.id || i.className || i.parentElement.className),
+  ready: [...ready.keys()].filter(secretUrl), loads: secretLoads.size })`;
+const NOTHING_LEFT = { imgs: [], ready: [], loads: 0 };
+// dans l'espace privé, une édition privée à une photo dans la pile, ouverte dans la visionneuse, son image d'entrée
+// chargée en avance, Avant tenu ; renvoie les marqueurs de l'image privée (identifiant, prompt, routes privées)
+async function privateBefore(word) {
+  await page.freshLabo(bench);
+  await page.enterPrivate(PCODE);
+  assert.equal(await ask(`mode: 'edit', prompt: '${word}', private: true, ref_images: [${plain('#6030a0')}]`), 202);
+  await bench.idle();
+  await page.eval(`loadPile()`);
+  await page.waitFor(`pileView()[0]?.prompt === '${word}'`, { what: 'image privée dans la pile' });
+  await page.imageShown('#pile [data-k="0"] .pimg img', 'carte du dessus privée');
+  await page.waitFor(`!document.querySelector('#pile .bfr').hidden`, { what: 'bouton Avant de la carte privée' });
+  await openOn(word);
+  await page.waitFor(`ready.get(inputUrl(vList[vIndex], 'ref_1.png'))?.im !== undefined`,
+    { what: 'image d\'entrée privée chargée en avance' });
+  await page.hold(BUTTON);
+  await beforeOn('#vBefore', 'image avant privée');
+  const id = await page.eval(`vList[vIndex].id`);
+  return [id, word, '/api/private/', 'prive_'];
+}
+
+test('espace privé : Avant sur une image privée comparable, par la route privée, sans rien écrire', async () => {
+  await page.freshLabo(bench);
+  await page.enterPrivate(PCODE);
+  assert.equal(await ask(`mode: 'edit', prompt: 'zh privee', private: true, ref_images: [${plain('#6030a0')}]`), 202);
+  await bench.idle();
+  await page.eval(`loadPile()`);
+  await page.waitFor(`pileView()[0]?.prompt === 'zh privee'`, { what: 'image privée dans la pile' });
+  await page.imageShown('#pile [data-k="0"] .pimg img', 'carte du dessus privée');
+  await page.waitFor(`!document.querySelector('#pile .bfr').hidden`, { what: 'bouton Avant de la carte privée' });
+  const id = await page.eval(`pileView()[0].id`), disk = bench.disk();
+  const PRIVATE_INPUT = new RegExp(`/api/private/input\\?id=${id}&file=ref_1\\.png$`);
+  await page.hold('#pile [data-k="0"] .bbtn');
+  await beforeOn('#pile .bfr', 'image avant privée sur la carte');
+  assert.match((await beforeState('#pile .bfr')).src, PRIVATE_INPUT, 'carte : route privée des images d\'entrée');
+  await page.release();
+  await openOn('zh privee');
+  await page.hold(BUTTON);
+  await beforeOn('#vBefore', 'image avant privée dans la visionneuse');
+  assert.match((await beforeState('#vBefore')).src, PRIVATE_INPUT, 'visionneuse : route privée');
+  await page.release();
+  await page.closeViewer();
+  await bench.idle();
+  assert.deepEqual(disk.written(), [], 'rien d\'écrit sur le disque du Mac');
+  assert.equal(await page.eval(`JSON.stringify({ ...localStorage, ...sessionStorage })
+    .includes(${JSON.stringify(id)})`), false, 'rien dans le stockage du navigateur');
+  await page.privateIdle();
+  await page.eval(`privLock()`);
+  await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+  page.assertNoErrors();
+});
+
+test('« Sortir » pendant l\'appui : bouton masqué dès l\'appui sur « Sortir », plus rien de privé après', async () => {
+  const markers = await privateBefore('zi privee');
+  await page.privateIdle();
+  const lock = await page.holdRequests(['*/api/private/lock'], () => true);   // réponse du Mac retenue
+  await page.eval(`void privLock()`);
+  assert.deepEqual(await page.eval(`({ viewer: $('vBefore').hidden,
+    card: document.querySelector('#pile .bfr')?.hidden, on: !!document.querySelector('.bfr.on') })`),
+  { viewer: true, card: true, on: false }, 'bouton masqué pendant « Sortir »');
+  await lock.release();
+  await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+  await page.release();
+  assert.deepEqual(await page.eval(PRIVATE_LEFT), NOTHING_LEFT, 'images privées restées');
+  assert.deepEqual(await page.leaks(markers), [], 'données privées restées dans la page');
+  page.assertNoErrors();
+});
+
+test('fermeture de la page puis « Retour » pendant l\'appui : plus rien de privé', async () => {
+  const markers = await privateBefore('zj privee');
+  await page.privateIdle();
+  await page.eval(`dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))`);
+  await page.release();
+  assert.deepEqual(await page.eval(PRIVATE_LEFT), NOTHING_LEFT, 'fermeture : images privées restées');
+  assert.deepEqual(await page.leaks(markers), [], 'fermeture : données privées restées');
+  // règle levée : la page est déjà sortie de l'espace à pagehide, plus rien de privé n'est en route
+  await page.eval(`dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))`);
+  await page.lockedOnMac();
+  await page.eval(`refreshStatus()`);
+  assert.deepEqual(await page.eval(PRIVATE_LEFT), NOTHING_LEFT, 'retour : images privées revenues');
+  assert.deepEqual(await page.leaks(markers), [], 'retour : données privées revenues');
+  page.assertNoErrors();
+});
+
+test('« Retour » vers une page de l\'espace privé pendant l\'appui : plus rien de privé', async () => {
+  const markers = await privateBefore('zk privee');
+  await page.privateIdle();
+  await page.eval(`dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))`);
+  await page.release();
+  await page.lockedOnMac();
+  await page.eval(`refreshStatus()`);
+  assert.deepEqual(await page.eval(PRIVATE_LEFT), NOTHING_LEFT, 'images privées restées');
+  assert.deepEqual(await page.leaks(markers), [], 'données privées restées');
+  page.assertNoErrors();
+});
+
+test('image avant privée en chargement pendant « Sortir » : rien n\'arrive après', async () => {
+  await page.freshLabo(bench);
+  await page.enterPrivate(PCODE);
+  // l'image d'entrée privée complète retenue avant le Mac dès sa première demande (sa miniature passe) ; ses
+  // demandes suivies par le réseau du navigateur jusqu'à leur issue (finie, ou abandonnée par la page)
+  const FULL = /\/api\/private\/input\?.*&file=ref_1\.png$/, sent = new Set(), ended = new Set();
+  page.on('Network.requestWillBeSent', p => { if (FULL.test(p.request.url)) sent.add(p.requestId); });
+  page.on('Network.loadingFinished', p => ended.add(p.requestId));
+  page.on('Network.loadingFailed', p => ended.add(p.requestId));
+  await page.send('Network.enable');
+  const held = await page.holdRequests(['*/api/private/input*&file=ref_1.png'], () => true);
+  assert.equal(await ask(`mode: 'edit', prompt: 'zl privee', private: true, ref_images: [${plain('#6030a0')}]`), 202);
+  await bench.idle();
+  await page.eval(`loadPile()`);
+  await page.waitFor(`pileView()[0]?.prompt === 'zl privee'`, { what: 'image privée dans la pile' });
+  await openOn('zl privee');
+  const markers = [await page.eval(`vList[vIndex].id`), 'zl privee', '/api/private/', 'prive_'];
+  await page.hold(BUTTON);
+  await beforeOn('#vBefore', 'miniature privée à l\'appui');
+  assert.match((await beforeState('#vBefore')).src, /&thumb=1&t=\d+$/, 'la miniature, l\'image complète retenue');
+  await page.eval(`privLock()`);                  // (un chargement privé reste en route exprès : pas de privateIdle)
+  await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+  await held.release();                             // la réponse de l'image complète arrive après la sortie
+  // chaque demande de l'image complète arrivée à son issue, puis le temps de la décoder et de la poser
+  const waiting = () => [...sent].filter(id => !ended.has(id));
+  await waitUntil(() => sent.size > 0 && !waiting().length, { what: 'image complète arrivée' });
+  await page.send('Network.disable');
+  await page.eval(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+  await page.release();
+  assert.deepEqual(await page.eval(PRIVATE_LEFT), NOTHING_LEFT, 'image privée arrivée après la sortie');
+  assert.deepEqual(await page.leaks(markers), [], 'données privées restées');
+  page.assertNoErrors();
+});
+
+test('« Sortir » refusé par le Mac : le bouton Avant revient sur l\'image privée', async () => {
+  await privateBefore('zm privee');
+  await page.release();
+  await page.privateIdle();
+  const lock = await page.holdRequests(['*/api/private/lock'], () => true);   // réponse du Mac retenue
+  await page.eval(`void privLock()`);
+  assert.equal(await page.eval(`$('vBefore').hidden`), true, 'masqué pendant « Sortir »');
+  // même un appui qui arriverait au cadre ne demande pas l'image d'entrée privée (preload l'ajouterait à secretLoads)
+  assert.deepEqual(await page.eval(`(holdBefore($('vBefore')), { on: $('vBefore').classList.contains('on'),
+    loads: secretLoads.size, want: $('vBeforeImg').want ?? null })`), { on: false, loads: 0, want: null },
+  'image d\'entrée privée demandée pendant « Sortir »');
+  await waitUntil(() => lock.held.length > 0, { what: 'verrouillage demandé' });
+  for (const { requestId } of lock.take()) await page.send('Fetch.fulfillRequest', { requestId, responseCode: 500,
+    responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: btoa('{}') });
+  await lock.release();
+  await page.waitFor(`!leavingPrivate && inPrivate()`, { what: 'sortie refusée, toujours dans l\'espace' });
+  await page.waitFor(`!$('vBefore').hidden && !document.querySelector('#pile .bfr').hidden`,
+    { what: 'bouton Avant revenu (visionneuse et carte)' });
+  await page.hold(BUTTON);
+  await beforeOn('#vBefore', 'image avant privée de nouveau');
+  await page.release();
+  await page.closeViewer();
+  await page.privateIdle();
+  await page.eval(`privLock()`);
+  await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+  // (le refus voulu du Mac est la seule erreur de la console)
+  assert.deepEqual(page.errors.filter(e => !/status of 500/.test(e)), []);
+  page.errors.length = 0;
 });

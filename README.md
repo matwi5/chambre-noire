@@ -524,8 +524,8 @@ une annotation (seule la photo peinte en rouge est gardée). La photo est étir�
 diffèrent que d'un arrondi (2 % au plus, comme au format « Image »), sinon montrée entière et centrée (une sortie en
 1:1 depuis une photo en 16:9). Dans la visionneuse, elle suit le zoom : molette et glisser sur ordinateur, ou pincer
 avec deux autres doigts pendant qu'un doigt tient Avant. Elle est chargée en avance dès que l'image est affichée ;
-sinon sa miniature vient d'abord. Le bouton de la carte ne trie rien et n'ouvre pas la visionneuse. Il n'est pas
-encore proposé dans l'espace privé.
+sinon sa miniature vient d'abord. Le bouton de la carte ne trie rien et n'ouvre pas la visionneuse. Il marche aussi
+dans l'espace privé (voir « Espace privé »).
 
 ### Prompts enregistrés
 
@@ -613,6 +613,11 @@ images sont enregistrées. Pour la confidentialité, passez par l'espace privé.
   Tirages.
 - Les **Tirages** de l'espace privé ne montrent que les images privées, avec la même visionneuse : télécharger,
   partager, copier, images d'entrée, Éditer, Dessiner, Reprendre, Supprimer. En sortant, elles quittent l'écran.
+- Le bouton **Avant** marche sur les images privées comparables, comme dans l'espace public : la photo d'origine est
+  lue déchiffrée par la session privée et gardée seulement en mémoire de la page, jamais écrite sur le disque, dans
+  les journaux ni dans le navigateur. Il disparaît dès l'appui sur « Sortir » (il revient si la sortie échoue), et la
+  photo quitte la page avec les autres images privées, chargées en avance comprises, à la sortie, à la fermeture de
+  la page et au retour par « Retour ».
 - **Chaque espace a sa propre saisie** : texte, images d'entrée, dessin (actif ou non, masque ou annotation) et son
   tracé. En
   entrant dans l'espace privé, la saisie publique est mise de côté et la saisie privée revient (vide

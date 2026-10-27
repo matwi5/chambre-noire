@@ -228,7 +228,9 @@ dernier bloc, après le HTML.
     jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
     de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
   - « bouton Avant » : `beforeFile` (règle de l'image comparable, seule source : `edit` à une image d'entrée, `mask` →
-    `init.png`), `beforeShown` (bouton montré), `aimBefore` (cadre visé sur une image : visionneuse dans `openViewer`,
+    `init.png`), `beforeShown` (bouton montré, image privée comprise, masqué sur une image privée pendant « Sortir » :
+    `leavingPrivate`), `reaimBefore` (cadres revisés : « Sortir » demandé ou refusé, dans `privLock`), `aimBefore`
+    (cadre visé sur une image : visionneuse dans `openViewer`,
     carte du dessus dans `renderPile`, son entrée chargée en avance), `placeBefore` (cadre posé sur le contenu affiché
     de l'image produite, étirée ou entière selon `BEFORE_STRETCH`), `holdBefore` et `dropBefore` (appui et relâché,
     `beforeHeld`, `blur` de la fenêtre), `armBefore` (bouton `BEFORE_KNOBS`, visuel `BEFORE_LOOK`, Pointer Events),
