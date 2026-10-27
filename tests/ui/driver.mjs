@@ -5,6 +5,10 @@
 //   const chrome = await launchChrome();         // profil temporaire, supprimé par chrome.close()
 //   const page = await chrome.phonePage();       // vue du téléphone du porteur : 367×760, densité 2,5, tactile ;
 //                                                // connectée au banc direct en cours (cookie du code d'accès)
+//   const pc = await chrome.newPage(PC);         // autre vue, connectée de même : PC (1280×800, densité 1, souris,
+//                                                // sans tactile), TABLET (tablette Android 800×1280, tactile),
+//                                                // TABLET_WIDE (la même en largeur, 1280×800), PHONE
+//   await page.setView(TABLET)                   // vue changée sans recharger (fenêtre redimensionnée)
 //   await page.goto(bench.url + '/'); await page.ready();   // ready : interface ouverte, moteur prêt (lampe)
 //   …; page.assertNoErrors(); await chrome.close(); await bench.stop();
 //                                                // assertNoErrors : erreurs de console du seul test en cours
@@ -22,6 +26,11 @@
 //   await page.swipe('#pile .pimg', 200, 0, { mouse: true, hold: true })   // à la souris ; hold : sans relâcher ;
 //                                                // pause : ms immobile avant de relâcher (geste lent)
 //   await page.release(300)                      // relâche le geste tenu (après 300 ms immobile : geste lent)
+//   await page.hold('#btn', { mouse: true })     // appui maintenu, immobile, au centre d'un élément (doigt par
+//                                                // défaut) ; page.release() le relâche
+//   await page.press('z', { modifiers: ['ctrl'] })   // touche appuyée puis relâchée (Ctrl, ⌘ : 'meta', 'shift', 'alt')
+//   await page.keyDown(' '); await page.keyDown(' ', { repeat: true }); await page.keyUp(' ')
+//                                                // Espace maintenue, répétée par le système (event.repeat), relâchée
 //   await page.typePrompt('texte')               // texte tapé dans le champ du Labo (événement input)
 //   await page.generate('texte')                 // tapé dans le Labo puis « Révéler » : demande acceptée
 //   await page.overflowing()                     // éléments visibles qui dépassent de la largeur de la vue
@@ -65,7 +74,11 @@ const ROOT = path.resolve(HERE, '..', '..');
 const VENV_PY = process.platform === 'win32' ? path.join('Scripts', 'python.exe') : path.join('bin', 'python');
 const CHROMES = { darwin: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   win32: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', linux: 'google-chrome' };
+// vues (paramètres de Emulation.setDeviceMetricsOverride) : mobile vaut aussi tactile (applyView), sinon souris
 export const PHONE = { width: 367, height: 760, deviceScaleFactor: 2.5, mobile: true };
+export const PC = { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false };
+export const TABLET = { width: 800, height: 1280, deviceScaleFactor: 2, mobile: true };        // tablette Android
+export const TABLET_WIDE = { width: 1280, height: 800, deviceScaleFactor: 2, mobile: true };   // la même en largeur
 export const WAIT = Number(process.env.QWEN_UI_WAIT) || 15000;
 export const EVAL_TIMEOUT = 30000;
 export const START_TIMEOUT = 60000;
@@ -241,12 +254,13 @@ export async function launchChrome() {
   const pages = [];
   return {
     pid: proc.pid,
-    async phonePage() {
+    phonePage() { return this.newPage(PHONE); },
+    // page dans la vue view (PHONE, PC, TABLET, TABLET_WIDE), connectée au banc direct comme phonePage
+    async newPage(view) {
       const target = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
       const page = await connect(target.webSocketDebuggerUrl);
       pages.push(page);
-      await page.send('Emulation.setDeviceMetricsOverride', PHONE);
-      await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+      await applyView(page, view);
       if (directBench) await setAccessCookie(page, directBench);
       return page;
     },
@@ -259,6 +273,40 @@ export async function launchChrome() {
       cleanup();
     },
   };
+}
+
+// vue d'une page : taille, densité, et tactile pour une vue mobile (pointeur grossier, sans survol), souris sinon ;
+// sans rechargement (la page voit un redimensionnement). N'emploie que page.send : planche.mjs l'applique aussi à la
+// page de la sonde d'un ancien commit
+export async function applyView(page, view) {
+  await page.send('Emulation.setDeviceMetricsOverride', view);
+  await page.send('Emulation.setTouchEmulationEnabled', view.mobile ? { enabled: true, maxTouchPoints: 5 }
+    : { enabled: false });
+}
+
+// touches du clavier (Input.dispatchKeyEvent) : key de l'événement → code et touche virtuelle de Windows ; un
+// caractère seul (lettre, chiffre) est déduit (keyInfo)
+const KEYS = { ' ': ['Space', 32], Enter: ['Enter', 13], Escape: ['Escape', 27], Tab: ['Tab', 9],
+  Backspace: ['Backspace', 8], ArrowLeft: ['ArrowLeft', 37], ArrowUp: ['ArrowUp', 38], ArrowRight: ['ArrowRight', 39],
+  ArrowDown: ['ArrowDown', 40], Control: ['ControlLeft', 17], Shift: ['ShiftLeft', 16], Alt: ['AltLeft', 18],
+  Meta: ['MetaLeft', 91] };
+// modificateurs : nom → bit de Input.dispatchKeyEvent, et la touche qui le porte
+const MODIFIERS = { alt: [1, 'Alt'], ctrl: [2, 'Control'], meta: [4, 'Meta'], shift: [8, 'Shift'] };
+function keyInfo(key) {
+  if (KEYS[key]) return { code: KEYS[key][0], vk: KEYS[key][1] };
+  if (/^[a-z0-9]$/i.test(key)) {
+    const up = key.toUpperCase();
+    return { code: (/\d/.test(key) ? 'Digit' : 'Key') + up, vk: up.charCodeAt(0) };
+  }
+  throw new Error(`touche inconnue du pilote : ${key}`);
+}
+// événement d'une touche : type keyDown (texte d'un caractère seul, ou d'Entrée, s'il n'y a ni Ctrl ni ⌘) ou keyUp
+function keyEvent(type, key, modifiers, repeat) {
+  const { code, vk } = keyInfo(key);
+  const mask = modifiers.reduce((m, name) => m | MODIFIERS[name][0], 0);
+  const text = type === 'keyDown' && !(mask & 6) ? (key === 'Enter' ? '\r' : key.length === 1 ? key : '') : '';
+  return { type: text ? 'keyDown' : type === 'keyDown' ? 'rawKeyDown' : 'keyUp', key, code, modifiers: mask,
+    windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, autoRepeat: repeat, text, unmodifiedText: text };
 }
 
 // cookie du code d'accès d'un banc posé dans le navigateur de la page (même cookie que la saisie du code)
@@ -295,6 +343,26 @@ async function connect(wsUrl) {
   await Promise.all([send('Runtime.enable'), send('Log.enable'), send('Page.enable')]);
 
   let held = null;                                   // fin du balayage tenu (page.release)
+  // doigt ou souris posé au centre de l'élément selector (amené à l'écran), après la fin d'un geste tenu d'avant ;
+  // rend l'entrée du geste (send(type, k) : au point de départ décalé de k fois dx, dy) ; held le relève au bout
+  async function press(selector, dx, dy, mouse) {
+    await page.release();
+    const c = await page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return null; el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    if (!c) throw new Error(`élément absent : ${selector}`);
+    const x = k => c.x + dx * k, y = k => c.y + dy * k;
+    const input = mouse
+      ? { down: 'mousePressed', move: 'mouseMoved', up: 'mouseReleased',
+        send: (type, k) => page.send('Input.dispatchMouseEvent', { type, x: x(k), y: y(k), button: 'left',
+          buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 }) }
+      : { down: 'touchStart', move: 'touchMove', up: 'touchEnd',
+        send: (type, k) => page.send('Input.dispatchTouchEvent', { type,
+          touchPoints: type === 'touchEnd' ? [] : [{ x: x(k), y: y(k), id: 1 }] }) };
+    await input.send(input.down, 0);
+    held = () => input.send(input.up, 1);
+    return input;
+  }
   let holding = null, holdHook = false;              // requêtes retenues en cours (page.holdRequests), écouteur posé
   const page = {
     send, on, errors,
@@ -360,6 +428,8 @@ async function connect(wsUrl) {
       await page.waitFor(`!__privInflight && pileRead && !secretLoads.size && ![...document.querySelectorAll('img')]
         .some(i => secretUrl(i.getAttribute('src')) && !i.complete)`, { what: 'espace privé au repos' });
     },
+    // autre vue (PHONE, PC, TABLET, TABLET_WIDE) sans recharger la page, comme une fenêtre redimensionnée
+    setView(view) { return applyView(page, view); },
     async goto(url) {
       const loaded = new Promise(r => on('Page.loadEventFired', r));
       await send('Page.navigate', { url });
@@ -380,23 +450,26 @@ async function connect(wsUrl) {
     // reste immobile pause ms avant d'être relevé (un geste lent) ; hold : il reste posé à la fin (page.release() le
     // relève). Un geste tenu d'avant est d'abord relevé
     async swipe(selector, dx, dy = 0, { mouse = false, hold = false, pause = 0 } = {}) {
-      await page.release();
-      const c = await page.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) return null; el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
-        return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
-      if (!c) throw new Error(`élément absent : ${selector}`);
-      const x = k => c.x + dx * k, y = k => c.y + dy * k;
-      const input = mouse
-        ? { down: 'mousePressed', move: 'mouseMoved', up: 'mouseReleased',
-          send: (type, k) => page.send('Input.dispatchMouseEvent', { type, x: x(k), y: y(k), button: 'left',
-            buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 }) }
-        : { down: 'touchStart', move: 'touchMove', up: 'touchEnd',
-          send: (type, k) => page.send('Input.dispatchTouchEvent', { type,
-            touchPoints: type === 'touchEnd' ? [] : [{ x: x(k), y: y(k), id: 1 }] }) };
-      await input.send(input.down, 0);
+      const input = await press(selector, dx, dy, mouse);
       for (const k of [0.25, 0.5, 0.75, 1]) await input.send(input.move, k);
-      held = () => input.send(input.up, 1);
       if (!hold) await page.release(pause);
+    },
+    // doigt (ou souris, mouse) posé au centre de l'élément selector et laissé immobile : page.release() le relève
+    async hold(selector, { mouse = false } = {}) { await press(selector, 0, 0, mouse); },
+    // touche du clavier enfoncée (key : valeur de KeyboardEvent.key, ' ' pour Espace), pour la page qui a le focus ;
+    // modifiers : ['ctrl', 'meta', 'shift', 'alt'] tenus pendant l'événement (sans leur propre touche) ; repeat :
+    // répétition du système (event.repeat) d'une touche maintenue
+    keyDown(key, { modifiers = [], repeat = false } = {}) {
+      return send('Input.dispatchKeyEvent', keyEvent('keyDown', key, modifiers, repeat));
+    },
+    keyUp(key, { modifiers = [] } = {}) { return send('Input.dispatchKeyEvent', keyEvent('keyUp', key, modifiers)); },
+    // touche appuyée puis relâchée, comme au clavier : les touches des modificateurs enfoncées d'abord, relâchées après
+    async press(key, { modifiers = [] } = {}) {
+      const held = [];
+      for (const m of modifiers) { held.push(m); await page.keyDown(MODIFIERS[m][1], { modifiers: held }); }
+      await page.keyDown(key, { modifiers });
+      await page.keyUp(key, { modifiers });
+      for (const m of [...modifiers].reverse()) { held.pop(); await page.keyUp(MODIFIERS[m][1], { modifiers: held }); }
     },
     // relève le doigt ou la souris d'un balayage tenu (swipe … { hold: true }), après pause ms immobile (geste lent)
     async release(pause = 0) { const up = held; held = null; if (!up) return;

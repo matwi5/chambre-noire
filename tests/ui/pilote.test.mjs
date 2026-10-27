@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { startBench, launchChrome, waitUntil } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, PHONE, PC, TABLET, TABLET_WIDE } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -78,6 +78,85 @@ test('chrome.phonePage : connectée au banc ; sans le cookie, le Mac lui-même r
     assert.deepEqual((await bench.api('/api/status')).queue, [], 'bench.api : le Mac, avec le cookie');
   } finally {
     await alone.close();
+  }
+});
+
+// ce que la page voit de sa vue : largeur, pointeur principal, survol et tactile
+const SEEN = `({ width: innerWidth, height: innerHeight, coarse: matchMedia('(pointer: coarse)').matches,
+  hover: matchMedia('(hover: hover)').matches, touch: navigator.maxTouchPoints > 0 })`;
+
+test('chrome.newPage : vues PC (souris) et tablette (tactile, en hauteur et en largeur) ; page.setView', async () => {
+  const seen = {};
+  for (const [name, view] of Object.entries({ PHONE, PC, TABLET, TABLET_WIDE })) {
+    const p = await chrome.newPage(view);
+    try {
+      await p.goto(bench.url + '/');
+      await p.ready();
+      seen[name] = await p.eval(SEEN);
+      p.assertNoErrors();
+    } finally { p.close(); }
+  }
+  assert.deepEqual(seen, {
+    PHONE: { width: 367, height: 760, coarse: true, hover: false, touch: true },
+    PC: { width: 1280, height: 800, coarse: false, hover: true, touch: false },
+    TABLET: { width: 800, height: 1280, coarse: true, hover: false, touch: true },
+    TABLET_WIDE: { width: 1280, height: 800, coarse: true, hover: false, touch: true },
+  });
+  const p = await chrome.newPage(PC);
+  try {
+    await p.goto(bench.url + '/');
+    await p.ready();
+    await p.setView(TABLET);
+    assert.deepEqual(await p.eval(SEEN), seen.TABLET, 'PC devenue tablette, sans rechargement');
+    await p.setView(PC);
+    assert.deepEqual(await p.eval(SEEN), seen.PC, 'puis PC de nouveau');
+  } finally { p.close(); }
+});
+
+test('page.keyDown, keyUp, press : touche maintenue, répétée, relâchée, avec modificateurs', async () => {
+  const p = await chrome.newPage(PC);
+  try {
+    await p.goto(bench.url + '/');
+    await p.ready();
+    await p.eval(`(() => { window.zpKeys = []; const log = e => zpKeys.push([e.type, e.key, e.code, e.repeat,
+      ['ctrlKey', 'metaKey', 'shiftKey', 'altKey'].filter(m => e[m]).join('+')].join(' '));
+      addEventListener('keydown', log); addEventListener('keyup', log); })()`);
+    await p.keyDown(' ');
+    await p.keyDown(' ', { repeat: true });
+    await p.keyDown(' ', { repeat: true });
+    await p.keyUp(' ');
+    await p.press('ArrowLeft');
+    await p.press('z', { modifiers: ['ctrl'] });
+    await p.press('Enter', { modifiers: ['meta'] });
+    await p.press('Escape');
+    assert.deepEqual(await p.eval(`zpKeys`), [
+      'keydown   Space false ', 'keydown   Space true ', 'keydown   Space true ', 'keyup   Space false ',
+      'keydown ArrowLeft ArrowLeft false ', 'keyup ArrowLeft ArrowLeft false ',
+      'keydown Control ControlLeft false ctrlKey', 'keydown z KeyZ false ctrlKey', 'keyup z KeyZ false ctrlKey',
+      'keyup Control ControlLeft false ',
+      'keydown Meta MetaLeft false metaKey', 'keydown Enter Enter false metaKey', 'keyup Enter Enter false metaKey',
+      'keyup Meta MetaLeft false ',
+      'keydown Escape Escape false ', 'keyup Escape Escape false ']);
+    p.assertNoErrors();
+  } finally { p.close(); }
+});
+
+test('page.hold puis page.release : appui maintenu sur un élément, au doigt et à la souris', async () => {
+  for (const [view, mouse, type] of [[TABLET, false, 'touch'], [PC, true, 'mouse']]) {
+    const p = await chrome.newPage(view);
+    try {
+      await p.goto(bench.url + '/');
+      await p.ready();
+      await p.eval(`(() => { const b = document.createElement('button'); b.id = 'zpHold'; b.textContent = 'zp';
+        b.style.cssText = 'position:fixed;left:40px;top:300px;width:90px;height:50px;z-index:50;touch-action:none';
+        window.zpPointer = []; const log = e => zpPointer.push(e.type + ' ' + e.pointerType);
+        b.addEventListener('pointerdown', log); b.addEventListener('pointerup', log); document.body.append(b); })()`);
+      await p.hold('#zpHold', { mouse });
+      assert.deepEqual(await p.eval(`zpPointer`), [`pointerdown ${type}`], 'appui tenu : pas encore relâché');
+      await p.release();
+      assert.deepEqual(await p.eval(`zpPointer`), [`pointerdown ${type}`, `pointerup ${type}`]);
+      p.assertNoErrors();
+    } finally { p.close(); }
   }
 });
 

@@ -489,15 +489,18 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
 
 `tests/bench.py` (banc : `start`, `call`, `generate`, `wait_job`, `wait_idle`, `wait_until`, `capture_push`),
 `tests/fake_sdcli.py` (faux moteur), `tests/test_*.py`, `tests/check.py` (tous les contrôles), `tests/ui/`
-(`driver.mjs`, `serve.py`, tests `*.test.mjs`). Commandes dans `CLAUDE.md`.
+(`driver.mjs`, `serve.py`, tests `*.test.mjs`). Commandes dans `CLAUDE.md`. Vues du pilote : `PHONE` (celle de
+`phonePage`), `PC` (souris), `TABLET` et `TABLET_WIDE` (tactile), ouvertes par `newPage` et changées sans
+rechargement par `setView` (`applyView`) ; clavier par `keyDown`, `keyUp` et `press`, appui maintenu par `hold`.
 
 Recettes visuelles (pas de script jetable) :
 
 - Planche avant/après d'un ticket visuel : `PLANCHE_AVANT=<commit> node tests/ui/probe.mjs --script
-  tests/ui/planche.mjs` dessine en une image les vues de `VIEWS` (Labo, pile, Tirages, visionneuse, espace privé), une
-  rangée par version ; la rangée « avant » est jouée par la sonde de ce commit dans un worktree temporaire (supprimé à
-  la fin). `PLANCHE_SORTIE` choisit le fichier, `PLANCHE_VUES` les vues. Chaque capture attend la fin des transitions
-  (`SETTLED`).
+  tests/ui/planche.mjs` dessine en une image les vues de `VIEWS` (Labo, pile, Tirages, visionneuse, espace privé) aux
+  tailles de `SIZES` (téléphone, tablette en hauteur et en largeur, PC ; la page redimensionnée sans rechargement), une
+  rangée par taille et par version ; la rangée « avant » est jouée par la sonde de ce commit dans un worktree
+  temporaire (supprimé à la fin). `PLANCHE_SORTIE` choisit le fichier, `PLANCHE_VUES` les vues, `PLANCHE_TAILLES` les
+  tailles. Chaque capture attend la fin des transitions (`SETTLED`).
 - PNG d'une icône depuis son SVG : `node tests/ui/probe.mjs --svg tools/ui/logo.svg --size 512 --shot
   /tmp/icone.png`. Piège de Chrome sans écran : sa fenêtre est plus haute que la zone affichée, une capture sans coupe
   sort plus haute que demandé ; la sonde fixe la vue à la taille voulue (densité 1, fond transparent) et coupe la
