@@ -120,6 +120,14 @@ les messages de commit.
     s'affiche, un Jeter suivant valide le précédent. Règle reformulée : « Aucune touche ne supprime un tirage ; au
     clavier, Jeter passe toujours par le bandeau Annuler, comme au doigt ; une touche maintenue ou répétée ne jette
     jamais plus d'une image avant que la suivante soit affichée. » » (remplace la phrase de Q24).
+- **Groupe A** (27/10/2026) : planche finale validée (« Je valide ») ; correctif `page.close` du pilote reclassé
+  antérieur au lot (« Ca me va ») ; groupe « durcissement » des constats antérieurs après les groupes B et C (« le
+  faire apres »).
+- **Groupe B, visuel du bouton Avant** (27/10/2026), réponse par bouton : « Le bouton Avant est un nouveau visuel :
+  une icône et un libellé courts, aux couleurs de la lumière inactinique (le rouge-orangé de l'app). Comment veux-tu
+  valider son apparence ? » → « Planche au retour (Recommandé) » : « La session dessine 2 ou 3 variantes côte à côte
+  sur une planche, intègre celle qu'elle juge la meilleure de façon facile à changer, et tu choisis au retour du
+  groupe. Le groupe n'est pas bloqué. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
