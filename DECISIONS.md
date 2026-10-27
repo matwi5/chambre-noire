@@ -128,6 +128,17 @@ les messages de commit.
   valider son apparence ? » → « Planche au retour (Recommandé) » : « La session dessine 2 ou 3 variantes côte à côte
   sur une planche, intègre celle qu'elle juge la meilleure de façon facile à changer, et tu choisis au retour du
   groupe. Le groupe n'est pas bloqué. »
+- **Groupe B, espace privé** (27/10/2026, réponses par boutons dans la session du groupe) :
+  - « Réserve du cadrage (une image privée déjà décodée n'a pas de drapeau « gone ») : si le test montre qu'une image
+    avant privée peut revenir après « Sortir », la fermeture de la page ou « Retour », comment la corriger ? » →
+    « Marquer tout à l'oubli (Recommandé) » : « Dans forgetPrivateImages, marquer « gone » toute entrée privée de
+    ready (pas seulement celles encore en chargement), avant de la retirer : une image qui l'attendait, même détachée
+    de la page, ne reçoit plus rien. Correctif limité à l'oubli. Si le test ne confirme pas la réserve, rien n'est
+    changé. » Issue : ni les tests ni la revue de sécurité ne confirment la réserve ; l'oubli n'est pas modifié.
+  - « Pendant « Sortir » en attente de la réponse du Mac, que fait le bouton Avant d'une image privée encore affichée
+    (carte du dessus ou visionneuse) ? » → « Masqué (Recommandé) » : « Le bouton disparaît dès l'appui sur « Sortir » ;
+    l'image d'entrée privée n'est plus demandée. S'il y a refus de la sortie, il revient avec le nouveau dessin de la
+    pile ou de la visionneuse. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
