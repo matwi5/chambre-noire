@@ -228,6 +228,11 @@ test('« Reprendre » une image de la pile lancée ici : images de sa demande ga
   await page.waitFor(`inputImages.length === 1`, { what: 'une image dans la saisie' });
   await page.typePrompt('zr5 terminee');
   await page.click('#go');
+  // la carte du dessus charge aussi en avance l'image d'entrée de son bouton Avant, une fois son image affichée :
+  // attendue avant la visionneuse, qui reprend ce chargement au lieu d'en lancer un second
+  await page.waitFor(`pileView()[0]?.prompt === 'zr5 terminee'`,
+    { what: 'image arrivée dans la pile', timeout: 30000 });
+  await page.imageShown('#pile [data-k="0"] .pimg img', 'carte du dessus');
   await page.viewPile('zr5 terminee');
   assert.equal(await resumable(), true);
   // la visionneuse charge en avance la première image d'entrée (par /api/input) : attendue avant de compter

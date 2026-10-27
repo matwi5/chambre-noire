@@ -401,7 +401,7 @@
     background:var(--void); border-radius:inherit; box-shadow:none; visibility:hidden; }   /* (visionneuse : mêmes
      transitions que l'image produite, .v-stage img) */
   .bfr .bimg.fill { object-fit:fill; }
-  .bfr.on .bimg[src], .bfr.on .btag { visibility:visible; }
+  .bfr.on .bimg[src], .bfr.on .bimg[src] ~ .btag { visibility:visible; }   /* étiquette : avec l'image d'entrée */
   .btag { position:absolute; left:10px; top:10px; padding:3px 9px; border-radius:var(--r-s); font:500 15px/1.2 var(--pixel);
     color:var(--accent); background:var(--badge); visibility:hidden; }
   .bbtn { position:absolute; right:10px; bottom:10px; display:flex; align-items:center; justify-content:center; gap:6px;
@@ -1693,7 +1693,7 @@ function renderPile(){
     if(k) return showImage(img, thumbOf(e.it));
     const fr=img.closest('.pcard').querySelector('.bfr'); armBefore(fr); aimBefore(fr, e.it, img);
     img.addEventListener('load', ()=>placeBefore(fr));
-    showImage(img, srcOf(e.it), {thumb:thumbOf(e.it), then:()=>{ if(fr.url) preload(fr.url); }}); }); }
+    showImage(img, srcOf(e.it), {thumb:thumbOf(e.it), then:()=>{ if(fr.url){ preload(fr.thumb); preload(fr.url); } }}); }); }
 // ce que montre la carte du dessus dessinée : un échec de la page, ou une image de la pile, retrouvés par leur nom
 function topEntry(){ const c=$('pile').querySelector('[data-k="0"]'), key=c && c.dataset.key; if(!key) return null;
   if(key[0]==='f'){ const p=pileFails().find(q=>q.id===key.slice(1)); return p ? {fail:p} : null; }

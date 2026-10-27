@@ -241,3 +241,21 @@ test('PC : zoom à la molette, puis Avant : même zoom et même cadrage', async 
   } finally { await page.setView(PHONE); }
   page.assertNoErrors();
 });
+
+test('étiquette « Avant » seulement avec l\'image d\'entrée à l\'écran, pas pendant son chargement', async () => {
+  await page.freshLabo(bench);
+  // image d'entrée complète et sa miniature retenues avant le Mac dès leur première demande
+  const held = await page.holdRequests(['*&file=ref_1.png*'], () => true);
+  assert.equal(await ask(`mode: 'edit', prompt: 'zg une', ref_images: [${plain('#a03070')}]`), 202);
+  await bench.idle();
+  await page.eval(`loadPile()`);
+  await page.imageShown('#pile [data-k="0"] .pimg img', 'carte du dessus');
+  await page.waitFor(`!document.querySelector('#pile .bfr').hidden`, { what: 'bouton Avant de la carte' });
+  await page.hold('#pile [data-k="0"] .bbtn');
+  assert.deepEqual(await off('#pile .bfr'), OFF, 'rien d\'arrivé : l\'image produite, sans étiquette');
+  await held.release();
+  await beforeOn('#pile .bfr', 'image d\'entrée arrivée');
+  assert.equal((await beforeState('#pile .bfr')).tag, true, 'puis l\'étiquette');
+  await page.release();
+  page.assertNoErrors();
+});
