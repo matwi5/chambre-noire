@@ -147,7 +147,7 @@ dernier bloc, après le HTML.
 - **CSS** : sections « jetons » (lumière inactinique ; `html.priv` : lumière verte), « fond », « surfaces mates »
   (classe `mat`), « barre du haut », « barre d'onglets », « panneaux du bas », « compositeur » (champ replié, grille des
   réglages `setgrid`), « panneau Réglages », « images d'entrée (Labo) et Dessiner », « visionneuse plein écran »,
-  « bouton Avant » (cadre `.bfr`, visuel du bouton choisi par `data-look`),
+  « bouton Avant » (cadre `.bfr`, bouton `.bbtn`),
   « carte en cours » (`runcard`, classe `behind` derrière une pile non vide), « pile du Labo » (cartes `pcard`,
   bandeau Annuler `undo`), « liste de la file (feuille de la file du Labo) » (cartes de la file), « prompts
   enregistrés », « espace privé », « messages et confirmations »,
@@ -233,7 +233,7 @@ dernier bloc, après le HTML.
     (cadre visé sur une image : visionneuse dans `openViewer`,
     carte du dessus dans `renderPile`, son entrée chargée en avance), `placeBefore` (cadre posé sur le contenu affiché
     de l'image produite, étirée ou entière selon `BEFORE_STRETCH`), `holdBefore` et `dropBefore` (appui et relâché,
-    `beforeHeld`, `blur` de la fenêtre), `armBefore` (bouton `BEFORE_KNOBS`, visuel `BEFORE_LOOK`, Pointer Events),
+    `beforeHeld`, `blur` de la fenêtre), `armBefore` (bouton `BEFORE_KNOBS`, Pointer Events),
     `beforeSizes` (cadres recalés quand une taille change).
   - « générations de la page, carte en cours et file » : `pageJobs` (générations lancées par cette page), `ownIds` et
     `saveOwn` (`localStorage` `qwen-own`), `isActive`, `isCampaignLot`, `lotOf`, `progress` (étape, phase, temps

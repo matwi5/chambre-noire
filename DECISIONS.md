@@ -139,6 +139,9 @@ les messages de commit.
     (carte du dessus ou visionneuse) ? » → « Masqué (Recommandé) » : « Le bouton disparaît dès l'appui sur « Sortir » ;
     l'image d'entrée privée n'est plus demandée. S'il y a refus de la sortie, il revient avec le nouveau dessin de la
     pile ou de la visionneuse. »
+- **Visuel du bouton Avant** (28/10/2026), réponse par bouton : « Quel visuel pour le bouton Avant ? » (planche du
+  groupe B : a plaque, icône et « Avant » ; b carré, icône seule ; c tampon pixel « Avant ») → « Garder a
+  (plaque) » : « Je garde le visuel a (plaque, icône et « Avant ») : retire les variantes b et c du CSS. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.

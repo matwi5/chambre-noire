@@ -394,7 +394,7 @@
   .v-stage img { touch-action:none; }
   /* ------------------------------------------------------------ bouton Avant : maintenu, l'image d'entrée remplace
      l'image produite dans le même cadre (.bfr, posé sur le contenu affiché de l'image par placeBefore), sans transition ;
-     l'étiquette « Avant » pendant l'appui. Visuel du bouton : data-look (BEFORE_LOOK), a plaque, b carré, c tampon */
+     l'étiquette « Avant » pendant l'appui. Bouton en plaque, icône et libellé (choix du porteur, 28/10/2026) */
   .bfr { position:absolute; z-index:2; pointer-events:none; }
   #vBefore { border-radius:var(--r-m); }
   .bfr .bimg { position:absolute; inset:0; width:100%; height:100%; max-width:none; max-height:none; object-fit:contain;
@@ -405,15 +405,10 @@
   .btag { position:absolute; left:10px; top:10px; padding:3px 9px; border-radius:var(--r-s); font:500 15px/1.2 var(--pixel);
     color:var(--accent); background:var(--badge); visibility:hidden; }
   .bbtn { position:absolute; right:10px; bottom:10px; display:flex; align-items:center; justify-content:center; gap:6px;
-    border:0; color:var(--accent); background:var(--badge); cursor:pointer; pointer-events:auto; touch-action:none;
+    height:36px; padding:0 12px 0 9px; border:0; border-radius:var(--r-s); font:500 15px/1 var(--pixel);
+    color:var(--accent); background:var(--badge); cursor:pointer; pointer-events:auto; touch-action:none;
     user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
   .bbtn svg { flex:none; width:18px; height:18px; }
-  .bbtn[data-look="a"] { height:36px; padding:0 12px 0 9px; border-radius:var(--r-s); font:500 15px/1 var(--pixel); }
-  .bbtn[data-look="b"] { width:44px; height:44px; border:1.5px solid currentColor; border-radius:var(--r-m); }
-  .bbtn[data-look="b"] span { display:none; }
-  .bbtn[data-look="c"] { height:34px; padding:0 12px; border:2px solid currentColor; border-radius:var(--r-s);
-    font:500 18px/1 var(--pixel); }
-  .bbtn[data-look="c"] svg { display:none; }
   .bfr.on .bbtn { color:var(--on-accent); background:var(--accent); }
   /* ------------------------------------------------------------ carte en cours : la génération de l'espace se
      révèle en pixels sur un canevas ; sur le dessus quand la pile est vide, sinon juste derrière elle, réduite à un
@@ -1510,9 +1505,8 @@ function beforeFile(it){ const ins=it.inputs || [];
 const beforeShown = it => !!it && !(it.private && leavingPrivate) && !!beforeFile(it);
 // cadres revisés sur leur image (« Sortir » demandé, ou refusé)
 const reaimBefore = () => document.querySelectorAll('.bfr').forEach(fr=>{ if(fr.of) aimBefore(fr, fr.it, fr.of); });
-const BEFORE_LOOK='a';                             // visuel du bouton (CSS .bbtn[data-look]) : a, b ou c
 const BEFORE_KNOBS = '<span class="btag" aria-hidden="true">Avant</span>'
-  + `<button class="bbtn" type="button" data-look="${BEFORE_LOOK}" aria-label="Maintenir pour voir l'image d'entrée">`
+  + '<button class="bbtn" type="button" aria-label="Maintenir pour voir l\'image d\'entrée">'
   + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M12 3v18"/><path d="M3.5 7v10a2 2 0 0 0 2 2H12V5H5.5a2 2 0 0 0-2 2z" fill="currentColor" stroke="none"/></svg>'
   + '<span>Avant</span></button>';
 const BEFORE_STRETCH=.02;                          // écart de forme au plus étiré (arrondi des dimensions de sortie)
