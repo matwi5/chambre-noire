@@ -228,15 +228,20 @@ test('PC : zoom à la molette, puis Avant : même zoom et même cadrage', async 
       deltaX: 0, deltaY: -200 });
     await page.waitFor(`$('viewer').classList.contains('zoomed') && !$('vStage').classList.contains('drag')`,
       { what: 'image zoomée' });
-    await page.hold(BUTTON, { mouse: true });
-    await beforeOn('#vBefore', 'image avant sur l\'image zoomée');
-    const r = await page.eval(`(() => { const a = $('vImg'), b = $('vBeforeImg'), box = e => (r => [r.left, r.top,
-      r.width, r.height])(e.getBoundingClientRect());
+    const framing = () => page.eval(`(() => { const a = $('vImg'), b = $('vBeforeImg'), box = e => (r => [r.left,
+      r.top, r.width, r.height])(e.getBoundingClientRect());
       return { same: a.style.transform === b.style.transform, zoom: a.style.transform, a: box(a), b: box(b) }; })()`);
-    await page.release();
-    assert.match(r.zoom, /scale\(/, 'image zoomée');
-    assert.equal(r.same, true, 'même transformation');
-    assert.ok(within1(r.a, r.b), `même cadrage : ${r.b} au lieu de ${r.a}`);
+    // le bouton à la souris, puis Espace tenue
+    for (const [how, down, up] of [['bouton', () => page.hold(BUTTON, { mouse: true }), () => page.release()],
+      ['Espace', () => page.keyDown(' '), () => page.keyUp(' ')]]) {
+      await down();
+      await beforeOn('#vBefore', `image avant sur l'image zoomée (${how})`);
+      const r = await framing();
+      await up();
+      assert.match(r.zoom, /scale\(/, `image zoomée (${how})`);
+      assert.equal(r.same, true, `même transformation (${how})`);
+      assert.ok(within1(r.a, r.b), `même cadrage (${how}) : ${r.b} au lieu de ${r.a}`);
+    }
     await page.closeViewer();
   } finally { await page.setView(PHONE); }
   page.assertNoErrors();
@@ -257,6 +262,83 @@ test('étiquette « Avant » seulement avec l\'image d\'entrée à l\'écran, pa
   await beforeOn('#pile .bfr', 'image d\'entrée arrivée');
   assert.equal((await beforeState('#pile .bfr')).tag, true, 'puis l\'étiquette');
   await page.release();
+  page.assertNoErrors();
+});
+
+// ------------------------------------------------------------ Espace maintenue (ticket 1219940950193702, vue PC)
+// Espace tenue sur sel (cadre de la carte du dessus ou de la visionneuse) : l'image avant à l'appui, répétitions du
+// système comprises, l'image produite au relâché ; la page n'a pas défilé
+async function spaceHold(sel, what) {
+  const y = await page.eval(`scrollY`);
+  await page.keyDown(' ');
+  await beforeOn(sel, `Espace tenue : image avant (${what})`);
+  assert.match((await beforeState(sel)).src, /&file=ref_1\.png$/, `l'image d'entrée (${what})`);
+  for (let k = 0; k < 3; k++) await page.keyDown(' ', { repeat: true });
+  assert.equal((await beforeState(sel)).on, true, `toujours tenue (${what})`);
+  await page.keyUp(' ');
+  assert.deepEqual(await off(sel), OFF, `Espace relâchée (${what})`);
+  assert.equal(await page.eval(`scrollY`), y, `page défilée (${what})`);
+}
+
+test('PC : Espace tenue montre l\'image avant, carte du dessus et visionneuse ; aucun bouton activé', async () => {
+  await page.setView(PC);
+  try {
+    await page.freshLabo(bench);
+    assert.equal(await ask(`mode: 'edit', prompt: 'zs dessous', ref_images: [${plain('#30a050')}]`), 202);
+    assert.equal(await ask(`mode: 'edit', prompt: 'zs une', ref_images: [${plain('#c06020')}]`), 202);
+    await bench.idle();
+    await page.eval(`loadPile()`);
+    await page.waitFor(`pileView()[0]?.prompt === 'zs une'`, { what: 'zs une dessus' });
+    await page.imageShown('#pile [data-k="0"] .pimg img', 'carte du dessus');
+    await page.waitFor(`!document.querySelector('#pile .bfr').hidden`, { what: 'bouton Avant de la carte' });
+    await page.eval(`document.activeElement?.blur()`);
+    await spaceHold('#pile .bfr', 'carte du dessus');
+    await page.eval(`$('pileNo').focus()`);         // ✕ qui a le focus : Espace ne le déclenche pas
+    await spaceHold('#pile .bfr', '✕ qui a le focus');
+    assert.deepEqual(await page.eval(`[pileView()[0].prompt, !discarding, !flying]`), ['zs une', true, true],
+      'Espace a jeté l\'image');
+    await page.keyDown(' ');                        // fenêtre quittée pendant l'appui
+    await beforeOn('#pile .bfr', 'image avant');
+    await page.eval(`dispatchEvent(new Event('blur'))`);
+    assert.deepEqual(await off('#pile .bfr'), OFF, 'fenêtre quittée');
+    await page.keyUp(' ');
+    await openOn('zs une');
+    await page.eval(`$('vSort').querySelector('.btn').focus()`);   // Jeter de la visionneuse qui a le focus
+    await spaceHold('#vBefore', 'visionneuse');
+    assert.deepEqual(await page.eval(`[vList.length, !discarding]`), [2, true], 'Espace a jeté l\'image');
+    await page.closeViewer();
+  } finally { await page.setView(PHONE); }
+  page.assertNoErrors();
+});
+
+test('PC : Espace sans effet sur une image non comparable, pendant une saisie, avec une feuille ouverte', async () => {
+  await page.setView(PC);
+  try {
+    await page.freshLabo(bench);
+    assert.equal(await ask(`mode: 'edit', prompt: 'zt une', ref_images: [${plain('#2080c0')}]`), 202);
+    assert.equal(await ask(`mode: 't2i', prompt: 'zt texte'`), 202);
+    await bench.idle();
+    await page.eval(`loadPile()`);
+    await page.waitFor(`pileView()[0]?.prompt === 'zt texte'`, { what: 'zt texte dessus' });
+    await page.imageShown('#pile [data-k="0"] .pimg img', 'carte du dessus');
+    await page.eval(`$('pileNo').focus()`);
+    await page.press(' ');                          // non comparable : rien, ✕ pas déclenché
+    assert.deepEqual(await page.eval(`[beforeHeld, pileView()[0].prompt, !discarding, !flying]`),
+      [null, 'zt texte', true, true]);
+    await page.click('#pileYes');                   // zt une dessus
+    await page.waitFor(`pileView().length === 1 && !document.querySelector('#pile .bfr').hidden`,
+      { what: 'zt une dessus, bouton Avant' });
+    await page.eval(`$('prompt').focus()`);
+    await page.press(' ');
+    assert.equal(await page.eval(`[beforeHeld, $('prompt').value.endsWith(' ')].join()`), ',true',
+      'saisie : une espace tapée, pas d\'image avant');
+    await page.typePrompt('');
+    await page.eval(`document.activeElement?.blur(); openSheet('setSheet')`);
+    await page.keyDown(' ');
+    assert.equal(await page.eval(`beforeHeld`), null, 'feuille ouverte : pas d\'image avant');
+    await page.keyUp(' ');
+    await page.closeSheet();
+  } finally { await page.setView(PHONE); }
   page.assertNoErrors();
 });
 

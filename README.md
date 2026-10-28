@@ -382,7 +382,8 @@ Au clavier (PC) : **→** garde et **←** jette l'image du dessus de la pile, e
 Annuler, un Jeter suivant envoie le précédent, même attente de l'image suivante affichée) ; **Z** ou **Ctrl/⌘ + Z**
 annule le Jeter tant que le bandeau est là. Dans le champ, **Ctrl/⌘ + Entrée** revient à appuyer sur **Révéler**. La
 visionneuse garde ← et → pour l'image précédente ou suivante, et Échap pour se fermer (Garder et Jeter y restent sur
-leurs boutons). Aucun raccourci ne réagit pendant qu'on tape un texte (sauf Ctrl/⌘ + Entrée dans le champ), quand un
+leurs boutons). **Espace** maintenue compare avec la photo d'origine (bouton **Avant**, plus bas). Aucun raccourci
+ne réagit pendant qu'on tape un texte (sauf Ctrl/⌘ + Entrée dans le champ), quand un
 panneau ou la visionneuse est ouvert (Ctrl/⌘ + Entrée compris), ni sur une carte d'échec ; sur la pile, les flèches
 ne servent qu'appuyées seules (⌘ + ← et Alt + ← restent la page précédente du navigateur). Règle : aucune touche ne
 supprime un tirage ; au clavier, Jeter
@@ -536,7 +537,10 @@ une annotation (seule la photo peinte en rouge est gardée). La photo est étir�
 diffèrent que d'un arrondi (2 % au plus, comme au format « Image »), sinon montrée entière et centrée (une sortie en
 1:1 depuis une photo en 16:9). Dans la visionneuse, elle suit le zoom : molette et glisser sur ordinateur, ou pincer
 avec deux autres doigts pendant qu'un doigt tient Avant. Elle est chargée en avance dès que l'image est affichée ;
-sinon sa miniature vient d'abord. Le bouton de la carte ne trie rien et n'ouvre pas la visionneuse. Il marche aussi
+sinon sa miniature vient d'abord. Sur ordinateur, maintenir **Espace** fait la même chose que maintenir le bouton,
+dans la visionneuse ou sur la carte du dessus de la pile (rien sur une image non comparable, pendant qu'on tape un
+texte ou avec un panneau ouvert) ; là, Espace ne fait pas défiler la page et n'active aucun bouton qui a le focus
+(Entrée, oui). Le bouton de la carte ne trie rien et n'ouvre pas la visionneuse. Il marche aussi
 dans l'espace privé (voir « Espace privé »).
 
 ### Prompts enregistrés

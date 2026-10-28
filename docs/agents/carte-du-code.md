@@ -233,8 +233,8 @@ dernier bloc, après le HTML.
     (cadre visé sur une image : visionneuse dans `openViewer`,
     carte du dessus dans `renderPile`, son entrée chargée en avance), `placeBefore` (cadre posé sur le contenu affiché
     de l'image produite, étirée ou entière selon `BEFORE_STRETCH`), `holdBefore` et `dropBefore` (appui et relâché,
-    `beforeHeld`, `blur` de la fenêtre), `armBefore` (bouton `BEFORE_KNOBS`, Pointer Events),
-    `beforeSizes` (cadres recalés quand une taille change).
+    `beforeHeld`, `blur` de la fenêtre ; aussi Espace tenue, raccourcis du PC plus bas), `armBefore` (bouton
+    `BEFORE_KNOBS`, Pointer Events), `beforeSizes` (cadres recalés quand une taille change).
   - « générations de la page, carte en cours et file » : `pageJobs` (générations lancées par cette page), `ownIds` et
     `saveOwn` (`localStorage` `qwen-own`), `isActive`, `isCampaignLot`, `lotOf`, `progress` (étape, phase, temps
     restant d'une génération de la page), `pageItem` (image d'une génération finie de la page : vrai mode et images
@@ -301,8 +301,10 @@ dernier bloc, après le HTML.
     privé), raccourcis du PC (écouteur `keydown` juste avant celui de la visionneuse : → et ← sur la pile par
     `sortTop`, Z et Ctrl/⌘ + Z par `undoDiscard`, Ctrl/⌘ + Entrée dans `#prompt` par `#go` ; rien pendant une saisie,
     une feuille, la visionneuse ou les images d'entrée, ni sur une carte d'échec ; une touche répétée ne trie rien,
-    Entrée répétée sur `SORT_BUTTONS` comprise), gestes : `zoomable` (pincer, molette, glisser ; son image avant reçoit
-    la même transformation, `twin` ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les
+    Entrée répétée sur `SORT_BUTTONS` comprise ; carte du dessus affichée : `shownTop` ; Espace tenue :
+    `holdBefore` du cadre de la visionneuse ou de la carte du dessus, `holder` à `'key'`, et `keyup` par `dropBefore`,
+    sans défilement ni bouton activé ; champs : `FORM_FIELDS`), gestes : `zoomable` (pincer, molette, glisser ; son
+    image avant reçoit la même transformation, `twin` ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les
     images d'entrée).
   - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;

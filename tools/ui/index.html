@@ -2376,21 +2376,30 @@ function stepViewer(d){ if(vIndex<0 || !vList.length) return; vStep=d; openViewe
 // affichée. » Une touche répétée par le système ne trie donc rien, pas même Entrée sur ✓, ✕ ou Garder et Jeter de la
 // visionneuse qui ont le focus (décision du porteur, groupe C du 28/10/2026). Rien pendant une saisie (champ, curseur
 // du pinceau), avec une feuille, la visionneuse ou les images d'entrée ouvertes, ni sur une carte d'échec ; les
-// flèches seulement sans modificateur (⌘ + ← et Alt + ← : page précédente du navigateur)
-const SORT_BUTTONS='#pileYes, #pileNo, #vSort .btn';
+// flèches seulement sans modificateur (⌘ + ← et Alt + ← : page précédente du navigateur). Espace tenue : le bouton
+// Avant de la visionneuse, sinon de la carte du dessus (image comparable, sinon rien), relâchée (keyup) ou fenêtre
+// quittée (blur) : l'image produite ; là, Espace ne fait pas défiler la page et n'active aucun bouton qui a le focus
+const SORT_BUTTONS='#pileYes, #pileNo, #vSort .btn', FORM_FIELDS='input, textarea, select';
+// carte du dessus du Labo affichée (pas masquée par Dessiner au téléphone), sinon null
+const shownTop = () => { const c=mode==='labo' && $('pile').querySelector('[data-k="0"]');
+  return c && c.getClientRects().length ? c : null; };
 addEventListener('keydown', e=>{
   if(e.repeat && e.key==='Enter' && e.target.closest?.(SORT_BUTTONS)){ e.preventDefault(); return; }
   if(e.defaultPrevented || e.isComposing) return;
   const cmd=e.ctrlKey || e.metaKey;
   if(e.target===$('prompt') && cmd && e.key==='Enter' && !openedSheet && vIndex<0){   // (une feuille par-dessus
     e.preventDefault(); if(!e.repeat) $('go').click(); return; }                        // le champ : rien)
-  if(e.target.closest?.('input, textarea, select') || mode!=='labo' || openedSheet || vIndex>=0 || ivIndex>=0) return;
+  if(e.target.closest?.(FORM_FIELDS) || openedSheet || ivIndex>=0) return;
+  if(e.key===' '){ const top=vIndex<0 && shownTop(); if(vIndex<0 && !top) return;
+    e.preventDefault(); const fr=top ? top.querySelector('.bfr') : $('vBefore');   // (carte d'échec : aucun)
+    if(fr && !e.repeat){ holdBefore(fr); if(beforeHeld===fr) fr.holder='key'; } return; }
+  if(mode!=='labo' || vIndex>=0) return;
   if(e.key.toLowerCase()==='z' && !e.altKey && !e.shiftKey){ if(discarding){ e.preventDefault(); undoDiscard(); } return; }
   if(!['ArrowLeft', 'ArrowRight'].includes(e.key) || cmd || e.altKey || e.shiftKey) return;
-  const card=$('pile').querySelector('[data-k="0"]'), top=topEntry();
-  if(!top || top.fail || !card.getClientRects().length) return;   // carte masquée (Dessiner au téléphone) : rien
+  const top=shownTop() && topEntry(); if(!top || top.fail) return;
   e.preventDefault();
   if(!e.repeat) sortTop(e.key==='ArrowRight' ? 'keep' : 'discard'); });
+addEventListener('keyup', e=>{ if(e.key===' ' && beforeHeld && beforeHeld.holder==='key'){ e.preventDefault(); dropBefore(); } });
 addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevented) return;
   if(ivIndex>=0){ if(e.key==='Escape') closeInputs(); else if(e.key==='ArrowLeft') showInput(ivIndex-1); else if(e.key==='ArrowRight') showInput(ivIndex+1); return; }
   if(e.key==='Escape') closeViewer(); else if(e.key==='ArrowLeft') stepViewer(-1); else if(e.key==='ArrowRight') stepViewer(1); });
