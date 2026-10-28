@@ -7,7 +7,8 @@
 // prête » sur les Tirages, qui mène au Labo ; pile privée par ses routes (✕ et ✓ privés, un Garder qui arrive seul dans
 // les Tirages privés affichés ; « Sortir » juste après l'entrée, pile privée pas encore lue, ou pendant le chargement
 // d'une image : rien de privé demandé ensuite, ni par un Garder refusé ni par une génération privée arrivée dans la
-// file pendant la sortie ; Jeter privé abandonné dès l'appui sur « Sortir », tri privé ignoré pendant la sortie) ;
+// file pendant la sortie ; Jeter privé abandonné dès l'appui sur « Sortir », tri privé ignoré pendant la sortie ;
+// images des cartes retirées vidées au redessin ; aucune adresse privée chargée en avance hors de l'espace) ;
 // balayage de la carte du dessus au doigt et à la souris (seuil, geste vif, tampons, échec qui ne part qu'à gauche,
 // pile redessinée sous le doigt, clic qui ouvre la visionneuse) ; après un tri, ✓, ✕ et la visionneuse ignorent un
 // double appui jusqu'à l'image suivante affichée (0,3 s au moins).
@@ -816,3 +817,37 @@ test('espace privé : « Sortir » pendant le chargement d\'une image de la pile
     page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/ERR_ABORTED|ERR_FAILED/.test(e)));
     page.assertNoErrors();
   });
+
+test('espace privé : la pile redessinée efface les images des cartes qu\'elle retire', async () => {
+  await enterPile();
+  await page.made('zp24 secrete dessous');
+  await page.made('zp24 secrete dessus');
+  try {
+    // (la pile privée peut garder des images des tests d'avant : deux cartes au moins)
+    await page.waitFor(`(l => l.length >= 2 && l.every(i => i.getAttribute('src')))(
+      [...$('pile').querySelectorAll('.pimg img')])`, { what: 'images des cartes posées' });
+    // les images des cartes dessinées (bouton Avant compris), gardées après leur retrait de la page
+    await page.eval(`window.oldImgs = [...$('pile').querySelectorAll('img')]`);
+    await page.click('#pileYes');
+    await page.waitFor(`!oldImgs[0].isConnected && !sortBusy()`, { what: 'pile redessinée' });
+    assert.deepEqual(await page.eval(`oldImgs.filter(i => i.getAttribute('src') || i.want).length`), 0,
+      'image privée gardée par une carte retirée');
+  } finally {
+    await page.click('#privExit');
+    await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+  }
+  page.assertNoErrors();
+});
+
+test('hors de l\'espace privé : aucune adresse privée n\'est chargée en avance', async () => {
+  await page.waitFor(`!inPrivate()`, { what: 'espace public' });
+  await watchPrivateSrc();
+  // aucun chemin de la page n'y mène hors de l'espace (rappel tardif d'une image privée) : appel direct
+  const u = '/api/private/thumb?id=zz';
+  assert.equal(await page.eval(`preload(${JSON.stringify(u)}).gone === true && !ready.has(${JSON.stringify(u)})`),
+    true, 'adresse privée chargée hors de l\'espace');
+  assert.deepEqual(await page.eval(`srcAfter`), [], 'adresse privée donnée à une image hors de l\'espace');
+  // une adresse qui n'est pas de l'espace se charge toujours
+  assert.equal(await page.eval(`preload('data:image/gif;base64,R0lGODlhAQABAAAAACw=').gone`), undefined);
+  page.assertNoErrors();
+});

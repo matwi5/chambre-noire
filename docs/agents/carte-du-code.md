@@ -221,7 +221,8 @@ dernier bloc, après le HTML.
     décodée à part (image du dessin, lue par `toEntry`), posée tout de suite sans passer par `ready` ; `fit`, `dims` :
     miniature des visionneuses à la taille de l'image complète, par `fitThumb`, en unités de la scène `cqw`, `cqh`),
     `preload` et `ready` (les 10 dernières images décodées : miniatures des voisines de la visionneuse, image complète
-    de la suivante dans le sens du parcours `vStep`, première image d'entrée),
+    de la suivante dans le sens du parcours `vStep`, première image d'entrée ; `refused` : adresse refusée, entrée
+    `gone`, pendant « Sortir » et, pour une adresse `/api/private/`, hors de l'espace privé),
     `clearImage`, `abortPrivateLoads` (chargements privés en route abandonnés, aussi avant la fermeture de la session
     par « Sortir », et ceux d'une génération finie avec un préfixe d'adresse : `secretLoads`, même évincés de `ready`,
     marqués `gone` : une image qui en attendait un, même détachée, ne reçoit rien), `forgetPrivateImages` (sortie de
@@ -277,7 +278,8 @@ dernier bloc, après le HTML.
     l'image a quitté la pile, sauf pendant leur lot), `pileView` et `pileSize` (sans les images dont le tri est en
     cours, `sorting`, avec leur génération de la page `pageOf`), `pileFails` (échecs de la page, en tête),
     `renderPile` (carte du dessus et deux devinées dessous : `pileCard`, `failCard`, chacune marquée par `pileTag` ;
-    état vide, compte, pastille de l'onglet ; redessinée seulement si elle change, `pileShown`), `topEntry` (ce que
+    état vide, compte, pastille de l'onglet ; redessinée seulement si elle change, `pileShown`, les images des cartes
+    retirées vidées par `clearImage`), `topEntry` (ce que
     montre la carte du dessus, retrouvé par son nom), `sortTop` (✓, ✕ et balayage ; `flyOut`, un départ à la fois :
     `flying`, vrai jusqu'au tri, même si la pile est redessinée entre-temps ; puis `holdSort` : `sortHeld` jusqu'à
     l'image suivante affichée, `SORT_GAP` ms au moins, aussi pour la visionneuse), `pileSwipe` (balayage de

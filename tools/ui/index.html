@@ -1437,8 +1437,10 @@ const secretLoads=new Set();
 const FADE_MS=350;                                // fondu de fermeture de .viewer (CSS, 0,3 s)
 // « Sortir » en attente du Mac (leavingPrivate) : aucune image de l'espace (secretUrl) n'est demandée ni posée, quel
 // que soit le chemin qui redessine (pile, fin ou échec d'une génération, visionneuse) : entrée abandonnée (gone) ; si
-// la sortie est refusée, privLock redessine
-function preload(url){ if(secretUrl(url) && leavingPrivate) return { url, gone:true, im:null, p:Promise.resolve(null) };
+// la sortie est refusée, privLock redessine. Hors de l'espace, une adresse privée (un rappel tardif) l'est aussi ;
+// pas les aperçus (/api/job/), qui servent aussi l'espace public
+const refused = url => secretUrl(url) && leavingPrivate || url.startsWith('/api/private/') && !inPrivate();
+function preload(url){ if(refused(url)) return { url, gone:true, im:null, p:Promise.resolve(null) };
   let e=ready.get(url);
   if(e) ready.delete(url);                        // la plus récente en dernier : les plus anciennes partent d'abord
   else { const im=new Image(); im.decoding='async'; im.src=url;
@@ -1689,6 +1691,9 @@ function renderPile(){
   if(key===pileShown) return; pileShown=key;
   dropSwipe();                                     // un geste ne trie jamais une carte qu'il ne tient pas
   if(beforeHeld && beforeHeld!==$('vBefore')) dropBefore();   // (le bouton Avant de la carte remplacée)
+  // images des cartes retirées vidées : une carte détachée ne garde pas son adresse (privée) jusqu'au ramasse-miettes,
+  // et un chargement qu'elle attendait encore ne lui pose rien (ni son image d'entrée chargée en avance)
+  $('pile').querySelectorAll('img').forEach(clearImage);
   $('pile').innerHTML=shownNow.map((e, k)=>e.fail ? failCard(e.fail, k) : pileCard(e.it, k)).join('');
   // images par showImage (jamais l'image d'avant), la miniature d'abord ; dessous, la miniature seule
   // carte du dessus : son bouton Avant, et son image d'entrée chargée en avance une fois l'image là
