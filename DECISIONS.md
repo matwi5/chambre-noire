@@ -263,6 +263,13 @@ les messages de commit.
   jusqu'au départ de la carte ? » → « Au moment du geste (Recommandé) » : « On ne change rien : l'image produite était
   à l'écran quand on a appuyé sur ←, et le bandeau Annuler reste là. Le geste visait une image vue, et le cas tient en
   0,22 s. »
+- **Groupe F, portée du verrou court** (28/10/2026), réponse par bouton, question posée par la session du groupe :
+  « F4 : le verrou court (0,3 s après l'affichage) s'applique à toute carte qui arrive sur le dessus sans tri sur cet
+  appareil, donc aussi l'image remise par « Annuler », une carte d'échec qui arrive en tête et la première carte vue à
+  l'ouverture ou au changement d'espace (la pile seulement, pas la visionneuse). On garde cette portée ? » → « Toute
+  carte (Recommandé) » : « Toute carte qui arrive sur le dessus doit être vue 0,3 s avant qu'un geste la trie, quelle
+  que soit la raison de son arrivée. Sans exception à retenir ; seul coût : un ✕ ignoré dans les 0,3 s qui suivent
+  Annuler. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
