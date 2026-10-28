@@ -129,7 +129,10 @@ test('PC : une image déposée n\'importe où sur la colonne du champ, avec surb
     'point dans la colonne de la pile (prémisse)');
   assert.equal(await drag('dragover', px, py), true, 'survol de la pile : le navigateur ouvrirait le fichier');
   assert.equal(await drag('drop', px, py), true, 'lâchée sur la pile : le navigateur ouvrirait le fichier');
-  assert.equal(await page.eval(`inputImages.length`), 1, 'image lâchée hors du champ ajoutée');
+  // une autre lâchée ensuite sur le champ, attendue lue : celle de la pile, si elle était prise, serait arrivée aussi
+  await drag('drop', x, y);
+  await page.waitFor(`inputImages.length >= 2`, { what: 'image déposée sur le champ' });
+  assert.equal(await page.eval(`inputImages.length`), 2, 'image lâchée hors du champ ajoutée');
   assert.equal(await lit(), false, 'champ encadré par un survol de la pile');
   page.assertNoErrors();
 });
