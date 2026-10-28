@@ -15,7 +15,9 @@ Commandes glissées dans le prompt, pour un test :
   dépendre du temps. La libération est un fichier <nom> du dossier QWEN_FAKE_HOLD (posé par le banc dans le script
   sd-cli) ; elle vaut pour toutes les générations de ce nom jusqu'au test suivant (BenchCase.setUp vide le dossier,
   après avoir tout libéré par le fichier ALL), et jusqu'à la fin du banc pour les tests d'interface : un nom par test.
-  Sans libération après HOLD_LIMIT secondes, échec comme FAIL.
+  Sans libération après HOLD_LIMIT secondes, échec comme FAIL. HOLD=<nom>@<k> attend de même, mais une fois l'étape
+  k annoncée : la génération reste en cours, avec les aperçus des étapes d'avant (le serveur lit le dernier aperçu à
+  chaque étape annoncée).
 """
 import os, re, struct, sys, time, zlib
 
@@ -69,19 +71,23 @@ def main(argv):
     fail = re.search(r"\bFAIL\b", prompt) or (fail_seed and fail_seed.group(1) == arg(argv, "-s"))
     slow = re.search(r"\bSLOW(?:=(\d+(?:\.\d+)?))?\b", prompt)
     delay = float(slow.group(1) or 0.3) if slow else 0.01
-    held = re.search(r"\bHOLD(?:=([\w-]+))?(?![\w=-])", prompt)
+    held = re.search(r"\bHOLD(?:=([\w-]+))?(?:@(\d+))?(?![\w=@-])", prompt)
+    held_at = int(held.group(2)) if held and held.group(2) else 0      # étape annoncée avant d'attendre (0 : avant)
     print("Version: faux sd-cli du banc de test", flush=True)
     for p in unreadable_inputs(argv):
         print(f"[E] load image from '{p}' failed --- media_io.cpp:543", flush=True)
         return 1
     print("loading diffusion model", flush=True)
-    if held and not hold(held.group(1) or "hold"):
+    if held and not held_at and not hold(held.group(1) or "hold"):
         print(f"[ERROR] faux moteur jamais libéré (HOLD, {HOLD_LIMIT} s)", flush=True)
         return 1
     print("get_learned_condition completed, taking 0.50s", flush=True)
     for k in range(1, steps + 1):
         time.sleep(delay)
         print(f"  |{'=' * k}| {k}/{steps} - {max(delay, 0.01):.2f}s/it", flush=True)
+        if k == held_at and not hold(held.group(1) or "hold"):
+            print(f"[ERROR] faux moteur jamais libéré (HOLD, {HOLD_LIMIT} s)", flush=True)
+            return 1
         if fail:
             print("[ERROR] panne simulée par le banc de test", flush=True)
             return 1

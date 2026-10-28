@@ -272,9 +272,9 @@ test('images d\'entrée : la miniature a la taille de l\'image complète (grande
   const [smallThumb, small] = await inputSizes('zq9 petite', 200, 150);   // plus petite : jamais agrandie
   assert.ok(near(smallThumb, small), `petite photo : miniature ${smallThumb} au lieu de ${small}`);
   // téléphone tourné pendant que la miniature attend son image : elle garde sa forme (4/3)
-  const turned = await inputSizes('zq9 tournée', 1200, 900, () => page.send('Emulation.setDeviceMetricsOverride',
-    { ...PHONE, width: PHONE.height, height: PHONE.width }));
-  await page.send('Emulation.setDeviceMetricsOverride', PHONE);
+  const turned = await inputSizes('zq9 tournée', 1200, 900,
+    () => page.setView({ ...PHONE, width: PHONE.height, height: PHONE.width }));
+  await page.setView(PHONE);
   const [t] = turned;
   assert.ok(Math.abs(t[0] / t[1] - 4 / 3) < 0.03, `miniature déformée après rotation : ${t}`);
   assert.ok(near(...turned), `après rotation : miniature ${turned[0]} au lieu de ${turned[1]}`);

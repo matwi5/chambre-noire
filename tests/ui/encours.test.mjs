@@ -8,7 +8,7 @@
 //   venv/bin/python tests/check.py --quick --ui tests/ui/encours.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, PHONE, waitUntil } from './driver.mjs';
+import { startBench, launchChrome, PHONE, PC, waitUntil } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -301,7 +301,7 @@ test('une seconde génération de la page passe sur la carte en cours quand elle
 
 // (depuis le Labo en deux colonnes à partir de 1024 px : sa largeur est bornée, plus la colonne de 640 px du téléphone)
 test('grand écran : le Labo est centré et de largeur bornée, les Tirages prennent la largeur', async () => {
-  await page.send('Emulation.setDeviceMetricsOverride', { ...PHONE, width: 1280, mobile: false });
+  await page.setView(PC);
   // largeur de la vue sans la barre de défilement : clientWidth
   const column = () => page.eval(`(() => { const r = document.querySelector('main').getBoundingClientRect();
     return [r.left, r.width, document.documentElement.clientWidth - r.right]; })()`);
@@ -312,6 +312,6 @@ test('grand écran : le Labo est centré et de largeur bornée, les Tirages pren
   await page.tab('tirages');
   assert.ok((await column())[1] > 640, 'Tirages : toute la largeur');
   await page.tab('labo');
-  await page.send('Emulation.setDeviceMetricsOverride', PHONE);
+  await page.setView(PHONE);
   page.assertNoErrors();
 });

@@ -13,7 +13,8 @@ HTTPS_HOST ; wifi=True, http:// direct d'un autre appareil, WIFI_HOST), call_ful
 generate(), wait_job() (pour un statut final, attend aussi que worker() en ait fini : settled), wait_until(cond),
 wait_idle() (tout le Mac au repos), capture_push() (notifications interceptées ; sent.decided complet après
 wait_idle()), release(nom), journal(), files(), LOG (sorties du serveur). Faux moteur (tests/fake_sdcli.py) : FAIL,
-SLOW[=s], FAILSEED=<n>, HOLD[=nom] dans le prompt (HOLD garde une génération en cours sans dépendre du temps).
+SLOW[=s], FAILSEED=<n>, HOLD[=nom][@k] dans le prompt (HOLD garde une génération en cours sans dépendre du temps ;
+@k : une fois l'étape k annoncée, aperçus d'avant vus).
 """
 import atexit, base64, contextlib, glob, json, os, shutil, signal, sys, tempfile, threading, time, unittest, warnings
 import urllib.error, urllib.request
