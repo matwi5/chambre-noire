@@ -218,6 +218,7 @@ test('pile : une image jetée depuis la visionneuse, son lien de téléchargemen
   await page.eval(`openViewer(0, pileView())`);
   await page.waitFor(`$('vDl').getAttribute('download') === ${JSON.stringify(name)}`,
     { what: 'lien de la visionneuse' });
+  await page.imageShown('#vImg');                  // (Jeter ignore une image pas encore affichée)
   await page.eval(`sortFromViewer('discard')`);
   await page.eval(`closeViewer()`);
   await page.waitFor(`!discarding && !pileItems.some(it => it.name === ${JSON.stringify(name)})`,

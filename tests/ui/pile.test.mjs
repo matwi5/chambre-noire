@@ -305,6 +305,7 @@ test('« Déjà triée » : l\'image gardée par une autre page quitte la pile',
   const other = await chrome.phonePage();
   await other.goto(bench.url + '/');
   await other.waitFor(`pileItems.some(it => it.prompt === 'zp5 disputee')`, { what: 'pile sur l\'autre page' });
+  await other.topShown();
   await other.click('#pileYes');
   await waitUntil(async () => !(await bench.inPile('zp5 disputee')), { what: 'gardée par l\'autre page' });
   other.assertNoErrors();
@@ -464,6 +465,7 @@ test('espace privé : pile privée par ses routes ; un Jeter en attente à la so
     .then(r => r.status)`), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate() && pileItems.length === 2`, { what: 'pile privée intacte' });
+  await page.topShown();
   await page.click('#pileYes');
   await page.waitFor(`sorts.some(s => s.url.endsWith('/api/private/keep')) && pileItems.length === 1`,
     { what: 'gardée par la route privée' });
@@ -929,7 +931,7 @@ test('espace privé : pendant « Sortir », Garder et Jeter de la visionneuse ne
   await page.eval(`sorts.length = 0`);
   const x = await exitHeld();
   try {
-    // (la visionneuse couvre l'en-tête : « Sortir » atteint au clavier, Tab puis Entrée)
+    // (la visionneuse couvre l'en-tête au doigt ; le clavier y mène par Tab puis Entrée : ici, appui par la page)
     await page.eval(`$('privExit').click()`);
     await waitUntil(() => x.locking(), { what: 'sortie demandée' });
     for (const k of [0, 1]) {                      // Jeter, puis Garder
@@ -985,7 +987,7 @@ test('image du dessus pas encore affichée : ni ✓, ni ✕, ni flèches, ni bal
     await h.release();
   }
   // l'image arrive : ✕ la jette (bandeau), comme d'habitude
-  await page.waitFor(`posed(${TOP_IMG}) && !sortBusy()`, { what: 'image du dessus affichée, pile au repos' });
+  await page.topShown();
   await page.click('#pileNo');
   await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
   await page.click('#undoBtn');
@@ -993,7 +995,8 @@ test('image du dessus pas encore affichée : ni ✓, ni ✕, ni flèches, ni bal
   page.assertNoErrors();
 });
 
-test('après un ✕, la suivante pas encore affichée : le verrou se lève après 3 s, mais ✕ ne la jette pas', async () => {
+test('après un tri, la suivante pas encore affichée : le verrou se lève après 3 s, mais ✕ ne la jette pas',
+  async () => {
   await page.waitFor(`!inPrivate()`, { what: 'espace public' });
   await clear();
   // images des deux cartes retenues dès leur création ; celles du dessus seules libérées ensuite (pass)
@@ -1005,20 +1008,18 @@ test('après un ✕, la suivante pas encore affichée : le verrou se lève aprè
     await page.waitFor(`${TOP} === 'zp33 dessus'`, { what: 'carte du dessus dessinée' });
     pass = encodeURIComponent(await page.eval(`pileItems.find(it => it.prompt === 'zp33 dessus').name`));
     await h.free(u => u.includes(pass));
-    await page.waitFor(`posed(${TOP_IMG}) && !sortBusy()`, { what: 'image du dessus affichée' });
+    await page.topShown();
     await page.eval(`sorts.length = 0`);
-    await page.click('#pileNo');                   // le dessus jeté : bandeau, la suivante dessus sans son image
-    await page.waitFor(`!$('undoBar').hidden && ${TOP} === 'zp33 suivante'`, { what: 'suivante sur le dessus' });
+    await page.click('#pileYes');                  // le dessus gardé : la suivante dessus, sans son image
+    await page.waitFor(`${TOP} === 'zp33 suivante'`, { what: 'suivante sur le dessus' });
     await page.waitFor(`!sortHeld`, { what: 'verrou levé par son plafond (3 s)' });
     await page.click('#pileNo');
     await elapse(400);
-    // ni la suivante jetée, ni le Jeter d'avant envoyé (un second Jeter l'aurait validé)
-    assert.deepEqual(await topState(), { top: 'zp33 suivante', posed: false, discarding: true, sorts: 0 },
-      '✕ après le plafond du verrou sur une image pas affichée');
+    assert.deepEqual(await topState(), { top: 'zp33 suivante', posed: false, discarding: false, sorts: 1 },
+      '✕ après le plafond du verrou sur une image pas affichée (seul le Garder d\'avant envoyé)');
   } finally {
     await h.release();
   }
-  await page.click('#undoBtn');
   await clear();
   page.assertNoErrors();
 });

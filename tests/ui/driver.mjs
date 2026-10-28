@@ -47,6 +47,8 @@
 //                                                // puis au repos ; await page.privateIdle() : espace au repos
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
 //   await page.topPrompt()                       // prompt de la carte du dessus de la pile
+//   await page.topShown()                        // image du dessus affichée (posed), pile au repos : ✓, ✕, les
+//                                                // flèches et le balayage la trient
 //   await page.watchSorts(); …; await page.sortsSent('discard')   // demandes keep, discard, delete de la page
 //                                                // (sorts : { url, at } de chacune)
 //   await bench.inPile('texte'); await bench.kept('texte')        // image dans la pile, dans les Tirages du Mac
@@ -538,6 +540,11 @@ async function connect(wsUrl, { closeTab, siblings }) {
     },
     // prompt de la carte du dessus de la pile affichée (undefined sans carte)
     topPrompt() { return page.eval(`$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`); },
+    // image de la carte du dessus affichée (posed : sinon un geste de tri l'ignore) et aucun tri en cours
+    topShown() {
+      return page.waitFor(`posed($('pile').querySelector('[data-k="0"] .pimg img')) && !sortBusy()`,
+        { what: 'image du dessus affichée, pile au repos' });
+    },
     // demandes de tri et de suppression (keep, discard, delete) envoyées par la page à partir de l'appel, notées dans
     // sorts ({ url, at } : adresse et instant de l'envoi) ; page.sortsSent('discard') : combien de cette route.
     // Rechargée, la page ne les note plus
