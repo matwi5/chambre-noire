@@ -142,6 +142,21 @@ les messages de commit.
 - **Visuel du bouton Avant** (28/10/2026), réponse par bouton : « Quel visuel pour le bouton Avant ? » (planche du
   groupe B : a plaque, icône et « Avant » ; b carré, icône seule ; c tampon pixel « Avant ») → « Garder a
   (plaque) » : « Je garde le visuel a (plaque, icône et « Avant ») : retire les variantes b et c du CSS. »
+- **Groupe C, touche répétée sur ✓ et ✕** (28/10/2026), réponse par bouton : « Jeter au clavier par un bouton qui a
+  le focus : après un clic sur ✕ (ou sur Jeter dans la visionneuse), le bouton garde le focus. Entrée maintenue le
+  réactive à chaque répétition du système : une image jetée, puis la suivante dès qu'elle est affichée, et ainsi de
+  suite (la pile se vide en passant par le bandeau, chaque Jeter validant le précédent). Espace sur ce bouton fait de
+  même au relâché. C'est le comportement d'avant le lot, que la spec ne traite pas. Que faire ? » → « Bloquer la
+  répétition (Recommandé) » : « Comme pour ←, une touche répétée par le système (repeat) n'active jamais ✓, ✕, ni
+  Garder et Jeter de la visionneuse : Entrée maintenue ne jette qu'une image. Un appui volontaire d'Entrée sur ✕ marche
+  toujours. Espace, sur la pile et dans la visionneuse, ne réactive jamais un bouton (ticket 2, preventDefault). »
+- **Groupe C, flèches seules et carte visible** (28/10/2026), réponse par bouton : « J'ai restreint quand ← et →
+  trient, au-delà de la spec : (1) seulement appuyées seules, sans Ctrl, ⌘, Alt ni Maj (⌘ + ← et Alt + ← sont la page
+  précédente du navigateur : sinon elles jetteraient ET quitteraient la page) ; (2) rien quand le focus est dans
+  n'importe quel champ (curseur de taille du pinceau compris, où ← → changent la valeur), pas seulement les champs de
+  texte ; (3) rien si la carte du dessus n'est pas affichée (pile masquée pendant Dessiner sous 1024 px). Je garde ces
+  trois restrictions ? » → « Garder les trois (Recommandé) » : « Les flèches ne trient que seules, hors de tout champ,
+  et seulement une carte visible : on ne jette jamais une image qu'on ne voit pas ni en voulant faire autre chose. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
