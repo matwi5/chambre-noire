@@ -256,6 +256,13 @@ les messages de commit.
     cartes restent vides jusqu'à la réponse du Mac. Que faire ? » → « Dans F2 : aucun redessin (Recommandé) » : « La
     pile n'est plus redessinée du tout pendant « Sortir » ; elle l'est au refus ou à la sortie, comme aujourd'hui.
     Couvre ce cas et tout autre chemin du même genre. »
+- **Groupe F, image d'avant pendant l'envol** (28/10/2026), réponse par bouton, question posée par la session du
+  groupe : « F3 : on appuie sur ← ou ✕ alors que l'image produite est visible, puis on tient Avant (ou Espace) pendant
+  l'envol de 0,22 s : la carte qui s'envole montre l'image d'avant, et c'est l'image produite qui est jetée (bandeau
+  Annuler de 5 s). La règle « aucun geste ne jette une image qui n'est pas affichée » vaut-elle au moment du geste ou
+  jusqu'au départ de la carte ? » → « Au moment du geste (Recommandé) » : « On ne change rien : l'image produite était
+  à l'écran quand on a appuyé sur ←, et le bandeau Annuler reste là. Le geste visait une image vue, et le cas tient en
+  0,22 s. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
