@@ -298,8 +298,11 @@ dernier bloc, après le HTML.
     `renderGallery` (redessinée seulement si les tirages changent, `histShown` ; état vide avec le logo et « Aller au
     Labo »), `openViewer`, `stepViewer`,
     `closeViewer` et `emptyViewer` (contenu vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace
-    privé), gestes : `zoomable` (pincer, molette, glisser ; son image avant reçoit la même transformation, `twin` ;
-    `resetZoom` pour la visionneuse, `resetInputZoom` pour les
+    privé), raccourcis du PC (écouteur `keydown` juste avant celui de la visionneuse : → et ← sur la pile par
+    `sortTop`, Z et Ctrl/⌘ + Z par `undoDiscard`, Ctrl/⌘ + Entrée dans `#prompt` par `#go` ; rien pendant une saisie,
+    une feuille, la visionneuse ou les images d'entrée, ni sur une carte d'échec ; une touche répétée ne trie rien,
+    Entrée répétée sur `SORT_BUTTONS` comprise), gestes : `zoomable` (pincer, molette, glisser ; son image avant reçoit
+    la même transformation, `twin` ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les
     images d'entrée).
   - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;

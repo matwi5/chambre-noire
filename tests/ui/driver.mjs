@@ -43,6 +43,9 @@
 //   await page.enterPrivate('code')              // dans l'espace privé (créé la première fois), vu par la page,
 //                                                // puis au repos ; await page.privateIdle() : espace au repos
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
+//   await page.topPrompt()                       // prompt de la carte du dessus de la pile
+//   await page.watchSorts(); …; await page.sortsSent('discard')   // demandes keep, discard, delete de la page
+//   await bench.inPile('texte'); await bench.kept('texte')        // image dans la pile, dans les Tirages du Mac
 //   await page.freshLabo(bench)                  // Labo neuf : page rechargée sans brouillon, pile vidée, générations
 //                                                // courtes ({ short: false } : réglages par défaut)
 //   await page.viewPile('texte')                 // visionneuse ouverte sur l'image de la pile à ce prompt
@@ -236,6 +239,9 @@ export async function startBench({ relay = false } = {}) {
     // libère les générations dont le prompt porte HOLD=<name> (HOLD seul : 'hold') ; voir tests/fake_sdcli.py
     release(name = 'hold') { fs.writeFileSync(path.join(hold, name), ''); },
     async api(route) { return (await macFetch(route)).json(); },
+    // image à ce prompt dans la pile du Mac, ou dans ses Tirages (espace public)
+    async inPile(prompt) { return (await (await macFetch('/api/pile')).json()).some(it => it.prompt === prompt); },
+    async kept(prompt) { return (await (await macFetch('/api/history')).json()).some(it => it.prompt === prompt); },
     // jeton et page d'entrée du banc, comme launch.py --enter : chemin de la page de redirection vers /entrer
     async enter() { return JSON.parse(await server.ask('entrer')).entry; },
     async stop() { if (directBench === entry) directBench = null; await relayed?.stop(); await server.stop(); },
@@ -292,9 +298,9 @@ export async function applyView(page, view) {
 // touches du clavier (Input.dispatchKeyEvent) : key de l'événement → code et touche virtuelle de Windows ; un
 // caractère seul (lettre, chiffre) est déduit (keyInfo)
 const KEYS = { ' ': ['Space', 32], Enter: ['Enter', 13], Escape: ['Escape', 27], Tab: ['Tab', 9],
-  Backspace: ['Backspace', 8], ArrowLeft: ['ArrowLeft', 37], ArrowUp: ['ArrowUp', 38], ArrowRight: ['ArrowRight', 39],
-  ArrowDown: ['ArrowDown', 40], Control: ['ControlLeft', 17], Shift: ['ShiftLeft', 16], Alt: ['AltLeft', 18],
-  Meta: ['MetaLeft', 91] };
+  Backspace: ['Backspace', 8], Delete: ['Delete', 46], ArrowLeft: ['ArrowLeft', 37], ArrowUp: ['ArrowUp', 38],
+  ArrowRight: ['ArrowRight', 39], ArrowDown: ['ArrowDown', 40], Control: ['ControlLeft', 17], Shift: ['ShiftLeft', 16],
+  Alt: ['AltLeft', 18], Meta: ['MetaLeft', 91] };
 // modificateurs : nom → bit de Input.dispatchKeyEvent, et la touche qui le porte
 const MODIFIERS = { alt: [1, 'Alt'], ctrl: [2, 'Control'], meta: [4, 'Meta'], shift: [8, 'Shift'] };
 function keyInfo(key) {
@@ -505,6 +511,17 @@ async function connect(wsUrl) {
           await loadPile(); }
         return n; })()`);
     },
+    // prompt de la carte du dessus de la pile affichée (undefined sans carte)
+    topPrompt() { return page.eval(`$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`); },
+    // demandes de tri et de suppression (keep, discard, delete) envoyées par la page à partir de l'appel, notées ;
+    // page.sortsSent('discard') : combien de cette route. Rechargée, la page ne les note plus
+    watchSorts() {
+      return page.eval(`(() => { window.sorts = []; if (window.sortsWatched) return; window.sortsWatched = true;
+        const f = window.fetch;
+        window.fetch = (u, o) => { if (/\\/(keep|discard|delete)$/.test(String(u))) sorts.push(String(u));
+          return f(u, o); }; })()`);
+    },
+    sortsSent(route) { return page.eval(`sorts.filter(u => u.endsWith('/${route}')).length`); },
     // Labo neuf : bench au repos (une génération encore en file serait reprise par la page rechargée), page rechargée
     // sans brouillon ni réglages (localStorage vidé), moteur prêt, pile lue puis gardée dans les Tirages ; short :
     // générations courtes (peu d'étapes, petite taille)

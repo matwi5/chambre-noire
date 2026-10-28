@@ -378,6 +378,18 @@ ouvert) ; rien pour une génération annulée. Partager et
 Copier ne sont proposés que là où le navigateur les permet : sur l'ordinateur lui-même, ou sur le téléphone par
 l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du Wi-Fi).
 
+Au clavier (PC) : **→** garde et **←** jette l'image du dessus de la pile, exactement comme ✓ et ✕ (même bandeau
+Annuler, un Jeter suivant envoie le précédent, même attente de l'image suivante affichée) ; **Z** ou **Ctrl/⌘ + Z**
+annule le Jeter tant que le bandeau est là. Dans le champ, **Ctrl/⌘ + Entrée** revient à appuyer sur **Révéler**. La
+visionneuse garde ← et → pour l'image précédente ou suivante, et Échap pour se fermer (Garder et Jeter y restent sur
+leurs boutons). Aucun raccourci ne réagit pendant qu'on tape un texte (sauf Ctrl/⌘ + Entrée dans le champ), quand un
+panneau ou la visionneuse est ouvert (Ctrl/⌘ + Entrée compris), ni sur une carte d'échec ; sur la pile, les flèches
+ne servent qu'appuyées seules (⌘ + ← et Alt + ← restent la page précédente du navigateur). Règle : aucune touche ne
+supprime un tirage ; au clavier, Jeter
+passe toujours par le bandeau Annuler, comme au doigt ; une touche maintenue ou répétée ne jette jamais plus d'une
+image avant que la suivante soit affichée (une touche répétée par le système ne trie rien, pas même Entrée sur ✓, ✕
+ou Garder et Jeter de la visionneuse quand ils ont le focus).
+
 ### Créer une image (Labo)
 
 Sous la pile et la génération en cours, le Labo a un seul champ de texte et une seule liste d'**images d'entrée**.
@@ -1140,8 +1152,10 @@ couleurs, son panneau avec « Ouvrir depuis le téléphone » sur l'ordinateur s
 « Sortir », rien qui dépasse), le toucher d'une notification (service worker et page), la file cloisonnée par espace,
 les prompts enregistrés privés, la reprise d'une génération, le suivi d'une génération privée devenue inconnue (sans
 faux « Échec »), le brouillon unique (reprise des anciens, aucun brouillon privé dans le navigateur, ancien réglage
-incognito signalé une fois puis oublié) et le pilote lui-même (recherche de données restées dans la page, fichiers
-écrits par le banc, délais).
+incognito signalé une fois puis oublié), les raccourcis clavier du PC (→ et ← sur la pile, Z et Ctrl/⌘ + Z, touche
+tenue ou répétée qui ne jette qu'une image, carte d'échec, rien pendant une saisie, une feuille ou la visionneuse,
+aucune touche qui supprime un tirage, Ctrl/⌘ + Entrée dans le champ) et le pilote lui-même (recherche de données restées
+dans la page, fichiers écrits par le banc, délais).
 
 Tests de bout en bout, interface lancée :
 
