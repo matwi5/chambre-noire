@@ -359,15 +359,24 @@ une fois lâchée au-delà du tiers de sa largeur ou après un geste vif ; en de
 l'image n'est effacée du Mac (image, vignette, images d'entrée, dossier de travail, ligne du journal) qu'à la fin du
 bandeau. Fermer ou recharger la page pendant ce temps la laisse dans la pile ; jeter une autre image envoie tout de
 suite l'effacement de la précédente (un seul bandeau à la fois). Après un tri, ✓, ✕ et les boutons de la visionneuse
-ignorent un nouvel appui tant que l'image suivante n'est pas affichée (0,3 s au moins) : un double appui ne trie jamais
-une image qu'on n'a pas vue. Plus généralement, aucun geste (bouton, touche, balayage, visionneuse) ne trie une image
+ignorent un nouvel appui tant que l'image suivante n'est pas affichée depuis 0,3 s : un double appui ne trie jamais
+une image qu'on n'a pas vue. De même, une carte arrivée sur le dessus sans tri sur cet appareil (nouvelle image, tri
+fait sur un autre appareil, image remise par Annuler) ne se trie par ✓, ✕, les flèches ou le balayage que 0,3 s après
+qu'on a pu la voir (Labo affiché, sans visionneuse, panneau ni Dessiner par-dessus) : un ✕ visé sur l'ancienne ne jette
+pas la nouvelle, même arrivée pendant que la visionneuse la couvrait. Dans la visionneuse, toute image de la pile attend
+de même 0,3 s après son affichage avant que Garder ou Jeter la trie : à l'ouverture, après un pas (← →) ou un tri. Plus
+généralement, aucun geste (bouton, touche, balayage, visionneuse) ne trie une image
 dont ni la miniature ni l'image n'est encore à l'écran ; une image que le navigateur n'arrive pas à lire se trie une
 fois son chargement fini en échec, pour ne pas bloquer la pile. Dans l'espace privé, un Jeter en attente est abandonné
 dès l'appui sur « Sortir » : l'image
-reste dans la pile privée, même si la sortie échoue. Tant que le Mac n'a pas répondu à « Sortir », rien ne se trie :
-✓, ✕, les flèches, le balayage (la carte revient) et Garder ou Jeter de la visionneuse ne font rien, et une carte qui
-partait revient sur la pile. Si un
-autre appareil a déjà trié l'image, Garder (**✓** ou
+reste dans la pile privée, même si la sortie échoue, et revient tout de suite sur la pile avec son image, comme avec
+**Annuler**. Tant que le Mac n'a pas répondu à « Sortir », rien ne bouge : ✓, ✕, les flèches, le balayage (la carte
+revient), **Relancer** (carte d'échec) et **Révéler** ne font rien, ni aucune action de la visionneuse restée ouverte
+(Garder, Jeter, **Éditer**, **Dessiner**, **Reprendre**, **Relancer**, **Supprimer** confirmé pendant l'attente,
+Partager,
+Copier, Télécharger) ; une carte qui partait revient sur la pile, et la pile n'est pas redessinée (ses images privées
+ne sont plus demandées). Une carte qui partait quand le Mac ferme l'espace de lui-même ne part pas non plus. Si un autre
+appareil a déjà trié l'image, Garder (**✓** ou
 balayage à droite) dit « Déjà triée » et la carte s'en va (un Jeter n'a rien à effacer). Un appui sur l'image l'ouvre en
 grand dans la visionneuse, qui parcourt la pile :
 **Garder** et **Jeter** y remplacent **Supprimer**, puis elle passe à l'image suivante ; **Télécharger**, **Partager**,
@@ -547,8 +556,10 @@ avec deux autres doigts pendant qu'un doigt tient Avant. Elle est chargée en av
 sinon sa miniature vient d'abord. Sur ordinateur, maintenir **Espace** fait la même chose que maintenir le bouton,
 dans la visionneuse ou sur la carte du dessus de la pile (rien sur une image non comparable, pendant qu'on tape un
 texte ou avec un panneau ouvert) ; là, Espace ne fait pas défiler la page et n'active aucun bouton qui a le focus
-(Entrée, oui). Le bouton de la carte ne trie rien et n'ouvre pas la visionneuse. Il marche aussi
-dans l'espace privé (voir « Espace privé »).
+(Entrée, oui). Le bouton de la carte ne trie rien et n'ouvre pas la visionneuse. Tant que l'image d'avant est à
+l'écran (bouton ou Espace tenus), rien ne trie l'image produite, qu'on ne voit pas : ✓, ✕, ← →, le balayage (la carte
+revient) et Garder ou Jeter de la visionneuse ne font rien ; il suffit de relâcher pour trier. Le bouton
+Avant marche aussi dans l'espace privé (voir « Espace privé »).
 
 ### Prompts enregistrés
 
@@ -1152,8 +1163,9 @@ confirmée, « Déjà terminée » pour une génération finie pendant la questi
 génération d'un autre appareil sans aperçu ou cachée, « +N en attente », rien qui dépasse à la largeur du téléphone), la
 pile (ordre, cartes de lot, ✓ et ✕, balayage au doigt et à la souris, bandeau Annuler et rien d'envoyé avant sa fin ni
 au rechargement, deux Jeter de suite, un second ✓ pendant le départ d'une carte, « Sortir » pendant le chargement d'une
-image privée, rien de trié pendant « Sortir » et la carte qui partait revenue, aucun tri d'une image pas encore
-affichée, image illisible triable, « Déjà triée », visionneuse, carte
+image privée, rien de trié ni relancé pendant « Sortir », la carte qui partait revenue et la pile qui garde ses images,
+aucun tri d'une image pas encore affichée ni dans les 0,3 s qui suivent son affichage, carte arrivée d'ailleurs
+comprise, carte masquée par Dessiner jamais triée, image illisible triable, « Déjà triée », visionneuse, carte
 d'échec, pile privée, message « Image prête »), Garder et Jeter par nom
 après une relecture de la pile, la saisie (unique, dans le Labo, Dessiner, collage, campagne à partir de 2 images,
 plusieurs photos d'un coup, vidage après « Révéler », saisie propre à chaque espace), le champ de création (replié avec
@@ -1169,7 +1181,8 @@ faux « Échec »), le brouillon unique (reprise des anciens, aucun brouillon pr
 incognito signalé une fois puis oublié), les raccourcis clavier du PC (→ et ← sur la pile, Z et Ctrl/⌘ + Z, touche
 tenue ou répétée qui ne jette qu'une image, carte d'échec, rien pendant une saisie, une feuille ou la visionneuse,
 aucune touche qui supprime un tirage, Ctrl/⌘ + Entrée dans le champ), le bouton Avant (images comparables, appui tenu
-et relâché, cadre, zoom, espace privé) et Espace maintenue (sans défilement ni bouton activé) et le pilote lui-même
+et relâché, cadre, zoom, espace privé, aucun tri tant qu'il est tenu) et Espace maintenue (sans défilement ni bouton
+activé) et le pilote lui-même
 (recherche de données restées dans la page, fichiers écrits par le banc, délais, fermeture d'un onglet, qui attend
 d'abord l'espace privé au repos).
 

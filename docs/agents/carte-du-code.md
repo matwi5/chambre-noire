@@ -222,8 +222,13 @@ dernier bloc, après le HTML.
     miniature des visionneuses à la taille de l'image complète, par `fitThumb`, en unités de la scène `cqw`, `cqh`),
     `preload` et `ready` (les 10 dernières images décodées : miniatures des voisines de la visionneuse, image complète
     de la suivante dans le sens du parcours `vStep`, première image d'entrée ; `refused` : adresse refusée, entrée
-    `gone`, pendant « Sortir » et, pour une adresse `/api/private/`, hors de l'espace privé),
-    `clearImage`, `abortPrivateLoads` (chargements privés en route abandonnés, aussi avant la fermeture de la session
+    `gone`, pendant « Sortir » et, pour une adresse `/api/private/`, hors de l'espace privé ; `unready` : entrée
+    retirée de `ready`, évincée, illisible ou oubliée, son image vidée, à son arrivée si elle chargeait encore ; un
+    aperçu de la carte en cours quitte `ready` dès sa demande, voir `revealPreview`),
+    `clearImage`, `clearImages` (images d'un contenu vidées avant qu'il soit remplacé ou vidé : pile, Tirages, « Voir
+    le lot », file, miniatures d'entrée de la visionneuse et de la saisie ; une image détachée ne garde pas son adresse
+    privée jusqu'au ramasse-miettes), `abortPrivateLoads` (chargements privés en route abandonnés, aussi avant la
+    fermeture de la session
     par « Sortir », et ceux d'une génération finie avec un préfixe d'adresse : `secretLoads`, même évincés de `ready`,
     marqués `gone` : une image qui en attendait un, même détachée, ne reçoit rien), `forgetPrivateImages` (sortie de
     l'espace privé : images privées et aperçus affichés, attendus ou chargés en avance, chargements en cours
@@ -252,7 +257,10 @@ dernier bloc, après le HTML.
     (génération révélée, couleurs des carrés lues par `cssRgb`, dernier aperçu ; `blankReveal`), `startReveal` et
     `drawNoise` (carrés au hasard avant le premier aperçu,
     allégés en `html.lite`, immobiles en `prefers-reduced-motion`), `revealPreview` (aperçu décodé par `preload`,
-    servi une fois) et `drawMosaic` (blocs de `REVEAL_COARSE` à `REVEAL_FINE` px selon step / total, sans lissage),
+    servi une fois : retiré de `ready` dès sa demande, rien ne l'évince ; pas montré, il passe par `unready`, et
+    l'aperçu que la mosaïque lâche, remplacé ou à
+    `clearReveal`, est vidé) et `drawMosaic` (blocs de `REVEAL_COARSE` à `REVEAL_FINE` px selon step / total, sans
+    lissage),
     `sizeReveal`, `redrawReveal`, `clearReveal`, `lite` (canevas vidé : fin, changement de génération, sortie de
     l'espace par `forgetPrivateImages`) ; `notifyDone` (message « Image prête »,
     « Lot prêt » hors du Labo, `toast(…, go)`), `renderQueue` (file de l'espace en cartes, feuille ouverte seulement :
@@ -277,22 +285,33 @@ dernier bloc, après le HTML.
     `pileRead` : l'état vide n'est montré qu'une fois la pile lue ; oublie les générations finies de la page dont
     l'image a quitté la pile, sauf pendant leur lot), `pileView` et `pileSize` (sans les images dont le tri est en
     cours, `sorting`, avec leur génération de la page `pageOf`), `pileFails` (échecs de la page, en tête),
-    `renderPile` (carte du dessus et deux devinées dessous : `pileCard`, `failCard`, chacune marquée par `pileTag` ;
+    `renderPile` (rien pendant « Sortir », `exiting()` ; carte du dessus et deux devinées dessous : `pileCard`,
+    `failCard`, chacune marquée par `pileTag` ;
     état vide, compte, pastille de l'onglet ; redessinée seulement si elle change, `pileShown`, les images des cartes
-    retirées vidées par `clearImage`), `topEntry` (ce que montre la carte du dessus, retrouvé par son nom), `posed`
+    retirées vidées par `clearImages`), `topEntry` (ce que montre la carte du dessus, retrouvé par son nom), `posed`
     (image de la pile triable : miniature ou image à l'écran, ou chargement fini en échec ; jamais pendant le
-    chargement), `sortTop` (✓, ✕ et balayage ; rien pendant « Sortir », `exiting()`, ni sur une image pas `posed` ;
+    chargement), `sortTop` (✓, ✕ et balayage ; rien pendant « Sortir », `exiting()`, ni tant que l'image d'avant est à
+    l'écran, `beforeHeld`, ni sur une carte masquée, `shownTop`, ni sur une image pas `posed` ;
     `flyOut`, un départ à la fois : `flying`, vrai jusqu'au tri ou au retour de la carte, même si la pile est
-    redessinée entre-temps, `flight` le départ en cours, que `landFlight` annule à l'appui sur « Sortir » ; puis
-    `holdSort` : `sortHeld` jusqu'à l'image suivante `posed`, `SORT_GAP` ms au moins, `SORT_HOLD_MAX` au plus, aussi
-    pour la visionneuse), `pileSwipe` (balayage de
+    redessinée entre-temps, `flight` le départ en cours, que `landFlight` annule à l'appui sur « Sortir » et à la sortie
+    de l'espace (`changedSpace`) ; verrou de tri qui suit ce que l'œil voit : toute carte arrivée sur
+    le dessus (tri d'ici, nouvelle image, tri ailleurs, Annuler, carte d'échec : `pileTop` change dans `renderPile`)
+    attend d'être vue `SORT_GAP` ms, `holdTop`, `topHeld` (pile seulement, `sortBusy`) ; dans la visionneuse, toute
+    image de la pile de même (ouverture, pas, tri : `openViewer`), `holdSort`, `sortHeld` ; l'attente commune,
+    `afterSeen`, suit ce que
+    montre la vue (`topView` : Labo sans visionneuse ni feuille, carte pas masquée, image posée ; ou l'image
+    de la visionneuse) et repart de zéro quand elle change ; `releaseSort` les lève à l'appui sur « Sortir » et à la
+    sortie de l'espace), `pileSwipe`
+    (balayage de
     la carte du dessus par Pointer Events, doigt et souris : seuil au tiers de la largeur ou geste vif ; `swiped` :
     la fin d'un balayage n'ouvre pas la visionneuse, oublié au prochain appui dans la zone de la pile),
     `sendSort` (envoi de Garder ou Jeter, « Déjà triée » sur un 404 de Garder), `keepItem`, `discardItem` (Jeter :
     bandeau `#undoBar`, `discarding`), `commitDiscard` (à la fin du bandeau, `DISCARD_MS`, ou au Jeter suivant ;
-    abandonné si l'espace où il a commencé est fermé ou en train de l'être, `leavingPrivate` ; `privLock` abandonne
-    un Jeter privé en attente dès l'appui sur « Sortir »), `undoDiscard`, `sortFromViewer` (Garder et Jeter de la
-    visionneuse, puis l'image suivante ; rien pendant « Sortir » ni sur une image pas `posed`). Garder et Jeter visent
+    abandonné si l'espace où il a commencé est fermé ou en train de l'être, `leavingPrivate` ; `privLock` annule
+    un Jeter privé en attente dès l'appui sur « Sortir », avant que les images privées soient refusées : la carte
+    revient avec son image), `undoDiscard`, `sortFromViewer` (Garder et Jeter de la
+    visionneuse, puis l'image suivante ; rien pendant « Sortir », ni tant que l'image d'avant est à l'écran,
+    `beforeHeld`, ni sur une image pas `posed`). Garder et Jeter visent
     une image par `pileKey` (nom, identifiant d'une privée), jamais par l'objet affiché.
   - « notifications » : `pushSubscribe`, `askNotifications`.
   - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts` (ouverte par le
@@ -321,11 +340,13 @@ dernier bloc, après le HTML.
     d'entrée selon le mode, `RESUME_FILES` : demande gardée `req`, sinon galerie), `canResume` (bouton `#vResume`),
     `settingsFor` (format, résolution et étapes qui redonnent l'image) ; « Relancer » (visionneuse `#vAgain`, carte
     d'échec `data-again`) : `keptRequest` (demande gardée : l'image seule), `againFrom` (reconstruite de
-    l'image sinon), `canAgain`, `relaunch` (graine et espace du moment ; estimation), puis `launch` (envoi commun avec
+    l'image sinon), `canAgain`, `relaunch` (graine et espace du moment ; estimation), puis `launch` (envoi commun, rien
+    d'une demande privée pendant « Sortir », avec
     « Révéler » : suivi, `accepted` (vidage de la saisie de « Révéler », champ replié), message, haut du Labo), `again`
-    (un geste à la fois) ;
-    actions de la visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`, `deleteItem` (« Supprimer » un
-    tirage), `forgetResult`.
+    (un geste à la fois ; rien pendant « Sortir », `exiting()`, comme « Révéler » `#go`) ;
+    actions de la visionneuse : `viewerAction` (comme `inputAction`, `viewerShare`, `viewerCopy`, `downloadLot` et les
+    liens `#vDl`, `#ivDl` : rien pendant « Sortir »), `removeFromViewer`, `lotMembers`, `deleteItem` (« Supprimer » un
+    tirage ; « Sortir » revérifié après la confirmation), `forgetResult`.
   - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
     `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,
     `putInput`, `swapInput`, `emptyInput` (vidage après « Révéler », dans l'espace d'où la demande est partie) ; un
@@ -336,7 +357,8 @@ dernier bloc, après le HTML.
     de `/api/status` demandée avant ; `leavingPrivate` (`exiting()` : dans l'espace, sortie en attente) : aucune image
     privée ni aperçu demandés ou posés, quel que soit le chemin qui redessine (`preload` les refuse : entrée `gone` ;
     `renderQueue`, `renderGallery`, `openLot`, `openViewer` ne redessinent rien, la seconde tentative d'une vignette
-    privée des Tirages est abandonnée, aussi après la sortie), aucune pile ni Tirages privés lus ou dessinés
+    privée des Tirages est abandonnée, aussi après la sortie, comme celle de toute vignette retirée de la grille
+    entre-temps), aucune pile ni Tirages privés lus ou dessinés
     (`loadPile`, `loadHistory`), même partis avant l'appui, ni pile redessinée à la réponse d'un tri (`sendSort`),
     aucune génération privée de la page interrogée (`pollJobs`) ni suivie ou adoptée, même par un suivi parti avant
     l'appui (`followQueue`, `adopted`), ni Jeter privé envoyé pendant la fermeture), `privChangeCode`, `privReset` ;

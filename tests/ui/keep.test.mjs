@@ -37,8 +37,8 @@ async function viewSecond(prompt) {
   await page.waitFor(`pileItems.filter(it => it.lot && it.lot.id === ${JSON.stringify(lot)}).length === 3`,
     { what: 'lot dans la pile' });
   await page.eval(`openViewer(pileView().findIndex(it => it.name === ${JSON.stringify(names[1])}), pileView())`);
-  await page.waitFor(`$('viewer').classList.contains('on') && !$('vSort').hidden`,
-    { what: 'visionneuse sur l\'image 2' });
+  await page.waitFor(`$('viewer').classList.contains('on') && !$('vSort').hidden && !sortHeld`,
+    { what: 'visionneuse sur l\'image 2, vue 0,3 s' });
   assert.equal(await page.eval(`(async () => { const before = pileItems; await loadPile();
     return pileItems !== before; })()`), true, 'pile relue (nouveaux objets)');
   return { lot, names };

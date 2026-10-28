@@ -111,6 +111,7 @@ test('champ : un toucher sur l\'image de la pile le replie et ouvre la visionneu
     await page.click('#composerLine');
     const size = await page.eval(`pileSize()`);
     await page.eval(`scrollTo({ top: 0, behavior: 'instant' })`);   // (le défilement vers le champ déplié arrêté)
+    await page.topShown();                          // (la carte vue 0,3 s une fois la page remontée)
     await page.swipe('#pile .pcard[data-k="0"] .pimg', 200, 0, { mouse: true });   // gardée d'un balayage à droite
     await page.waitFor(`pileSize() === ${size - 1}`, { what: 'carte balayée' });
     assert.equal(await folded(), false, 'fin du balayage prise pour un toucher sur la pile');
