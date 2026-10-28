@@ -241,6 +241,21 @@ les messages de commit.
   aussi (l'aperçu non montré passe par le même outil que les autres images préchargées, et clearReveal vide l'image
   qu'il lâche) ; le test d'étanchéité vérifie aussi les adresses /api/job/ d'une génération privée. Même défaut, même
   outil, risque faible. »
+- **Groupe F, passe « bogues » de F2** (28/10/2026), réponses par bouton, questions posées par la session du groupe :
+  - « F2, Q1 : un Jeter privé attend la fin de son bandeau quand on appuie sur « Sortir ». Il est abandonné (l'image
+    reste sur le Mac). Pendant l'attente de la réponse du Mac, que devient la carte ? » → « Elle revient tout de suite
+    (Recommandé) » : « Le Jeter est annulé juste avant que les images privées soient refusées ; la carte revient sur
+    la pile avec son image (depuis la mémoire de la page ; dans le cas rare où elle n'y est plus, carte vide jusqu'à la
+    réponse). Comme « Annuler » : l'œil voit que rien n'a été jeté. »
+  - « F2, Q2 : pendant « Sortir », la visionneuse peut rester ouverte sur une image privée ; Éditer, Dessiner,
+    Reprendre et Supprimer y envoient encore des requêtes privées (Supprimer, confirmé, peut supprimer l'image). Que
+    faire ? » → « Dans F2 : tout bloqué (Recommandé) » : « Toutes les actions de la visionneuse ne font rien pendant
+    « Sortir », comme Relancer (elle reste ouverte, sans message), et Supprimer revérifie « Sortir » après sa
+    confirmation. »
+  - « F2, Q3 : une génération privée en échec dont la réponse arrive pendant « Sortir » redessine la pile, et les
+    cartes restent vides jusqu'à la réponse du Mac. Que faire ? » → « Dans F2 : aucun redessin (Recommandé) » : « La
+    pile n'est plus redessinée du tout pendant « Sortir » ; elle l'est au refus ou à la sortie, comme aujourd'hui.
+    Couvre ce cas et tout autre chemin du même genre. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
