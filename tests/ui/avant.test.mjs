@@ -174,6 +174,7 @@ test('cadre : le contenu affiché de l\'image produite, étirée au format « Im
       else {
         await page.closeViewer();
         if (prompt === 'zd carre') {                       // « zd image », arrivée après, gardée : « zd carre » dessus
+          await page.topShown();                           // (vue 0,3 s une fois la visionneuse effacée)
           await page.click('#pileYes');
           await page.waitFor(`pileView().length === 1 && pileView()[0].prompt === 'zd carre'`,
             { what: 'zd carre dessus' });
@@ -344,6 +345,7 @@ test('PC : Espace sans effet sur une image non comparable, pendant une saisie, a
     await page.press(' ');                          // non comparable : rien, ✕ pas déclenché
     assert.deepEqual(await page.eval(`[beforeHeld, pileView()[0].prompt, !discarding, !flying]`),
       [null, 'zt texte', true, true]);
+    await page.topShown();                          // (carte arrivée : verrou court de 0,3 s)
     await page.click('#pileYes');                   // zt une dessus
     await page.waitFor(`pileView().length === 1 && !document.querySelector('#pile .bfr').hidden`,
       { what: 'zt une dessus, bouton Avant' });

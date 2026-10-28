@@ -1641,8 +1641,9 @@ const failText = p => 'Échec : '+(p.j.error||'génération impossible');
 // dont le tri attend son bandeau ou la réponse du Mac (« p » ou « n » suivi de pileKey), tenues hors de la pile
 // affichée même si une relecture les rend encore ; discarding : le Jeter qui attend la fin de son bandeau ({tag, priv,
 // body, timer}) ; flying : la carte du dessus part (un second appui ne vise pas la même image) ; pileShown : les cartes
-// dessinées (redessinées seulement quand elles changent)
-let pileItems=[], pileRead=false, pileRev=null, pileSeq=0, discarding=null, flying=false, pileShown='';
+// dessinées (redessinées seulement quand elles changent) ; pileTop : la clé de la carte du dessus dessinée (une autre,
+// arrivée sur le dessus, prend le verrou court : holdTop)
+let pileItems=[], pileRead=false, pileRev=null, pileSeq=0, discarding=null, flying=false, pileShown='', pileTop='';
 const sorting=new Set();
 const pileApi = (route, priv) => (priv ? '/api/private/' : '/api/')+route;   // pile, keep, discard
 const pileKey = it => it.private ? it.id : it.name;
@@ -1713,7 +1714,12 @@ function renderPile(){ if(exiting()) return;
     if(k) return showImage(img, thumbOf(e.it));
     const fr=img.closest('.pcard').querySelector('.bfr'); armBefore(fr); aimBefore(fr, e.it, img);
     img.addEventListener('load', ()=>placeBefore(fr));
-    showImage(img, srcOf(e.it), {thumb:thumbOf(e.it), then:()=>{ if(fr.url){ preload(fr.thumb); preload(fr.url); } }}); }); }
+    showImage(img, srcOf(e.it), {thumb:thumbOf(e.it), then:()=>{ if(fr.url){ preload(fr.thumb); preload(fr.url); } }}); });
+  // carte du dessus remplacée (nouvelle image, tri ailleurs, Annuler…) : le même verrou court, compté depuis son
+  // affichage (celui d'un tri d'ici la suit aussi)
+  const top0=$('pile').querySelector('[data-k="0"]')?.dataset.key || '';
+  if(top0 && top0!==pileTop) holdTop();
+  pileTop=top0; }
 // ce que montre la carte du dessus dessinée : un échec de la page, ou une image de la pile, retrouvés par leur nom
 function topEntry(){ const c=$('pile').querySelector('[data-k="0"]'), key=c && c.dataset.key; if(!key) return null;
   if(key[0]==='f'){ const p=pileFails().find(q=>q.id===key.slice(1)); return p ? {fail:p} : null; }
@@ -1735,32 +1741,57 @@ function landFlight(){ if(!flight) return; const c=flight.c; clearTimeout(flight
 // et ses réglages, se trie, sinon elle bloquerait la pile) ; jamais pendant son chargement (décisions du porteur du
 // 28/10/2026, groupe « durcissement » et groupe E)
 const posed = img => !!img && !!img.getAttribute('src') && img.complete;
-// après un tri (✓, ✕, ou Garder et Jeter de la visionneuse), les suivants attendent que l'image suivante soit
-// affichée, SORT_GAP ms au moins : un double appui ne trie jamais l'image suivante sans l'avoir vue, et un Jeter
-// n'envoie jamais celui d'avant sans son bandeau (décision du 24/10/2026). Le verrou se lève au plus tard après
-// SORT_HOLD_MAX ms (une image qui ne vient pas ne bloque pas les autres gestes : Garder ou Jeter une autre image dans
-// la visionneuse), mais elle ne se trie pas pour autant (posed) : sans image posée, seule une carte d'échec se trie
-const SORT_GAP=300, SORT_HOLD_MAX=3000;
-let sortHeld=false, holdTimer=null;               // holdTimer : l'attente en cours (une seule à la fois)
-const sortBusy=()=>flying || sortHeld;           // un tri en cours ou son attente : ✓, ✕ et la visionneuse l'ignorent
-function holdSort(shown){ clearTimeout(holdTimer); sortHeld=true; const t0=performance.now();   // (minuteur : une
-  const wait=()=>{ const t=performance.now()-t0;   // page cachée n'a plus d'images d'animation, mais ses minuteurs)
-    if(t>=SORT_HOLD_MAX || t>=SORT_GAP && shown()) releaseSort(); else holdTimer=setTimeout(wait, 50); };
-  holdTimer=setTimeout(wait, SORT_GAP); }
+// Verrou de tri qui suit ce que l'œil voit : toute carte qui arrive sur le dessus de la pile (après un tri d'ici, une
+// nouvelle image, un tri sur un autre appareil, Annuler, une carte d'échec : renderPile, pileTop) ne se trie qu'une fois
+// vue SORT_GAP ms (holdTop, topHeld) : un double appui ne trie jamais l'image suivante sans l'avoir vue, un Jeter
+// n'envoie jamais celui d'avant sans son bandeau (décision du 24/10/2026), un ✕ visé sur l'ancienne ne jette pas la
+// nouvelle (décisions du porteur, « Verrou court » et « Toute carte », 28/10/2026). Dans la visionneuse, toute image de
+// la pile de même, à l'ouverture, après un pas ou un tri (holdSort, sortHeld, posé par openViewer). Une image qui ne vient pas ne se trie pas pour autant (posed) ;
+// son verrou ne bloque que sa vue : passer à une autre image (visionneuse) le reprend sur celle-ci
+const SORT_GAP=300;
+// view() : ce que montre une vue qui trie, {key, shown} (topView, ou l'image de la visionneuse) ; afterSeen appelle
+// done() une fois ce qu'elle montre vu depuis SORT_GAP ms (le compte repart de zéro quand elle montre autre chose, key,
+// ou plus rien) ; renvoie de quoi l'abandonner. (minuteur : une page cachée n'a plus d'images d'animation, mais ses
+// minuteurs ; la vue est notée au plus 50 ms après)
+function afterSeen(view, done){ let key, since=null, timer=null;
+  const wait=()=>{ const v=view() || {}, now=performance.now();
+    if(v.key!==key){ key=v.key; since=null; }
+    if(!v.shown) since=null; else if(since==null) since=now;
+    if(since!=null && now-since>=SORT_GAP) done(); else timer=setTimeout(wait, 50); };
+  wait(); return ()=>clearTimeout(timer); }
+// sortHeld : verrou de l'image de la visionneuse ; topHeld : verrou de la carte du dessus (pile seulement : la
+// visionneuse montre sa propre image). stopSort, stopTop : abandon de leur attente
+let sortHeld=false, topHeld=false, stopSort=null, stopTop=null;
+const sortBusy=()=>flying || sortHeld || topHeld;   // ✓, ✕, ← → et le balayage l'ignorent (la visionneuse : sans topHeld)
+function holdSort(view){ if(stopSort) stopSort(); sortHeld=true; stopSort=afterSeen(view, ()=>{ stopSort=null; sortHeld=false; }); }
+function holdTop(){ if(stopTop) stopTop(); topHeld=true; stopTop=afterSeen(topView, ()=>{ stopTop=null; topHeld=false; }); }
+// el à l'écran, ce que l'œil en voit : son milieu dans la fenêtre (pas sorti par défilement), et rien par-dessus, ni
+// une visionneuse (images d'entrée comprises ; pas celle qui contient el) ni une feuille, même pendant leur effacement,
+// ni le voile. (Pas
+// document.hidden : Chrome sans écran laisse les pages des tests derrière un autre onglet)
+const onScreen = el => { const r=el.getBoundingClientRect(), y=(r.top+r.bottom)/2, x=(r.left+r.right)/2;
+  return !!r.height && y>=0 && y<=innerHeight && x>=0 && x<=innerWidth
+    && ![...document.querySelectorAll('.viewer, .sheet')].some(v=>!v.contains(el) && getComputedStyle(v).visibility==='visible')
+    && !(+getComputedStyle($('scrim')).opacity); };
+// la carte du dessus dessinée (data-key) et vue : Labo affiché, carte pas masquée (Dessiner : shownTop) et à l'écran,
+// envol fini, image posée (carte d'échec, pile vide : rien à attendre)
+const topView = () => { const c=$('pile').querySelector('[data-k="0"]'), img=c && c.querySelector('.pimg img');
+  return {key:c ? c.dataset.key : '',
+    shown:!flying && (!c || !!shownTop() && onScreen(img || c)) && (!img || posed(img))}; };
 // verrou levé tout de suite (« Sortir » : la pile ne bouge plus, et l'image suivante n'arrivera pas avant la réponse)
-function releaseSort(){ clearTimeout(holdTimer); holdTimer=null; sortHeld=false; }
+function releaseSort(){ if(stopSort) stopSort(); if(stopTop) stopTop(); stopSort=stopTop=null; sortHeld=topHeld=false; }
 // vrai si la carte part (un échec ne part qu'à gauche, retiré de la page). Pendant « Sortir » (exiting), rien ne part,
 // carte d'échec comprise : la carte reste à l'écran, sans tri, jusqu'à la fin de la sortie (décision du porteur,
 // « Ne bouge pas », 28/10/2026)
 // Tant que l'image d'avant est à l'écran (bouton Avant tenu, Espace tenue : beforeHeld, carte du dessus ou
 // visionneuse), rien ne part non plus : l'image produite n'est pas affichée ; relâcher suffit pour trier (décision du
 // porteur, « Rien », groupe F du 28/10/2026)
-function sortTop(action){ if(sortBusy() || exiting() || beforeHeld) return false; const top=topEntry(); if(!top) return false;
+// (carte masquée par Dessiner, shownTop : rien non plus)
+function sortTop(action){ if(sortBusy() || exiting() || beforeHeld || !shownTop()) return false;
+  const top=topEntry(); if(!top) return false;
   if(top.fail && action!=='discard') return false;   // ✓ sur un échec : rien ne part, rien n'attend
   const topImg = () => $('pile').querySelector('[data-k="0"] .pimg img');   // (aucune sur une carte d'échec)
   if(!top.fail && !posed(topImg())) return false;    // image pas encore affichée : rien ne part
-  // la carte suivante affichée : envol fini et son image posée (ou la pile vide, ou une carte d'échec)
-  holdSort(()=>{ const img=topImg(); return !flying && (!img || posed(img)); });
   if(top.fail){ flyOut('l', ()=>drop(top.fail)); return true; }
   const it=top.it; flyOut(action==='keep' ? 'r' : 'l', ()=>action==='keep' ? keepItem(it) : discardItem(it)); return true; }
 // envoie Garder ou Jeter (route) d'une image de l'espace priv ; l'image reste hors de la pile affichée jusqu'à la
@@ -1849,11 +1880,11 @@ let swiped=false, dropSwipe=()=>{};
 // Garder ou Jeter depuis la visionneuse ouverte sur la pile : elle passe à l'image suivante, ou se ferme ; pendant
 // « Sortir » (exiting), ni tant que l'image d'avant est à l'écran (beforeHeld), rien : l'image reste affichée, sans tri
 // (comme sortTop)
-function sortFromViewer(action){ const it=vList[vIndex]; if(!it || !it.pile || sortBusy() || exiting() || beforeHeld) return;
+function sortFromViewer(action){ const it=vList[vIndex]; if(!it || !it.pile || flying || sortHeld || exiting() || beforeHeld) return;
   if(!posed($('vImg'))) return;                    // image pas encore affichée : rien (posed, plus haut)
   const list=vList.filter(x=>pileTag(x)!==pileTag(it)), at=Math.min(vIndex, list.length-1);
   // image suivante affichée, ou visionneuse fermée entre-temps (l'image attendue n'y arrivera plus)
-  if(list.length){ openViewer(at, list); holdSort(()=>vIndex<0 || posed($('vImg'))); }
+  if(list.length) openViewer(at, list);           // (l'image suivante attend d'être vue : openViewer, holdSort)
   else closeViewer();
   if(action==='keep') keepItem(it); else discardItem(it); }
 // fin d'une génération de la page (ou d'un lot, une fois plus rien d'actif dans le lot), quand la page affichée n'est pas
@@ -2406,6 +2437,9 @@ function openViewer(i, list=vList){ if(exiting()) return;   // « Sortir » en a
   const n=list.length; [list[(i+1)%n], list[(i+n-1)%n]].forEach(x=>{ if(x!==it) preload(thumbOf(x)); });
   const next=list[(i+vStep+n)%n]; if(next!==it) preload(srcOf(next));
   aimBefore($('vBefore'), it, img);              // bouton Avant de la nouvelle image (son entrée : chargée ci-dessus)
+  // image de la pile : Garder et Jeter attendent qu'elle soit vue SORT_GAP ms, à l'ouverture, après un pas (← →) ou un
+  // tri (décision du porteur, « Toute image vue 0,3 s », 28/10/2026) ; visionneuse fermée : rien à attendre
+  if(it.pile) holdSort(()=>vIndex<0 ? {key:'', shown:true} : {key:$('vImg').want, shown:posed($('vImg')) && onScreen($('vImg'))});
   img.alt=it.prompt||it.name; $('vCount').textContent=`${i+1} / ${list.length}`;
   const date=new Date(it.time*1000).toLocaleString('fr-FR', {dateStyle:'short', timeStyle:'short'});
   $('vChips').innerHTML=[date, MODE_LABELS[it.mode]||it.mode, it.width?it.width+'×'+it.height:'', it.steps?it.steps+' étapes':'', it.model?it.model.toUpperCase():'', it.seconds?fmt(it.seconds):'',
@@ -2431,7 +2465,7 @@ function emptyViewer(){ clearTimeout(vEmpty); vList=[]; clearImage($('vImg')); c
 function stepViewer(d){ if(vIndex<0 || !vList.length) return; vStep=d; openViewer((vIndex+d+vList.length)%vList.length); }
 // Raccourcis du PC (la visionneuse garde les siens, ci-dessous) : sur la pile du Labo, → garde et ← jette l'image du
 // dessus par le même chemin que ✓ et ✕ (sortTop : bandeau Annuler, un Jeter suivant valide le précédent, verrou
-// sortHeld entre deux tris), Z ou Ctrl/⌘ + Z annule le Jeter en attente ; Ctrl/⌘ + Entrée dans le prompt : « Révéler ».
+// court de la carte suivante, topHeld), Z ou Ctrl/⌘ + Z annule le Jeter en attente ; Ctrl/⌘ + Entrée dans le prompt : « Révéler ».
 // Règle (suppression) : « Aucune touche ne supprime un tirage ; au clavier, Jeter passe toujours par le bandeau Annuler,
 // comme au doigt ; une touche maintenue ou répétée ne jette jamais plus d'une image avant que la suivante soit
 // affichée. » Une touche répétée par le système ne trie donc rien, pas même Entrée sur ✓, ✕ ou Garder et Jeter de la
@@ -2838,7 +2872,8 @@ async function privLock(){ if(leavingPrivate) return;   // second appui pendant 
   const r=await postJson('/api/private/lock', {}).catch(()=>null), ok=await lockAccepted(r); leavingPrivate=false;
   // page fermée pendant l'attente (pagehide) : déjà sortie et effacée, rien n'est redessiné ni annoncé
   if(!inPrivate()){ if(ok) liftRelock(); return; }
-  if(!ok){ erasePrivate=false; pileShown=''; histShown=''; reveal.pv=0; renderPile(); loadPile(); renderGallery();
+  // (pileTop oublié : la carte du dessus, dont l'image a pu être abandonnée, reprend le verrou court)
+  if(!ok){ erasePrivate=false; pileShown=''; pileTop=''; histShown=''; reveal.pv=0; renderPile(); loadPile(); renderGallery();
     reaimBefore();                                 // (bouton Avant de la visionneuse ; la pile, redessinée, a le sien)
     // images de la pile et aperçu redemandés, pile relue (une lecture arrivée pendant la sortie n'a pas été dessinée ;
     // la visionneuse, elle, attend l'image suivante)

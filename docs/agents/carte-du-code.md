@@ -291,12 +291,18 @@ dernier bloc, après le HTML.
     retirées vidées par `clearImages`), `topEntry` (ce que montre la carte du dessus, retrouvé par son nom), `posed`
     (image de la pile triable : miniature ou image à l'écran, ou chargement fini en échec ; jamais pendant le
     chargement), `sortTop` (✓, ✕ et balayage ; rien pendant « Sortir », `exiting()`, ni tant que l'image d'avant est à
-    l'écran, `beforeHeld`, ni sur une image pas `posed` ;
+    l'écran, `beforeHeld`, ni sur une carte masquée, `shownTop`, ni sur une image pas `posed` ;
     `flyOut`, un départ à la fois : `flying`, vrai jusqu'au tri ou au retour de la carte, même si la pile est
     redessinée entre-temps, `flight` le départ en cours, que `landFlight` annule à l'appui sur « Sortir » et à la sortie
-    de l'espace (`changedSpace`) ; puis `holdSort` : `sortHeld` jusqu'à l'image suivante `posed`, `SORT_GAP`
-    ms au moins, `SORT_HOLD_MAX` au plus, aussi pour la visionneuse ; `releaseSort` le lève à l'appui sur
-    « Sortir » et à la sortie de l'espace), `pileSwipe` (balayage de
+    de l'espace (`changedSpace`) ; verrou de tri qui suit ce que l'œil voit : toute carte arrivée sur
+    le dessus (tri d'ici, nouvelle image, tri ailleurs, Annuler, carte d'échec : `pileTop` change dans `renderPile`)
+    attend d'être vue `SORT_GAP` ms, `holdTop`, `topHeld` (pile seulement, `sortBusy`) ; dans la visionneuse, toute
+    image de la pile de même (ouverture, pas, tri : `openViewer`), `holdSort`, `sortHeld` ; l'attente commune,
+    `afterSeen`, suit ce que
+    montre la vue (`topView` : Labo sans visionneuse ni feuille, carte pas masquée, image posée ; ou l'image
+    de la visionneuse) et repart de zéro quand elle change ; `releaseSort` les lève à l'appui sur « Sortir » et à la
+    sortie de l'espace), `pileSwipe`
+    (balayage de
     la carte du dessus par Pointer Events, doigt et souris : seuil au tiers de la largeur ou geste vif ; `swiped` :
     la fin d'un balayage n'ouvre pas la visionneuse, oublié au prochain appui dans la zone de la pile),
     `sendSort` (envoi de Garder ou Jeter, « Déjà triée » sur un 404 de Garder), `keepItem`, `discardItem` (Jeter :

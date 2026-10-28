@@ -39,7 +39,8 @@
 //   await page.visible('#prompt')                // élément affiché (ni absent, ni masqué, ni sans boîte)
 //   await page.pasteImage()                      // une image de 64×64 collée dans le champ du Labo (Cmd+V)
 //   await page.made('texte')                     // « Révéler » puis l'image attendue dans la pile affichée, son
-//                                                // image affichée si elle est dessus ({ shown: false } : sans)
+//                                                // image affichée si elle est dessus, verrou court levé
+//                                                // ({ shown: false } : sans)
 //   await page.holdFetch(`u => u === '/api/status'`); …; await page.releaseFetch()   // réponses retenues
 //   const h = await page.holdRequests(['*/api/private/lock'], p => true); …; await h.release()   // requêtes retenues
 //                                                // avant le Mac (Fetch.enable) ; h.held, h.free(match), h.take(match)
@@ -55,7 +56,8 @@
 //   await bench.inPile('texte'); await bench.kept('texte')        // image dans la pile, dans les Tirages du Mac
 //   await page.freshLabo(bench)                  // Labo neuf : page rechargée sans brouillon, pile vidée, générations
 //                                                // courtes ({ short: false } : réglages par défaut)
-//   await page.viewPile('texte')                 // visionneuse ouverte sur l'image de la pile à ce prompt
+//   await page.viewPile('texte')                 // visionneuse ouverte sur l'image de la pile à ce prompt, vue
+//                                                // 0,3 s ({ seen: false } : sans attendre)
 //   await page.viewTirage(0)                     // visionneuse ouverte sur le premier des Tirages affichés
 //   await page.closeViewer()                     // visionneuse fermée, fondu fini (le Labo de nouveau sous le doigt)
 //   await page.imageShown('#vImg')               // image chargée et décodée (miniature ou image complète)
@@ -526,10 +528,12 @@ async function connect(wsUrl, { closeTab, siblings }) {
     // Tirages ; chacune attendue hors de la pile du Mac avant la suivante. Une carte d'échec en tête l'empêche
     // (erreur), comme une image du dessus jamais affichée (✓ n'en trie aucune). La page passe d'abord au premier plan,
     // comme sous le doigt : une page cachée ne décode pas ses images, sa carte du dessus ne serait jamais affichée.
+    // Le Labo est affiché le temps du tri (✓ ne trie qu'une carte vue), puis l'onglet d'avant revient.
     // Renvoie le nombre d'images gardées
     async keepPile() {
       await send('Page.bringToFront');
-      return page.eval(`(async () => {
+      return page.eval(`(async () => { const was = mode; if (was !== 'labo') goTab('labo');
+        try { return await keepAll(); } finally { if (was !== 'labo') goTab(was); } async function keepAll() {
         const onMac = async k => (await (await fetch(pileApi('pile', inPrivate()))).json()).some(x => pileKey(x) === k);
         const shown = () => posed($('pile').querySelector('[data-k="0"] .pimg img'));
         await loadPile(); let n = 0;
@@ -547,7 +551,7 @@ async function connect(wsUrl, { closeTab, siblings }) {
             if (t > 400) throw new Error('image non gardée : ' + k);
             await new Promise(r => setTimeout(r, 25)); }
           await loadPile(); }
-        return n; })()`);
+        return n; } })()`);
     },
     // prompt de la carte du dessus de la pile affichée (undefined sans carte)
     topPrompt() { return page.eval(`$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`); },
@@ -581,11 +585,13 @@ async function connect(wsUrl, { closeTab, siblings }) {
       if (short) await page.eval(`opt.steps = 'low'; opt.res = 'low'; saveOpt(); refreshChoices()`);
     },
     // visionneuse ouverte sur l'image de la pile affichée dont le prompt est prompt (attendue dans la pile)
-    async viewPile(prompt) {
+    async viewPile(prompt, { seen = true } = {}) {
       const at = `pileView().findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
       await page.waitFor(`${at} >= 0`, { what: `« ${prompt} » dans la pile`, timeout: 30000 });
       await page.eval(`openViewer(${at}, pileView())`);
       await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
+      // son image vue 0,3 s (sortHeld levé) : sinon Garder et Jeter l'ignorent encore ({ seen: false } : sans)
+      if (seen) await page.waitFor(`!sortHeld`, { what: 'image de la visionneuse vue 0,3 s' });
     },
     // visionneuse ouverte sur le tirage de rang index des Tirages affichés, son image chargée
     async viewTirage(index = 0) {
@@ -647,9 +653,10 @@ async function connect(wsUrl, { closeTab, siblings }) {
       await page.generate(prompt);
       await page.waitFor(`pileItems.some(it => it.prompt === ${JSON.stringify(prompt)})`,
         { what: `« ${prompt} » dans la pile`, timeout: 30000 });
-      // sur le dessus, son image affichée (posed) : sinon ✓, ✕ et les flèches l'ignorent encore
+      // sur le dessus, son image affichée (posed) depuis SORT_GAP (verrou court d'une carte arrivée : sortBusy) :
+      // sinon ✓, ✕ et les flèches l'ignorent encore
       if (shown) await page.waitFor(`(c => !c || c.querySelector('.pprompt').textContent !== ${JSON.stringify(prompt)}
-        || posed(c.querySelector('.pimg img')))($('pile').querySelector('[data-k="0"]'))`,
+        || posed(c.querySelector('.pimg img')) && !sortBusy())($('pile').querySelector('[data-k="0"]'))`,
       { what: `image de « ${prompt} » affichée`, timeout: 30000 });
     },
     // réponses de fetch retenues dans la page : celles dont l'adresse vérifie match (source d'une fonction

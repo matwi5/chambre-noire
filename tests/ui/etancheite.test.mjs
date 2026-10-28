@@ -66,6 +66,7 @@ async function privateTour() {
   assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE0pile' }`), 202);
   await page.waitFor(`pileItems.length === 1 && (img => img && img.complete && img.naturalWidth > 0)
     ($('pile').querySelector('[data-k="0"] img'))`, { what: 'image privée dans la pile', timeout: 30000 });
+  await page.topShown();                           // (vue 0,3 s : ✕ la jette plus bas, sous la visionneuse)
   await page.click('#pile [data-k="0"] [data-open]');
   await page.waitFor(`$('vImg').complete && $('vImg').naturalWidth > 0`, { what: 'image de la pile en grand' });
   await page.eval(`closeViewer()`);

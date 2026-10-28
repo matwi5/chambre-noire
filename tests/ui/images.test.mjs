@@ -219,6 +219,7 @@ test('pile : une image jetée depuis la visionneuse, son lien de téléchargemen
   await page.waitFor(`$('vDl').getAttribute('download') === ${JSON.stringify(name)}`,
     { what: 'lien de la visionneuse' });
   await page.imageShown('#vImg');                  // (Jeter ignore une image pas encore affichée)
+  await page.waitFor(`!sortHeld`, { what: 'image vue 0,3 s' });   // (ni vue depuis moins de 0,3 s)
   await page.eval(`sortFromViewer('discard')`);
   await page.eval(`closeViewer()`);
   await page.waitFor(`!discarding && !pileItems.some(it => it.name === ${JSON.stringify(name)})`,

@@ -28,9 +28,9 @@ after(async () => {
 const TOP = `$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`;   // prompt de la carte du dessus
 // focus rendu à la page (aucun bouton ni champ ne le tient)
 const unfocus = () => page.eval(`document.activeElement?.blur()`);
-// la carte du dessus affichée et le tri d'avant fini : un nouveau tri est permis
-const settled = what => page.waitFor(`!flying && !sortHeld && !!$('pile').querySelector('[data-k="0"] .pimg img')
-  ?.getAttribute('src')`, { what });
+// la carte du dessus affichée depuis 0,3 s et le tri d'avant fini (sortBusy) : un nouveau tri est permis
+const settled = what => page.waitFor(`!sortBusy() && posed($('pile').querySelector('[data-k="0"] .pimg img'))`,
+  { what });
 // bandeau Annuler affiché pour le Jeter en attente
 const banner = what => page.waitFor(`!$('undoBar').hidden && !!discarding`, { what });
 // pile vidée : un Jeter en attente annulé, puis tout gardé
@@ -123,6 +123,7 @@ test('carte d\'échec en tête : → et ← ne font rien', async () => {
   await page.press('ArrowRight');
   assert.equal(await page.eval(`!!$('pile').querySelector('[data-k="0"] .pfail') && !flying && $('undoBar').hidden`),
     true, 'la carte d\'échec reste');
+  await page.waitFor(`!sortBusy()`, { what: 'carte d\'échec vue 0,3 s' });   // (verrou court d'une carte arrivée)
   await page.click('#pileNo');                      // ✕ la retire, comme avant
   await page.waitFor(`${TOP} === 'zk4 reussie'`, { what: 'échec retiré' });
   assert.equal(await page.sortsSent('discard'), 0);
