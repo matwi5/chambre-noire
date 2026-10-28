@@ -8,14 +8,16 @@
 // les Tirages privés affichés ; « Sortir » juste après l'entrée, pile privée pas encore lue, ou pendant le chargement
 // d'une image : rien de privé demandé ensuite, ni par un Garder refusé ni par une génération privée arrivée dans la
 // file pendant la sortie ; Jeter privé abandonné dès l'appui sur « Sortir », tri privé ignoré pendant la sortie ;
-// images des cartes retirées vidées au redessin ; aucune adresse privée chargée en avance hors de l'espace) ;
+// images des cartes retirées vidées au redessin ; aucune adresse privée chargée en avance hors de l'espace ;
+// pendant « Sortir », ni ✓, ni ✕, ni flèches, ni balayage, ni la visionneuse ne trient, une carte qui partait
+// revient) ;
 // balayage de la carte du dessus au doigt et à la souris (seuil, geste vif, tampons, échec qui ne part qu'à gauche,
 // pile redessinée sous le doigt, clic qui ouvre la visionneuse) ; après un tri, ✓, ✕ et la visionneuse ignorent un
 // double appui jusqu'à l'image suivante affichée (0,3 s au moins).
 //   venv/bin/python tests/check.py --quick --ui tests/ui/pile.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, waitUntil } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, elapse } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -849,5 +851,93 @@ test('hors de l\'espace privé : aucune adresse privée n\'est chargée en avanc
   assert.deepEqual(await page.eval(`srcAfter`), [], 'adresse privée donnée à une image hors de l\'espace');
   // une adresse qui n'est pas de l'espace se charge toujours
   assert.equal(await page.eval(`preload('data:image/gif;base64,R0lGODlhAQABAAAAACw=').gone`), undefined);
+  page.assertNoErrors();
+});
+
+// pendant « Sortir » (réponse du Mac retenue), la carte du dessus privée : son prompt, son image posée, partie ou non
+// (out-l, out-r), déplacée ou tamponnée (transform, --swipe), un départ en cours, un Jeter en attente, les tris envoyés
+const stillTop = () => page.eval(`(() => { const c = $('pile').querySelector('[data-k="0"]');
+  return { top: c?.querySelector('.pprompt')?.textContent, img: !!c?.querySelector('.pimg img')?.getAttribute('src'),
+    out: /out-[lr]/.test(c?.className || ''),
+    moved: !!c?.style.transform || !!Number(c?.style.getPropertyValue('--swipe')),
+    flying, discarding: !!discarding, sorts: sorts.length }; })()`);
+// pile privée vidée, puis deux images dessus ; renvoie la sortie à réponse retenue, pas encore demandée
+async function privateTwo(tag) {
+  await enterPile();
+  await clear();
+  await page.made(`${tag} secrete dessous`);
+  await page.made(`${tag} secrete dessus`);
+  await page.waitFor(`!sortBusy()`, { what: 'pile au repos' });
+  await page.eval(`sorts.length = 0`);
+  return exitHeld();
+}
+
+test('espace privé : pendant « Sortir », ✓, ✕, les flèches et le balayage ne font rien sur la carte du dessus',
+  async () => {
+    const x = await privateTwo('zp28');
+    const calm = { top: 'zp28 secrete dessus', img: true, out: false, moved: false, flying: false, discarding: false,
+      sorts: 0 };
+    try {
+      await page.click('#privExit');
+      await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+      for (const [what, act] of [['✓', () => page.click('#pileYes')], ['✕', () => page.click('#pileNo')],
+        ['→', () => page.press('ArrowRight')], ['←', () => page.press('ArrowLeft')],
+        ['balayage', () => page.swipe('#pile .pimg', -200)]]) {
+        await act();
+        await elapse(400);                         // (au-delà de l'envol d'une carte, 0,22 s)
+        assert.deepEqual(await stillTop(), calm, `${what} pendant « Sortir »`);
+      }
+    } finally {
+      await endExitHeld(x);
+    }
+    await page.enterPrivate(CODE);
+    await page.waitFor(`pileItems.filter(it => it.prompt.startsWith('zp28 secrete')).length === 2`,
+      { what: 'les deux images encore dans la pile privée' });
+    await page.click('#privExit');
+    await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+    page.assertNoErrors();
+  });
+
+test('espace privé : une carte privée déjà en partance à l\'appui sur « Sortir » revient sur la pile, sans tri',
+  async () => {
+    const x = await privateTwo('zp29');
+    try {
+      // ✕ puis « Sortir » pendant l'envol, la carte lâchée comme au bout d'un balayage à gauche (--swipe : tampon
+      // « Jeter » montré)
+      await page.eval(`$('pile').querySelector('[data-k="0"]').style.setProperty('--swipe', '-1.6');
+        $('pileNo').click(); $('privExit').click()`);
+      await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+      await elapse(400);
+      assert.deepEqual(await stillTop(),
+        { top: 'zp29 secrete dessus', img: true, out: false, moved: false, flying: false, discarding: false, sorts: 0 },
+        'carte partie');
+      assert.deepEqual(await page.eval(`[...$('pile').querySelectorAll('[data-k="0"] .stamp')]
+        .map(s => getComputedStyle(s).opacity)`), ['0', '0'], 'tampon resté sur la carte revenue');
+    } finally {
+      await endExitHeld(x);
+    }
+    page.assertNoErrors();
+  });
+
+test('espace privé : pendant « Sortir », Garder et Jeter de la visionneuse ne font rien', async () => {
+  await enterPile();
+  await clear();
+  await page.made('zp30 secrete seule');
+  await page.viewPile('zp30 secrete seule');
+  await page.eval(`sorts.length = 0`);
+  const x = await exitHeld();
+  try {
+    // (la visionneuse couvre l'en-tête : « Sortir » atteint au clavier, Tab puis Entrée)
+    await page.eval(`$('privExit').click()`);
+    await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+    for (const k of [0, 1]) {                      // Jeter, puis Garder
+      await page.eval(`$('vSort').querySelectorAll('.btn')[${k}].click()`);
+      await elapse(400);
+      assert.deepEqual(await page.eval(`[vIndex >= 0 && vList[vIndex]?.prompt, !!discarding, sorts.length]`),
+        ['zp30 secrete seule', false, 0], `${k ? 'Garder' : 'Jeter'} de la visionneuse pendant « Sortir »`);
+    }
+  } finally {
+    await endExitHeld(x);
+  }
   page.assertNoErrors();
 });

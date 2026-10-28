@@ -280,8 +280,11 @@ dernier bloc, après le HTML.
     `renderPile` (carte du dessus et deux devinées dessous : `pileCard`, `failCard`, chacune marquée par `pileTag` ;
     état vide, compte, pastille de l'onglet ; redessinée seulement si elle change, `pileShown`, les images des cartes
     retirées vidées par `clearImage`), `topEntry` (ce que
-    montre la carte du dessus, retrouvé par son nom), `sortTop` (✓, ✕ et balayage ; `flyOut`, un départ à la fois :
-    `flying`, vrai jusqu'au tri, même si la pile est redessinée entre-temps ; puis `holdSort` : `sortHeld` jusqu'à
+    montre la carte du dessus, retrouvé par son nom), `sortTop` (✓, ✕ et balayage ; rien pendant « Sortir »,
+    `exiting()` ; `flyOut`, un départ à la fois : `flying`, vrai jusqu'au tri ou au retour de la carte, même si la pile
+    est redessinée
+    entre-temps, `flight` le départ en cours, que `landFlight` annule à l'appui sur « Sortir » ; puis `holdSort` :
+    `sortHeld` jusqu'à
     l'image suivante affichée, `SORT_GAP` ms au moins, aussi pour la visionneuse), `pileSwipe` (balayage de
     la carte du dessus par Pointer Events, doigt et souris : seuil au tiers de la largeur ou geste vif ; `swiped` :
     la fin d'un balayage n'ouvre pas la visionneuse, oublié au prochain appui dans la zone de la pile),
@@ -289,8 +292,8 @@ dernier bloc, après le HTML.
     bandeau `#undoBar`, `discarding`), `commitDiscard` (à la fin du bandeau, `DISCARD_MS`, ou au Jeter suivant ;
     abandonné si l'espace où il a commencé est fermé ou en train de l'être, `leavingPrivate` ; `privLock` abandonne
     un Jeter privé en attente dès l'appui sur « Sortir »), `undoDiscard`, `sortFromViewer` (Garder et Jeter de la
-    visionneuse, puis l'image suivante). Garder et Jeter visent une image par `pileKey` (nom, identifiant d'une
-    privée), jamais par l'objet affiché.
+    visionneuse, puis l'image suivante ; rien pendant « Sortir »). Garder et Jeter visent une image par `pileKey` (nom,
+    identifiant d'une privée), jamais par l'objet affiché.
   - « notifications » : `pushSubscribe`, `askNotifications`.
   - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts` (ouverte par le
     bouton, filtre `promptUsage` sur la catégorie de la saisie, `inputKind`), `renderPrompts`, `usePrompt`,

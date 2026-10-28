@@ -1686,7 +1686,8 @@ function renderPile(){
   $('pileCount').textContent=items.length ? items.length+' à trier' : '';
   renderRunTab(); renderRunCard();
   const shownNow=list.slice(0, 3), key=JSON.stringify(shownNow.map(e=>e.fail ? 'f'+e.fail.id : pileTag(e.it)));
-  // (flying reste vrai jusqu'au tri de la carte qui partait, même redessinée entre-temps : sinon un second appui
+  // (flying reste vrai jusqu'au tri de la carte qui partait, ou jusqu'à son retour par landFlight, même redessinée
+  // entre-temps : sinon un second appui
   // viserait une carte que le premier n'a pas encore retirée)
   if(key===pileShown) return; pileShown=key;
   dropSwipe();                                     // un geste ne trie jamais une carte qu'il ne tient pas
@@ -1706,11 +1707,17 @@ function renderPile(){
 function topEntry(){ const c=$('pile').querySelector('[data-k="0"]'), key=c && c.dataset.key; if(!key) return null;
   if(key[0]==='f'){ const p=pileFails().find(q=>q.id===key.slice(1)); return p ? {fail:p} : null; }
   const it=pileView().find(x=>pileTag(x)===key); return it ? {it} : null; }
-// la carte du dessus part à droite (Garder) ou à gauche (Jeter), puis go() ; un seul départ à la fois
+// la carte du dessus part à droite (Garder) ou à gauche (Jeter), puis go() ; un seul départ à la fois. flight : le
+// départ en cours ({c, dir, timer}) ; landFlight l'annule, la carte revient à sa place sans tri (« Sortir » appuyé
+// pendant l'envol : aucune image privée ne quitte l'écran sans tri, décision du porteur, groupe E du 28/10/2026)
+let flight=null;
 function flyOut(dir, go){ const c=$('pile').querySelector('[data-k="0"]'); flying=true;
   if(!c){ flying=false; return go(); }
   c.style.transform=''; c.classList.add('out-'+dir);   // (depuis là où le balayage l'a laissée)
-  setTimeout(()=>{ flying=false; go(); }, 220); }
+  flight={c, dir, timer:setTimeout(()=>{ flight=null; flying=false; go(); }, 220)}; }
+function landFlight(){ if(!flight) return; const c=flight.c; clearTimeout(flight.timer); c.classList.remove('out-'+flight.dir);
+  c.style.setProperty('--swipe', 0);               // (tampon « Garder » ou « Jeter » d'un balayage retiré)
+  flight=null; flying=false; }
 // après un tri (✓, ✕, ou Garder et Jeter de la visionneuse), les suivants attendent que l'image suivante soit
 // affichée, SORT_GAP ms au moins : un double appui ne trie jamais l'image suivante sans l'avoir vue, et un Jeter
 // n'envoie jamais celui d'avant sans son bandeau (décision du 24/10/2026) ; 3 s au plus si l'image ne vient pas
@@ -1722,8 +1729,10 @@ function holdSort(shown){ sortHeld=true; const t0=performance.now();   // (minut
   const wait=()=>{ const t=performance.now()-t0;                       // d'images d'animation, mais ses minuteurs)
     if(t>=SORT_HOLD_MAX || t>=SORT_GAP && shown()) sortHeld=false; else setTimeout(wait, 50); };
   setTimeout(wait, SORT_GAP); }
-// vrai si la carte part (un échec ne part qu'à gauche, retiré de la page)
-function sortTop(action){ if(sortBusy()) return false; const top=topEntry(); if(!top) return false;
+// vrai si la carte part (un échec ne part qu'à gauche, retiré de la page). Pendant « Sortir » (exiting), rien ne part,
+// carte d'échec comprise : la carte reste à l'écran, sans tri, jusqu'à la fin de la sortie (décision du porteur,
+// « Ne bouge pas », 28/10/2026)
+function sortTop(action){ if(sortBusy() || exiting()) return false; const top=topEntry(); if(!top) return false;
   if(top.fail && action!=='discard') return false;   // ✓ sur un échec : rien ne part, rien n'attend
   // la carte suivante affichée : envol fini et son image posée (ou la pile vide)
   holdSort(()=>{ const img=$('pile').querySelector('[data-k="0"] .pimg img');
@@ -1813,8 +1822,9 @@ let swiped=false, dropSwipe=()=>{};
     const quick=Math.abs(g0.dx)>SWIPE_QUICK_PX && Math.abs(speed)>SWIPE_QUICK_SPEED && Math.sign(speed)===Math.sign(g0.dx);
     if(!((far || quick) && sortTop(g0.dx>0 ? 'keep' : 'discard'))) place(g0.c, 0); };
   $('pile').addEventListener('pointerup', end); $('pile').addEventListener('pointercancel', end); })();
-// Garder ou Jeter depuis la visionneuse ouverte sur la pile : elle passe à l'image suivante, ou se ferme
-function sortFromViewer(action){ const it=vList[vIndex]; if(!it || !it.pile || sortBusy()) return;
+// Garder ou Jeter depuis la visionneuse ouverte sur la pile : elle passe à l'image suivante, ou se ferme ; pendant
+// « Sortir » (exiting), rien : l'image reste affichée, sans tri (comme sortTop)
+function sortFromViewer(action){ const it=vList[vIndex]; if(!it || !it.pile || sortBusy() || exiting()) return;
   const list=vList.filter(x=>pileTag(x)!==pileTag(it)), at=Math.min(vIndex, list.length-1);
   // image suivante affichée, ou visionneuse fermée entre-temps (l'image attendue n'y arrivera plus)
   if(list.length){ openViewer(at, list); holdSort(()=>vIndex<0 || !!$('vImg').getAttribute('src')); }
@@ -2764,6 +2774,7 @@ async function privLock(){ if(leavingPrivate) return;   // second appui pendant 
   // l'image reste dans la pile privée, même si la sortie échoue (le doute garde l'image, décision du 24/10/2026).
   // Avant abortPrivateLoads : la pile redessinée par l'abandon n'a plus de chargement privé qui survive à la sortie
   if(discarding && discarding.priv) undoDiscard();
+  landFlight();                                    // carte en partance : revenue sur la pile, sans tri
   abortPrivateLoads();
   // vignettes privées des Tirages pas encore chargées (chargement différé : un défilement les demanderait)
   document.querySelectorAll('#histGrid img').forEach(i=>{

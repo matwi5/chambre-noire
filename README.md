@@ -361,7 +361,9 @@ bandeau. Fermer ou recharger la page pendant ce temps la laisse dans la pile ; j
 suite l'effacement de la précédente (un seul bandeau à la fois). Après un tri, ✓, ✕ et les boutons de la visionneuse
 ignorent un nouvel appui tant que l'image suivante n'est pas affichée (0,3 s au moins) : un double appui ne trie jamais
 une image qu'on n'a pas vue. Dans l'espace privé, un Jeter en attente est abandonné dès l'appui sur « Sortir » : l'image
-reste dans la pile privée, même si la sortie échoue. Si un
+reste dans la pile privée, même si la sortie échoue. Tant que le Mac n'a pas répondu à « Sortir », rien ne se trie :
+✓, ✕, les flèches, le balayage (la carte revient) et Garder ou Jeter de la visionneuse ne font rien, et une carte qui
+partait revient sur la pile. Si un
 autre appareil a déjà trié l'image, Garder (**✓** ou
 balayage à droite) dit « Déjà triée » et la carte s'en va (un Jeter n'a rien à effacer). Un appui sur l'image l'ouvre en
 grand dans la visionneuse, qui parcourt la pile :
@@ -1147,7 +1149,8 @@ confirmée, « Déjà terminée » pour une génération finie pendant la questi
 génération d'un autre appareil sans aperçu ou cachée, « +N en attente », rien qui dépasse à la largeur du téléphone), la
 pile (ordre, cartes de lot, ✓ et ✕, balayage au doigt et à la souris, bandeau Annuler et rien d'envoyé avant sa fin ni
 au rechargement, deux Jeter de suite, un second ✓ pendant le départ d'une carte, « Sortir » pendant le chargement d'une
-image privée, « Déjà triée », visionneuse, carte d'échec, pile privée, message « Image prête »), Garder et Jeter par nom
+image privée, rien de trié pendant « Sortir » et la carte qui partait revenue, « Déjà triée », visionneuse, carte
+d'échec, pile privée, message « Image prête »), Garder et Jeter par nom
 après une relecture de la pile, la saisie (unique, dans le Labo, Dessiner, collage, campagne à partir de 2 images,
 plusieurs photos d'un coup, vidage après « Révéler », saisie propre à chaque espace), le champ de création (replié avec
 une pile, déplié pile vide, replié après « Révéler », par sa poignée ou un toucher sur la pile sans rien perdre de la
