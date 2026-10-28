@@ -1688,7 +1688,9 @@ function failCard(p, k){
   return `<article class="pcard" data-k="${k}" data-key="f${esc(p.id)}"><div class="pfail"><span class="qicon">${dicon('fail')}</span><p class="pprompt">${esc(p.prompt)}</p>`
     + `<p class="perr">${esc(failText(p))}</p>${p.req ? `<button class="btn secondary small" data-again>${dicon('again')}Relancer</button>` : ''}</div>${STAMPS}</article>`; }
 // la carte du dessus et les deux suivantes (devinées dessous), les boutons ✕ et ✓, l'état vide, la pastille de l'onglet
-function renderPile(){
+// rien pendant « Sortir » (exiting) : les images privées y sont refusées, la pile redessinée resterait sans images ;
+// privLock la redessine au refus, changedSpace à la sortie (décision du porteur, groupe F du 28/10/2026)
+function renderPile(){ if(exiting()) return;
   const fails=pileFails(), items=pileView(), list=[...fails.map(p=>({fail:p})), ...items.map(it=>({it}))];
   $('pileActs').hidden=!list.length;
   $('pileYes').disabled=!!fails.length;            // échec en tête : rien à garder, ✕ le retire
@@ -1739,12 +1741,14 @@ const posed = img => !!img && !!img.getAttribute('src') && img.complete;
 // SORT_HOLD_MAX ms (une image qui ne vient pas ne bloque pas les autres gestes : Garder ou Jeter une autre image dans
 // la visionneuse), mais elle ne se trie pas pour autant (posed) : sans image posée, seule une carte d'échec se trie
 const SORT_GAP=300, SORT_HOLD_MAX=3000;
-let sortHeld=false;
+let sortHeld=false, holdTimer=null;               // holdTimer : l'attente en cours (une seule à la fois)
 const sortBusy=()=>flying || sortHeld;           // un tri en cours ou son attente : ✓, ✕ et la visionneuse l'ignorent
-function holdSort(shown){ sortHeld=true; const t0=performance.now();   // (minuteur : une page cachée n'a plus
-  const wait=()=>{ const t=performance.now()-t0;                       // d'images d'animation, mais ses minuteurs)
-    if(t>=SORT_HOLD_MAX || t>=SORT_GAP && shown()) sortHeld=false; else setTimeout(wait, 50); };
-  setTimeout(wait, SORT_GAP); }
+function holdSort(shown){ clearTimeout(holdTimer); sortHeld=true; const t0=performance.now();   // (minuteur : une
+  const wait=()=>{ const t=performance.now()-t0;   // page cachée n'a plus d'images d'animation, mais ses minuteurs)
+    if(t>=SORT_HOLD_MAX || t>=SORT_GAP && shown()) releaseSort(); else holdTimer=setTimeout(wait, 50); };
+  holdTimer=setTimeout(wait, SORT_GAP); }
+// verrou levé tout de suite (« Sortir » : la pile ne bouge plus, et l'image suivante n'arrivera pas avant la réponse)
+function releaseSort(){ clearTimeout(holdTimer); holdTimer=null; sortHeld=false; }
 // vrai si la carte part (un échec ne part qu'à gauche, retiré de la page). Pendant « Sortir » (exiting), rien ne part,
 // carte d'échec comprise : la carte reste à l'écran, sans tri, jusqu'à la fin de la sortie (décision du porteur,
 // « Ne bouge pas », 28/10/2026)
@@ -2132,6 +2136,7 @@ function drop(p, quiet){
   if(!quiet) renderPile(); else renderRunCard(); }
 function inputThumb(kind){ return kind==='t2i' ? null : inputImages[0].dataUrl; }
 $('go').onclick=async()=>{                         // toujours actif : la demande rejoint la file avec les réglages du moment
+  if(exiting()) return;                            // (sauf pendant « Sortir » : rien ne part, comme « Relancer »)
   let body; try{ body=buildRequest(); }catch(e){ toast(e.message, 'err'); return; }
   const kind=inputKind(), thumb=inputThumb(kind), priv=inPrivate();   // pris avant l'envoi : l'espace peut changer pendant l'attente
   const sent={ text:$('prompt').value, images:inputImages.slice() };   // saisie qui part (voir emptyInput)
@@ -2146,7 +2151,9 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
 };
 // envoie une demande (Révéler, Relancer) partie de l'espace priv ; acceptée, ses générations sont suivies avec la
 // demande (req) et ce que infoOf(k) dit de la k-ième, accepted() est appelée, puis le haut du Labo
-async function launch(body, priv, infoOf, accepted){
+// « Sortir » demandé pendant l'attente d'avant l'envoi (confirmation d'une génération longue, lecture des images
+// d'entrée) : une demande privée ne part pas vers une session qui se ferme (seul point d'envoi)
+async function launch(body, priv, infoOf, accepted){ if(priv && leavingPrivate) return;
   let r, j; try{ r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=await r.json(); }
   catch(e){ toast('Serveur injoignable', 'err'); return; }
   if(!r.ok){ toast('Erreur : '+(j.error||('HTTP '+r.status)), 'err'); return; }
@@ -2181,7 +2188,9 @@ async function againFrom(it){
     ref_images:images }); }
 // un seul « Relancer » à la fois : un double appui sur une carte, qui reste à l'écran, ne relance pas deux fois
 let relaunching=false;
-async function again(go){ if(relaunching) return; relaunching=true; try{ await go(); } finally{ relaunching=false; } }
+// rien pendant « Sortir » (exiting) : aucune demande privée vers une session qui se ferme (décision du porteur,
+// groupe F du 28/10/2026)
+async function again(go){ if(relaunching || exiting()) return; relaunching=true; try{ await go(); } finally{ relaunching=false; } }
 async function relaunch(req){
   const priv=inPrivate(), body={...req, seed:-1}, camp=body.campaign;
   if(priv) body.private=true; else delete body.private;
@@ -2517,7 +2526,8 @@ async function drawFrom(name, read, {list, priv}=noteInput()){
   // sélecteur était ouvert) qui a des images n'est pas remplacée
   const replace = async n => !n || list===inputImages && await ask('Dessiner sur cette image ?',
     `Remplacer ${n>1 ? 'les '+n+' images' : 'l\'image'} de la saisie par celle-ci ?`, 'Remplacer');
-  const n=list.length; if(!await replace(n)) return;
+  // « Sortir » appuyé pendant la question : l'image privée n'est pas lue (aucune demande vers une session qui se ferme)
+  const n=list.length; if(!await replace(n) || priv && leavingPrivate) return;
   let entry; try{ entry=await toEntry(name, await read(), priv); }
   catch(e){ if(priv===inPrivate()) toast('Image illisible', 'err'); return; }
   if(list.length>n && !await replace(list.length)) return;   // images ajoutées pendant la lecture : redemandé
@@ -2550,7 +2560,7 @@ async function resumeFrom(it){
   const files=resumeImages(it), {list, priv}=noteInput(), mask=it.mode==='mask'; closeViewer();
   const filled = () => !!($('prompt').value.trim() || list.length), replace = () => ask('Reprendre cette image ?',
     'Le texte et les images de la saisie seront remplacés par les siens.', 'Remplacer');
-  if(filled() && !await replace()) return;
+  if(filled() && !await replace() || priv && leavingPrivate) return;   // (« Sortir » pendant la question : comme drawFrom)
   // saisie acceptée : redemandé si elle change pendant la lecture (une image retirée puis une autre ajoutée comprises)
   const text=$('prompt').value, was=list.slice();
   let entries; try{ entries=await Promise.all(files.map(async f=>toEntry(f.name,
@@ -2591,8 +2601,11 @@ async function shareImage(url, name){
 async function copyImage(url){
   try{ await navigator.clipboard.write([new ClipboardItem({'image/png': fetch(url).then(r=>r.blob()).then(b=>new Blob([b], {type:'image/png'}))})]); toast('Image copiée'); }
   catch(e){ toast('Copie impossible : '+e.message, 'err'); } }
-function viewerShare(){ const it=vList[vIndex]; if(it) shareImage(srcOf(it), it.name); }
-function viewerCopy(){ const it=vList[vIndex]; if(it) copyImage(srcOf(it)); }
+// actions de la visionneuse et de ses images d'entrée : rien pendant « Sortir » (exiting), la visionneuse reste ouverte,
+// sans message (décision du porteur, groupe F du 28/10/2026) ; aucune requête privée vers une session qui se ferme
+function viewerShare(){ const it=vList[vIndex]; if(it && !exiting()) shareImage(srcOf(it), it.name); }
+function viewerCopy(){ const it=vList[vIndex]; if(it && !exiting()) copyImage(srcOf(it)); }
+['vDl', 'ivDl'].forEach(k=>$(k).addEventListener('click', e=>{ if(exiting()) e.preventDefault(); }));   // (téléchargements)
 // ------------------------------------------------------------ images d'entrée d'une image de la galerie
 let ivIndex=-1, ivOwner=null;
 const inputUrl = (it, f, extra='') => (it.private ? '/api/private/input?id='+it.id : '/api/input?name='+encodeURIComponent(it.name))+'&file='+encodeURIComponent(f)+extra;
@@ -2602,9 +2615,10 @@ function renderInputsButton(it){
   if(!list.length){ b.innerHTML=''; return; }
   b.innerHTML=`<span class="v-in-thumbs">${list.slice(0,3).map(f=>`<img src="${inputUrl(it, f, '&thumb=1&t='+it.time)}" alt="">`).join('')}</span>`
     + `<span>${list.length>1 ? list.length+" images d'entrée" : "Image d'entrée"}</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>`; }
-function openInputs(i){ const it=vList[vIndex]; if(!it || !(it.inputs||[]).length) return; clearTimeout(ivEmpty); ivOwner=it; showInput(i);
+function openInputs(i){ const it=vList[vIndex]; if(!it || !(it.inputs||[]).length || exiting()) return; clearTimeout(ivEmpty); ivOwner=it; showInput(i);
   $('iv').classList.remove('immersive'); $('iv').classList.add('on'); syncThemeColor(); }
-function showInput(i){ if(!ivOwner) return;       // fermée (boutons et gestes pendant le fondu de fermeture)
+function showInput(i){ if(!ivOwner || exiting()) return;   // fermée (boutons et gestes pendant le fondu de fermeture) ;
+                                                   // « Sortir » : l'image d'entrée affichée et son libellé ne bougent pas
   const it=ivOwner, n=it.inputs.length; ivIndex=(i+n)%n; const f=it.inputs[ivIndex], thumb=g=>inputUrl(it, g, '&thumb=1&t='+it.time);
   resetInputZoom();
   showImage($('ivImg'), inputUrl(it, f), {thumb:thumb(f), fit:true});   // miniature : celle du bouton de la visionneuse, déjà là
@@ -2617,14 +2631,14 @@ function closeInputs(){ resetInputZoom(); $('iv').classList.remove('on'); ivInde
 function emptyInputs(){ clearTimeout(ivEmpty); clearImage($('ivImg'));
   $('ivImg').alt=$('ivLabel').textContent=$('ivCount').textContent=''; dropLink($('ivDl')); }
 async function inputAction(kind){             // repartir de cette image d'entrée : Éditer (référence) ou Dessiner
-  if(!ivOwner || ivIndex<0) return;               // second appui pendant le fondu de fermeture
+  if(!ivOwner || ivIndex<0 || exiting()) return;  // second appui pendant le fondu de fermeture ; « Sortir »
   if(kind==='edit' && refuseWhileDrawing()) return;   // refusé avant de fermer : l'image reste à l'écran
   const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f;
   closeInputs(); closeViewer();
   return kind==='mask' ? drawFrom(name, ()=>dataUrlOf(name, url)) : useAsEditInput(name, url); }
 const resetInputZoom=zoomable($('ivStage'), $('ivImg'), $('iv'), d=>showInput(ivIndex+d), closeInputs);   // comme la visionneuse
 async function viewerAction(kind){
-  const it=vList[vIndex]; if(!it) return;
+  const it=vList[vIndex]; if(!it || exiting()) return;
   if(kind==='edit' && refuseWhileDrawing()) return;   // refusé avant de fermer : l'image reste à l'écran
   if(kind==='edit' || kind==='mask'){ closeViewer(); return kind==='edit' ? useAsEditInput(it.name, srcOf(it)) : useAsMaskInput(it.name, srcOf(it)); }
   if(kind==='resume') return resumeFrom(it);
@@ -2635,6 +2649,7 @@ async function viewerAction(kind){
 // Vrai si l'image n'est plus là.
 async function deleteItem(it){
   if(!await ask('Supprimer cette image ?', (it.private ? 'Cette image privée' : it.name)+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return false;
+  if(it.private && (leavingPrivate || !inPrivate())) return false;   // « Sortir » appuyé pendant la confirmation
   const r=it.private ? await postJson('/api/private/delete', {id:it.id}) : await postJson('/api/delete', {name:it.name});
   if(!r.ok){ toast('Suppression impossible : '+((await r.json()).error||r.status), 'err'); return false; }
   log('supprimé : '+it.name, !!it.private); toast('Image supprimée');
@@ -2660,10 +2675,11 @@ function openLot(){                               // « Voir le lot » : ses ima
   g.onclick=e=>{ const b=e.target.closest('[data-k]'); if(!b) return; closeSheet(); openViewer(+b.dataset.k, items); };
   openSheet('lotSheet'); }
 async function downloadLot(){                     // « Tout télécharger » : un téléchargement par image, l'un après l'autre (pas d'archive)
-  const items=lotMembers(vList[vIndex]);
-  for(const x of items){ const a=document.createElement('a'); a.href=dlOf(x); a.download=x.name;
-    document.body.appendChild(a); a.click(); a.remove(); await sleep(400); }   // un temps entre deux : le navigateur les accepte tous
-  if(items.length) toast(items.length+' téléchargements lancés'); }
+  if(exiting()) return; const items=lotMembers(vList[vIndex]); let n=0;
+  for(const x of items){ if(x.private && (leavingPrivate || !inPrivate())) break;   // « Sortir » entre-temps
+    const a=document.createElement('a'); a.href=dlOf(x); a.download=x.name;
+    document.body.appendChild(a); a.click(); a.remove(); n++; await sleep(400); }   // un temps entre deux : le navigateur les accepte tous
+  if(n && !exiting() && !(items[0].private && !inPrivate())) toast(n+' téléchargements lancés'); }
 function forgetResult(name){                      // image supprimée : elle quitte le Labo
   const p=pageJobs.find(q=>q.result && q.result.name===name);
   if(p) drop(p); }
@@ -2715,6 +2731,8 @@ function changedSpace(inside){
   // pour cet appareil : l'image reste dans la pile privée)
   if(!inside && discarding && discarding.priv){ clearTimeout(discarding.timer); discarding=null; hideUndo(); }
   if(!inside) [...sorting].forEach(t=>{ if(t[0]==='p') sorting.delete(t); });   // (leur réponse sera ignorée)
+  if(!inside){ landFlight(); releaseSort(); }       // carte en partance (fermeture par le Mac) : rien ne part, et le
+                                                   // verrou de la pile quittée ne retient pas celle de l'espace public
   pileItems=[]; pileRead=false; pileShown=''; labIdle=null; renderRunCard(); renderPile(); if(!hiding) loadPile();
   histItems=[]; histRev=null; histAsk=null; histShown=''; clearImages($('histGrid')); $('histGrid').innerHTML='';
   $('histCount').textContent='';
@@ -2798,13 +2816,16 @@ async function privUnlock(){ if(!$('puCode').value) return;
 let leavingPrivate=false;
 function exiting(){ return inPrivate() && leavingPrivate; }   // dans l'espace, « Sortir » en attente du Mac
 async function privLock(){ if(leavingPrivate) return;   // second appui pendant l'attente : rien de plus
-  erasePrivate=true; leavingPrivate=true;
-  reaimBefore();                                   // bouton Avant d'une image privée masqué, appui relâché
   // Jeter privé en attente : abandonné dès l'appui, pas à la réponse du Mac (son bandeau pourrait finir entre-temps) ;
   // l'image reste dans la pile privée, même si la sortie échoue (le doute garde l'image, décision du 24/10/2026).
-  // Avant abortPrivateLoads : la pile redessinée par l'abandon n'a plus de chargement privé qui survive à la sortie
+  // Annulé comme par « Annuler », avant que les images privées soient refusées : la carte revient sur la pile avec son
+  // image, depuis la mémoire de la page (rare : elle n'y est plus, carte vide jusqu'à la réponse ; décision du
+  // porteur, groupe F du 28/10/2026). Avant abortPrivateLoads : rien de privé ne reste en route après la sortie
   if(discarding && discarding.priv) undoDiscard();
+  erasePrivate=true; leavingPrivate=true;
+  reaimBefore();                                   // bouton Avant d'une image privée masqué, appui relâché
   landFlight();                                    // carte en partance : revenue sur la pile, sans tri
+  releaseSort();                                   // (rien ne se trie pendant la sortie : exiting)
   abortPrivateLoads();
   // vignettes privées des Tirages pas encore chargées (chargement différé : un défilement les demanderait)
   document.querySelectorAll('#histGrid img').forEach(i=>{

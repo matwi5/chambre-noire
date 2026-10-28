@@ -1050,3 +1050,258 @@ test('image du dessus illisible : la carte se trie une fois l\'échec du chargem
   page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/ERR_FAILED|ERR_ABORTED/.test(e)));
   page.assertNoErrors();
 });
+
+// « Rien ne bouge pendant Sortir, partout » : demandes de génération envoyées par la page (/api/generate), comptées
+// dans asked à partir de l'appel
+const watchGenerate = () => page.eval(`(() => { window.asked = 0; if (window.askWatched) return;
+  window.askWatched = true; const f = window.fetch;
+  window.fetch = (u, o) => { if (String(u) === '/api/generate') asked++; return f(u, o); }; })()`);
+// la carte du dessus et les images de la pile affichée : chacune a une adresse (aucune carte redessinée sans image)
+const pileShot = () => page.eval(`({ top: ${TOP}, bare: [...$('pile').querySelectorAll('.pimg img')]
+  .filter(i => !i.getAttribute('src')).length, discarding: !!discarding, undo: !$('undoBar').hidden, held: sortHeld,
+  sorts: sorts.length })`);
+
+test('espace privé : pendant « Sortir », Relancer d\'une carte d\'échec privée ne fait rien', async () => {
+  await enterPile();
+  await page.generate('FAIL zp34 secrete echec');
+  await page.waitFor(`!!$('pile').querySelector('[data-k="0"] .pfail [data-again]')`,
+    { what: 'carte d\'échec privée en tête' });
+  await watchGenerate();
+  const x = await exitHeld();
+  try {
+    await page.click('#privExit');
+    await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+    await page.click('#pile [data-k="0"] [data-again]');
+    await elapse(400);
+    assert.deepEqual(await page.eval(`[asked, !!$('pile').querySelector('[data-k="0"] .pfail')]`), [0, true],
+      'Relancer pendant « Sortir »');
+  } finally {
+    await endExitHeld(x);
+  }
+  page.assertNoErrors();
+});
+
+test('espace privé : pendant « Sortir », Relancer de la visionneuse et « Révéler » ne partent pas', async () => {
+  await enterPile();
+  await clear();
+  await page.made('zp35 secrete vue');
+  await page.viewPile('zp35 secrete vue');
+  await page.eval(`$('prompt').value = 'zp35 secrete saisie'`);
+  await watchGenerate();
+  const x = await exitHeld();
+  try {
+    await page.eval(`$('privExit').click()`);      // (la visionneuse couvre l'en-tête)
+    await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+    await page.eval(`$('vAgain').click()`);
+    await elapse(400);
+    assert.deepEqual(await page.eval(`[asked, vIndex >= 0 && vList[vIndex]?.prompt]`), [0, 'zp35 secrete vue'],
+      'Relancer de la visionneuse pendant « Sortir »');
+    await page.eval(`$('go').click()`);
+    await elapse(400);
+    assert.equal(await page.eval(`asked`), 0, '« Révéler » pendant « Sortir »');
+  } finally {
+    await endExitHeld(x);
+  }
+  page.assertNoErrors();
+});
+
+test('espace privé : « Révéler » confirmé (génération longue) après l\'appui sur « Sortir » ne part pas',
+  async () => {
+    await enterPile();
+    await page.eval(`$('prompt').value = 'zp38 secrete longue'; estSeconds = 7200`);   // (plus d'une heure : confirmée)
+    await watchGenerate();
+    const x = await exitHeld();
+    try {
+      await page.eval(`$('go').click()`);
+      await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation de la génération longue' });
+      await page.eval(`$('privExit').click()`);    // (la feuille couvre l'en-tête)
+      await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+      await page.eval(`answer(true)`);
+      await elapse(400);
+      assert.equal(await page.eval(`asked`), 0, '« Révéler » parti pendant « Sortir »');
+    } finally {
+      await endExitHeld(x);
+    }
+    page.assertNoErrors();
+  });
+
+test('espace privé : un Jeter privé en attente à l\'appui sur « Sortir » : la carte revient avec son image, sans'
+  + ' verrou, et y reste après un refus', async () => {
+  const x = await privateTwo('zp36');
+  try {
+    await page.topShown();
+    await page.click('#pileNo');                   // le dessus jeté : bandeau, le dessous sur le dessus
+    await page.waitFor(`!!discarding && ${TOP} === 'zp36 secrete dessous'`, { what: 'Jeter en attente' });
+    await page.topShown();
+    // verrou de tri tenu comme si l'image suivante n'était jamais affichée (il ne se lèverait qu'après 3 s)
+    await page.eval(`holdSort(() => false)`);
+    await page.click('#privExit');
+    await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+    await elapse(400);
+    const back = { top: 'zp36 secrete dessus', bare: 0, discarding: false, undo: false, held: false, sorts: 0 };
+    assert.deepEqual(await pileShot(), back, 'pile pendant « Sortir »');
+    await page.refuseExit(x.h);
+    await page.topShown();
+    assert.deepEqual(await pileShot(), back, 'pile après le refus');
+  } finally {
+    await x.h.release();
+  }
+  await page.privateIdle();
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+  assert.deepEqual(page.errors.filter(e => !/status of 500/.test(e)), [], 'erreurs de la console');
+  page.errors.length = 0;
+});
+
+// bouton de la visionneuse qui appelle ce code (onclick)
+const vBtn = code => `document.querySelector(${JSON.stringify(`#viewer [onclick="${code}"]`)})`;
+
+test('espace privé : pendant « Sortir », aucune action de la visionneuse ne part (Éditer, Dessiner, Reprendre,'
+  + ' Supprimer, Copier, Télécharger)', async () => {
+  await enterPile();
+  await clear();
+  await page.made('zp39 secrete vue');
+  await page.viewPile('zp39 secrete vue');
+  const x = await exitHeld({ noting: true });
+  x.privateIds = new Set(await page.eval(`pageJobs.filter(p => p.private).map(p => p.id)`));
+  try {
+    await page.eval(`$('privExit').click()`);      // (la visionneuse couvre l'en-tête)
+    await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+    const n = await page.eval(`inputImages.length`);
+    for (const code of [`viewerAction('edit')`, `viewerAction('mask')`, `viewerAction('resume')`,
+      `viewerAction('delete')`, 'viewerCopy()']) {
+      await page.eval(`${vBtn(code)}.click()`);
+      await elapse(300);
+      assert.deepEqual(await page.eval(`[vIndex >= 0 && vList[vIndex]?.prompt, openedSheet?.id ?? null,
+        inputImages.length]`), ['zp39 secrete vue', null, n], `${code} pendant « Sortir »`);
+    }
+    assert.equal(await page.eval(`(e => { $('vDl').dispatchEvent(e); return e.defaultPrevented; })(
+      new MouseEvent('click', { cancelable: true }))`), true, 'téléchargement pendant « Sortir »');
+    assert.deepEqual(x.after, [], 'requête privée partie pendant « Sortir »');
+  } finally {
+    await endExitHeld(x);
+  }
+  page.assertNoErrors();
+});
+
+test('espace privé : Supprimer confirmé après l\'appui sur « Sortir » ne supprime rien', async () => {
+  await enterPile();
+  await clear();
+  await page.made('zp40 secrete tirage');
+  await page.keepPile();                           // (dans les Tirages privés)
+  await page.tab('tirages');
+  await page.waitFor(`histItems.some(it => it.prompt === 'zp40 secrete tirage')`, { what: 'tirage privé' });
+  await page.eval(`openViewer(histItems.findIndex(it => it.prompt === 'zp40 secrete tirage'), histItems)`);
+  await page.eval(`sorts.length = 0; ${vBtn(`viewerAction('delete')`)}.click()`);
+  await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation de suppression' });
+  const x = await exitHeld();
+  try {
+    await page.eval(`$('privExit').click()`);      // (la feuille couvre l'en-tête)
+    await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+    await page.eval(`answer(true)`);
+    await elapse(400);
+    assert.equal(await page.sortsSent('delete'), 0, 'suppression privée envoyée pendant « Sortir »');
+  } finally {
+    await endExitHeld(x);
+    await page.tab('labo');
+  }
+  page.assertNoErrors();
+});
+
+test('espace privé : Dessiner et Reprendre confirmés après l\'appui sur « Sortir » ne lisent aucune image privée',
+  async () => {
+    await enterPile();
+    await clear();
+    await page.made('zp42 secrete vue');
+    await page.pasteImage();                       // saisie non vide : Dessiner et Reprendre demandent confirmation
+    await page.waitFor(`inputImages.length === 1`, { what: 'image collée' });
+    for (const [what, code] of [['Dessiner', `viewerAction('mask')`], ['Reprendre', `viewerAction('resume')`]]) {
+      await page.viewPile('zp42 secrete vue');
+      await page.eval(`${vBtn(code)}.click()`);
+      await page.waitFor(`openedSheet === $('askSheet')`, { what: `confirmation de ${what}` });
+      const x = await exitHeld({ noting: true });
+      try {
+        await page.eval(`$('privExit').click()`);  // (la feuille couvre l'en-tête)
+        await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+        await page.eval(`answer(true)`);
+        await elapse(400);
+        assert.deepEqual(x.after, [], `${what} : image privée lue pendant « Sortir »`);
+        assert.equal(await page.eval(`inputImages.length`), 1, `${what} : saisie changée pendant « Sortir »`);
+        await page.refuseExit(x.h);                // (on reste dans l'espace pour le suivant)
+      } finally {
+        await x.h.release();
+      }
+    }
+    await page.privateIdle();
+    await page.click('#privExit');
+    await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+    assert.deepEqual(page.errors.filter(e => !/status of 500/.test(e)), [], 'erreurs de la console');
+    page.errors.length = 0;
+  });
+
+test('espace privé : pendant « Sortir », les images d\'entrée affichées ne changent pas', async () => {
+  await enterPile();
+  await clear();
+  const ref = color => `(() => { const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d'); g.fillStyle = '${color}'; g.fillRect(0, 0, 64, 64); return c.toDataURL(); })()`;
+  const refs = [await page.eval(ref('#a03020')), await page.eval(ref('#2030a0'))];
+  await page.launch('zp43 secrete deux', { private: true, mode: 'edit', steps: 2, ref_images: refs });
+  await bench.idle({ page });
+  await page.eval(`loadPile()`);
+  await page.viewPile('zp43 secrete deux');
+  await page.eval(`$('vInputs').click()`);
+  await page.imageShown('#ivImg', 'première image d\'entrée');
+  const shot = () => page.eval(`[ivIndex, $('ivCount').textContent, $('ivImg').getAttribute('src'),
+    $('ivDl').getAttribute('href')]`);
+  const before = await shot();
+  const x = await exitHeld();
+  try {
+    await page.eval(`$('privExit').click()`);      // (la vue couvre l'en-tête)
+    await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+    await page.press('ArrowRight');
+    await elapse(300);
+    assert.deepEqual(await shot(), before, 'image d\'entrée suivante pendant « Sortir »');
+  } finally {
+    await endExitHeld(x);
+  }
+  page.assertNoErrors();
+});
+
+test('espace privé : pendant « Sortir », la pile n\'est pas redessinée (échec privé arrivé pendant l\'attente)',
+  async () => {
+    const x = await privateTwo('zp41');
+    try {
+      await page.topShown();
+      await page.eval(`window.cardsBefore = [...$('pile').querySelectorAll('.pcard')]`);
+      await page.click('#privExit');
+      await waitUntil(() => x.locking(), { what: 'sortie demandée' });
+      // une génération privée de la page finie en échec pendant l'attente, comme le dirait finish, puis le dessin
+      await page.eval(`pageJobs.push({ id: 'zp41fail', private: true, prompt: 'zp41 secrete echec', doneAt: Date.now(),
+        j: { id: 'zp41fail', status: 'failed', error: 'test', private: true } }); renderPile()`);
+      assert.deepEqual(await page.eval(`(c => [c.length, c.every((e, k) => e === cardsBefore[k]),
+        [...$('pile').querySelectorAll('.pimg img')].filter(i => !i.getAttribute('src')).length])(
+        [...$('pile').querySelectorAll('.pcard')])`), [2, true, 0], 'pile redessinée pendant « Sortir »');
+    } finally {
+      await endExitHeld(x);
+    }
+    page.assertNoErrors();
+  });
+
+test('espace privé : une carte privée en partance quand le Mac ferme l\'espace revient, sans verrou', async () => {
+  await enterPile();
+  await clear();
+  await page.made('zp37 secrete dessus');
+  await page.topShown();
+  await page.eval(`sorts.length = 0`);
+  await page.privateIdle();
+  // l'espace fermé par le Mac, sans « Sortir » ; ✕ juste avant que la page l'apprenne : elle l'apprend (l'état lu,
+  // appliqué comme le fait refreshStatus) pendant l'envol (0,22 s), vérifié dans la même évaluation
+  await page.eval(`postJson('/api/private/lock', {})`);
+  assert.deepEqual(await page.eval(`(() => { $('pileNo').click(); const was = [flying, sortHeld];
+    applyPrivate({ ...privState, unlocked: false }); return [...was, flying, !!flight, sortHeld]; })()`),
+  [true, true, false, false, false], 'carte privée en vol, ou verrou de tri tenu');
+  await page.eval(`refreshStatus()`);
+  await elapse(400);                               // (au-delà de l'envol)
+  assert.deepEqual(await page.eval(`[inPrivate(), sorts.length]`), [false, 0], 'tri envoyé');
+  page.assertNoErrors();
+});

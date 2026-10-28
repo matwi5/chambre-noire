@@ -43,6 +43,7 @@
 //   await page.holdFetch(`u => u === '/api/status'`); …; await page.releaseFetch()   // réponses retenues
 //   const h = await page.holdRequests(['*/api/private/lock'], p => true); …; await h.release()   // requêtes retenues
 //                                                // avant le Mac (Fetch.enable) ; h.held, h.free(match), h.take(match)
+//   await page.refuseExit(h)                     // « Sortir » retenu par h refusé (500) : la page reste dans l'espace
 //   await page.enterPrivate('code')              // dans l'espace privé (créé la première fois), vu par la page,
 //                                                // puis au repos ; await page.privateIdle() : espace au repos
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
@@ -437,6 +438,16 @@ async function connect(wsUrl, { closeTab, siblings }) {
           if (holding === h) holding = null; } };
       await send('Fetch.enable', { patterns: patterns.map(urlPattern => ({ urlPattern })) });
       return h;
+    },
+    // « Sortir » refusé par le Mac : le verrouillage retenu par h (holdRequests) reçoit une erreur 500, h est relâché,
+    // puis la page reste dans l'espace (la console note l'erreur 500 : au test de la retirer de page.errors)
+    async refuseExit(h) {
+      await waitUntil(() => h.held.some(r => r.url.includes('/api/private/lock')), { what: 'sortie demandée' });
+      for (const { requestId } of h.take(u => u.includes('/api/private/lock'))) await send('Fetch.fulfillRequest',
+        { requestId, responseCode: 500, responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+          body: Buffer.from('{}').toString('base64') });
+      await h.release();
+      await page.waitFor(`!leavingPrivate && inPrivate()`, { what: 'sortie refusée, toujours dans l\'espace' });
     },
     // entrée dans l'espace privé avec ce code (l'espace est créé s'il n'existe pas) ; la page la voit à son
     // interrogation suivante de /api/status, demandée tout de suite. settle : attendre ensuite l'espace au repos

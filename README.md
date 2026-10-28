@@ -364,10 +364,14 @@ une image qu'on n'a pas vue. Plus généralement, aucun geste (bouton, touche, b
 dont ni la miniature ni l'image n'est encore à l'écran ; une image que le navigateur n'arrive pas à lire se trie une
 fois son chargement fini en échec, pour ne pas bloquer la pile. Dans l'espace privé, un Jeter en attente est abandonné
 dès l'appui sur « Sortir » : l'image
-reste dans la pile privée, même si la sortie échoue. Tant que le Mac n'a pas répondu à « Sortir », rien ne se trie :
-✓, ✕, les flèches, le balayage (la carte revient) et Garder ou Jeter de la visionneuse ne font rien, et une carte qui
-partait revient sur la pile. Si un
-autre appareil a déjà trié l'image, Garder (**✓** ou
+reste dans la pile privée, même si la sortie échoue, et revient tout de suite sur la pile avec son image, comme avec
+**Annuler**. Tant que le Mac n'a pas répondu à « Sortir », rien ne bouge : ✓, ✕, les flèches, le balayage (la carte
+revient), **Relancer** (carte d'échec) et **Révéler** ne font rien, ni aucune action de la visionneuse restée ouverte
+(Garder, Jeter, **Éditer**, **Dessiner**, **Reprendre**, **Relancer**, **Supprimer** confirmé pendant l'attente,
+Partager,
+Copier, Télécharger) ; une carte qui partait revient sur la pile, et la pile n'est pas redessinée (ses images privées
+ne sont plus demandées). Une carte qui partait quand le Mac ferme l'espace de lui-même ne part pas non plus. Si un autre
+appareil a déjà trié l'image, Garder (**✓** ou
 balayage à droite) dit « Déjà triée » et la carte s'en va (un Jeter n'a rien à effacer). Un appui sur l'image l'ouvre en
 grand dans la visionneuse, qui parcourt la pile :
 **Garder** et **Jeter** y remplacent **Supprimer**, puis elle passe à l'image suivante ; **Télécharger**, **Partager**,
@@ -1152,8 +1156,8 @@ confirmée, « Déjà terminée » pour une génération finie pendant la questi
 génération d'un autre appareil sans aperçu ou cachée, « +N en attente », rien qui dépasse à la largeur du téléphone), la
 pile (ordre, cartes de lot, ✓ et ✕, balayage au doigt et à la souris, bandeau Annuler et rien d'envoyé avant sa fin ni
 au rechargement, deux Jeter de suite, un second ✓ pendant le départ d'une carte, « Sortir » pendant le chargement d'une
-image privée, rien de trié pendant « Sortir » et la carte qui partait revenue, aucun tri d'une image pas encore
-affichée, image illisible triable, « Déjà triée », visionneuse, carte
+image privée, rien de trié ni relancé pendant « Sortir », la carte qui partait revenue et la pile qui garde ses images,
+aucun tri d'une image pas encore affichée, image illisible triable, « Déjà triée », visionneuse, carte
 d'échec, pile privée, message « Image prête »), Garder et Jeter par nom
 après une relecture de la pile, la saisie (unique, dans le Labo, Dessiner, collage, campagne à partir de 2 images,
 plusieurs photos d'un coup, vidage après « Révéler », saisie propre à chaque espace), le champ de création (replié avec

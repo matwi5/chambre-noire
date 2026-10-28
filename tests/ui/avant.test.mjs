@@ -508,11 +508,7 @@ test('« Sortir » refusé par le Mac : le bouton Avant revient sur l\'image pri
   assert.deepEqual(await page.eval(`(holdBefore($('vBefore')), { on: $('vBefore').classList.contains('on'),
     loads: secretLoads.size, want: $('vBeforeImg').want ?? null })`), { on: false, loads: 0, want: null },
   'image d\'entrée privée demandée pendant « Sortir »');
-  await waitUntil(() => lock.held.length > 0, { what: 'verrouillage demandé' });
-  for (const { requestId } of lock.take()) await page.send('Fetch.fulfillRequest', { requestId, responseCode: 500,
-    responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: btoa('{}') });
-  await lock.release();
-  await page.waitFor(`!leavingPrivate && inPrivate()`, { what: 'sortie refusée, toujours dans l\'espace' });
+  await page.refuseExit(lock);
   await page.waitFor(`!$('vBefore').hidden && !document.querySelector('#pile .bfr').hidden`,
     { what: 'bouton Avant revenu (visionneuse et carte)' });
   await page.hold(BUTTON);
