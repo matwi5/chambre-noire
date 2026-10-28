@@ -1152,7 +1152,8 @@ après une relecture de la pile, la saisie (unique, dans le Labo, Dessiner, coll
 plusieurs photos d'un coup, vidage après « Révéler », saisie propre à chaque espace), le champ de création (replié avec
 une pile, déplié pile vide, replié après « Révéler », par sa poignée ou un toucher sur la pile sans rien perdre de la
 saisie, déplié d'office puis replié quand la carte revient, touché il reste déplié, pas replié par la fin d'un balayage,
-replié dès le premier toucher après un balayage au doigt, image glissée sur la ligne, ✓ et ✕ jamais sous la ligne,
+replié dès le premier toucher après un balayage au doigt, image glissée sur la ligne, fichier lâché hors des zones
+de dépôt ignoré, ✓ et ✕ jamais sous la ligne,
 dessin en pleine hauteur, grille de réglages qui ouvre le panneau, rien qui dépasse), l'en-tête (lampe d'état et ses
 couleurs, son panneau avec « Ouvrir depuis le téléphone » sur l'ordinateur seulement et la ligne « Espace privé »,
 « Sortir », rien qui dépasse), le toucher d'une notification (service worker et page), la file cloisonnée par espace,
@@ -1162,7 +1163,8 @@ incognito signalé une fois puis oublié), les raccourcis clavier du PC (→ et 
 tenue ou répétée qui ne jette qu'une image, carte d'échec, rien pendant une saisie, une feuille ou la visionneuse,
 aucune touche qui supprime un tirage, Ctrl/⌘ + Entrée dans le champ), le bouton Avant (images comparables, appui tenu
 et relâché, cadre, zoom, espace privé) et Espace maintenue (sans défilement ni bouton activé) et le pilote lui-même
-(recherche de données restées dans la page, fichiers écrits par le banc, délais).
+(recherche de données restées dans la page, fichiers écrits par le banc, délais, fermeture d'un onglet, qui attend
+d'abord l'espace privé au repos).
 
 Tests de bout en bout, interface lancée :
 
