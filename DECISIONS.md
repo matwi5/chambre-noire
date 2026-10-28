@@ -171,6 +171,28 @@ les messages de commit.
   - « Pour E2, pendant « Sortir », une carte privée : » → « Ne bouge pas (Recommandé) » : « ✓, ✕ et les flèches ne
     font rien sur une carte privée pendant « Sortir » : elle reste à l'écran jusqu'à la fin de la sortie, sans tri.
     Invariant : aucune image privée n'est triée ni ne quitte l'écran sans tri. »
+- **Groupe D, vignette non chargée et `page.close` dans l'espace privé** (28/10/2026), réponses par bouton dans la
+  session du groupe :
+  - « Ticket « Pilote : fermer l'onglet, pile.test.mjs indépendant » (zone confidentialité). Le test « pendant
+    « Sortir » » de pile.test.mjs suppose une vignette privée des Tirages pas encore chargée. J'ai vérifié pourquoi il
+    échoue seul : sa prémisse ne tenait que parce que la page de test était en arrière-plan (onglets laissés ouverts) ;
+    au premier plan, Chrome sert la vignette depuis son cache (même adresse que la grille vient d'afficher), elle est
+    donc déjà « chargée ». Comment le test doit-il préparer lui-même sa vignette non chargée ? » → « Adresse jamais
+    servie (Recommandé) » : « Le test crée son propre tirage privé, puis pose une vignette différée (loading=lazy,
+    Tirages cachés) sur la même route privée /api/private/thumb, avec un paramètre en plus (&zq=lazy) que la page n'a
+    jamais chargé. La garde vérifiée (« Sortir » retire l'adresse des vignettes privées pas encore chargées) et les
+    deux contrôles d'étanchéité (aucune requête privée, aucune adresse privée posée pendant la sortie) restent
+    identiques. Essayé : passe seul. Je ferai aussi la preuve rouge (garde neutralisée → le test échoue). » Écartées :
+    « Requête retenue », « Cache coupé ».
+  - « Ticket 1 (pilote, zone confidentialité), constat de la passe « bogues » : maintenant que page.close ferme
+    vraiment l'onglet, la page fermée fait son « pagehide » ; si elle voit l'espace privé ouvert (même cookie que la
+    page principale), elle verrouille l'espace sur le Mac. C'est le vrai comportement d'un onglet fermé, et aucun test
+    actuel ne ferme une page dans l'espace. Mais un futur test pourrait le faire sans attendre l'espace au repos
+    (requêtes privées en route → 403 sous charge), ce que la règle mécanique « privateIdle avant de fermer l'espace »
+    ne repère pas. Que faire ? » → « Attente dans page.close (Recommandé) » : « page.close attend lui-même l'espace
+    privé au repos (page.privateIdle) avant de fermer un onglet qui est dans l'espace ; la fermeture verrouille
+    toujours l'espace, comme un vrai onglet fermé, mais jamais avec une requête privée en route. Commentaire du pilote
+    à jour. » Écartées : « Documenter seulement », « Règle mécanique ».
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
