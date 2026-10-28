@@ -1752,7 +1752,10 @@ function releaseSort(){ clearTimeout(holdTimer); holdTimer=null; sortHeld=false;
 // vrai si la carte part (un échec ne part qu'à gauche, retiré de la page). Pendant « Sortir » (exiting), rien ne part,
 // carte d'échec comprise : la carte reste à l'écran, sans tri, jusqu'à la fin de la sortie (décision du porteur,
 // « Ne bouge pas », 28/10/2026)
-function sortTop(action){ if(sortBusy() || exiting()) return false; const top=topEntry(); if(!top) return false;
+// Tant que l'image d'avant est à l'écran (bouton Avant tenu, Espace tenue : beforeHeld, carte du dessus ou
+// visionneuse), rien ne part non plus : l'image produite n'est pas affichée ; relâcher suffit pour trier (décision du
+// porteur, « Rien », groupe F du 28/10/2026)
+function sortTop(action){ if(sortBusy() || exiting() || beforeHeld) return false; const top=topEntry(); if(!top) return false;
   if(top.fail && action!=='discard') return false;   // ✓ sur un échec : rien ne part, rien n'attend
   const topImg = () => $('pile').querySelector('[data-k="0"] .pimg img');   // (aucune sur une carte d'échec)
   if(!top.fail && !posed(topImg())) return false;    // image pas encore affichée : rien ne part
@@ -1844,8 +1847,9 @@ let swiped=false, dropSwipe=()=>{};
     if(!((far || quick) && sortTop(g0.dx>0 ? 'keep' : 'discard'))) place(g0.c, 0); };
   $('pile').addEventListener('pointerup', end); $('pile').addEventListener('pointercancel', end); })();
 // Garder ou Jeter depuis la visionneuse ouverte sur la pile : elle passe à l'image suivante, ou se ferme ; pendant
-// « Sortir » (exiting), rien : l'image reste affichée, sans tri (comme sortTop)
-function sortFromViewer(action){ const it=vList[vIndex]; if(!it || !it.pile || sortBusy() || exiting()) return;
+// « Sortir » (exiting), ni tant que l'image d'avant est à l'écran (beforeHeld), rien : l'image reste affichée, sans tri
+// (comme sortTop)
+function sortFromViewer(action){ const it=vList[vIndex]; if(!it || !it.pile || sortBusy() || exiting() || beforeHeld) return;
   if(!posed($('vImg'))) return;                    // image pas encore affichée : rien (posed, plus haut)
   const list=vList.filter(x=>pileTag(x)!==pileTag(it)), at=Math.min(vIndex, list.length-1);
   // image suivante affichée, ou visionneuse fermée entre-temps (l'image attendue n'y arrivera plus)
@@ -2392,6 +2396,7 @@ function renderGallery(){ if(exiting()) return;    // « Sortir » en attente : 
     b.onclick=()=>openViewer(i, histItems); grid.appendChild(b); });
 }
 function openViewer(i, list=vList){ if(exiting()) return;   // « Sortir » en attente : rien de privé n'est posé
+  if(beforeHeld && beforeHeld!==$('vBefore')) dropBefore();   // (Avant de la carte tenu : la visionneuse la couvre)
   const it=list[i]; if(!it) return; clearTimeout(vEmpty); vList=list; vIndex=i; resetZoom();
   const v=$('viewer'), img=$('vImg');
   // la miniature en attendant l'image ; une fois l'image là, sa première image d'entrée est chargée en avance

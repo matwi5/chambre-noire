@@ -290,7 +290,8 @@ dernier bloc, après le HTML.
     état vide, compte, pastille de l'onglet ; redessinée seulement si elle change, `pileShown`, les images des cartes
     retirées vidées par `clearImages`), `topEntry` (ce que montre la carte du dessus, retrouvé par son nom), `posed`
     (image de la pile triable : miniature ou image à l'écran, ou chargement fini en échec ; jamais pendant le
-    chargement), `sortTop` (✓, ✕ et balayage ; rien pendant « Sortir », `exiting()`, ni sur une image pas `posed` ;
+    chargement), `sortTop` (✓, ✕ et balayage ; rien pendant « Sortir », `exiting()`, ni tant que l'image d'avant est à
+    l'écran, `beforeHeld`, ni sur une image pas `posed` ;
     `flyOut`, un départ à la fois : `flying`, vrai jusqu'au tri ou au retour de la carte, même si la pile est
     redessinée entre-temps, `flight` le départ en cours, que `landFlight` annule à l'appui sur « Sortir » et à la sortie
     de l'espace (`changedSpace`) ; puis `holdSort` : `sortHeld` jusqu'à l'image suivante `posed`, `SORT_GAP`
@@ -303,7 +304,8 @@ dernier bloc, après le HTML.
     abandonné si l'espace où il a commencé est fermé ou en train de l'être, `leavingPrivate` ; `privLock` annule
     un Jeter privé en attente dès l'appui sur « Sortir », avant que les images privées soient refusées : la carte
     revient avec son image), `undoDiscard`, `sortFromViewer` (Garder et Jeter de la
-    visionneuse, puis l'image suivante ; rien pendant « Sortir » ni sur une image pas `posed`). Garder et Jeter visent
+    visionneuse, puis l'image suivante ; rien pendant « Sortir », ni tant que l'image d'avant est à l'écran,
+    `beforeHeld`, ni sur une image pas `posed`). Garder et Jeter visent
     une image par `pileKey` (nom, identifiant d'une privée), jamais par l'objet affiché.
   - « notifications » : `pushSubscribe`, `askNotifications`.
   - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts` (ouverte par le

@@ -551,8 +551,10 @@ avec deux autres doigts pendant qu'un doigt tient Avant. Elle est chargée en av
 sinon sa miniature vient d'abord. Sur ordinateur, maintenir **Espace** fait la même chose que maintenir le bouton,
 dans la visionneuse ou sur la carte du dessus de la pile (rien sur une image non comparable, pendant qu'on tape un
 texte ou avec un panneau ouvert) ; là, Espace ne fait pas défiler la page et n'active aucun bouton qui a le focus
-(Entrée, oui). Le bouton de la carte ne trie rien et n'ouvre pas la visionneuse. Il marche aussi
-dans l'espace privé (voir « Espace privé »).
+(Entrée, oui). Le bouton de la carte ne trie rien et n'ouvre pas la visionneuse. Tant que l'image d'avant est à
+l'écran (bouton ou Espace tenus), rien ne trie l'image produite, qu'on ne voit pas : ✓, ✕, ← →, le balayage (la carte
+revient) et Garder ou Jeter de la visionneuse ne font rien ; il suffit de relâcher pour trier. Le bouton
+Avant marche aussi dans l'espace privé (voir « Espace privé »).
 
 ### Prompts enregistrés
 
@@ -1173,7 +1175,8 @@ faux « Échec »), le brouillon unique (reprise des anciens, aucun brouillon pr
 incognito signalé une fois puis oublié), les raccourcis clavier du PC (→ et ← sur la pile, Z et Ctrl/⌘ + Z, touche
 tenue ou répétée qui ne jette qu'une image, carte d'échec, rien pendant une saisie, une feuille ou la visionneuse,
 aucune touche qui supprime un tirage, Ctrl/⌘ + Entrée dans le champ), le bouton Avant (images comparables, appui tenu
-et relâché, cadre, zoom, espace privé) et Espace maintenue (sans défilement ni bouton activé) et le pilote lui-même
+et relâché, cadre, zoom, espace privé, aucun tri tant qu'il est tenu) et Espace maintenue (sans défilement ni bouton
+activé) et le pilote lui-même
 (recherche de données restées dans la page, fichiers écrits par le banc, délais, fermeture d'un onglet, qui attend
 d'abord l'espace privé au repos).
 
