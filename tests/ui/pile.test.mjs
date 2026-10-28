@@ -1527,3 +1527,25 @@ test('visionneuse : Jeter ignoré dans les 0,3 s qui suivent l\'ouverture ou un 
   await clear();
   page.assertNoErrors();
 });
+
+test('espace privé : « Sortir » refusé, l\'image de la pile ouverte en grand reprend son verrou court', async () => {
+  await enterPile();
+  await clear();
+  await page.made('zp51 secrete vue');
+  await page.viewPile('zp51 secrete vue');
+  const x = await exitHeld();
+  try {
+    await page.eval(`$('privExit').click()`);      // (la visionneuse couvre l'en-tête)
+    await page.refuseExit(x.h);
+    assert.equal(await page.eval(`sortHeld`), true, 'Garder et Jeter permis aussitôt après le refus');
+  } finally {
+    await x.h.release();
+  }
+  await page.waitFor(`!sortHeld`, { what: 'image vue 0,3 s' });
+  await page.closeViewer();
+  await page.privateIdle();
+  await page.click('#privExit');
+  await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+  assert.deepEqual(page.errors.filter(e => !/status of 500/.test(e)), [], 'erreurs de la console');
+  page.errors.length = 0;
+});

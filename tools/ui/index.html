@@ -2426,6 +2426,8 @@ function renderGallery(){ if(exiting()) return;    // « Sortir » en attente : 
     if(it.lot && inLot[it.lot.id]>1){ const lb=document.createElement('b'); lb.className='lotb'; lb.textContent=`${it.lot.rank}/${it.lot.size}`; b.appendChild(lb); }
     b.onclick=()=>openViewer(i, histItems); grid.appendChild(b); });
 }
+// l'image de la visionneuse et si elle est vue (visionneuse fermée : rien à attendre), pour holdSort
+const viewerView = () => vIndex<0 ? {key:'', shown:true} : {key:$('vImg').want, shown:posed($('vImg')) && onScreen($('vImg'))};
 function openViewer(i, list=vList){ if(exiting()) return;   // « Sortir » en attente : rien de privé n'est posé
   if(beforeHeld && beforeHeld!==$('vBefore')) dropBefore();   // (Avant de la carte tenu : la visionneuse la couvre)
   const it=list[i]; if(!it) return; clearTimeout(vEmpty); vList=list; vIndex=i; resetZoom();
@@ -2439,7 +2441,7 @@ function openViewer(i, list=vList){ if(exiting()) return;   // « Sortir » en a
   aimBefore($('vBefore'), it, img);              // bouton Avant de la nouvelle image (son entrée : chargée ci-dessus)
   // image de la pile : Garder et Jeter attendent qu'elle soit vue SORT_GAP ms, à l'ouverture, après un pas (← →) ou un
   // tri (décision du porteur, « Toute image vue 0,3 s », 28/10/2026) ; visionneuse fermée : rien à attendre
-  if(it.pile) holdSort(()=>vIndex<0 ? {key:'', shown:true} : {key:$('vImg').want, shown:posed($('vImg')) && onScreen($('vImg'))});
+  if(it.pile) holdSort(viewerView);
   img.alt=it.prompt||it.name; $('vCount').textContent=`${i+1} / ${list.length}`;
   const date=new Date(it.time*1000).toLocaleString('fr-FR', {dateStyle:'short', timeStyle:'short'});
   $('vChips').innerHTML=[date, MODE_LABELS[it.mode]||it.mode, it.width?it.width+'×'+it.height:'', it.steps?it.steps+' étapes':'', it.model?it.model.toUpperCase():'', it.seconds?fmt(it.seconds):'',
@@ -2872,8 +2874,10 @@ async function privLock(){ if(leavingPrivate) return;   // second appui pendant 
   const r=await postJson('/api/private/lock', {}).catch(()=>null), ok=await lockAccepted(r); leavingPrivate=false;
   // page fermée pendant l'attente (pagehide) : déjà sortie et effacée, rien n'est redessiné ni annoncé
   if(!inPrivate()){ if(ok) liftRelock(); return; }
-  // (pileTop oublié : la carte du dessus, dont l'image a pu être abandonnée, reprend le verrou court)
+  // (pileTop oublié : la carte du dessus, dont l'image a pu être abandonnée, reprend le verrou court ; l'image de la
+  // pile ouverte en grand de même : releaseSort a levé leurs verrous à l'appui)
   if(!ok){ erasePrivate=false; pileShown=''; pileTop=''; histShown=''; reveal.pv=0; renderPile(); loadPile(); renderGallery();
+    if(vIndex>=0 && vList[vIndex]?.pile) holdSort(viewerView);
     reaimBefore();                                 // (bouton Avant de la visionneuse ; la pile, redessinée, a le sien)
     // images de la pile et aperçu redemandés, pile relue (une lecture arrivée pendant la sortie n'a pas été dessinée ;
     // la visionneuse, elle, attend l'image suivante)
