@@ -88,7 +88,7 @@ test('page.close ferme l\'onglet : la page restée ouverte repasse au premier pl
     await other.ready();
     assert.equal(await page.eval(`document.visibilityState`), 'hidden', 'page derrière l\'autre onglet (prémisse)');
     other.assertNoErrors();
-  } finally { await other.close(); }               // (une seconde fermeture ne fait rien)
+  } finally { await other.close(); }
   await page.waitFor(`document.visibilityState === 'visible'`, { what: 'page de nouveau au premier plan' });
   page.assertNoErrors();
 });
@@ -96,7 +96,7 @@ test('page.close ferme l\'onglet : la page restée ouverte repasse au premier pl
 test('page.close dans l\'espace privé : chaque page de l\'espace attendue au repos avant la fermeture', async () => {
   await page.enterPrivate('code-du-pilote');
   const other = await chrome.phonePage();
-  let held = null;
+  let held = null, closing = null;
   try {
     await other.goto(bench.url + '/');
     await other.waitFor(`inPrivate()`, { what: 'autre page dans l\'espace' });
@@ -105,20 +105,45 @@ test('page.close dans l\'espace privé : chaque page de l\'espace attendue au re
     await page.eval(`void loadPile()`);
     await waitUntil(() => held.held.length > 0, { what: 'lecture privée en route' });
     let closed = false;
-    const closing = other.close().then(() => { closed = true; });
+    closing = other.close().then(() => { closed = true; });
     await elapse(500);
     assert.equal(closed, false, 'onglet fermé (espace reverrouillé) avec une requête privée en route');
-    await held.release();
-    await closing;
   } finally {
     await held?.release();
-    await other.close();
+    await (closing || other.close());                // une seule fermeture, attendue aussi sur un échec
   }
   await page.lockedOnMac();                          // la page fermée dans l'espace l'a reverrouillé (pagehide)
   await page.eval(`refreshStatus()`);
   await page.waitFor(`!inPrivate()`, { what: 'page sortie de l\'espace' });
   page.assertNoErrors();
 });
+
+test('page.close dans l\'espace privé : une requête privée partie avant tout appel du pilote est attendue aussi',
+  async () => {
+    await page.enterPrivate('code-du-pilote');
+    const other = await chrome.phonePage();
+    let held = null, closing = null;
+    try {
+      // l'autre page est entrée d'elle-même (état lu du Mac), sans enterPrivate ni privateIdle du pilote ; une
+      // lecture privée qui ne retient pas la pile (pileRead) part ensuite
+      await other.goto(bench.url + '/');
+      await other.waitFor(`inPrivate() && pileRead`, { what: 'autre page dans l\'espace, pile lue' });
+      held = await other.holdRequests(['*/api/private/history'], () => true);
+      await other.eval(`void fetch('/api/private/history')`);
+      await waitUntil(() => held.held.length > 0, { what: 'lecture privée de l\'autre page en route' });
+      let closed = false;
+      closing = other.close().then(() => { closed = true; });
+      await elapse(500);
+      assert.equal(closed, false, 'onglet fermé (espace reverrouillé) avec sa propre requête privée en route');
+    } finally {
+      await held?.release();
+      await (closing || other.close());
+    }
+    await page.lockedOnMac();
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`!inPrivate()`, { what: 'page sortie de l\'espace' });
+    page.assertNoErrors();
+  });
 
 // ce que la page voit de sa vue : largeur, pointeur principal, survol et tactile
 const SEEN = `({ width: innerWidth, height: innerHeight, coarse: matchMedia('(pointer: coarse)').matches,

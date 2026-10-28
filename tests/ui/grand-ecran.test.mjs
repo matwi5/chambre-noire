@@ -99,23 +99,25 @@ test('PC : Dessiner prend la colonne du champ, la pile reste visible à gauche',
 
 test('PC : une image déposée n\'importe où sur la colonne du champ, avec surbrillance au survol', async () => {
   await labo();
-  // un fichier glissé sur un point de la colonne du champ (événement de glisser-déposer à ce point) ; renvoie si le
-  // navigateur ouvrirait le fichier à la place de la page (dépôt non pris)
+  // un fichier glissé sur un point de la page (événement de glisser-déposer à ce point) ; renvoie s'il est pris par
+  // une zone de dépôt (zone : annulé avant d'atteindre document) et s'il est annulé (page : sinon le navigateur
+  // ouvrirait le fichier à la place de l'interface)
   const drag = (type, x, y) => page.eval(`(async () => { const dt = new DataTransfer(),
     c = document.createElement('canvas'); c.width = c.height = 64; const b = await new Promise(r => c.toBlob(r));
     dt.items.add(new File([b], 'deposee.png', { type: 'image/png' }));
     const el = document.elementFromPoint(${x}, ${y});
     const ev = new DragEvent(${JSON.stringify(type)}, { dataTransfer: dt, bubbles: true, cancelable: true,
       clientX: ${x}, clientY: ${y}, relatedTarget: null });
-    el.dispatchEvent(ev); return ev.defaultPrevented; })()`);
+    let zone = false; document.addEventListener(ev.type, e => { zone = e.defaultPrevented; }, { once: true });
+    el.dispatchEvent(ev); return { zone, page: ev.defaultPrevented }; })()`);
   const lit = () => page.eval(`getComputedStyle($('composer')).outlineStyle !== 'none'`);
   const field = await box('#composer');
   const x = Math.round((field.left + field.right) / 2), y = field.bottom - 8;   // bas de la colonne, hors de la tuile
   assert.equal(await lit(), false, 'surbrillance avant le survol');
-  assert.equal(await drag('dragenter', x, y), true, 'entrée : non prise');
-  assert.equal(await drag('dragover', x, y), true, 'survol : le navigateur ouvrirait le fichier');
+  assert.equal((await drag('dragenter', x, y)).zone, true, 'entrée : non prise');
+  assert.equal((await drag('dragover', x, y)).zone, true, 'survol : non pris par le champ');
   assert.equal(await lit(), true, 'survol : pas de surbrillance');
-  assert.equal(await drag('drop', x, y), true, 'dépôt : le navigateur ouvrirait le fichier');
+  assert.equal((await drag('drop', x, y)).zone, true, 'dépôt : non pris par le champ');
   await page.waitFor(`inputImages.length === 1`, { what: 'image déposée' });
   assert.equal(await lit(), false, 'surbrillance restée après le dépôt');
   await drag('dragenter', x, y);
@@ -127,8 +129,10 @@ test('PC : une image déposée n\'importe où sur la colonne du champ, avec surb
   const [px, py] = [Math.round((pile.left + pile.right) / 2), Math.round((pile.top + pile.bottom) / 2)];
   assert.equal(await page.eval(`!!document.elementFromPoint(${px}, ${py}).closest('#composer')`), false,
     'point dans la colonne de la pile (prémisse)');
-  assert.equal(await drag('dragover', px, py), true, 'survol de la pile : le navigateur ouvrirait le fichier');
-  assert.equal(await drag('drop', px, py), true, 'lâchée sur la pile : le navigateur ouvrirait le fichier');
+  assert.deepEqual(await drag('dragover', px, py), { zone: false, page: true },
+    'survol de la pile : pris par une zone, ou le navigateur ouvrirait le fichier');
+  assert.deepEqual(await drag('drop', px, py), { zone: false, page: true },
+    'lâchée sur la pile : prise par une zone, ou le navigateur ouvrirait le fichier');
   // une autre lâchée ensuite sur le champ, attendue lue : celle de la pile, si elle était prise, serait arrivée aussi
   await drag('drop', x, y);
   await page.waitFor(`inputImages.length >= 2`, { what: 'image déposée sur le champ' });

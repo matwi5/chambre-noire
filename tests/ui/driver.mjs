@@ -279,7 +279,7 @@ export async function launchChrome() {
     // page dans la vue view (PHONE, PC, TABLET, TABLET_WIDE), connectée au banc direct comme phonePage
     async newPage(view) {
       const target = await (await devtools('new?about:blank')).json();
-      const page = await connect(target.webSocketDebuggerUrl, () => closeTab(target.id));
+      const page = await connect(target.webSocketDebuggerUrl, { closeTab: () => closeTab(target.id), siblings: pages });
       pages.push(page);
       await applyView(page, view);
       if (directBench) await setAccessCookie(page, directBench);
@@ -335,9 +335,15 @@ function setAccessCookie(page, { url, cookie }) {
   return page.send('Network.setCookie', { ...cookie, url, httpOnly: true, sameSite: 'Lax' });
 }
 
+// requêtes privées de la page en route (fetch vers /api/private/), comptées dans __privInflight (une fois par page)
+const COUNT_PRIVATE = `(() => { if (window.__privFetch) return; const f = window.__privFetch = window.fetch;
+  window.__privInflight = 0;
+  window.fetch = (u, ...a) => { if (!String(u).startsWith('/api/private/')) return f(u, ...a);
+    __privInflight++; return f(u, ...a).finally(() => { __privInflight--; }); }; })()`;
+
 // une page : commandes du protocole, évaluation de JavaScript, attente d'une condition, erreurs de la console ;
-// closeTab ferme son onglet dans Chrome (page.close)
-async function connect(wsUrl, closeTab) {
+// closeTab ferme son onglet dans Chrome, siblings : les pages du même Chrome (page.close)
+async function connect(wsUrl, { closeTab, siblings }) {
   const ws = new WebSocket(wsUrl);
   await new Promise((resolve, reject) => { ws.addEventListener('open', resolve, { once: true }); ws.addEventListener('error', reject, { once: true }); });
   let id = 0;
@@ -363,6 +369,8 @@ async function connect(wsUrl, closeTab) {
     if (p.entry.level === 'error')
       record(`${p.entry.source} : ${p.entry.text}${p.entry.url ? ` (${p.entry.url})` : ''}`); });
   await Promise.all([send('Runtime.enable'), send('Log.enable'), send('Page.enable')]);
+  // requêtes privées comptées dès le chargement de chaque document (privateIdle, page.close)
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: COUNT_PRIVATE });
 
   let held = null;                                   // fin du balayage tenu (page.release)
   // doigt ou souris posé au centre de l'élément selector (amené à l'écran, puis immobile : un défilement doux de la
@@ -440,16 +448,12 @@ async function connect(wsUrl, closeTab) {
       await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
       if (settle) await page.privateIdle();
     },
-    // requêtes privées de la page en route (fetch vers /api/private/), comptées dans __privInflight à partir de
-    // l'appel (une fois par page)
-    countPrivate() {
-      return page.eval(`(() => { if (window.__privFetch) return; const f = window.__privFetch = window.fetch;
-        window.__privInflight = 0;
-        window.fetch = (u, ...a) => { if (!String(u).startsWith('/api/private/')) return f(u, ...a);
-          __privInflight++; return f(u, ...a).finally(() => { __privInflight--; }); }; })()`);
-    },
-    // espace privé au repos : pile privée lue, aucune requête privée en route (comptées depuis countPrivate, que
-    // enterPrivate pose), aucune image privée en chargement. À attendre avant de fermer l'espace sans « Sortir »
+    // requêtes privées de la page en route (fetch vers /api/private/), comptées dans __privInflight dès le chargement
+    // du document ; sur un document déjà chargé avant la connexion, à partir de l'appel
+    countPrivate() { return page.eval(COUNT_PRIVATE); },
+    // espace privé au repos : pile privée lue, aucune requête privée en route (comptées dès le chargement du
+    // document), aucune image privée en chargement (une vignette différée hors de l'écran n'est jamais chargée : elle
+    // fait échouer l'attente). À attendre avant de fermer l'espace sans « Sortir »
     // (le Mac, une fermeture de la page) : une requête servie après la fermeture répondrait 403, ce que la page ne peut
     // pas savoir
     async privateIdle() {
@@ -731,11 +735,15 @@ async function connect(wsUrl, closeTab) {
     assertNoErrors() {
       if (errors.length) throw new Error(`erreurs dans la console :\n  ${errors.join('\n  ')}`);
     },
-    // onglet fermé (pagehide, comme une vraie fermeture), connexion coupée. Une page fermée dans l'espace privé le
-    // reverrouille : chaque page ouverte dans l'espace est d'abord attendue au repos (privateIdle), aucune requête
-    // privée en route ne reçoit de 403. disconnect ne coupe que la connexion (l'onglet reste chargé)
+    // onglet fermé (pagehide, comme une vraie fermeture), connexion coupée. Une page fermée qui voit l'espace privé
+    // ouvert (même conditions que son pagehide) le reverrouille : chaque page du même Chrome dans l'espace est d'abord
+    // attendue au repos (privateIdle), aucune requête privée en route ne reçoit de 403. Le verrouillage, lui, peut
+    // arriver au Mac après la fin de close (page.lockedOnMac l'attend). disconnect ne coupe que la connexion (l'onglet
+    // reste chargé)
     async close() {
-      for (const p of livePages) {
+      const relocks = await page.eval(`typeof privState === 'object'
+        && !!(privState.unlocked || relock || entering || marked)`).catch(() => false);
+      for (const p of relocks ? siblings.filter(x => livePages.has(x)) : []) {
         if (await p.eval(`typeof inPrivate === 'function' && inPrivate()`).catch(() => false)) await p.privateIdle();
       }
       page.disconnect();
