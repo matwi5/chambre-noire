@@ -193,6 +193,29 @@ les messages de commit.
     privé au repos (page.privateIdle) avant de fermer un onglet qui est dans l'espace ; la fermeture verrouille
     toujours l'espace, comme un vrai onglet fermé, mais jamais avec une requête privée en route. Commentaire du pilote
     à jour. » Écartées : « Documenter seulement », « Règle mécanique ».
+- **Groupe E, durcissement de la pile** (28/10/2026), réponses par bouton dans la session du groupe :
+  - « E3 (ne jamais jeter une image non affichée) : une carte de la pile dont seule la miniature (320 px) est posée,
+    l'image complète encore en chargement, compte-t-elle comme « affichée » (✓, ✕, ← → et balayage la trient) ? » →
+    « Oui, miniature = affichée (Recommandé) » : « C'est ce que l'œil voit déjà sur la carte, et ce que le verrou entre
+    deux tris mesure aujourd'hui. Seule une carte sans rien d'affiché (ni miniature ni image) ne se trie pas. »
+  - « E3 : une image de la pile que le navigateur n'arrive pas à lire (fichier abîmé, ou effacé par un autre
+    appareil : la carte montre son texte mais une image vide/cassée) peut-elle être triée ? » → « Oui, une fois
+    l'échec constaté (Recommandé) » : « Quand le chargement est fini et a échoué, la carte (texte, réglages) devient
+    triable : ✓, ✕ (toujours avec le bandeau Annuler de 5 s). Sinon une image abîmée bloquerait la pile pour toujours.
+    Une image encore en chargement, elle, ne se trie jamais. »
+  - « E2 (carte privée immobile pendant « Sortir ») : quels gestes bloquer pendant l'attente de la réponse du Mac ? »
+    → « Tout tri, visionneuse comprise (Recommandé) » : « ✓, ✕, ← →, balayage (la carte revient en place) et
+    Garder/Jeter de la visionneuse ne font rien sur une image privée : la visionneuse ne passe pas non plus à l'image
+    suivante. Une carte d'échec privée reste aussi immobile (rien ne bouge pendant Sortir). »
+  - « E2 : une carte privée déjà en train de partir (envol de 0,2 s lancé par ✓ ou ✕) quand on appuie sur
+    « Sortir » : aujourd'hui elle quitte l'écran sans être triée. Que faire ? » → « Elle revient sur la pile
+    (Recommandé) » : « L'envol s'annule : la carte reprend sa place avec son image, sans tri, et y reste jusqu'à la fin
+    de la sortie. Respecte l'invariant « aucune image privée ne quitte l'écran sans tri ». »
+  - « E3, image illisible : la passe « bogues » note qu'une coupure réseau passagère (Tailscale qui décroche une
+    seconde) ressemble, pour la page, à une image abîmée. Aujourd'hui la carte fait déjà deux essais (chargement à
+    part, puis l'image elle-même) ; si les deux échouent, elle devient triable alors que l'image est peut-être saine.
+    Que faire ? » → « Garder tel quel (Recommandé) » : « Deux essais suffisent : après leur échec, la carte (texte,
+    réglages) se trie, Jeter passe toujours par le bandeau Annuler de 5 s. Rien de plus à coder. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
