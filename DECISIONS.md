@@ -277,6 +277,13 @@ les messages de commit.
   test « cachée ». Que faire ? » → « Plus tard (Recommandé) » : « F4 part sans cette règle ; la limite et le travail
   sur le pilote vont au compte rendu, pour un durcissement (le groupe G touche déjà le pilote). Il faut un ✕ dans les
   0,3 s qui suivent le retour dans l'appli. »
+- **Groupe F, verrou court dans la visionneuse** (28/10/2026), réponse par bouton, question posée par la session du
+  groupe : « F4 : dans la visionneuse, une image de la pile qu'on vient d'ouvrir en grand, ou vers laquelle on vient
+  de passer par ← →, n'a pas le verrou de 0,3 s (seule l'image qui suit un tri l'a). Exemple : ✕ sur la pile, on
+  ouvre aussitôt la carte suivante en grand, puis Jeter : elle part après moins de 0,3 s à l'écran. Que faire ? » →
+  « Toute image vue 0,3 s (Recommandé) » : « Toute image de la pile montrée dans la visionneuse (ouverture, passage
+  par ← →, après un tri) doit y être vue 0,3 s avant que Garder ou Jeter la trie. Seul coût : Garder ou Jeter ignoré
+  dans les 0,3 s qui suivent l'ouverture ou un pas. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
