@@ -38,7 +38,8 @@
 //   await page.overflowing()                     // éléments visibles qui dépassent de la largeur de la vue
 //   await page.visible('#prompt')                // élément affiché (ni absent, ni masqué, ni sans boîte)
 //   await page.pasteImage()                      // une image de 64×64 collée dans le champ du Labo (Cmd+V)
-//   await page.made('texte')                     // « Révéler » puis l'image attendue dans la pile affichée
+//   await page.made('texte')                     // « Révéler » puis l'image attendue dans la pile affichée, son
+//                                                // image affichée si elle est dessus ({ shown: false } : sans)
 //   await page.holdFetch(`u => u === '/api/status'`); …; await page.releaseFetch()   // réponses retenues
 //   const h = await page.holdRequests(['*/api/private/lock'], p => true); …; await h.release()   // requêtes retenues
 //                                                // avant le Mac (Fetch.enable) ; h.held, h.free(match), h.take(match)
@@ -510,15 +511,24 @@ async function connect(wsUrl, { closeTab, siblings }) {
       await up(); },
     // garde par ✓ toutes les images de la pile affichée (celle de l'espace où est la page) : elles passent dans ses
     // Tirages ; chacune attendue hors de la pile du Mac avant la suivante. Une carte d'échec en tête l'empêche
-    // (erreur). Renvoie le nombre d'images gardées
-    keepPile() {
+    // (erreur), comme une image du dessus jamais affichée (✓ n'en trie aucune). La page passe d'abord au premier plan,
+    // comme sous le doigt : une page cachée ne décode pas ses images, sa carte du dessus ne serait jamais affichée.
+    // Renvoie le nombre d'images gardées
+    async keepPile() {
+      await send('Page.bringToFront');
       return page.eval(`(async () => {
         const onMac = async k => (await (await fetch(pileApi('pile', inPrivate()))).json()).some(x => pileKey(x) === k);
+        const shown = () => posed($('pile').querySelector('[data-k="0"] .pimg img'));
         await loadPile(); let n = 0;
         for (let it; (it = pileView()[0]); n++) {
           if (pileFails().length) throw new Error('carte d\\'échec en tête de la pile');
-          while (sortBusy()) await new Promise(r => setTimeout(r, 25));   // ✓ ignoré pendant un tri et SORT_GAP
-          if (!(it = pileView()[0])) break;               // la pile a pu changer pendant l'attente
+          // ✓ ignoré pendant un tri et SORT_GAP, et tant que l'image du dessus n'est pas affichée (posed) ; la pile a
+          // pu changer pendant l'attente (vidée ailleurs, carte d'échec arrivée en tête)
+          for (let t = 0; (sortBusy() || !shown()) && pileView()[0] && !pileFails().length; t++) {
+            if (t > 400) throw new Error('image du dessus jamais affichée');
+            await new Promise(r => setTimeout(r, 25)); }
+          if (pileFails().length) throw new Error('carte d\\'échec en tête de la pile');
+          if (!(it = pileView()[0])) break;
           const k = pileKey(it); $('pileYes').click();
           for (let t = 0; await onMac(k); t++) {
             if (t > 400) throw new Error('image non gardée : ' + k);
@@ -614,10 +624,14 @@ async function connect(wsUrl, { closeTab, siblings }) {
         $('prompt').dispatchEvent(ev); })()`);
     },
     // génération demandée par la page (page.generate), finie : son image est dans la pile affichée
-    async made(prompt) {
+    async made(prompt, { shown = true } = {}) {
       await page.generate(prompt);
       await page.waitFor(`pileItems.some(it => it.prompt === ${JSON.stringify(prompt)})`,
         { what: `« ${prompt} » dans la pile`, timeout: 30000 });
+      // sur le dessus, son image affichée (posed) : sinon ✓, ✕ et les flèches l'ignorent encore
+      if (shown) await page.waitFor(`(c => !c || c.querySelector('.pprompt').textContent !== ${JSON.stringify(prompt)}
+        || posed(c.querySelector('.pimg img')))($('pile').querySelector('[data-k="0"]'))`,
+      { what: `image de « ${prompt} » affichée`, timeout: 30000 });
     },
     // réponses de fetch retenues dans la page : celles dont l'adresse vérifie match (source d'une fonction
     // (adresse) => booléen, évaluée dans la page) n'arrivent qu'à page.releaseFetch() ; la requête, elle, part tout de

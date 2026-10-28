@@ -279,21 +279,21 @@ dernier bloc, après le HTML.
     cours, `sorting`, avec leur génération de la page `pageOf`), `pileFails` (échecs de la page, en tête),
     `renderPile` (carte du dessus et deux devinées dessous : `pileCard`, `failCard`, chacune marquée par `pileTag` ;
     état vide, compte, pastille de l'onglet ; redessinée seulement si elle change, `pileShown`, les images des cartes
-    retirées vidées par `clearImage`), `topEntry` (ce que
-    montre la carte du dessus, retrouvé par son nom), `sortTop` (✓, ✕ et balayage ; rien pendant « Sortir »,
-    `exiting()` ; `flyOut`, un départ à la fois : `flying`, vrai jusqu'au tri ou au retour de la carte, même si la pile
-    est redessinée
-    entre-temps, `flight` le départ en cours, que `landFlight` annule à l'appui sur « Sortir » ; puis `holdSort` :
-    `sortHeld` jusqu'à
-    l'image suivante affichée, `SORT_GAP` ms au moins, aussi pour la visionneuse), `pileSwipe` (balayage de
+    retirées vidées par `clearImage`), `topEntry` (ce que montre la carte du dessus, retrouvé par son nom), `posed`
+    (image de la pile triable : miniature ou image à l'écran, ou chargement fini en échec ; jamais pendant le
+    chargement), `sortTop` (✓, ✕ et balayage ; rien pendant « Sortir », `exiting()`, ni sur une image pas `posed` ;
+    `flyOut`, un départ à la fois : `flying`, vrai jusqu'au tri ou au retour de la carte, même si la pile est
+    redessinée entre-temps, `flight` le départ en cours, que `landFlight` annule à l'appui sur « Sortir » ; puis
+    `holdSort` : `sortHeld` jusqu'à l'image suivante `posed`, `SORT_GAP` ms au moins, `SORT_HOLD_MAX` au plus, aussi
+    pour la visionneuse), `pileSwipe` (balayage de
     la carte du dessus par Pointer Events, doigt et souris : seuil au tiers de la largeur ou geste vif ; `swiped` :
     la fin d'un balayage n'ouvre pas la visionneuse, oublié au prochain appui dans la zone de la pile),
     `sendSort` (envoi de Garder ou Jeter, « Déjà triée » sur un 404 de Garder), `keepItem`, `discardItem` (Jeter :
     bandeau `#undoBar`, `discarding`), `commitDiscard` (à la fin du bandeau, `DISCARD_MS`, ou au Jeter suivant ;
     abandonné si l'espace où il a commencé est fermé ou en train de l'être, `leavingPrivate` ; `privLock` abandonne
     un Jeter privé en attente dès l'appui sur « Sortir »), `undoDiscard`, `sortFromViewer` (Garder et Jeter de la
-    visionneuse, puis l'image suivante ; rien pendant « Sortir »). Garder et Jeter visent une image par `pileKey` (nom,
-    identifiant d'une privée), jamais par l'objet affiché.
+    visionneuse, puis l'image suivante ; rien pendant « Sortir » ni sur une image pas `posed`). Garder et Jeter visent
+    une image par `pileKey` (nom, identifiant d'une privée), jamais par l'objet affiché.
   - « notifications » : `pushSubscribe`, `askNotifications`.
   - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts` (ouverte par le
     bouton, filtre `promptUsage` sur la catégorie de la saisie, `inputKind`), `renderPrompts`, `usePrompt`,
@@ -308,8 +308,8 @@ dernier bloc, après le HTML.
     privé), raccourcis du PC (écouteur `keydown` juste avant celui de la visionneuse : → et ← sur la pile par
     `sortTop`, Z et Ctrl/⌘ + Z par `undoDiscard`, Ctrl/⌘ + Entrée dans `#prompt` par `#go` ; rien pendant une saisie,
     une feuille, la visionneuse (sauf Espace) ou les images d'entrée, ni sur une carte d'échec ; une touche répétée ne
-    trie rien,
-    Entrée répétée sur `SORT_BUTTONS` comprise ; carte du dessus affichée : `shownTop` ; Espace tenue :
+    trie rien, Entrée répétée sur un bouton marqué `data-sort` comprise ; carte du dessus affichée : `shownTop` ; Espace
+    tenue :
     `holdBefore` du cadre de la visionneuse ou de la carte du dessus, `holder` à `'key'` (pas sur un appui du pointeur
     en cours), et `keyup` par `dropBefore`,
     sans défilement ni bouton activé ; champs : `FORM_FIELDS`), gestes : `zoomable` (pincer, molette, glisser ; son

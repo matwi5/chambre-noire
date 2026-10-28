@@ -13,7 +13,9 @@
 // revient) ;
 // balayage de la carte du dessus au doigt et à la souris (seuil, geste vif, tampons, échec qui ne part qu'à gauche,
 // pile redessinée sous le doigt, clic qui ouvre la visionneuse) ; après un tri, ✓, ✕ et la visionneuse ignorent un
-// double appui jusqu'à l'image suivante affichée (0,3 s au moins).
+// double appui jusqu'à l'image suivante affichée (0,3 s au moins) ; aucun geste ne trie une image pas encore affichée,
+// même une fois le verrou levé par son plafond (3 s), et une image illisible se trie une fois son chargement en échec,
+// pas pendant.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/pile.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -796,7 +798,7 @@ test('espace privé : « Sortir » pendant le chargement d\'une image de la pile
     const fail = async () => { for (const r of h.take()) await page.send('Fetch.failRequest',
       { requestId: r.requestId, errorReason: 'Aborted' }).catch(() => {}); };
     try {
-      await page.made('zp15 secrete en route');
+      await page.made('zp15 secrete en route', { shown: false });
       await waitUntil(() => seen.length > 0, { what: 'image privée demandée' });
       // la pile redessinée pendant le chargement : l'image de l'ancienne carte, détachée, l'attend encore
       await page.eval(`pileShown = ''; renderPile()`);
@@ -939,5 +941,111 @@ test('espace privé : pendant « Sortir », Garder et Jeter de la visionneuse ne
   } finally {
     await endExitHeld(x);
   }
+  page.assertNoErrors();
+});
+
+// carte du dessus publique : son prompt, son image posée (posed : miniature ou image, chargement fini), un Jeter en
+// attente, les tris envoyés
+const TOP_IMG = `$('pile').querySelector('[data-k="0"] .pimg img')`;
+const topState = () => page.eval(`({ top: ${TOP}, posed: posed(${TOP_IMG}), discarding: !!discarding,
+  sorts: sorts.length })`);
+// une image neuve sur le dessus, ses images (miniature, image complète) retenues avant le Mac
+async function heldTop(prompt) {
+  await page.waitFor(`!inPrivate()`, { what: 'espace public' });
+  await clear();
+  await page.made(`${prompt} dessous`);
+  await page.waitFor(`!sortBusy()`, { what: 'pile au repos' });
+  const h = await page.holdRequests(['*/api/result*', '*/api/thumb*'], () => true);
+  await page.generate(`${prompt} dessus`);
+  await page.waitFor(`${TOP} === ${JSON.stringify(`${prompt} dessus`)}`, { what: 'carte du dessus dessinée' });
+  await waitUntil(() => h.held.length > 0, { what: 'image du dessus demandée' });
+  await page.eval(`sorts.length = 0`);
+  return h;
+}
+
+test('image du dessus pas encore affichée : ni ✓, ni ✕, ni flèches, ni balayage, ni la visionneuse ne la trient',
+  async () => {
+  const h = await heldTop('zp31');
+  const unseen = { top: 'zp31 dessus', posed: false, discarding: false, sorts: 0 };
+  try {
+    for (const [what, act] of [['✓', () => page.click('#pileYes')], ['✕', () => page.click('#pileNo')],
+      ['→', () => page.press('ArrowRight')], ['←', () => page.press('ArrowLeft')],
+      ['balayage', () => page.swipe('#pile .pimg', -200)]]) {
+      await act();
+      await elapse(400);
+      assert.deepEqual(await topState(), unseen, `${what} sur une image pas affichée`);
+    }
+    await page.viewPile('zp31 dessus');           // visionneuse : son image retenue elle aussi
+    await page.eval(`$('vSort').querySelector('.btn').click()`);   // Jeter
+    await elapse(400);
+    assert.deepEqual(await page.eval(`[vIndex >= 0 && vList[vIndex]?.prompt, !!discarding, sorts.length]`),
+      ['zp31 dessus', false, 0], 'Jeter de la visionneuse sur une image pas affichée');
+    await page.closeViewer();
+  } finally {
+    await h.release();
+  }
+  // l'image arrive : ✕ la jette (bandeau), comme d'habitude
+  await page.waitFor(`posed(${TOP_IMG}) && !sortBusy()`, { what: 'image du dessus affichée, pile au repos' });
+  await page.click('#pileNo');
+  await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
+  await page.click('#undoBtn');
+  await clear();
+  page.assertNoErrors();
+});
+
+test('après un ✕, la suivante pas encore affichée : le verrou se lève après 3 s, mais ✕ ne la jette pas', async () => {
+  await page.waitFor(`!inPrivate()`, { what: 'espace public' });
+  await clear();
+  // images des deux cartes retenues dès leur création ; celles du dessus seules libérées ensuite (pass)
+  let pass = null;
+  const h = await page.holdRequests(['*/api/result*', '*/api/thumb*'], p => !(pass && p.request.url.includes(pass)));
+  try {
+    await page.made('zp33 suivante', { shown: false });
+    await page.made('zp33 dessus', { shown: false });
+    await page.waitFor(`${TOP} === 'zp33 dessus'`, { what: 'carte du dessus dessinée' });
+    pass = encodeURIComponent(await page.eval(`pileItems.find(it => it.prompt === 'zp33 dessus').name`));
+    await h.free(u => u.includes(pass));
+    await page.waitFor(`posed(${TOP_IMG}) && !sortBusy()`, { what: 'image du dessus affichée' });
+    await page.eval(`sorts.length = 0`);
+    await page.click('#pileNo');                   // le dessus jeté : bandeau, la suivante dessus sans son image
+    await page.waitFor(`!$('undoBar').hidden && ${TOP} === 'zp33 suivante'`, { what: 'suivante sur le dessus' });
+    await page.waitFor(`!sortHeld`, { what: 'verrou levé par son plafond (3 s)' });
+    await page.click('#pileNo');
+    await elapse(400);
+    // ni la suivante jetée, ni le Jeter d'avant envoyé (un second Jeter l'aurait validé)
+    assert.deepEqual(await topState(), { top: 'zp33 suivante', posed: false, discarding: true, sorts: 0 },
+      '✕ après le plafond du verrou sur une image pas affichée');
+  } finally {
+    await h.release();
+  }
+  await page.click('#undoBtn');
+  await clear();
+  page.assertNoErrors();
+});
+
+test('image du dessus illisible : la carte se trie une fois l\'échec du chargement constaté, pas pendant',
+  async () => {
+  const h = await heldTop('zp32');
+  const fail = async () => { for (const r of h.take()) await page.send('Fetch.failRequest',
+    { requestId: r.requestId, errorReason: 'Failed' }).catch(() => {}); };
+  try {
+    await fail();                                  // chargement à part en échec
+    // la page redonne l'adresse au navigateur, qui la redemande (retenue) : adresse posée, chargement en cours
+    await page.waitFor(`(i => !!i?.getAttribute('src') && !i.complete)(${TOP_IMG}) && !sortBusy()`,
+      { what: 'nouvel essai du navigateur en cours' });
+    await page.click('#pileNo');
+    await elapse(400);
+    assert.deepEqual(await topState(), { top: 'zp32 dessus', posed: false, discarding: false, sorts: 0 },
+      '✕ pendant le nouvel essai');
+    await waitUntil(async () => (await fail(), (await topState()).posed), { what: 'échec du chargement constaté' });
+  } finally {
+    await h.release();
+  }
+  await page.waitFor(`!sortBusy()`, { what: 'pile au repos' });
+  await page.click('#pileNo');
+  await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau sur la carte illisible' });
+  await page.click('#undoBtn');
+  await clear();
+  page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/ERR_FAILED|ERR_ABORTED/.test(e)));
   page.assertNoErrors();
 });

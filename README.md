@@ -360,7 +360,10 @@ l'image n'est effacée du Mac (image, vignette, images d'entrée, dossier de tra
 bandeau. Fermer ou recharger la page pendant ce temps la laisse dans la pile ; jeter une autre image envoie tout de
 suite l'effacement de la précédente (un seul bandeau à la fois). Après un tri, ✓, ✕ et les boutons de la visionneuse
 ignorent un nouvel appui tant que l'image suivante n'est pas affichée (0,3 s au moins) : un double appui ne trie jamais
-une image qu'on n'a pas vue. Dans l'espace privé, un Jeter en attente est abandonné dès l'appui sur « Sortir » : l'image
+une image qu'on n'a pas vue. Plus généralement, aucun geste (bouton, touche, balayage, visionneuse) ne trie une image
+dont ni la miniature ni l'image n'est encore à l'écran ; une image que le navigateur n'arrive pas à lire se trie une
+fois son chargement fini en échec, pour ne pas bloquer la pile. Dans l'espace privé, un Jeter en attente est abandonné
+dès l'appui sur « Sortir » : l'image
 reste dans la pile privée, même si la sortie échoue. Tant que le Mac n'a pas répondu à « Sortir », rien ne se trie :
 ✓, ✕, les flèches, le balayage (la carte revient) et Garder ou Jeter de la visionneuse ne font rien, et une carte qui
 partait revient sur la pile. Si un
@@ -1149,7 +1152,8 @@ confirmée, « Déjà terminée » pour une génération finie pendant la questi
 génération d'un autre appareil sans aperçu ou cachée, « +N en attente », rien qui dépasse à la largeur du téléphone), la
 pile (ordre, cartes de lot, ✓ et ✕, balayage au doigt et à la souris, bandeau Annuler et rien d'envoyé avant sa fin ni
 au rechargement, deux Jeter de suite, un second ✓ pendant le départ d'une carte, « Sortir » pendant le chargement d'une
-image privée, rien de trié pendant « Sortir » et la carte qui partait revenue, « Déjà triée », visionneuse, carte
+image privée, rien de trié pendant « Sortir » et la carte qui partait revenue, aucun tri d'une image pas encore
+affichée, image illisible triable, « Déjà triée », visionneuse, carte
 d'échec, pile privée, message « Image prête »), Garder et Jeter par nom
 après une relecture de la pile, la saisie (unique, dans le Labo, Dessiner, collage, campagne à partir de 2 images,
 plusieurs photos d'un coup, vidage après « Révéler », saisie propre à chaque espace), le champ de création (replié avec

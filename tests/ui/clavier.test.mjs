@@ -2,7 +2,7 @@
 // l'image du dessus (bandeau Annuler, un Jeter suivant valide le précédent, comme au doigt), Z ou Ctrl/⌘ + Z annule
 // tant que le bandeau est là. Règle à ne jamais enfreindre : « Aucune touche ne supprime un tirage ; au clavier, Jeter
 // passe toujours par le bandeau Annuler, comme au doigt ; une touche maintenue ou répétée ne jette jamais plus d'une
-// image avant que la suivante soit affichée. »
+// image avant que la suivante soit affichée. » Boutons de tri marqués data-sort : Entrée répétée n'en active aucun.
 //   venv/bin/python tests/check.py --no-bench --ui tests/ui/clavier.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -250,3 +250,20 @@ test('Ctrl/⌘ + Entrée dans le prompt : « Révéler », une demande par appui
   await emptyPile();
   page.assertNoErrors();
 });
+
+test('boutons de tri marqués data-sort : Entrée répétée n\'en active aucun, même un bouton ajouté plus tard',
+  async () => {
+    assert.deepEqual(await page.eval(`[...document.querySelectorAll('[data-sort]')]
+      .map(b => b.id || 'visionneuse ' + b.textContent.trim())`),
+    ['pileNo', 'pileYes', 'visionneuse Jeter', 'visionneuse Garder']);
+    // un futur bouton de tri, marqué comme les autres : un appui l'active, la répétition du système non
+    await page.eval(`(() => { const b = document.createElement('button'); b.id = 'futureSort'; b.dataset.sort = '';
+      b.textContent = 'Trier'; window.futureHits = 0; b.onclick = () => futureHits++; document.body.append(b);
+      b.focus(); })()`);
+    await page.keyDown('Enter');
+    for (let k = 0; k < 4; k++) await page.keyDown('Enter', { repeat: true });
+    await page.keyUp('Enter');
+    assert.equal(await page.eval(`futureHits`), 1, 'Entrée répétée sur un bouton marqué data-sort');
+    await page.eval(`$('futureSort').remove()`);
+    page.assertNoErrors();
+  });

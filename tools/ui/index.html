@@ -671,7 +671,7 @@
       <i class="rbar" id="runBar"></i>
     </article>
     <div class="pile" id="pile"></div>
-    <div class="pile-acts" id="pileActs" hidden><button class="pbtn mat" id="pileNo" aria-label="Jeter" title="Jeter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button><span class="pcount" id="pileCount"></span><button class="pbtn yes" id="pileYes" aria-label="Garder" title="Garder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+    <div class="pile-acts" id="pileActs" hidden><button class="pbtn mat" id="pileNo" data-sort aria-label="Jeter" title="Jeter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button><span class="pcount" id="pileCount"></span><button class="pbtn yes" id="pileYes" data-sort aria-label="Garder" title="Garder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
     <!-- pile vide : une cuve vide en pixels -->
     <div class="empty mat" id="pileEmpty" hidden><svg viewBox="0 0 16 16" fill="currentColor" fill-rule="evenodd" shape-rendering="crispEdges" aria-hidden="true"><path d="M1 8h1v5h12V8h1v6H1z"/><path d="M2 10h3v1H2zM7 10h2v1H7zM11 10h3v1h-3z"/><path d="M7 3h2v1H7zM6 4h1v1H6zM9 4h1v1H9zM8 5h1v1H8zM7 6h1v1H7z"/></svg><p>Rien à trier</p><small>Chaque image terminée arrive ici : gardez-la ou jetez-la.</small></div>
   </section>
@@ -750,7 +750,7 @@
     <div class="m-chips" id="vChips"></div>
     <button class="v-inputs" id="vInputs" onclick="openInputs(0)" hidden></button>
     <div class="v-lot" id="vLot" hidden><button class="btn secondary small" id="vLotOpen" onclick="openLot()">Voir le lot</button><button class="btn secondary small" onclick="downloadLot()">Tout télécharger</button></div>
-    <div class="v-sort" id="vSort" hidden><button class="btn secondary" onclick="sortFromViewer('discard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>Jeter</button><button class="btn" onclick="sortFromViewer('keep')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>Garder</button></div>
+    <div class="v-sort" id="vSort" hidden><button class="btn secondary" data-sort onclick="sortFromViewer('discard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>Jeter</button><button class="btn" data-sort onclick="sortFromViewer('keep')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>Garder</button></div>
     <div class="acts v-acts">
       <button class="act" onclick="viewerAction('edit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/></svg><span>Éditer</span></button>
       <button class="act" onclick="viewerAction('mask')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg><span>Dessiner</span></button>
@@ -1718,10 +1718,17 @@ function flyOut(dir, go){ const c=$('pile').querySelector('[data-k="0"]'); flyin
 function landFlight(){ if(!flight) return; const c=flight.c; clearTimeout(flight.timer); c.classList.remove('out-'+flight.dir);
   c.style.setProperty('--swipe', 0);               // (tampon « Garder » ou « Jeter » d'un balayage retiré)
   flight=null; flying=false; }
+// Règle (suppression) : « Aucun geste (touche, clic, doigt) ne jette une image de la pile qui n'est pas affichée à
+// l'écran. » Une image de la pile ne se trie (✓, ✕, ← →, balayage, Garder et Jeter de la visionneuse) qu'une fois
+// posée : sa miniature ou son image à l'écran, ou son chargement fini en échec (image illisible : la carte, son texte
+// et ses réglages, se trie, sinon elle bloquerait la pile) ; jamais pendant son chargement (décisions du porteur du
+// 28/10/2026, groupe « durcissement » et groupe E)
+const posed = img => !!img && !!img.getAttribute('src') && img.complete;
 // après un tri (✓, ✕, ou Garder et Jeter de la visionneuse), les suivants attendent que l'image suivante soit
 // affichée, SORT_GAP ms au moins : un double appui ne trie jamais l'image suivante sans l'avoir vue, et un Jeter
-// n'envoie jamais celui d'avant sans son bandeau (décision du 24/10/2026) ; 3 s au plus si l'image ne vient pas
-// (une image en échec ne bloque pas le tri pour toujours)
+// n'envoie jamais celui d'avant sans son bandeau (décision du 24/10/2026). Le verrou se lève au plus tard après
+// SORT_HOLD_MAX ms (une image qui ne vient pas ne bloque pas les autres gestes : Garder ou Jeter une autre image dans
+// la visionneuse), mais elle ne se trie pas pour autant (posed) : sans image posée, seule une carte d'échec se trie
 const SORT_GAP=300, SORT_HOLD_MAX=3000;
 let sortHeld=false;
 const sortBusy=()=>flying || sortHeld;           // un tri en cours ou son attente : ✓, ✕ et la visionneuse l'ignorent
@@ -1734,9 +1741,10 @@ function holdSort(shown){ sortHeld=true; const t0=performance.now();   // (minut
 // « Ne bouge pas », 28/10/2026)
 function sortTop(action){ if(sortBusy() || exiting()) return false; const top=topEntry(); if(!top) return false;
   if(top.fail && action!=='discard') return false;   // ✓ sur un échec : rien ne part, rien n'attend
-  // la carte suivante affichée : envol fini et son image posée (ou la pile vide)
-  holdSort(()=>{ const img=$('pile').querySelector('[data-k="0"] .pimg img');
-    return !flying && (!img || !!img.getAttribute('src')); });
+  const topImg = () => $('pile').querySelector('[data-k="0"] .pimg img');   // (aucune sur une carte d'échec)
+  if(!top.fail && !posed(topImg())) return false;    // image pas encore affichée : rien ne part
+  // la carte suivante affichée : envol fini et son image posée (ou la pile vide, ou une carte d'échec)
+  holdSort(()=>{ const img=topImg(); return !flying && (!img || posed(img)); });
   if(top.fail){ flyOut('l', ()=>drop(top.fail)); return true; }
   const it=top.it; flyOut(action==='keep' ? 'r' : 'l', ()=>action==='keep' ? keepItem(it) : discardItem(it)); return true; }
 // envoie Garder ou Jeter (route) d'une image de l'espace priv ; l'image reste hors de la pile affichée jusqu'à la
@@ -1825,9 +1833,10 @@ let swiped=false, dropSwipe=()=>{};
 // Garder ou Jeter depuis la visionneuse ouverte sur la pile : elle passe à l'image suivante, ou se ferme ; pendant
 // « Sortir » (exiting), rien : l'image reste affichée, sans tri (comme sortTop)
 function sortFromViewer(action){ const it=vList[vIndex]; if(!it || !it.pile || sortBusy() || exiting()) return;
+  if(!posed($('vImg'))) return;                    // image pas encore affichée : rien (posed, plus haut)
   const list=vList.filter(x=>pileTag(x)!==pileTag(it)), at=Math.min(vIndex, list.length-1);
   // image suivante affichée, ou visionneuse fermée entre-temps (l'image attendue n'y arrivera plus)
-  if(list.length){ openViewer(at, list); holdSort(()=>vIndex<0 || !!$('vImg').getAttribute('src')); }
+  if(list.length){ openViewer(at, list); holdSort(()=>vIndex<0 || posed($('vImg'))); }
   else closeViewer();
   if(action==='keep') keepItem(it); else discardItem(it); }
 // fin d'une génération de la page (ou d'un lot, une fois plus rien d'actif dans le lot), quand la page affichée n'est pas
@@ -2399,12 +2408,12 @@ function stepViewer(d){ if(vIndex<0 || !vList.length) return; vStep=d; openViewe
 // flèches seulement sans modificateur (⌘ + ← et Alt + ← : page précédente du navigateur). Espace tenue : le bouton
 // Avant de la visionneuse, sinon de la carte du dessus (image comparable, sinon rien), relâchée (keyup) ou fenêtre
 // quittée (blur) : l'image produite ; là, Espace ne fait pas défiler la page et n'active aucun bouton qui a le focus
-const SORT_BUTTONS='#pileYes, #pileNo, #vSort .btn', FORM_FIELDS='input, textarea, select';
+const FORM_FIELDS='input, textarea, select';     // (boutons de tri : marqués data-sort dans le HTML)
 // carte du dessus du Labo affichée (pas masquée par Dessiner au téléphone), sinon null
 const shownTop = () => { const c=mode==='labo' && $('pile').querySelector('[data-k="0"]');
   return c && c.getClientRects().length ? c : null; };
 addEventListener('keydown', e=>{
-  if(e.repeat && e.key==='Enter' && e.target.closest?.(SORT_BUTTONS)){ e.preventDefault(); return; }
+  if(e.repeat && e.key==='Enter' && e.target.closest?.('[data-sort]')){ e.preventDefault(); return; }
   if(e.defaultPrevented || e.isComposing) return;
   const cmd=e.ctrlKey || e.metaKey;
   if(e.target===$('prompt') && cmd && e.key==='Enter' && !openedSheet && vIndex<0){   // (une feuille par-dessus
