@@ -234,6 +234,13 @@ les messages de commit.
   visionneuse ne fait rien (elle reste ouverte, sans message), et « Révéler » ne part pas si le test confirme qu'il
   partait (la saisie reste telle quelle, effacée ensuite par la sortie). Aucune demande privée vers une session qui se
   ferme. »
+- **Groupe F, aperçus privés détachés** (28/10/2026), réponse par bouton, question posée par la session du groupe :
+  « Groupe F, ticket F1 : on vide aussi les aperçus d'une génération privée (/api/job/<id>/preview) qui restent en
+  mémoire de la page, détachés, après « Sortir » ? Rien n'en est visible à l'écran : un aperçu arrivé trop tard, et
+  celui que montrait la mosaïque de la carte en cours. » → « Oui, étendre F1 (Recommandé) » : « Ces deux cas sont vidés
+  aussi (l'aperçu non montré passe par le même outil que les autres images préchargées, et clearReveal vide l'image
+  qu'il lâche) ; le test d'étanchéité vérifie aussi les adresses /api/job/ d'une génération privée. Même défaut, même
+  outil, risque faible. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
