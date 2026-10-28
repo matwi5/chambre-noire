@@ -216,6 +216,17 @@ les messages de commit.
     part, puis l'image elle-même) ; si les deux échouent, elle devient triable alors que l'image est peut-être saine.
     Que faire ? » → « Garder tel quel (Recommandé) » : « Deux essais suffisent : après leur échec, la carte (texte,
     réglages) se trie, Jeter passe toujours par le bandeau Annuler de 5 s. Rien de plus à coder. »
+- **Second groupe « durcissement »** (28/10/2026), réponses par bouton :
+  - « Le découpage (6 tickets, groupes F et G) te va ? » → « Oui, tel quel (Recommandé) » : « Je crée les 6 tickets
+    dans Asana sous la tâche mère, avec leurs blocages, et je les mets au tableau de bord en deux groupes. »
+  - « F3 : pendant que l'image d'avant est affichée (Avant tenu ou Espace), que font ✓, ✕, ← →, le balayage et
+    Garder/Jeter de la visionneuse ? » → « Rien (Recommandé) » : « Aucun tri tant que l'image d'avant est à l'écran ;
+    il suffit de relâcher pour trier. Invariant : aucun geste ne jette une image qui n'est pas affichée. »
+  - « F4 : une carte du dessus remplacée sans tri (nouvelle image, tri sur un autre appareil) : » → « Verrou court
+    (Recommandé) » : « Comme entre deux tris : 300 ms après l'affichage de la nouvelle carte, pendant lesquelles ✓, ✕
+    et ← → ne font rien. Un ✕ visé sur l'ancienne ne jette pas la nouvelle. »
+  - « Dans quel ordre faire les deux groupes ? » → « F puis G (Recommandé) » : « D'abord les défauts visibles (F3
+    contredit ton invariant), puis le ménage des tests. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
