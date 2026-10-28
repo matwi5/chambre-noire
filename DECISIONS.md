@@ -284,6 +284,17 @@ les messages de commit.
   « Toute image vue 0,3 s (Recommandé) » : « Toute image de la pile montrée dans la visionneuse (ouverture, passage
   par ← →, après un tri) doit y être vue 0,3 s avant que Garder ou Jeter la trie. Seul coût : Garder ou Jeter ignoré
   dans les 0,3 s qui suivent l'ouverture ou un pas. »
+- **Retour du groupe F** (29/10/2026), réponses par bouton :
+  - « C3 (revue de sécurité du groupe F, code du groupe B) : dans la visionneuse des Tirages, « Supprimer » marche
+    pendant que l'image d'avant est tenue (Espace ou un doigt sur Avant) ; après confirmation, l'image est supprimée
+    sans être à l'écran (pour une image privée, la confirmation ne la nomme pas). Que faire ? » → « Refuser pendant
+    l'appui (Recommandé) » : « « Supprimer » ne fait rien tant que l'image d'avant est tenue, comme Garder et Jeter
+    (F3). Relâcher suffit. »
+  - « La session propose d'ajouter au CLAUDE.md, piège « Interface », deux règles du groupe F : pendant « Sortir »
+    (exiting()), rien ne bouge (toute action le vérifie, launch refuse une demande privée, la pile n'est pas
+    redessinée) ; aucune image de la pile ne se trie avant d'avoir été vue 0,3 s (topHeld, sortHeld, onScreen). On
+    l'ajoute ? » → « Oui, l'ajouter (Recommandé) » : « Ce sont deux invariants que toute future modification de
+    l'interface doit respecter ; je l'ajoute à la puce « Interface » des pièges. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
