@@ -270,6 +270,13 @@ les messages de commit.
   carte (Recommandé) » : « Toute carte qui arrive sur le dessus doit être vue 0,3 s avant qu'un geste la trie, quelle
   que soit la raison de son arrivée. Sans exception à retenir ; seul coût : un ✕ ignoré dans les 0,3 s qui suivent
   Annuler. »
+- **Groupe F, verrou court et page en arrière-plan** (28/10/2026), réponse par bouton, question posée par la session
+  du groupe : « F4 : quand l'application est en arrière-plan (autre appli, téléphone verrouillé, autre onglet), les
+  0,3 s du verrou s'écoulent quand même : un ✕ tapé dans les 0,3 s qui suivent le retour peut jeter une image arrivée
+  entre-temps, jamais vue. La règle (page cachée) fait échouer des tests tant que le pilote laisse parfois la page de
+  test « cachée ». Que faire ? » → « Plus tard (Recommandé) » : « F4 part sans cette règle ; la limite et le travail
+  sur le pilote vont au compte rendu, pour un durcissement (le groupe G touche déjà le pilote). Il faut un ✕ dans les
+  0,3 s qui suivent le retour dans l'appli. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
