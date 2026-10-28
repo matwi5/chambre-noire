@@ -4,7 +4,7 @@
 //   venv/bin/python tests/check.py --no-bench --ui tests/ui/avant.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, waitUntil, PC, PHONE } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, elapse, PC, PHONE, TABLET } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -267,8 +267,11 @@ test('étiquette « Avant » seulement avec l\'image d\'entrée à l\'écran, pa
 
 // ------------------------------------------------------------ Espace maintenue (ticket 1219940950193702, vue PC)
 // Espace tenue sur sel (cadre de la carte du dessus ou de la visionneuse) : l'image avant à l'appui, répétitions du
-// système comprises, l'image produite au relâché ; la page n'a pas défilé
-async function spaceHold(sel, what) {
+// système comprises, l'image produite au relâché ; scrolls : la page, qui peut défiler, n'a pas défilé (mesuré une
+// fois le défilement doux du navigateur fini)
+async function spaceHold(sel, what, { scrolls = false } = {}) {
+  if (scrolls) assert.equal(await page.eval(`document.documentElement.scrollHeight > innerHeight + 200`), true,
+    `page qui défile (${what})`);
   const y = await page.eval(`scrollY`);
   await page.keyDown(' ');
   await beforeOn(sel, `Espace tenue : image avant (${what})`);
@@ -277,6 +280,8 @@ async function spaceHold(sel, what) {
   assert.equal((await beforeState(sel)).on, true, `toujours tenue (${what})`);
   await page.keyUp(' ');
   assert.deepEqual(await off(sel), OFF, `Espace relâchée (${what})`);
+  if (!scrolls) return;
+  await elapse(600);
   assert.equal(await page.eval(`scrollY`), y, `page défilée (${what})`);
 }
 
@@ -293,6 +298,20 @@ test('PC : Espace tenue montre l\'image avant, carte du dessus et visionneuse ; 
     await page.waitFor(`!document.querySelector('#pile .bfr').hidden`, { what: 'bouton Avant de la carte' });
     await page.eval(`document.activeElement?.blur()`);
     await spaceHold('#pile .bfr', 'carte du dessus');
+    // une page qui défile (tablette en hauteur, avec un clavier, champ de création déplié sous la pile) : Espace ne la
+    // fait pas défiler
+    await page.setView({ ...TABLET, height: 900 });
+    await page.eval(`openComposer(); scrollTo(0, 0)`);
+    await spaceHold('#pile .bfr', 'page qui défile', { scrolls: true });
+    await page.setView(PC);
+    // bouton tenu à la souris : Espace appuyée puis relâchée ne le relâche pas, le relâché de la souris oui
+    await page.hold('#pile [data-k="0"] .bbtn', { mouse: true });
+    await beforeOn('#pile .bfr', 'bouton tenu à la souris');
+    await page.keyDown(' ');
+    await page.keyUp(' ');
+    assert.equal((await beforeState('#pile .bfr')).on, true, 'Espace a relâché l\'appui de la souris');
+    await page.release();
+    assert.deepEqual(await off('#pile .bfr'), OFF, 'relâché de la souris');
     await page.eval(`$('pileNo').focus()`);         // ✕ qui a le focus : Espace ne le déclenche pas
     await spaceHold('#pile .bfr', '✕ qui a le focus');
     assert.deepEqual(await page.eval(`[pileView()[0].prompt, !discarding, !flying]`), ['zs une', true, true],

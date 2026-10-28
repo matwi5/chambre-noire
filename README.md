@@ -384,7 +384,8 @@ annule le Jeter tant que le bandeau est là. Dans le champ, **Ctrl/⌘ + Entrée
 visionneuse garde ← et → pour l'image précédente ou suivante, et Échap pour se fermer (Garder et Jeter y restent sur
 leurs boutons). **Espace** maintenue compare avec la photo d'origine (bouton **Avant**, plus bas). Aucun raccourci
 ne réagit pendant qu'on tape un texte (sauf Ctrl/⌘ + Entrée dans le champ), quand un
-panneau ou la visionneuse est ouvert (Ctrl/⌘ + Entrée compris), ni sur une carte d'échec ; sur la pile, les flèches
+panneau ou la visionneuse est ouvert (Ctrl/⌘ + Entrée compris ; dans la visionneuse, Espace compare toujours), ni sur
+une carte d'échec ; sur la pile, les flèches
 ne servent qu'appuyées seules (⌘ + ← et Alt + ← restent la page précédente du navigateur). Règle : aucune touche ne
 supprime un tirage ; au clavier, Jeter
 passe toujours par le bandeau Annuler, comme au doigt ; une touche maintenue ou répétée ne jette jamais plus d'une

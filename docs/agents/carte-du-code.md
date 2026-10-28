@@ -300,9 +300,11 @@ dernier bloc, après le HTML.
     `closeViewer` et `emptyViewer` (contenu vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace
     privé), raccourcis du PC (écouteur `keydown` juste avant celui de la visionneuse : → et ← sur la pile par
     `sortTop`, Z et Ctrl/⌘ + Z par `undoDiscard`, Ctrl/⌘ + Entrée dans `#prompt` par `#go` ; rien pendant une saisie,
-    une feuille, la visionneuse ou les images d'entrée, ni sur une carte d'échec ; une touche répétée ne trie rien,
+    une feuille, la visionneuse (sauf Espace) ou les images d'entrée, ni sur une carte d'échec ; une touche répétée ne
+    trie rien,
     Entrée répétée sur `SORT_BUTTONS` comprise ; carte du dessus affichée : `shownTop` ; Espace tenue :
-    `holdBefore` du cadre de la visionneuse ou de la carte du dessus, `holder` à `'key'`, et `keyup` par `dropBefore`,
+    `holdBefore` du cadre de la visionneuse ou de la carte du dessus, `holder` à `'key'` (pas sur un appui du pointeur
+    en cours), et `keyup` par `dropBefore`,
     sans défilement ni bouton activé ; champs : `FORM_FIELDS`), gestes : `zoomable` (pincer, molette, glisser ; son
     image avant reçoit la même transformation, `twin` ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les
     images d'entrée).

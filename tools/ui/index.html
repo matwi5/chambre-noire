@@ -2375,7 +2375,7 @@ function stepViewer(d){ if(vIndex<0 || !vList.length) return; vStep=d; openViewe
 // comme au doigt ; une touche maintenue ou répétée ne jette jamais plus d'une image avant que la suivante soit
 // affichée. » Une touche répétée par le système ne trie donc rien, pas même Entrée sur ✓, ✕ ou Garder et Jeter de la
 // visionneuse qui ont le focus (décision du porteur, groupe C du 28/10/2026). Rien pendant une saisie (champ, curseur
-// du pinceau), avec une feuille, la visionneuse ou les images d'entrée ouvertes, ni sur une carte d'échec ; les
+// du pinceau), avec une feuille, la visionneuse (sauf Espace) ou les images d'entrée ouvertes, ni sur une carte d'échec ; les
 // flèches seulement sans modificateur (⌘ + ← et Alt + ← : page précédente du navigateur). Espace tenue : le bouton
 // Avant de la visionneuse, sinon de la carte du dessus (image comparable, sinon rien), relâchée (keyup) ou fenêtre
 // quittée (blur) : l'image produite ; là, Espace ne fait pas défiler la page et n'active aucun bouton qui a le focus
@@ -2392,7 +2392,8 @@ addEventListener('keydown', e=>{
   if(e.target.closest?.(FORM_FIELDS) || openedSheet || ivIndex>=0) return;
   if(e.key===' '){ const top=vIndex<0 && shownTop(); if(vIndex<0 && !top) return;
     e.preventDefault(); const fr=top ? top.querySelector('.bfr') : $('vBefore');   // (carte d'échec : aucun)
-    if(fr && !e.repeat){ holdBefore(fr); if(beforeHeld===fr) fr.holder='key'; } return; }
+    if(fr && !e.repeat && fr.holder==null){ holdBefore(fr); if(beforeHeld===fr) fr.holder='key'; }   // (un appui
+    return; }                                       // en cours, souris ou doigt, reste à celui qui l'a commencé)
   if(mode!=='labo' || vIndex>=0) return;
   if(e.key.toLowerCase()==='z' && !e.altKey && !e.shiftKey){ if(discarding){ e.preventDefault(); undoDiscard(); } return; }
   if(!['ArrowLeft', 'ArrowRight'].includes(e.key) || cmd || e.altKey || e.shiftKey) return;
