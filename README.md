@@ -410,7 +410,8 @@ autre appareil). Une fois touché, il ne se replie qu'après **Révéler**, en g
 touchant) ou en touchant la pile (la visionneuse s'ouvre aussi si l'on a touché l'image) ; replier ne perd rien de la
 saisie. Pendant le dessin, il prend toute la hauteur du Labo et la pile s'efface (à partir de 1024 px, il garde sa
 colonne et la pile reste à gauche). À partir de 1024 px, une ou plusieurs images déposées n'importe où sur la colonne
-du champ rejoignent les images d'entrée ; le champ est encadré pendant le survol.
+du champ rejoignent les images d'entrée ; le champ est encadré pendant le survol. Un fichier lâché ailleurs (sur la
+pile, par exemple) est ignoré : la page reste sur l'interface au lieu de l'ouvrir.
 
 Pour obtenir plusieurs propositions du même prompt, choisir 2, 3 ou 4 **Images** dans les Réglages (la case Images de
 la grille le rappelle sous le texte ; le choix est retenu). Une seule demande lance alors un **lot de variantes** : une

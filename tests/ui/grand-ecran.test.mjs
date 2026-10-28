@@ -122,6 +122,15 @@ test('PC : une image déposée n\'importe où sur la colonne du champ, avec surb
   assert.equal(await lit(), true, 'second survol : pas de surbrillance');
   await page.eval(`$('composer').dispatchEvent(new DragEvent('dragleave', { bubbles: true, relatedTarget: null }))`);
   assert.equal(await lit(), false, 'surbrillance restée après la sortie');
+  // lâchée hors du champ (colonne de la pile) : ignorée, le navigateur ne quitte pas l'interface pour l'ouvrir
+  const pile = await box('#pile');
+  const [px, py] = [Math.round((pile.left + pile.right) / 2), Math.round((pile.top + pile.bottom) / 2)];
+  assert.equal(await page.eval(`!!document.elementFromPoint(${px}, ${py}).closest('#composer')`), false,
+    'point dans la colonne de la pile (prémisse)');
+  assert.equal(await drag('dragover', px, py), true, 'survol de la pile : le navigateur ouvrirait le fichier');
+  assert.equal(await drag('drop', px, py), true, 'lâchée sur la pile : le navigateur ouvrirait le fichier');
+  assert.equal(await page.eval(`inputImages.length`), 1, 'image lâchée hors du champ ajoutée');
+  assert.equal(await lit(), false, 'champ encadré par un survol de la pile');
   page.assertNoErrors();
 });
 

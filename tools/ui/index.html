@@ -1311,6 +1311,11 @@ $('composer').addEventListener('dragleave', e=>{ if(!$('composer').contains(e.re
 $('composer').addEventListener('drop', e=>{ dropping(false);
   if(e.target.closest('#inDrop')) return;            // (la tuile l'ajoute elle-même)
   const files=[...e.dataTransfer.files]; if(!files.length) return; e.preventDefault(); addInputFiles(files); });
+// un fichier lâché hors des zones de dépôt (colonne de la pile au PC) est ignoré : sans cela, le navigateur l'ouvrirait
+// à la place de l'interface ; un texte glissé garde le comportement du navigateur
+['dragover', 'drop'].forEach(t=>addEventListener(t, e=>{
+  if(e.defaultPrevented || ![...e.dataTransfer.types].includes('Files')) return;
+  e.preventDefault(); if(t==='dragover') e.dataTransfer.dropEffect='none'; }));
 (function foldGesture(){                           // glissement vers le bas sur la poignée, ou un toucher
   const grab=$('composerGrab'); let y0=null;
   grab.addEventListener('pointerdown', e=>{ y0=e.clientY; grab.setPointerCapture(e.pointerId); });

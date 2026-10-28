@@ -198,9 +198,11 @@ dernier bloc, après le HTML.
     nouveau quelque chose si on n'y a pas touché depuis, `autoOpen` ; `labIdle`, remis à `null` par `changedSpace`),
     `foldGesture` (poignée), toucher sur la pile (`.pilezone`, image comprise, hors ✓, ✕ et autres boutons), dépôt
     d'une image sur le champ, replié compris (`dragover`, `drop` ; surbrillance `dropping`, dessinée à partir de
-    1024 px, où le champ est toute la colonne de droite) ; replié aussi après « Révéler » ; `showLabo('composer')` le
-    déplie. Hauteur de l'image de pile `--pimg-h` : ✓ et ✕ restent au-dessus de la ligne repliée ; à partir de
-    1024 px, la hauteur de la colonne de gauche (`--col-h`), section CSS « grand écran ».
+    1024 px, où le champ est toute la colonne de droite ; un fichier lâché ailleurs est ignoré par les écouteurs
+    `dragover` et `drop` de la fenêtre, pour que le navigateur ne l'ouvre pas à la place de l'interface) ; replié aussi
+    après « Révéler » ; `showLabo('composer')` le déplie. Hauteur de l'image de pile `--pimg-h` : ✓ et ✕ restent
+    au-dessus de la ligne repliée ; à partir de 1024 px, la hauteur de la colonne de gauche (`--col-h`), section CSS
+    « grand écran ».
   - « images », « dessin » : `toEntry`, `addInputFiles` (choix, dépôt et collage, écouteur `paste` du Labo),
     `refuseWhileDrawing` (ajout refusé pendant le dessin, saisie affichée ou mise de côté), `noteInput` (saisie visée
     par un ajout, notée avant toute attente), `renderInputs` (images d'entrée de la saisie, `inputImages`, puis
