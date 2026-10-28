@@ -103,7 +103,7 @@ test('← ← rapides : la seconde attend la carte suivante affichée ; ← ← 
     await settled('suivante affichée');
     assert.deepEqual([await page.topPrompt(), await page.sortsSent('discard')], ['zk3 b', 0], 'second ← ignoré');
     await page.press('ArrowLeft');                  // zk3 b : le Jeter de zk3 c part, comme au doigt
-    await page.waitFor(`sorts.filter(u => u.endsWith('/discard')).length === 1`, { what: 'premier Jeter envoyé' });
+    await waitUntil(async () => await page.sortsSent('discard') === 1, { what: 'premier Jeter envoyé' });
     await waitUntil(async () => !(await bench.inPile('zk3 c')), { what: 'zk3 c effacée' });
     assert.equal(await page.eval(`document.querySelectorAll('.undo:not([hidden])').length`), 1, 'un seul bandeau');
     await page.press('z');

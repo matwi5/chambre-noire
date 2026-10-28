@@ -25,7 +25,7 @@ before(async () => {
   await page.goto(bench.url + '/');
   await page.ready();
   await page.eval(`opt.steps = 'low'; opt.res = 'low'; saveOpt(); refreshChoices()`);   // générations courtes
-  await watchSorts();
+  await page.watchSorts();
 });
 
 after(async () => {
@@ -35,18 +35,10 @@ after(async () => {
 });
 
 const CODE = 'code-du-banc-1';
-const inPile = async prompt => (await bench.api('/api/pile')).some(it => it.prompt === prompt);
-const kept = async prompt => (await bench.api('/api/history')).some(it => it.prompt === prompt);
 // prompts des cartes dessinées, du dessus vers le dessous
 const cards = () => page.eval(`[...$('pile').querySelectorAll('.pcard')]
   .map(c => c.querySelector('.pprompt').textContent)`);
 const TOP = `$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`;   // prompt de la carte du dessus
-const top = () => page.eval(TOP);
-// demandes de tri envoyées par la page (route et instant), notées au passage ; rechargée, la page ne les note plus
-const watchSorts = () => page.eval(`(() => { window.sorts = []; const f = window.fetch;
-  window.fetch = (u, o) => { if (/\\/(keep|discard)$/.test(String(u))) sorts.push({ url: String(u), at: Date.now() });
-    return f(u, o); }; })()`);
-const discards = () => page.eval(`sorts.filter(s => s.url.endsWith('/discard')).length`);
 const watchToasts = () => page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
   window.toastWatch = new MutationObserver(() => seenToasts.push($('toastBox').textContent));
   toastWatch.observe($('toastBox'), { childList: true, characterData: true, subtree: true }); })()`);
@@ -87,9 +79,9 @@ test('la dernière sur le dessus, la suivante devinée dessous ; ✓ la garde da
   await page.click('#pileYes');
   await page.waitFor(`!pileItems.some(it => it.prompt === 'zp1 second') && $('runCount').textContent === '1'`,
     { what: 'carte gardée' });
-  assert.equal(await top(), 'zp1 premier');
-  assert.equal(await kept('zp1 second'), true, 'dans les Tirages');
-  assert.equal(await inPile('zp1 second'), false, 'plus dans la pile');
+  assert.equal(await page.topPrompt(), 'zp1 premier');
+  assert.equal(await bench.kept('zp1 second'), true, 'dans les Tirages');
+  assert.equal(await bench.inPile('zp1 second'), false, 'plus dans la pile');
   await page.tab('tirages');
   await page.waitFor(`histItems.some(it => it.prompt === 'zp1 second')`, { what: 'image gardée dans les Tirages' });
   await page.tab('labo');
@@ -105,21 +97,21 @@ test('✕ : bandeau « Annuler » de 5 s, rien envoyé avant ; « Annuler » rem
   assert.equal(await page.eval(`$('undoBar').textContent`), 'Image jetéeAnnuler');
   assert.equal(await page.eval(`$('runCount').hidden`), true, 'l\'image jetée ne compte plus');
   await new Promise(r => setTimeout(r, 2500));      // au milieu du délai : rien n'est parti
-  assert.equal(await discards(), 0, 'Jeter envoyé avant la fin du bandeau');
+  assert.equal(await page.sortsSent('discard'), 0, 'Jeter envoyé avant la fin du bandeau');
   await page.click('#undoBtn');
   await page.waitFor(`$('undoBar').hidden && ${TOP} === 'zp2 a jeter'`,
     { what: 'carte remise sur le dessus' });
   await new Promise(r => setTimeout(r, 3500));      // au-delà des 5 s du premier geste : toujours rien
-  assert.equal(await discards(), 0, 'Jeter envoyé malgré « Annuler »');
-  assert.equal(await inPile('zp2 a jeter'), true);
+  assert.equal(await page.sortsSent('discard'), 0, 'Jeter envoyé malgré « Annuler »');
+  assert.equal(await bench.inPile('zp2 a jeter'), true);
   // ✕ jusqu'au bout : la demande part à la fin du bandeau, pas avant
   const at = Date.now();
   await page.click('#pileNo');
   await page.waitFor(`sorts.some(s => s.url.endsWith('/discard'))`, { what: 'Jeter envoyé', timeout: 10000 });
   const sent = await page.eval(`sorts.find(s => s.url.endsWith('/discard')).at`);
   assert.ok(sent - at >= 4900, `Jeter envoyé après ${sent - at} ms`);
-  await waitUntil(async () => !(await inPile('zp2 a jeter')), { what: 'image effacée de la pile' });
-  assert.equal(await kept('zp2 a jeter'), false, 'pas dans les Tirages');
+  await waitUntil(async () => !(await bench.inPile('zp2 a jeter')), { what: 'image effacée de la pile' });
+  assert.equal(await bench.kept('zp2 a jeter'), false, 'pas dans les Tirages');
   await page.waitFor(`$('undoBar').hidden && !pileItems.length`, { what: 'bandeau parti, pile vide' });
   page.assertNoErrors();
 });
@@ -130,7 +122,7 @@ test('double appui sur ✕ : une seule image part, rien avant 5 s ; Annuler, vis
   await page.eval(`sorts.length = 0; $('pileNo').click(); $('pileNo').click()`);   // deux appuis pendant l'envol
   await page.waitFor(`!$('undoBar').hidden && ${TOP} === 'zp2b dessous'`, { what: 'bandeau, la suivante dessus' });
   await new Promise(r => setTimeout(r, 1000));
-  assert.equal(await discards(), 0, 'Jeter envoyé par le second appui');
+  assert.equal(await page.sortsSent('discard'), 0, 'Jeter envoyé par le second appui');
   assert.equal(await page.eval(`pileView().some(it => it.prompt === 'zp2b dessous')`), true, 'la suivante reste');
   await page.click('#undoBtn');
   await page.waitFor(`${TOP} === 'zp2b double'`, { what: 'carte remise' });
@@ -145,7 +137,7 @@ test('double appui sur ✕ : une seule image part, rien avant 5 s ; Annuler, vis
   await page.click('#undoBtn');
   await page.eval(`closeViewer()`);
   await page.waitFor(`${TOP} === 'zp2b double'`, { what: 'carte remise' });
-  assert.equal(await discards(), 0);
+  assert.equal(await page.sortsSent('discard'), 0);
   await clear();
   page.assertNoErrors();
 });
@@ -180,8 +172,8 @@ test('balayage au doigt : la carte suit et penche, « Garder » à droite ; trop
   assert.equal(await still(), true, 'trié par un geste lent sous le seuil');
   await page.swipe(CARD, 220);                       // au-delà du tiers de la largeur : gardée
   await page.waitFor(`sorts.some(s => s.url.endsWith('/api/keep'))`, { what: 'Garder envoyé' });
-  await waitUntil(() => kept('zp12 balayee'), { what: 'dans les Tirages' });
-  assert.equal(await top(), 'zp12 dessous');
+  await waitUntil(() => bench.kept('zp12 balayee'), { what: 'dans les Tirages' });
+  assert.equal(await page.topPrompt(), 'zp12 dessous');
   page.assertNoErrors();
 });
 
@@ -190,7 +182,7 @@ test('geste vif : sous le seuil mais rapide, la carte part', async () => {
   await page.eval(`sorts.length = 0`);
   await page.swipe(CARD, 80);                        // 80 px, sous le tiers (≈ 115 px), en un geste rapide
   await page.waitFor(`sorts.some(s => s.url.endsWith('/api/keep'))`, { what: 'Garder envoyé' });
-  await waitUntil(() => kept('zp12 dessous'), { what: 'dans les Tirages' });
+  await waitUntil(() => bench.kept('zp12 dessous'), { what: 'dans les Tirages' });
   await page.made('zp12 gauche');
   page.assertNoErrors();
 });
@@ -207,7 +199,7 @@ test('balayage au doigt vers la gauche : « Jeter », puis Jeter avec son bandea
   await page.waitFor(`!$('undoBar').hidden && !pileView().some(it => it.prompt === 'zp12 gauche')`,
     { what: 'bandeau, carte partie' });
   assert.equal(await page.eval(`mode`), 'labo', 'un balayage de carte ne change pas d\'onglet');
-  assert.equal(await discards(), 0, 'rien envoyé avant la fin du bandeau');
+  assert.equal(await page.sortsSent('discard'), 0, 'rien envoyé avant la fin du bandeau');
   await page.click('#undoBtn');
   await page.waitFor(`${TOP} === 'zp12 gauche'`, { what: 'carte remise' });
   page.assertNoErrors();
@@ -256,7 +248,7 @@ test('à la souris : à droite gardée ; un balayage n\'ouvre pas la visionneuse
     'un balayage n\'ouvre pas la visionneuse');
   await page.swipe(CARD, 220, 0, { mouse: true });
   await page.waitFor(`sorts.some(s => s.url.endsWith('/api/keep'))`, { what: 'Garder envoyé' });
-  await waitUntil(() => kept('zp12 autre'), { what: 'dans les Tirages' });
+  await waitUntil(() => bench.kept('zp12 autre'), { what: 'dans les Tirages' });
   await page.made('zp12 souris');
   await page.swipe(CARD, 2, 0, { mouse: true });     // un clic, à peine bougé : la visionneuse
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte par le clic' });
@@ -273,9 +265,9 @@ test('rechargement pendant le bandeau : rien n\'est envoyé, l\'image est encore
   await page.ready('page rechargée');
   await page.waitFor(`pileItems.some(it => it.prompt === 'zp3 doute')`, { what: 'image dans la pile rechargée' });
   await new Promise(r => setTimeout(r, 5500));      // au-delà du délai : rien n'est parti avant le rechargement
-  assert.equal(await inPile('zp3 doute'), true, 'image effacée malgré la fermeture de la page');
+  assert.equal(await bench.inPile('zp3 doute'), true, 'image effacée malgré la fermeture de la page');
   assert.equal(await page.eval(`$('undoBar').hidden`), true);
-  await watchSorts();
+  await page.watchSorts();
   await page.eval(`opt.steps = 'low'; opt.res = 'low'; saveOpt(); refreshChoices()`);
   await clear();
   page.assertNoErrors();
@@ -289,13 +281,13 @@ test('deux ✕ de suite : le premier Jeter part tout de suite, un seul bandeau p
   await page.waitFor(`!$('undoBar').hidden && ${TOP} === 'zp4 un' && !sortHeld`,
     { what: 'premier bandeau, carte suivante vue' });
   await page.click('#pileNo');                      // zp4 un : le Jeter de zp4 deux part
-  await page.waitFor(`sorts.filter(s => s.url.endsWith('/discard')).length === 1`, { what: 'premier Jeter envoyé' });
-  await waitUntil(async () => !(await inPile('zp4 deux')), { what: 'zp4 deux effacée' });
+  await waitUntil(async () => await page.sortsSent('discard') === 1, { what: 'premier Jeter envoyé' });
+  await waitUntil(async () => !(await bench.inPile('zp4 deux')), { what: 'zp4 deux effacée' });
   assert.equal(await page.eval(`document.querySelectorAll('.undo:not([hidden])').length`), 1, 'un seul bandeau');
   await page.click('#undoBtn');                     // le second est annulé
   await page.waitFor(`${TOP} === 'zp4 un'`,
     { what: 'zp4 un remise' });
-  assert.equal(await inPile('zp4 un'), true);
+  assert.equal(await bench.inPile('zp4 un'), true);
   await clear();
   page.assertNoErrors();
 });
@@ -309,9 +301,9 @@ test('« Déjà triée » : l\'image gardée par une autre page quitte la pile',
   await other.goto(bench.url + '/');
   await other.waitFor(`pileItems.some(it => it.prompt === 'zp5 disputee')`, { what: 'pile sur l\'autre page' });
   await other.click('#pileYes');
-  await waitUntil(async () => !(await inPile('zp5 disputee')), { what: 'gardée par l\'autre page' });
+  await waitUntil(async () => !(await bench.inPile('zp5 disputee')), { what: 'gardée par l\'autre page' });
   other.assertNoErrors();
-  other.close();
+  await other.close();
   await watchToasts();
   await page.click('#pileYes');
   await page.waitFor(`seenToasts.includes('Déjà triée') && !pileItems.length`,
@@ -332,7 +324,7 @@ test('✓ puis une autre carte sur le dessus avant le départ : un second ✓ ne
   await page.waitFor(`sorts.length > 0 && !flying`, { what: 'Garder envoyé' });
   await new Promise(r => setTimeout(r, 600));
   assert.equal(await page.eval(`sorts.length`), 1, 'deux tris pour un départ');
-  assert.deepEqual([await kept('zp14 seconde'), await inPile('zp14 premiere')], [true, true],
+  assert.deepEqual([await bench.kept('zp14 seconde'), await bench.inPile('zp14 premiere')], [true, true],
     'pas l\'image du premier appui qui est gardée');
   await clear();
   page.assertNoErrors();
@@ -346,7 +338,7 @@ test('double appui sur Jeter dans la visionneuse, et ✕ juste après un envol :
     await page.waitFor(`$('viewer').classList.contains('on') && vList.length === 3`, { what: 'visionneuse' });
     await page.eval(`sorts.length = 0; sortFromViewer('discard'); sortFromViewer('discard')`);   // double appui
     await new Promise(r => setTimeout(r, 1000));
-    assert.equal(await discards(), 0, 'Jeter de la première envoyé par le second appui');
+    assert.equal(await page.sortsSent('discard'), 0, 'Jeter de la première envoyé par le second appui');
     assert.deepEqual(await page.eval(`[vList.length, vList[vIndex].prompt]`), [2, 'zp16 b'], 'seconde image triée');
     await page.click('#undoBtn');
     await page.eval(`closeViewer()`);
@@ -354,7 +346,7 @@ test('double appui sur Jeter dans la visionneuse, et ✕ juste après un envol :
     // ✕ puis un second ✕ juste après la fin de l'envol (220 ms) : la carte suivante ne part pas
     await page.eval(`sorts.length = 0; $('pileNo').click(); setTimeout(() => $('pileNo').click(), 250)`);
     await new Promise(r => setTimeout(r, 1000));
-    assert.equal(await discards(), 0, 'Jeter envoyé par le second ✕');
+    assert.equal(await page.sortsSent('discard'), 0, 'Jeter envoyé par le second ✕');
     assert.equal(await page.eval(`discarding && pileView().length`), 2, 'deux cartes encore dans la pile');
     await page.click('#undoBtn');
     await clear();
@@ -385,7 +377,7 @@ test('visionneuse de la pile : Garder, Jeter, image suivante ; ni Supprimer ni �
   await page.eval(`sortFromViewer('keep')`);
   await page.waitFor(`vList.length === 2 && vList[vIndex].prompt === 'zp7 b' && !sortHeld`,
     { what: 'image suivante après Garder, affichée' });
-  await waitUntil(() => kept('zp7 c'), { what: 'zp7 c gardée' });
+  await waitUntil(() => bench.kept('zp7 c'), { what: 'zp7 c gardée' });
   await page.eval(`sortFromViewer('discard')`);
   await page.waitFor(`vList.length === 1 && vList[vIndex].prompt === 'zp7 a' && !$('undoBar').hidden`,
     { what: 'image suivante après Jeter, bandeau' });
@@ -461,7 +453,7 @@ test('espace privé : pile privée par ses routes ; un Jeter en attente à la so
   assert.equal(await page.eval(`$('undoBar').hidden`), true, 'bandeau privé parti avec l\'espace');
   assert.deepEqual(await cards(), ['zp11 publique']);
   await new Promise(r => setTimeout(r, 5500));
-  assert.equal(await discards(), 0, 'Jeter privé envoyé après la sortie');
+  assert.equal(await page.sortsSent('discard'), 0, 'Jeter privé envoyé après la sortie');
   // de retour dans l'espace : l'image jetée avant la sortie y est encore ; ✓ la garde dans les Tirages privés
   assert.equal(await page.eval(`postJson('/api/private/unlock', { code: ${JSON.stringify(CODE)} })
     .then(r => r.status)`), 200);
@@ -472,7 +464,7 @@ test('espace privé : pile privée par ses routes ; un Jeter en attente à la so
     { what: 'gardée par la route privée' });
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti' });
-  assert.equal(await inPile('zp11 secrete garde'), false, 'rien de privé dans la pile publique');
+  assert.equal(await bench.inPile('zp11 secrete garde'), false, 'rien de privé dans la pile publique');
   await clear();
   page.assertNoErrors();
 });
@@ -512,7 +504,7 @@ test('espace privé : ✕ jette par la route privée après le bandeau ; un Gard
   await page.tab('labo');
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti' });
-  assert.equal(await kept('zp20 privee gardee'), false, 'rien de privé dans les Tirages publics');
+  assert.equal(await bench.kept('zp20 privee gardee'), false, 'rien de privé dans les Tirages publics');
   page.assertNoErrors();
 });
 
@@ -539,11 +531,11 @@ test('espace privé : un Jeter en attente est abandonné dès l\'appui sur « So
       // un Jeter privé qui arriverait à sa fin pendant l'aller-retour ne part pas non plus (garde leavingPrivate)
       await page.eval(`(() => { const d = { tag: 'pzz', priv: true, body: { id: 'zz' } }; discarding = d;
         commitDiscard(d); })()`);
-      assert.equal(await discards(), 0, 'Jeter privé envoyé pendant la sortie');
+      assert.equal(await page.sortsSent('discard'), 0, 'Jeter privé envoyé pendant la sortie');
     } finally {
       await endExitHeld(x);
     }
-    assert.equal(await discards(), 0);
+    assert.equal(await page.sortsSent('discard'), 0);
     await page.enterPrivate(CODE);
     await page.waitFor(`pileItems.some(it => it.prompt === 'zp17 secrete')`,
       { what: 'image privée encore dans sa pile' });
@@ -740,13 +732,16 @@ test('espace privé : une génération de la page qui finit pendant « Sortir »
 test('espace privé : pendant « Sortir », ni Tirages, ni file, ni « Voir le lot », ni visionneuse privés ; un second '
   + 'appui ne relance rien', async () => {
   await enterPile();
+  await page.made('zp26 secrete tiree');           // un tirage privé à soi, lancé seul (--name) comme après les autres
+  await page.keepPile();
   await page.tab('tirages');
   await page.waitFor(`[...$('histGrid').querySelectorAll('img')].some(i => i.src.includes('/api/private/'))`,
     { what: 'Tirages privés affichés' });
-  // une vignette privée des Tirages pas encore chargée (chargement différé, Tirages cachés)
+  // une vignette privée des Tirages pas encore chargée (chargement différé, Tirages cachés), à une adresse que la page
+  // n'a jamais chargée : celle de la grille, déjà affichée, serait servie par le cache de Chrome (déjà chargée)
   await page.tab('labo');
   await page.eval(`(() => { const im = document.createElement('img'); im.id = 'zqLazy'; im.loading = 'lazy';
-    im.src = thumbOf(histItems.find(it => it.private)); $('histGrid').append(im); })()`);
+    im.src = thumbOf(histItems.find(it => it.private)) + '&zq=lazy'; $('histGrid').append(im); })()`);
   assert.equal(await page.eval(`$('zqLazy').complete`), false, 'vignette pas encore chargée (prémisse)');
   const x = await exitHeld({ noting: true });
   try {

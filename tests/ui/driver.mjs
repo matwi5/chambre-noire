@@ -11,6 +11,8 @@
 //   await page.setView(TABLET)                   // vue changée sans recharger (fenêtre redimensionnée)
 //   await page.goto(bench.url + '/'); await page.ready();   // ready : interface ouverte, moteur prêt (lampe)
 //   …; page.assertNoErrors(); await chrome.close(); await bench.stop();
+//   await other.close()                          // onglet fermé dans Chrome (pagehide), pas seulement sa connexion :
+//                                                // la page restée ouverte repasse au premier plan
 //                                                // assertNoErrors : erreurs de console du seul test en cours
 //                                                // (remises à zéro à chaque test, chacune nommée par son test)
 //   await page.click('#go')                      // toucher : échoue si l'élément n'est pas sous le doigt (recouvert,
@@ -45,6 +47,7 @@
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
 //   await page.topPrompt()                       // prompt de la carte du dessus de la pile
 //   await page.watchSorts(); …; await page.sortsSent('discard')   // demandes keep, discard, delete de la page
+//                                                // (sorts : { url, at } de chacune)
 //   await bench.inPile('texte'); await bench.kept('texte')        // image dans la pile, dans les Tirages du Mac
 //   await page.freshLabo(bench)                  // Labo neuf : page rechargée sans brouillon, pile vidée, générations
 //                                                // courtes ({ short: false } : réglages par défaut)
@@ -262,21 +265,28 @@ export async function launchChrome() {
     { timeout: START_TIMEOUT, what: `Chrome démarré (${exe})` })
     .catch(e => { process.off('exit', cleanup); cleanup(); throw e; });
   const port = fs.readFileSync(portFile, 'utf8').split('\n')[0];
+  const devtools = route => fetch(`http://127.0.0.1:${port}/json/${route}`, { method: 'PUT' });
+  // onglet fermé dans Chrome, attendu jusqu'à sa disparition de la liste des onglets
+  const closeTab = async id => {
+    await devtools(`close/${id}`);
+    await waitUntil(async () => !(await (await devtools('list')).json()).some(t => t.id === id),
+      { what: 'onglet fermé' });
+  };
   const pages = [];
   return {
     pid: proc.pid,
     phonePage() { return this.newPage(PHONE); },
     // page dans la vue view (PHONE, PC, TABLET, TABLET_WIDE), connectée au banc direct comme phonePage
     async newPage(view) {
-      const target = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
-      const page = await connect(target.webSocketDebuggerUrl);
+      const target = await (await devtools('new?about:blank')).json();
+      const page = await connect(target.webSocketDebuggerUrl, () => closeTab(target.id));
       pages.push(page);
       await applyView(page, view);
       if (directBench) await setAccessCookie(page, directBench);
       return page;
     },
     async close() {
-      pages.forEach(p => p.close());
+      pages.forEach(p => p.disconnect());              // Chrome arrêté ferme les onglets
       const gone = new Promise(r => proc.once('exit', r));
       proc.kill();
       await Promise.race([gone, pause(5000)]);
@@ -325,8 +335,9 @@ function setAccessCookie(page, { url, cookie }) {
   return page.send('Network.setCookie', { ...cookie, url, httpOnly: true, sameSite: 'Lax' });
 }
 
-// une page : commandes du protocole, évaluation de JavaScript, attente d'une condition, erreurs de la console
-async function connect(wsUrl) {
+// une page : commandes du protocole, évaluation de JavaScript, attente d'une condition, erreurs de la console ;
+// closeTab ferme son onglet dans Chrome (page.close)
+async function connect(wsUrl, closeTab) {
   const ws = new WebSocket(wsUrl);
   await new Promise((resolve, reject) => { ws.addEventListener('open', resolve, { once: true }); ws.addEventListener('error', reject, { once: true }); });
   let id = 0;
@@ -513,15 +524,17 @@ async function connect(wsUrl) {
     },
     // prompt de la carte du dessus de la pile affichée (undefined sans carte)
     topPrompt() { return page.eval(`$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`); },
-    // demandes de tri et de suppression (keep, discard, delete) envoyées par la page à partir de l'appel, notées ;
-    // page.sortsSent('discard') : combien de cette route. Rechargée, la page ne les note plus
+    // demandes de tri et de suppression (keep, discard, delete) envoyées par la page à partir de l'appel, notées dans
+    // sorts ({ url, at } : adresse et instant de l'envoi) ; page.sortsSent('discard') : combien de cette route.
+    // Rechargée, la page ne les note plus
     watchSorts() {
       return page.eval(`(() => { window.sorts = []; if (window.sortsWatched) return; window.sortsWatched = true;
         const f = window.fetch;
-        window.fetch = (u, o) => { if (/\\/(keep|discard|delete)$/.test(String(u))) sorts.push(String(u));
+        window.fetch = (u, o) => { if (/\\/(keep|discard|delete)$/.test(String(u)))
+          sorts.push({ url: String(u), at: Date.now() });
           return f(u, o); }; })()`);
     },
-    sortsSent(route) { return page.eval(`sorts.filter(u => u.endsWith('/${route}')).length`); },
+    sortsSent(route) { return page.eval(`sorts.filter(s => s.url.endsWith('/${route}')).length`); },
     // Labo neuf : bench au repos (une génération encore en file serait reprise par la page rechargée), page rechargée
     // sans brouillon ni réglages (localStorage vidé), moteur prêt, pile lue puis gardée dans les Tirages ; short :
     // générations courtes (peu d'étapes, petite taille)
@@ -718,7 +731,17 @@ async function connect(wsUrl) {
     assertNoErrors() {
       if (errors.length) throw new Error(`erreurs dans la console :\n  ${errors.join('\n  ')}`);
     },
-    close() { livePages.delete(page); try { ws.close(); } catch { /* déjà fermée */ } },
+    // onglet fermé (pagehide, comme une vraie fermeture), connexion coupée. Une page fermée dans l'espace privé le
+    // reverrouille : chaque page ouverte dans l'espace est d'abord attendue au repos (privateIdle), aucune requête
+    // privée en route ne reçoit de 403. disconnect ne coupe que la connexion (l'onglet reste chargé)
+    async close() {
+      for (const p of livePages) {
+        if (await p.eval(`typeof inPrivate === 'function' && inPrivate()`).catch(() => false)) await p.privateIdle();
+      }
+      page.disconnect();
+      await closeTab();
+    },
+    disconnect() { livePages.delete(page); try { ws.close(); } catch { /* déjà fermée */ } },
   };
   livePages.add(page);
   return page;

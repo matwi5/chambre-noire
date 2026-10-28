@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { startBench, launchChrome, waitUntil, PHONE, PC, TABLET, TABLET_WIDE } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, elapse, PHONE, PC, TABLET, TABLET_WIDE } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -81,6 +81,45 @@ test('chrome.phonePage : connectée au banc ; sans le cookie, le Mac lui-même r
   }
 });
 
+test('page.close ferme l\'onglet : la page restée ouverte repasse au premier plan', async () => {
+  const other = await chrome.phonePage();
+  try {
+    await other.goto(bench.url + '/');
+    await other.ready();
+    assert.equal(await page.eval(`document.visibilityState`), 'hidden', 'page derrière l\'autre onglet (prémisse)');
+    other.assertNoErrors();
+  } finally { await other.close(); }               // (une seconde fermeture ne fait rien)
+  await page.waitFor(`document.visibilityState === 'visible'`, { what: 'page de nouveau au premier plan' });
+  page.assertNoErrors();
+});
+
+test('page.close dans l\'espace privé : chaque page de l\'espace attendue au repos avant la fermeture', async () => {
+  await page.enterPrivate('code-du-pilote');
+  const other = await chrome.phonePage();
+  let held = null;
+  try {
+    await other.goto(bench.url + '/');
+    await other.waitFor(`inPrivate()`, { what: 'autre page dans l\'espace' });
+    // une lecture privée de la page restée ouverte encore en route (retenue avant le Mac)
+    held = await page.holdRequests(['*/api/private/pile'], () => true);
+    await page.eval(`void loadPile()`);
+    await waitUntil(() => held.held.length > 0, { what: 'lecture privée en route' });
+    let closed = false;
+    const closing = other.close().then(() => { closed = true; });
+    await elapse(500);
+    assert.equal(closed, false, 'onglet fermé (espace reverrouillé) avec une requête privée en route');
+    await held.release();
+    await closing;
+  } finally {
+    await held?.release();
+    await other.close();
+  }
+  await page.lockedOnMac();                          // la page fermée dans l'espace l'a reverrouillé (pagehide)
+  await page.eval(`refreshStatus()`);
+  await page.waitFor(`!inPrivate()`, { what: 'page sortie de l\'espace' });
+  page.assertNoErrors();
+});
+
 // ce que la page voit de sa vue : largeur, pointeur principal, survol et tactile
 const SEEN = `({ width: innerWidth, height: innerHeight, coarse: matchMedia('(pointer: coarse)').matches,
   hover: matchMedia('(hover: hover)').matches, touch: navigator.maxTouchPoints > 0 })`;
@@ -94,7 +133,7 @@ test('chrome.newPage : vues PC (souris) et tablette (tactile, en hauteur et en l
       await p.ready();
       seen[name] = await p.eval(SEEN);
       p.assertNoErrors();
-    } finally { p.close(); }
+    } finally { await p.close(); }
   }
   assert.deepEqual(seen, {
     PHONE: { width: 367, height: 760, coarse: true, hover: false, touch: true },
@@ -110,7 +149,7 @@ test('chrome.newPage : vues PC (souris) et tablette (tactile, en hauteur et en l
     assert.deepEqual(await p.eval(SEEN), seen.TABLET, 'PC devenue tablette, sans rechargement');
     await p.setView(PC);
     assert.deepEqual(await p.eval(SEEN), seen.PC, 'puis PC de nouveau');
-  } finally { p.close(); }
+  } finally { await p.close(); }
 });
 
 test('page.keyDown, keyUp, press : touche maintenue, répétée, relâchée, avec modificateurs', async () => {
@@ -138,7 +177,7 @@ test('page.keyDown, keyUp, press : touche maintenue, répétée, relâchée, ave
       'keyup Meta MetaLeft false ',
       'keydown Escape Escape false ', 'keyup Escape Escape false ']);
     p.assertNoErrors();
-  } finally { p.close(); }
+  } finally { await p.close(); }
 });
 
 test('page.hold puis page.release : appui maintenu sur un élément, au doigt et à la souris', async () => {
@@ -156,7 +195,7 @@ test('page.hold puis page.release : appui maintenu sur un élément, au doigt et
       await p.release();
       assert.deepEqual(await p.eval(`zpPointer`), [`pointerdown ${type}`, `pointerup ${type}`]);
       p.assertNoErrors();
-    } finally { p.close(); }
+    } finally { await p.close(); }
   }
 });
 
