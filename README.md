@@ -1159,8 +1159,9 @@ les prompts enregistrés privés, la reprise d'une génération, le suivi d'une 
 faux « Échec »), le brouillon unique (reprise des anciens, aucun brouillon privé dans le navigateur, ancien réglage
 incognito signalé une fois puis oublié), les raccourcis clavier du PC (→ et ← sur la pile, Z et Ctrl/⌘ + Z, touche
 tenue ou répétée qui ne jette qu'une image, carte d'échec, rien pendant une saisie, une feuille ou la visionneuse,
-aucune touche qui supprime un tirage, Ctrl/⌘ + Entrée dans le champ) et le pilote lui-même (recherche de données restées
-dans la page, fichiers écrits par le banc, délais).
+aucune touche qui supprime un tirage, Ctrl/⌘ + Entrée dans le champ), le bouton Avant (images comparables, appui tenu
+et relâché, cadre, zoom, espace privé) et Espace maintenue (sans défilement ni bouton activé) et le pilote lui-même
+(recherche de données restées dans la page, fichiers écrits par le banc, délais).
 
 Tests de bout en bout, interface lancée :
 
