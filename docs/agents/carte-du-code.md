@@ -222,8 +222,13 @@ dernier bloc, après le HTML.
     miniature des visionneuses à la taille de l'image complète, par `fitThumb`, en unités de la scène `cqw`, `cqh`),
     `preload` et `ready` (les 10 dernières images décodées : miniatures des voisines de la visionneuse, image complète
     de la suivante dans le sens du parcours `vStep`, première image d'entrée ; `refused` : adresse refusée, entrée
-    `gone`, pendant « Sortir » et, pour une adresse `/api/private/`, hors de l'espace privé),
-    `clearImage`, `abortPrivateLoads` (chargements privés en route abandonnés, aussi avant la fermeture de la session
+    `gone`, pendant « Sortir » et, pour une adresse `/api/private/`, hors de l'espace privé ; `unready` : entrée
+    retirée de `ready`, évincée, illisible ou oubliée, son image vidée, à son arrivée si elle chargeait encore ; un
+    aperçu de la carte en cours quitte `ready` dès sa demande, voir `revealPreview`),
+    `clearImage`, `clearImages` (images d'un contenu vidées avant qu'il soit remplacé ou vidé : pile, Tirages, « Voir
+    le lot », file, miniatures d'entrée de la visionneuse et de la saisie ; une image détachée ne garde pas son adresse
+    privée jusqu'au ramasse-miettes), `abortPrivateLoads` (chargements privés en route abandonnés, aussi avant la
+    fermeture de la session
     par « Sortir », et ceux d'une génération finie avec un préfixe d'adresse : `secretLoads`, même évincés de `ready`,
     marqués `gone` : une image qui en attendait un, même détachée, ne reçoit rien), `forgetPrivateImages` (sortie de
     l'espace privé : images privées et aperçus affichés, attendus ou chargés en avance, chargements en cours
@@ -252,7 +257,10 @@ dernier bloc, après le HTML.
     (génération révélée, couleurs des carrés lues par `cssRgb`, dernier aperçu ; `blankReveal`), `startReveal` et
     `drawNoise` (carrés au hasard avant le premier aperçu,
     allégés en `html.lite`, immobiles en `prefers-reduced-motion`), `revealPreview` (aperçu décodé par `preload`,
-    servi une fois) et `drawMosaic` (blocs de `REVEAL_COARSE` à `REVEAL_FINE` px selon step / total, sans lissage),
+    servi une fois : retiré de `ready` dès sa demande, rien ne l'évince ; pas montré, il passe par `unready`, et
+    l'aperçu que la mosaïque lâche, remplacé ou à
+    `clearReveal`, est vidé) et `drawMosaic` (blocs de `REVEAL_COARSE` à `REVEAL_FINE` px selon step / total, sans
+    lissage),
     `sizeReveal`, `redrawReveal`, `clearReveal`, `lite` (canevas vidé : fin, changement de génération, sortie de
     l'espace par `forgetPrivateImages`) ; `notifyDone` (message « Image prête »,
     « Lot prêt » hors du Labo, `toast(…, go)`), `renderQueue` (file de l'espace en cartes, feuille ouverte seulement :
@@ -279,7 +287,7 @@ dernier bloc, après le HTML.
     cours, `sorting`, avec leur génération de la page `pageOf`), `pileFails` (échecs de la page, en tête),
     `renderPile` (carte du dessus et deux devinées dessous : `pileCard`, `failCard`, chacune marquée par `pileTag` ;
     état vide, compte, pastille de l'onglet ; redessinée seulement si elle change, `pileShown`, les images des cartes
-    retirées vidées par `clearImage`), `topEntry` (ce que montre la carte du dessus, retrouvé par son nom), `posed`
+    retirées vidées par `clearImages`), `topEntry` (ce que montre la carte du dessus, retrouvé par son nom), `posed`
     (image de la pile triable : miniature ou image à l'écran, ou chargement fini en échec ; jamais pendant le
     chargement), `sortTop` (✓, ✕ et balayage ; rien pendant « Sortir », `exiting()`, ni sur une image pas `posed` ;
     `flyOut`, un départ à la fois : `flying`, vrai jusqu'au tri ou au retour de la carte, même si la pile est
@@ -336,7 +344,8 @@ dernier bloc, après le HTML.
     de `/api/status` demandée avant ; `leavingPrivate` (`exiting()` : dans l'espace, sortie en attente) : aucune image
     privée ni aperçu demandés ou posés, quel que soit le chemin qui redessine (`preload` les refuse : entrée `gone` ;
     `renderQueue`, `renderGallery`, `openLot`, `openViewer` ne redessinent rien, la seconde tentative d'une vignette
-    privée des Tirages est abandonnée, aussi après la sortie), aucune pile ni Tirages privés lus ou dessinés
+    privée des Tirages est abandonnée, aussi après la sortie, comme celle de toute vignette retirée de la grille
+    entre-temps), aucune pile ni Tirages privés lus ou dessinés
     (`loadPile`, `loadHistory`), même partis avant l'appui, ni pile redessinée à la réponse d'un tri (`sendSort`),
     aucune génération privée de la page interrogée (`pollJobs`) ni suivie ou adoptée, même par un suivi parti avant
     l'appui (`followQueue`, `adopted`), ni Jeter privé envoyé pendant la fermeture), `privChangeCode`, `privReset` ;

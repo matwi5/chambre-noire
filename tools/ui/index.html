@@ -1263,7 +1263,7 @@ function refuseWhileDrawing(list=inputImages){
 const maskMode = () => document.querySelector('input[name=mask_mode]:checked').value;
 const setMaskMode = k => { document.querySelector(`input[name=mask_mode][value=${k}]`).checked=true; };
 // images d'entrée de la saisie : vignettes numérotées, interrupteur Campagne à partir de 2 images, bouton et zone de dessin
-function renderInputs(){ const t=$('inThumbs'); t.innerHTML='';
+function renderInputs(){ const t=$('inThumbs'); clearImages(t); t.innerHTML='';
   if(inputImages.length!==1) drawOn=false;         // dessin : sur une image seule (en-tête et campagne en dépendent)
   const k=inputImages.length, camp=inCampaign();   // campagne : des photos éditées une à une
   $('refTitle').textContent = camp ? 'Photos de la campagne' : 'Images d\'entrée';
@@ -1446,9 +1446,15 @@ function preload(url){ if(refused(url)) return { url, gone:true, im:null, p:Prom
   else { const im=new Image(); im.decoding='async'; im.src=url;
     e={ el:im, url, im:undefined, p:im.decode().then(()=>im, ()=>null) };
     if(secretUrl(url)) secretLoads.add(e);
-    e.p.then(x=>{ e.im=x; secretLoads.delete(e); if(!x && ready.get(url)===e) ready.delete(url); }); }   // illisible : redemandée la fois suivante
-  ready.set(url, e); while(ready.size>READY_MAX) ready.delete(ready.keys().next().value);
+    e.p.then(x=>{ e.im=x; secretLoads.delete(e); if(!x) unready(e); })   // illisible : redemandée la fois suivante
+      .then(()=>{ if(e.out) clearImage(im); }); }  // retirée de ready pendant son chargement : vidée à son arrivée
+  ready.set(url, e); while(ready.size>READY_MAX) unready(ready.get(ready.keys().next().value));
   return e; }
+// entrée retirée de ready (évincée par de plus récentes, illisible, servie une fois, oubliée) : son image vidée, comme
+// une image retirée de l'écran ; encore en chargement (out), elle l'est à son arrivée, après le showImage qui
+// l'attendait (plus haut). Un aperçu de la carte en cours (revealPreview) quitte ready dès sa demande, sans passer par
+// là ; elle le vide en le lâchant. (el absent : entrée refusée, refused)
+function unready(e){ e.out=true; if(ready.get(e.url)===e) ready.delete(e.url); if(e.el && e.im!==undefined) clearImage(e.el); }
 // keep : laisser l'image d'avant jusqu'à la nouvelle (aperçu suivant de la même génération), même si la nouvelle est
 // illisible ; sans keep, une image illisible est confiée au navigateur (nouvel essai, ou image cassée comme avant).
 // then(ok) : appelée quand la nouvelle image est à l'écran (ok faux : illisible). once : image servie une seule fois
@@ -1460,7 +1466,7 @@ function preload(url){ if(refused(url)) return { url, gone:true, im:null, p:Prom
 function showImage(img, url, {thumb, keep, then, once, fit, dims, decoded}={}){
   if(img.want===url && img.getAttribute('src')===url && img.complete && img.naturalWidth){ if(then) then(true); return; }   // déjà là
   img.want=url;                                    // adresse attendue : une image chargée trop tard pour un autre choix est ignorée
-  const put=e=>{ if(once && ready.get(url)===e) ready.delete(url);
+  const put=e=>{ if(once && ready.get(url)===e) unready(e);
     if(img.want!==url || e.gone) return;           // gone : abandonné à la sortie de l'espace (image détachée comprise)
     if((e.im || !keep) && img.getAttribute('src')!==url){ img.src=url; unfit(img); }
     if(then) then(!!e.im); };
@@ -1473,6 +1479,9 @@ function showImage(img, url, {thumb, keep, then, once, fit, dims, decoded}={}){
     if(t.im!==undefined) side(); else t.p.then(side); }
   e.p.then(()=>put(e)); }
 function clearImage(img){ img.want=null; img.removeAttribute('src'); unfit(img); }
+// contenu remplacé ou vidé (innerHTML) : ses images vidées d'abord, pour qu'une image détachée ne garde pas son adresse
+// (privée) jusqu'au ramasse-miettes, ni ne reçoive un chargement qu'elle attendait encore
+function clearImages(el){ el.querySelectorAll('img').forEach(clearImage); }
 // miniature affichée à la taille de l'image complète de dimensions [w, h] dans la scène de la visionneuse : sa forme, et
 // la plus petite largeur entre la sienne, celle de la scène et celle que permet la hauteur de la scène. Taille en unités
 // de la scène (cqw, cqh) : recalculée par le navigateur quand la scène change (panneau, rotation).
@@ -1488,9 +1497,9 @@ const secretUrl = u => !!u && (u.startsWith('/api/private/') || u.startsWith('/a
 // détachée de la page par un nouveau dessin de la pile, ne reçoit rien ni ne redemande l'adresse à son échec.
 // prefix : seulement les adresses qui commencent ainsi (les aperçus d'une génération finie, finish)
 function abortPrivateLoads(prefix=''){ for(const e of [...secretLoads]){ if(!e.url.startsWith(prefix)) continue;
-  e.gone=true; secretLoads.delete(e); e.el.src=''; if(ready.get(e.url)===e) ready.delete(e.url); } }
+  e.gone=true; secretLoads.delete(e); clearImage(e.el); if(ready.get(e.url)===e) ready.delete(e.url); } }
 function forgetPrivateImages(){ if(reveal.img) clearReveal();   // canevas de la carte en cours (aperçus : /api/job/)
-  abortPrivateLoads(); for(const u of [...ready.keys()]) if(secretUrl(u)) ready.delete(u);
+  abortPrivateLoads(); for(const e of [...ready.values()]) if(secretUrl(e.url)) unready(e);
   document.querySelectorAll('img').forEach(i=>{   // affichée, ou attendue (chargement en cours : ignorée à son arrivée)
     if(secretUrl(i.getAttribute('src')) || secretUrl(i.want)) clearImage(i); });
   document.querySelectorAll('[href]').forEach(a=>{   // liens de téléchargement, et leur nom de fichier (prive_<id>)
@@ -1694,7 +1703,7 @@ function renderPile(){
   if(beforeHeld && beforeHeld!==$('vBefore')) dropBefore();   // (le bouton Avant de la carte remplacée)
   // images des cartes retirées vidées : une carte détachée ne garde pas son adresse (privée) jusqu'au ramasse-miettes,
   // et un chargement qu'elle attendait encore ne lui pose rien (ni son image d'entrée chargée en avance)
-  $('pile').querySelectorAll('img').forEach(clearImage);
+  clearImages($('pile'));
   $('pile').innerHTML=shownNow.map((e, k)=>e.fail ? failCard(e.fail, k) : pileCard(e.it, k)).join('');
   // images par showImage (jamais l'image d'avant), la miniature d'abord ; dessous, la miniature seule
   // carte du dessus : son bouton Avant, et son image d'entrée chargée en avance une fois l'image là
@@ -1938,7 +1947,8 @@ function sizeReveal(){ const c=$('revealCanvas'), r=c.getBoundingClientRect(), d
   const w=Math.round(r.width*dpr), h=Math.round(r.height*dpr);
   if(c.width===w && c.height===h) return false;
   c.width=w; c.height=h; return true; }
-function clearReveal(){ clearInterval(reveal.timer); reveal=blankReveal();
+function clearReveal(){ clearInterval(reveal.timer); if(reveal.img) clearImage(reveal.img);   // l'aperçu lâché : vidé
+  reveal=blankReveal();
   const c=$('revealCanvas'); c.width=c.height=0; }
 function startReveal(key){ clearReveal(); reveal.key=key; reveal.rgb=[cssRgb('--void'), cssRgb('--accent')];
   sizeReveal(); drawNoise();
@@ -1969,9 +1979,15 @@ function drawMosaic(){ const im=reveal.img, c=$('revealCanvas'); if(!im || !c.wi
 // nouvel aperçu d'une génération de la page : décodé à part (preload), puis dessiné s'il est toujours celui attendu
 function revealPreview(p){ const v=p.j.preview_version; if(v===reveal.pv || p.private && leavingPrivate) return; reveal.pv=v;
   const url='/api/job/'+p.j.id+'/preview?v='+v, key=reveal.key, frac=p.j.total ? (p.j.step||0)/p.j.total : 0, e=preload(url);
-  e.p.then(im=>{ if(ready.get(url)===e) ready.delete(url);   // servi une fois : il ne reste pas parmi les images prêtes
-    if(!im || reveal.key!==key || reveal.pv!==v || (p.private && !inPrivate())) return;
-    clearInterval(reveal.timer); reveal.img=im; reveal.frac=frac; drawMosaic(); }); }
+  // servi une fois : il quitte ready tout de suite, sans être vidé (rien ne l'évince pendant son chargement, la
+  // mosaïque l'attend ; encore en route, secretLoads le couvre à la sortie de l'espace)
+  if(ready.get(url)===e) ready.delete(url);
+  e.p.then(im=>{
+    // pas montré (illisible, dépassé par un plus récent, espace quitté) : vidé comme toute image préchargée retirée
+    // de ready (unready)
+    if(!im || reveal.key!==key || reveal.pv!==v || (p.private && !inPrivate())) return unready(e);
+    const old=reveal.img; clearInterval(reveal.timer); reveal.img=im; reveal.frac=frac; drawMosaic();
+    if(old && old!==im) clearImage(old); }); }     // l'aperçu d'avant, lâché : vidé
 // icônes de la nature d'une demande (cartes de la file) ; annulation et « Passer en tête » partout dans l'espace
 // de la génération
 const QICON = {
@@ -2053,7 +2069,7 @@ function renderQueue(){ if(exiting()) return;      // « Sortir » en attente : 
   // (vignettes d'entrée en data URL), et rien de l'espace quitté ne reste dans la liste cachée ; ouverte, redessinées
   // seulement quand elles changent
   const html = openedSheet===$('fileSheet') ? cards.map(c=>queueCard(c, own)).join('') : '';
-  if(html!==queueHtml){ queueHtml=html; $('queueList').innerHTML=html; } }
+  if(html!==queueHtml){ queueHtml=html; clearImages($('queueList')); $('queueList').innerHTML=html; } }
 let queueHtml='';                                  // cartes de la file affichées (renderQueue)
 $('queueList').addEventListener('click', async ev=>{
   const t=ev.target.closest('[data-toggle]');
@@ -2350,15 +2366,16 @@ function renderGallery(){ if(exiting()) return;    // « Sortir » en attente : 
   const grid=$('histGrid'), key=histItems.map(it=>it.name+'@'+it.time).join('|');
   $('histCount').textContent = histItems.length ? histItems.length+' image'+(histItems.length>1?'s':'') : '';
   if(key===histShown && grid.childElementCount) return;   // mêmes tirages : vignettes gardées, rien ne clignote
-  histShown=key; grid.innerHTML='';
+  histShown=key; clearImages(grid); grid.innerHTML='';
   if(!histItems.length){ grid.innerHTML='<div class="hempty"><img src="/logo.svg" alt=""><p>Aucun tirage pour l\'instant</p><button class="btn" onclick="goTab(\'labo\')">Aller au Labo</button></div>'; return; }
   const inLot={};                                  // images de chaque lot encore dans la galerie
   histItems.forEach(it=>{ if(it.lot) inLot[it.lot.id]=(inLot[it.lot.id]||0)+1; });
   histItems.forEach((it, i)=>{ const b=document.createElement('button'); b.dataset.name=it.name; b.setAttribute('aria-label', it.prompt||it.name);
     const im=document.createElement('img'); im.loading='lazy'; im.decoding='async'; im.alt='';
     // coupure passagère : une seconde tentative, sauf pour une vignette privée pendant ou après la sortie de l'espace
+    // (ni pour une vignette retirée de la grille entre-temps : elle a été vidée)
     im.onerror=()=>{ if(!im.dataset.retry){ im.dataset.retry=1; setTimeout(()=>{ const u=thumbOf(it);
-      if(!(secretUrl(u) && (exiting() || !inPrivate()))) im.src=u+'&retry=1'; }, 700); } };
+      if(im.isConnected && !(secretUrl(u) && (exiting() || !inPrivate()))) im.src=u+'&retry=1'; }, 700); } };
     im.src=thumbOf(it); b.appendChild(im);
     if(it.mode && it.mode!=='t2i'){ const sp=document.createElement('span'); sp.textContent=MODE_LABELS[it.mode]||it.mode; b.appendChild(sp); }
     // repère des images d'un lot (rang sur la taille du lot), tant qu'il en reste au moins deux dans la galerie
@@ -2394,7 +2411,8 @@ function closeViewer(){ dropBefore($('vBefore')); resetZoom(); $('viewer').class
 // visionneuse fermée : plus rien de l'image vue dans la page cachée (image, prompt, réglages, rang, lot, lien)
 function emptyViewer(){ clearTimeout(vEmpty); vList=[]; clearImage($('vImg')); clearImage($('vBg'));   // fond compris
   aimBefore($('vBefore'), null, $('vImg'));        // image avant comprise
-  $('vImg').alt=$('vCount').textContent=$('vLotOpen').textContent=''; $('vChips').innerHTML=$('vInputs').innerHTML='';
+  $('vImg').alt=$('vCount').textContent=$('vLotOpen').textContent=''; clearImages($('vInputs'));
+  $('vChips').innerHTML=$('vInputs').innerHTML='';
   $('vInputs').hidden=$('vLot').hidden=$('vSort').hidden=true; dropLink($('vDl')); }
 function stepViewer(d){ if(vIndex<0 || !vList.length) return; vStep=d; openViewer((vIndex+d+vList.length)%vList.length); }
 // Raccourcis du PC (la visionneuse garde les siens, ci-dessous) : sur la pile du Labo, → garde et ← jette l'image du
@@ -2580,7 +2598,8 @@ let ivIndex=-1, ivOwner=null;
 const inputUrl = (it, f, extra='') => (it.private ? '/api/private/input?id='+it.id : '/api/input?name='+encodeURIComponent(it.name))+'&file='+encodeURIComponent(f)+extra;
 const inputLabel = (it, f) => f==='init.png' ? "Image d'origine" : it.mode==='mask' ? 'Zone peinte' : it.mode==='annot' ? 'Annotation' : 'Référence '+f.replace(/\D/g, '');
 function renderInputsButton(it){
-  const b=$('vInputs'), list=it.inputs||[]; b.hidden=!list.length; if(!list.length) return;
+  const b=$('vInputs'), list=it.inputs||[]; clearImages(b); b.hidden=!list.length;   // (miniatures de l'image d'avant)
+  if(!list.length){ b.innerHTML=''; return; }
   b.innerHTML=`<span class="v-in-thumbs">${list.slice(0,3).map(f=>`<img src="${inputUrl(it, f, '&thumb=1&t='+it.time)}" alt="">`).join('')}</span>`
     + `<span>${list.length>1 ? list.length+" images d'entrée" : "Image d'entrée"}</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>`; }
 function openInputs(i){ const it=vList[vIndex]; if(!it || !(it.inputs||[]).length) return; clearTimeout(ivEmpty); ivOwner=it; showInput(i);
@@ -2636,6 +2655,7 @@ function openLot(){                               // « Voir le lot » : ses ima
   const items=lotMembers(vList[vIndex]); if(!items.length) return; const n=items.length, s=n>1 ? 's' : '';
   $('lotTitle').textContent = isCampaignLot(items[0].lot, items[0].mode) ? `Campagne de ${n} photo${s}` : `Lot de ${n} image${s}`;
   const g=$('lotSheetGrid');                       // chaque vignette à la forme de son image (une campagne en mélange plusieurs)
+  clearImages(g);
   g.innerHTML=items.map((x, i)=>`<button data-k="${i}" style="--ar:${x.width && x.height ? x.width/x.height : 1}" aria-label="Ouvrir l'image ${x.lot.rank}"><img src="${thumbOf(x)}" alt=""><b>${x.lot.rank}/${x.lot.size}</b></button>`).join('');
   g.onclick=e=>{ const b=e.target.closest('[data-k]'); if(!b) return; closeSheet(); openViewer(+b.dataset.k, items); };
   openSheet('lotSheet'); }
@@ -2679,7 +2699,7 @@ function changedSpace(inside){
   // (confirmation de suppression comprise : elle montre le titre du prompt)
   if([$('promptSheet'), $('promptEditSheet'), $('askSheet'), $('fileSheet')].includes(openedSheet)){ closeSheet(); $('askText').textContent=''; }
   if(openedSheet===$('lotSheet')) closeSheet();      // « Voir le lot » : images de l'espace quitté
-  $('lotSheetGrid').innerHTML=''; $('lotSheetGrid').onclick=null;
+  clearImages($('lotSheetGrid')); $('lotSheetGrid').innerHTML=''; $('lotSheetGrid').onclick=null;
   prompts={saved:[], types:prompts.types}; editingPrompt=null; $('peTitle').value=$('peText').value=''; renderPrompts();
   if(ivIndex>=0 && !!ivOwner.private!==inside) closeInputs();
   if(vIndex>=0 && vList.some(x=>!!x.private!==inside)) closeViewer();
@@ -2688,7 +2708,7 @@ function changedSpace(inside){
     if(ivIndex<0) emptyInputs(); if(vIndex<0) emptyViewer(); }   // vues fermées : vidées sans attendre le fondu
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
     // file privée reçue avant la sortie : elle ne s'affiche pas en attendant /api/status (carte, pastille, feuille)
-    queueState=queueState.filter(e=>e.kind!=='private'); queueHtml=''; $('queueList').innerHTML='';
+    queueState=queueState.filter(e=>e.kind!=='private'); queueHtml=''; clearImages($('queueList')); $('queueList').innerHTML='';
     openLots.clear(); lotCancels.clear();          // identifiants de lots (privés compris) des cartes de la file
     if(!hiding) resumeOwn(queueState); }
   // pile : celle de l'espace où l'on arrive ; un Jeter privé qui attend son bandeau est abandonné (l'espace est fermé
@@ -2696,7 +2716,8 @@ function changedSpace(inside){
   if(!inside && discarding && discarding.priv){ clearTimeout(discarding.timer); discarding=null; hideUndo(); }
   if(!inside) [...sorting].forEach(t=>{ if(t[0]==='p') sorting.delete(t); });   // (leur réponse sera ignorée)
   pileItems=[]; pileRead=false; pileShown=''; labIdle=null; renderRunCard(); renderPile(); if(!hiding) loadPile();
-  histItems=[]; histRev=null; histAsk=null; histShown=''; $('histGrid').innerHTML=''; $('histCount').textContent='';
+  histItems=[]; histRev=null; histAsk=null; histShown=''; clearImages($('histGrid')); $('histGrid').innerHTML='';
+  $('histCount').textContent='';
   if(mode==='tirages' && !hiding) loadHistory();
   syncThemeColor(); }
 // Saisie propre à chaque espace (texte, images d'entrée, dessin : actif ou non, masque ou annotation, tracé) :
