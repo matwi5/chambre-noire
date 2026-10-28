@@ -157,6 +157,20 @@ les messages de commit.
   texte ; (3) rien si la carte du dessus n'est pas affichée (pile masquée pendant Dessiner sous 1024 px). Je garde ces
   trois restrictions ? » → « Garder les trois (Recommandé) » : « Les flèches ne trient que seules, hors de tout champ,
   et seulement une carte visible : on ne jette jamais une image qu'on ne voit pas ni en voulant faire autre chose. »
+- **Groupe C, Espace sur un bouton qui a le focus** (28/10/2026), réponse par bouton : « Le choix laissé par le groupe
+  C : Espace n'active plus aucun bouton qui a le focus (Annuler et Révéler compris). On le garde ? » → « Garder
+  (Recommandé) » : « Espace ne sert qu'à comparer avec l'image d'avant ; Annuler et Révéler restent accessibles par
+  Entrée, Z ou un clic. »
+- **Groupe « durcissement »** (28/10/2026), réponses par bouton :
+  - « Le découpage du durcissement (6 tickets, groupes D puis E) te va ? » → « Oui, tel quel (Recommandé) » : « Je
+    crée les 6 tickets dans Asana sous la tâche mère, avec leurs blocages, puis je les mets au tableau de bord en deux
+    groupes. »
+  - « Pour E3, que faire d'une carte dont l'image n'est pas encore à l'écran ? » → « Aucun tri tant qu'elle n'est pas
+    affichée (Recommandé) » : « Ni ✓, ni ✕, ni ← → ne la trient tant que son image n'est pas posée. Les 3 s ne servent
+    plus qu'aux cartes d'échec. Invariant : aucun geste ne jette une image qui n'est pas affichée. »
+  - « Pour E2, pendant « Sortir », une carte privée : » → « Ne bouge pas (Recommandé) » : « ✓, ✕ et les flèches ne
+    font rien sur une carte privée pendant « Sortir » : elle reste à l'écran jusqu'à la fin de la sortie, sans tri.
+    Invariant : aucune image privée n'est triée ni ne quitte l'écran sans tri. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
