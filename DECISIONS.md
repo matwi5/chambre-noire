@@ -227,6 +227,13 @@ les messages de commit.
     et ← → ne font rien. Un ✕ visé sur l'ancienne ne jette pas la nouvelle. »
   - « Dans quel ordre faire les deux groupes ? » → « F puis G (Recommandé) » : « D'abord les défauts visibles (F3
     contredit ton invariant), puis le ménage des tests. »
+- **Groupe F, Relancer et Révéler pendant « Sortir »** (28/10/2026), réponse par bouton, question posée par la session
+  du groupe : « Groupe F, ticket F2 : pendant « Sortir » (réponse du Mac attendue), que font « Relancer » de la
+  visionneuse ouverte sur une image privée et « Révéler » sur une demande privée ? (la session n'a trouvé aucune garde
+  sur « Révéler », à confirmer par un test) » → « Rien (Recommandé) » : « Comme la carte d'échec : « Relancer » de la
+  visionneuse ne fait rien (elle reste ouverte, sans message), et « Révéler » ne part pas si le test confirme qu'il
+  partait (la saisie reste telle quelle, effacée ensuite par la sortie). Aucune demande privée vers une session qui se
+  ferme. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
