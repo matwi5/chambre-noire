@@ -86,7 +86,8 @@ fichier seul, ou --failed, suffit. Le journal note la charge au départ et à la
 écran étrangers au contrôle, QWEN_UI_JOBS) ; chaque test rouge va aussi dans un journal persistant, commun aux
 worktrees (FAILURE_LOG du dossier temporaire du système : date, dossier, fichier, test, verdict du rejeu, charge),
 pour repérer les tests qui reviennent rouges. --failed rejoue seuls les tests rouges du dernier passage (titres des
-tests d'interface, méthodes du banc), sans les contrôles statiques ni le rejeu ; il n'enregistre aucun vert.
+tests d'interface, méthodes du banc), sans les contrôles statiques ni le rejeu ; il n'enregistre aucun vert ; il ne
+lance que des fichiers de tests/ui et des modules du banc qui existent (toute autre entrée est ignorée et dite).
 
 --at <commit> --ui <fichiers> [--name <motif>] : rejoue des tests d'interface de l'arbre de travail contre l'interface
 et le serveur d'un autre commit (comparer à la base, voir si un test aurait vu un bogue) : worktree temporaire du
@@ -1420,15 +1421,23 @@ def run_failed(args):
         print("--failed : aucun test rouge noté au dernier passage : rien à rejouer")
         return {}, []
     print(f"--failed : tests rouges du passage du {red['when']}")
+    # la liste vient d'un fichier du dossier temporaire : seuls se rejouent des fichiers de tests/ui et des modules du
+    # banc qui existent (un chemin d'ailleurs ou une option de node ne se lance jamais)
+    known_ui = set(ui_files(None))
+    ui = {f: t for f, t in red.get("ui", {}).items() if f in known_ui}
+    bench = {m: n for m, n in red.get("bench", {}).items()
+             if re.fullmatch(r"test_\w+", m) and os.path.isfile(os.path.join(ROOT, "tests", m + ".py"))}
+    for entry in [*(f for f in red.get("ui", {}) if f not in ui), *(m for m in red.get("bench", {}) if m not in bench)]:
+        print(f"--failed : ignoré : {entry} (ni un fichier de tests/ui ni un module du banc)")
     RED["ui"].clear(), RED["bench"].clear(), CAPPED_FILES.clear()
     failed, cited = {}, []
-    for module, names in red.get("bench", {}).items():
+    for module, names in bench.items():
         ok, lines, faults = run_bench(f"{module}.py", names or ())
         print("\n".join(lines))
         cited += [l for l in lines if CITED_RE.match(l)]
         if not ok:
             failed.setdefault("Banc", []).extend(faults)
-    for f, titles in red.get("ui", {}).items():
+    for f, titles in ui.items():
         # un titre qui n'est plus un test du fichier (renommé, ou le fichier lui-même, tombé au chargement) : node le
         # compterait réussi sans rien lancer ; alors le fichier entier
         try:

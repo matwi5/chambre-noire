@@ -365,6 +365,11 @@ class ReplayTest(StaticsMocked):
     échecs ; --failed rejoue les seuls tests rouges du dernier passage."""
     UI = ("--no-bench", "--ui", "tests/ui/a.test.mjs")
 
+    def setUp(self):
+        super().setUp()
+        for name in ("tests/ui/a.test.mjs", "tests/ui/smoke.test.mjs", "tests/test_rewrap.py"):   # (dépôt du test)
+            self.write(name, "")
+
     def test_a_red_file_green_alone_is_intermittent(self):
         failed, out, _, flags = self.run_checks(*self.UI, ui=[(RED_OUT, 1), (GREEN_OUT, 0)])
         self.assertEqual(failed, {"Interface": ["tests/ui/a.test.mjs (intermittent : vert seul)"]})
@@ -409,6 +414,24 @@ class ReplayTest(StaticsMocked):
         self.assertEqual(calls[1].args, ("test_x.py",))
         self.assertEqual(failed, {"Banc": ["test_x.C.test_y (intermittent : vert seul)"]})
         self.assertIn("Rejeu seul : test_x.py : intermittent : vert seul (Ran 1 test in 0.1s)", out)
+
+    def test_failed_replays_only_test_files_of_the_repository(self):
+        """La liste des rouges vient d'un fichier du dossier temporaire : --failed n'y rejoue que des fichiers de
+        tests/ui et des modules du banc qui existent ; une autre entrée est ignorée et dite (revue de sécurité, C1)."""
+        check.write_json(check.red_record(self.journal), {"when": "29/10/2026 14:00",
+            "ui": {"/tmp/ailleurs.mjs": [], "--import=x": [], "tests/ui/../../ailleurs.test.mjs": [],
+                   "tests/ui/smoke.test.mjs": ["un rouge"]},
+            "bench": {"../ailleurs": None, "test_zz_absent": None, "test_rewrap": ["test_x"]}})
+        with mock.patch.object(check, "run_ui_file", return_value=(GREEN_OUT, 0)) as run_file, \
+                mock.patch.object(check, "run_bench", return_value=BENCH_OK) as run_bench, \
+                mock.patch.object(check, "ui_titles", return_value=["un rouge"]), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            check.run_failed(check.parse_args(["--failed"]))
+        self.assertEqual([c.args[0] for c in run_file.call_args_list], ["tests/ui/smoke.test.mjs"])
+        self.assertEqual([c.args for c in run_bench.call_args_list], [("test_rewrap.py", ["test_x"])])
+        for entry in ("/tmp/ailleurs.mjs", "--import=x", "tests/ui/../../ailleurs.test.mjs", "../ailleurs",
+                      "test_zz_absent"):
+            self.assertIn(f"ignoré : {entry}", out.getvalue())
 
     def test_many_red_files_are_not_replayed(self):
         files = [f"tests/ui/{c}.test.mjs" for c in "abcd"]
