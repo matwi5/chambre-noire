@@ -1124,8 +1124,11 @@ Sur Mac : `venv/bin/python -m unittest discover -s tests`. Le faux moteur n'a é
 Tous les contrôles en une commande : `venv/bin/python tests/check.py` compile les fichiers Python, vérifie la syntaxe
 du JavaScript de l'interface avec Node.js (`node --check`), refuse une ligne ajoutée de plus de 120 caractères
 depuis la séparation d'avec `origin/main`, lance le banc et affiche son résultat (`--no-bench` pour le sauter ;
-`--quick` le saute si aucun fichier Python n'a changé depuis le dernier commit). Il échoue aussi si un fichier du
-dépôt contient un repère propre à une machine (chemin de dossier personnel, adresse IP privée, nom Tailscale) : le
+`--quick` le saute si aucun fichier Python n'a changé depuis le dernier commit). Hors de la CI, le banc entier n'est
+pas relancé quand les fichiers Python sont ceux du dernier banc vert (seul le test du dépôt public tourne, et le
+résultat de ce banc est cité avec sa date ; `--force` le relance), et quand seuls des fichiers Markdown ont changé
+depuis le dernier contrôle vert aux mêmes options, ni le banc ni l'interface ne repassent. Il échoue aussi si un fichier
+du dépôt contient un repère propre à une machine (chemin de dossier personnel, adresse IP privée, nom Tailscale) : le
 dépôt est public. Un avis, sans échec, signale un changement de code pas encore commité qui touche l'espace privé ou
 la suppression d'images, et nomme la fonction (ou la route) de chaque ligne touchée. Sur
 GitHub, la même commande, complète, tourne sur chaque pull request vers `main` et chaque envoi sur `dev`
@@ -1142,15 +1145,21 @@ aussi dans un journal, dont le chemin est affiché
 (les lignes de pile de Node n'y sont qu'à lui), et le journal d'un passage en échec est gardé sous un nom horodaté
 (les dix derniers), cité par la dernière ligne. Un contrôle vert enregistre l'état de l'arbre : relancé à
 l'identique (mêmes fichiers, mêmes options), il dit « déjà vert sur cet état » sans rien relancer (`--force` pour
-relancer). Le banc et chaque fichier d'interface affichent leur durée. `python3 tests/check.py --lines` ne vérifie que
+relancer). Le banc et chaque fichier d'interface affichent leur durée. Un fichier d'interface ou un module du banc
+en échec est rejoué seul, une fois, en fin de passage : la dernière ligne dit « intermittent : vert seul » ou
+« reproductible » ; le journal note la charge du poste (moyennes de charge, autres Chrome sans écran, `QWEN_UI_JOBS`),
+et chaque test rouge s'ajoute à un journal des échecs commun aux worktrees, pour repérer ceux qui reviennent.
+`--failed` rejoue seuls les tests rouges du dernier passage. Un fichier d'interface s'arrête au cinquième test en
+échec (`QWEN_UI_FAIL_CAP`), et sa ligne le dit. `python3 tests/check.py --lines` ne vérifie que
 la longueur des lignes ajoutées, en moins d'une seconde ; le hook avant commit du dépôt (`.githooks/pre-commit`,
 activé par `python3 tests/check.py --link-venv`) le lance sur ce qui va être enregistré et refuse le commit fautif.
 `python3 tests/check.py --lines --fix` recoupe les seules lignes fautives quand c'est sans risque (Markdown,
 commentaire seul sur sa ligne, docstring Python), en gardant retrait, puces et citations, sans remettre en forme le
 reste du paragraphe, et nomme celles qui restent à recouper à la main ; `python3 tests/rewrap.py <fichier>.md` fait
 de même pour un fichier Markdown (toutes ses lignes trop longues avec `--all`). Dans Claude Code, le hook du dépôt
-(`.claude/settings.json`) lance `check.py --hook` après chaque écriture d'un fichier (Edit, Write) : il juge ce seul
-fichier et montre ses lignes trop longues tout de suite.
+(`.claude/settings.json`) lance `check.py --hook` après chaque écriture d'un fichier (Edit, Write), qu'il juge seul,
+et après chaque commande (script, heredoc), où il juge les fichiers changés depuis le dernier commit : il recoupe
+seul la prose trop longue (Markdown, commentaires, docstrings) et montre tout de suite le code trop long.
 
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps que
 le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier, et `--name <motif>` pour les seuls tests dont le

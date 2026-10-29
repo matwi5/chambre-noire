@@ -6,6 +6,7 @@
   venv/bin/python tests/check.py --no-bench --ui tests/ui/x.test.mjs [--name <motif>]   # boucle de travail
   venv/bin/python tests/check.py --quick    # banc sauté si aucun .py n'a changé depuis le dernier commit
   venv/bin/python tests/check.py --ui tests/ui/x.test.mjs --repeat 3   # un fichier passé 3 fois (intermittent)
+  venv/bin/python tests/check.py --failed   # seuls les tests rouges du dernier passage, rejoués
   python3 tests/check.py --lines [--fix]    # longueur des lignes ajoutées seule (moins d'une seconde) ; --fix recoupe
   python3 tests/check.py --link-venv        # worktree : liens vers venv et les notes du dossier principal, hook
   python3 tests/check.py --map <nom> | --show <nom> | --uses <mot>   # situer, lire, chercher sans grep
@@ -39,19 +40,29 @@ un fichier créé passe les contrôles avant son premier commit.
    blocs de code Markdown ; base introuvable : un avis, et le contrôle passe ; --lines ne fait que ce contrôle,
    --lines --cached juge l'index (hook .githooks/pre-commit, posé par --link-venv), --lines --fix recoupe les seules
    lignes fautives qui peuvent l'être (Markdown, commentaires, docstrings) et --hook juge le fichier qu'une écriture de
-   Claude Code vient de changer (hook PostToolUse de .claude/settings.json : fautes sur stderr, code 2) ;
+   Claude Code vient de changer, ou après une commande Bash (script, heredoc) les fichiers changés depuis le dernier
+   commit (hook PostToolUse de .claude/settings.json, moins d'une seconde) : il recoupe seul la prose trop longue,
+   comme --fix, et signale le code trop long (sur stderr, code 2 : un fichier recoupé est à relire avant de l'éditer) ;
 4. règles mécaniques de CODING_STANDARDS.md (tests/rules.py, liste à la fin de ce fichier, noms de la carte du code
    compris) : sur les lignes ajoutées, et sur des fichiers entiers pour celles du serveur et des imports ;
    si l'un de ces quatre contrôles échoue, check.py s'arrête là, sans lancer le banc ni l'interface ;
 5. lance le banc (unittest discover -s tests), recopie telles quelles sa ligne « Ran N tests … » et son verdict, et
-   affiche sa durée ; avec --quick (jamais en CI) et aucun .py changé depuis le dernier commit (ticket_base : non
-   suivis compris ; hors git, le banc tourne), seul tests/test_public_repo.py tourne ;
+   affiche sa durée ; seul tests/test_public_repo.py tourne quand les .py (suivis et nouveaux, tests compris) sont
+   ceux du dernier banc entier vert (empreinte, à côté du journal ; la ligne « Ran N tests » de ce banc est citée avec
+   sa date ; décision du 29/10/2026), ou avec --quick et aucun .py changé depuis le dernier commit (ticket_base : non
+   suivis compris ; hors git, le banc tourne) ; jamais en CI (CI, GITHUB_ACTIONS : le banc entier, toujours), et
+   --force le relance ;
 6. avec --ui : les tests d'interface tests/ui/*.test.mjs, ou les seuls fichiers donnés (pilote Chrome, voir
    tests/ui/driver.mjs), UI_JOBS fichiers à la fois (3 par défaut, QWEN_UI_JOBS), chacun avec sa durée, en même
    temps que le banc : chacun son Chrome, et son serveur sur un port libre, depuis son propre dossier temporaire
    (bench.start()), avec l'interface dans un autre processus (tests/ui/serve.py) ; résultats dans l'ordre des
-   fichiers ; --name <motif> ne lance que les tests dont le nom correspond (échec tout de suite si aucun), --repeat N
-   passe chaque fichier N fois ; un test « todo » est compté « à faire », sans échec ;
+   fichiers ; --name <motif> ne lance que les tests dont le nom correspond (échec tout de suite si aucun, avec les
+   titres proches), --repeat N passe chaque fichier N fois ; un test « todo » est compté « à faire », sans échec ; un
+   fichier est arrêté à UI_FAIL_CAP tests en échec (5, QWEN_UI_FAIL_CAP ; 0 : sans plafond), et sa ligne le dit : un
+   changement de sens fait tomber des dizaines de tests à 30 s chacun ;
+   quand seuls des .md ont changé depuis le dernier contrôle vert aux mêmes options (empreinte de tout sauf les .md),
+   ni banc ni interface ne repassent : les lignes, les règles et tests/test_public_repo.py, puis les lignes à citer
+   de ce contrôle vert ;
 7. avis, sans échec, « zone sensible : passe bogues /code-review requise » quand une ligne ajoutée dans tools/ depuis
    le dernier commit (ticket_base : le ticket en cours, arbre de travail compris ; donc aucun avis en CI) touche
    l'espace privé ou la suppression de données (SENSITIVE) ; il nomme la fonction (ou la route) de chaque ligne. Un
@@ -63,11 +74,22 @@ récapitule les fautes (fichier:ligne, test du banc, fichier d'interface), les l
 gardé, pour qu'une sortie coupée par tail les montre encore. Un contrôle vert enregistre l'empreinte de l'arbre et ses
 options (green_record, à côté du journal).
 
+Échec du banc ou de l'interface : en fin de passage, chaque fichier d'interface et chaque module du banc en échec
+(REPLAY_MAX au plus, ni un fichier arrêté au plafond, ni avec --repeat) est rejoué seul, une fois ; sa faute porte
+alors « (intermittent : vert seul) » ou « (reproductible) » dans la dernière ligne. Le contrôle reste en échec (un
+test instable se comprend, il ne s'ignore pas), mais un intermittent n'appelle pas un nouveau contrôle complet : le
+fichier seul, ou --failed, suffit. Le journal note la charge au départ et à la fin (moyennes de charge, Chrome sans
+écran étrangers au contrôle, QWEN_UI_JOBS) ; chaque test rouge va aussi dans un journal persistant, commun aux
+worktrees (FAILURE_LOG du dossier temporaire du système : date, dossier, fichier, test, verdict du rejeu, charge),
+pour repérer les tests qui reviennent rouges. --failed rejoue seuls les tests rouges du dernier passage (titres des
+tests d'interface, méthodes du banc), sans les contrôles statiques ni le rejeu ; il n'enregistre aucun vert.
+
 Le Python des contrôles est celui du venv du dépôt (venv/ à la racine, sinon celui du dossier principal quand on est
 dans un worktree), sinon l'interpréteur qui lance ce script (cas de la CI) : check.py se relance de lui-même avec le
 bon. Code de sortie non nul au moindre échec.
 """
-import argparse, concurrent.futures, glob, json, os, re, shutil, signal, subprocess, sys, tempfile, time
+import argparse, concurrent.futures, difflib, glob, hashlib, json, os, re, shutil, signal, subprocess, sys, tempfile
+import threading, time
 
 import rules                                          # tests/rules.py : règles mécaniques, index de la carte
 
@@ -105,6 +127,19 @@ CITED_RE = re.compile(r"(Banc(?: \([^)]*\))? : (?:Ran |OK|FAILED)|Interface : \d
 NODE_STACK_RE = re.compile(r"\s+at\s")             # ligne de pile de Node : dans le journal, pas à l'écran
 # journaux des passages en échec, gardés à côté du journal (une cause intermittente ne se perd plus)
 FAILURES_DIR, FAILURES_KEPT = "qwen-check-echecs", 10
+# journal persistant des tests rouges, commun aux worktrees (fichier, test, date, charge, verdict du rejeu) : un test
+# qui revient souvent rouge seul sous la charge se repère ; FAILURE_LOG_KEPT lignes au plus
+FAILURE_LOG, FAILURE_LOG_KEPT = "qwen-check-echecs.jsonl", 1000
+# échecs d'un fichier d'interface avant de l'arrêter (QWEN_UI_FAIL_CAP le change ; 0 : sans plafond) : un changement
+# de sens fait tomber des dizaines de tests à 30 s chacun, les premiers suffisent à le voir
+UI_FAIL_CAP = int(os.environ.get("QWEN_UI_FAIL_CAP") or 5)
+REPLAY_MAX = 3                                       # fichiers ou modules en échec rejoués seuls au plus
+# lignes du rapport spec de node --test : test réussi, test en échec (avant le résumé « ℹ tests ») ; arrêt au plafond
+PASSED_TEST_RE = re.compile(r"^\s*✔ (.+) \([\d.]+m?s\)$")
+FAILED_TEST_RE = re.compile(r"^\s*✖ (.+) \([\d.]+m?s\)$")
+CAPPED_RE = re.compile(r"^fichier arrêté après (\d+) échecs", re.M)
+# test du banc en échec (« FAIL: test_y (test_x.Classe.test_y) ») : nom de la méthode, identifiant complet
+BENCH_FAULT_RE = re.compile(r"^(?:FAIL|ERROR): (\S+) \((\S+)\)", re.M)
 
 
 def git(*args):
@@ -399,11 +434,19 @@ def fix_lines(base):
     paragraphe : Markdown par tests/rewrap.py (retrait, puces et citations gardés), commentaire seul sur sa ligne et
     docstring d'un .py, .mjs ou .js (rewrap.rewrap_code) ; puis le contrôle des lignes, qui nomme celles laissées
     (code, chaînes : à recouper à la main). Code de sortie du contrôle."""
-    import rewrap                                     # ici : rewrap importe check
     if not base:
         return 1 if check_line_length(base) else 0
-    by_file = {}
-    for f, k, _ in long_lines(base):
+    for message in recut(long_lines(base)):
+        print(message)
+    return 1 if check_line_length(base) else 0
+
+
+def recut(found):
+    """Recoupe les lignes trop longues found ([(fichier, ligne, longueur)], long_lines) qui peuvent l'être (Markdown,
+    commentaires, docstrings) ; un fichier qui ne se lirait plus est rendu tel quel. Un message par fichier touché."""
+    import rewrap                                     # ici : rewrap importe check
+    by_file, messages = {}, []
+    for f, k, _ in found:
         by_file.setdefault(f, set()).add(k)
     for f, numbers in sorted(by_file.items()):
         path = os.path.join(ROOT, f)
@@ -420,10 +463,11 @@ def fix_lines(base):
             if broken:                                # garde-fou : un fichier qui ne se lit plus est rendu tel quel
                 with open(path, "w", encoding="utf-8", newline="") as fh:
                     fh.write(text)
-                print(f"{f} : recoupe annulée, le fichier ne se lisait plus ({broken}) : à recouper à la main")
+                messages.append(f"{f} : recoupe annulée, le fichier ne se lisait plus ({broken}) : à recouper à la "
+                                "main")
                 continue
-        print(f"{f} : {cuts} ligne(s) recoupée(s)" + (f", {len(left)} à recouper à la main" if left else ""))
-    return 1 if check_line_length(base) else 0
+        messages.append(f"{f} : {cuts} ligne(s) recoupée(s)" + (f", {len(left)} à recouper à la main" if left else ""))
+    return messages
 
 
 def fix_breaks(f, path, text):
@@ -444,34 +488,56 @@ def fix_breaks(f, path, text):
 
 
 def hook_lines(stdin):
-    """--hook (PostToolUse de Claude Code sur Edit et Write, .claude/settings.json) : juge le seul fichier écrit
-    (tool_input.file_path du JSON reçu), dans le dépôt qui le contient (un worktree compris) ; rien s'il est hors d'un
-    dépôt de ce projet ou n'est pas un fichier contrôlé. Fautes sur stderr et code 2 (que Claude Code montre), sinon
-    0 sans rien écrire."""
+    """--hook (PostToolUse de Claude Code sur Edit, Write et Bash, .claude/settings.json) : juge le seul fichier écrit
+    (tool_input.file_path du JSON reçu) ou, après une commande Bash (sans file_path : un script, un heredoc), les
+    fichiers changés depuis le dernier commit (non suivis compris) du dépôt de son dossier (cwd du JSON, sinon
+    CLAUDE_PROJECT_DIR) ; un worktree compris, rien hors d'un dépôt de ce projet. La prose trop longue (Markdown,
+    commentaires, docstrings) est recoupée sur place (recut, comme --lines --fix), le code trop long est signalé.
+    Lignes recoupées et fautes restantes sur stderr avec le code 2 (que Claude Code montre : un fichier recoupé est à
+    relire avant de l'éditer de nouveau), sinon 0 sans rien écrire."""
     global ROOT
     try:
-        path = json.loads(stdin or "{}").get("tool_input", {}).get("file_path") or ""
+        data = json.loads(stdin or "{}")
+        given = data.get("tool_input", {}).get("file_path") or ""
+        folder = os.path.dirname(os.path.abspath(given)) if given else (data.get("cwd")
+                                                                       or os.environ.get("CLAUDE_PROJECT_DIR", ""))
     except (ValueError, AttributeError):
         return 0
-    folder = os.path.dirname(os.path.abspath(path)) if path else ""
-    if not os.path.isdir(folder):
+    if not folder or not os.path.isdir(folder):
         return 0
     r = subprocess.run(["git", "-C", folder, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
     root = r.stdout.strip()
     if r.returncode or not os.path.isfile(os.path.join(root, "tests", "check.py")):
         return 0
     ROOT = root
-    rel = os.path.relpath(os.path.realpath(path), os.path.realpath(root)).replace(os.sep, "/")
     base = merge_base()
-    if rel.startswith("..") or not base:
+    if not base:
         return 0
-    found = long_lines(base, paths=(rel,))
+    if given:
+        paths = [os.path.relpath(os.path.realpath(given), os.path.realpath(root)).replace(os.sep, "/")]
+        if paths[0].startswith(".."):
+            return 0
+    else:                                             # commande Bash : ce qui a changé depuis le dernier commit
+        try:
+            paths = sorted(set(git("diff", "--name-only", "HEAD", "--", *LINE_FILES).splitlines()
+                               + new_files(*LINE_FILES)))
+        except subprocess.CalledProcessError:         # pas encore de commit
+            return 0
+    found = long_lines(base, paths=paths) if paths else []
     if not found:
         return 0
-    print(f"Lignes de plus de {LINE_MAX} caractères ajoutées :", file=sys.stderr)
-    for f, k, n in found:
-        print(f"  {f}:{k} ({n} caractères)", file=sys.stderr)
-    print("python3 tests/check.py --lines --fix les recoupe (Markdown, commentaires, docstrings)", file=sys.stderr)
+    messages = [m for m in recut(found) if " : 0 ligne(s) recoupée(s)" not in m]
+    left = long_lines(base, paths=paths)
+    if messages:
+        print("Lignes de plus de {} caractères recoupées par le hook (fichier à relire avant de l'éditer) :"
+              .format(LINE_MAX), file=sys.stderr)
+        for message in messages:
+            print(f"  {message}", file=sys.stderr)
+    if left:
+        print(f"Lignes de plus de {LINE_MAX} caractères ajoutées, à recouper à la main (code, chaînes) :",
+              file=sys.stderr)
+        for f, k, n in left:
+            print(f"  {f}:{k} ({n} caractères)", file=sys.stderr)
     return 2
 
 
@@ -628,20 +694,41 @@ def seconds(t):
     return f"{t // 60} min {t % 60:02d} s" if t >= 60 else f"{t} s"
 
 
-def run_bench(pattern=None):
-    """Banc (unittest discover -s tests, ou les seuls fichiers pattern) : (réussi, lignes à afficher, fautes : tests
-    en échec)."""
+# tests rouges du passage en cours, notés par run_bench et run_ui : {"ui": {fichier : [titres]}, "bench": {module :
+# [méthodes]}} ; un fichier sans titre (échec hors d'un test) se rejoue entier. Écrits pour --failed (red_record)
+RED = {"ui": {}, "bench": {}}
+CAPPED_FILES = set()                                 # fichiers d'interface arrêtés au plafond (pas rejoués)
+
+
+def bench_fault(m):
+    """Identifiant complet d'un test du banc en échec (BENCH_FAULT_RE) : « test_x.Classe.test_y »."""
+    name, where = m.group(1), m.group(2)
+    return where if where.endswith("." + name) else f"{where}.{name}"
+
+
+def run_bench(pattern=None, names=()):
+    """Banc (unittest discover -s tests, ou les seuls fichiers pattern ; names : les seuls tests de ces noms, -k) :
+    (réussi, lignes à afficher, fautes : identifiants des tests en échec, notés dans RED)."""
     start = time.monotonic()
     r = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", *(["-p", pattern] if pattern
-                                                                                        else [])],
-                       cwd=ROOT, capture_output=True, text=True)
+                                                                                        else []),
+                        *[a for n in names for a in ("-k", n)]], cwd=ROOT, capture_output=True, text=True)
     out = r.stderr + r.stdout
     lines = out.strip().splitlines()
     ran = next((l for l in reversed(lines) if l.startswith("Ran ")), "Ran ? tests : ligne introuvable")
     verdict = next((l for l in reversed(lines) if l.startswith(("OK", "FAILED"))), "verdict introuvable")
     label = "Banc" + (f" ({pattern})" if pattern else "")
     shown = [out.rstrip()] if r.returncode else []
-    faults = list(dict.fromkeys(m.group(2) for m in re.finditer(r"^(FAIL|ERROR): \S+ \((\S+)\)", out, re.M)))
+    faults = list(dict.fromkeys(bench_fault(m) for m in BENCH_FAULT_RE.finditer(out)))
+    for m in BENCH_FAULT_RE.finditer(out):
+        module = bench_fault(m).split(".")[0]
+        if module == "unittest":                       # module qui ne s'importe pas : _FailedTest.<module>
+            module = m.group(1)
+        listed = RED["bench"].setdefault(module, [])
+        if listed is not None and m.group(1).startswith("test"):
+            listed.append(m.group(1))
+        else:                                         # setUpClass, import… : le module entier
+            RED["bench"][module] = None
     if r.returncode and not faults:
         faults = ["banc"]
     return r.returncode == 0, shown + [f"{label} : {ran}", f"{label} : {verdict}",
@@ -671,19 +758,42 @@ def ui_titles(files):
     return titles
 
 
-def run_ui_file(f, flags, env):
+def run_ui_file(f, flags, env, cap=None):
     """Un fichier d'interface dans son groupe de processus : (sortie, code de retour) ; il dépasse UI_FILE_TIMEOUT,
-    ou finit, et Chrome et le banc sont arrêtés dans tous les cas, même bloqués. node introuvable : OSError."""
+    atteint cap tests en échec (UI_FAIL_CAP ; la sortie le dit, CAPPED_RE), ou finit, et Chrome et le banc sont
+    arrêtés dans tous les cas, même bloqués. node introuvable : OSError."""
+    cap = UI_FAIL_CAP if cap is None else cap
     proc = subprocess.Popen(["node", "--test", *flags, f], cwd=ROOT, env=env, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
                             start_new_session=os.name != "nt")
-    try:
-        out, _ = proc.communicate(timeout=UI_FILE_TIMEOUT)
-    except subprocess.TimeoutExpired:
-        stop_group(proc)
-        out = proc.communicate()[0] + f"\nfichier arrêté au bout de {seconds(UI_FILE_TIMEOUT)}"
+    lines, capped = [], threading.Event()
+
+    def read():                                       # sortie lue au fil de l'eau : le plafond se voit tout de suite
+        failures, summary = 0, False
+        for line in proc.stdout:
+            lines.append(line)
+            summary = summary or line.startswith("ℹ tests")
+            if not summary and FAILED_TEST_RE.match(line.rstrip("\n")):
+                failures += 1
+                if cap and failures >= cap:
+                    capped.set()
+                    return
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    reader.join(UI_FILE_TIMEOUT)
+    note = (f"\nfichier arrêté au bout de {seconds(UI_FILE_TIMEOUT)}" if reader.is_alive()
+            else f"\nfichier arrêté après {cap} échecs (plafond QWEN_UI_FAIL_CAP : une cascade d'un même changement ; "
+                 "le fichier seul, ou --name, pour la suite)" if capped.is_set() else "")
     stop_group(proc)                                  # restes du fichier (Chrome, banc) : arrêtés dans tous les cas
-    return out.rstrip(), proc.returncode
+    reader.join(10)
+    proc.wait()
+    return ("".join(lines) + note).rstrip(), proc.returncode or (1 if note else 0)
+
+
+def failed_titles(out):
+    """Titres des tests en échec d'une sortie de node --test (lignes ✖ d'avant le résumé, qui les répète)."""
+    head = out.split("\nℹ tests", 1)[0]
+    return [m.group(1) for line in head.splitlines() if (m := FAILED_TEST_RE.match(line))]
 
 
 def run_ui(files, name=None, wait=None, jobs=None, repeat=1):
@@ -709,16 +819,26 @@ def run_ui(files, name=None, wait=None, jobs=None, repeat=1):
             results = list(pool.map(one, runs))
     except OSError:
         return False, ["Interface : node introuvable"], ["node introuvable"]
-    for (_, f), (out, code, took) in zip(runs, results):
+    for (file, f), (out, code, took) in zip(runs, results):
         counts = ui_counts(out)
+        capped = CAPPED_RE.search(out)
+        if capped:
+            CAPPED_FILES.add(file)
+        if capped and not counts.get("tests"):       # arrêté au plafond : pas de résumé, comptes de ses lignes
+            passed = sum(1 for line in out.splitlines() if PASSED_TEST_RE.match(line))
+            counts = {"tests": passed + int(capped.group(1)), "pass": passed, "fail": int(capped.group(1))}
         for k, v in counts.items():
             total[k] = total.get(k, 0) + v
         if code or not counts.get("tests"):           # aucun test lancé : pas une réussite
             faults.append(f)
             shown.append(out)
+            RED["ui"].setdefault(file, [])
+            RED["ui"][file] = list(dict.fromkeys(RED["ui"][file] + failed_titles(out)))
         failed = counts.get("fail", 0) + counts.get("cancelled", 0)
         todo = f", {counts['todo']} à faire" if counts.get("todo") else ""      # test « todo » : compté, sans échec
-        shown.append(f"Interface : {f} : {counts.get('tests', '?')} tests, {failed} en échec{todo} ({seconds(took)})")
+        cap_note = f", arrêté au plafond de {capped.group(1)} échecs" if capped else ""
+        shown.append(f"Interface : {f} : {counts.get('tests', '?')} tests, {failed} en échec{todo}{cap_note} "
+                     f"({seconds(took)})")
     failed = total.get("fail", 0) + total.get("cancelled", 0)
     todo = f", {total['todo']} à faire" if total.get("todo") else ""
     shown.append(f"Interface : {len(runs)} fichier(s), {total.get('tests', 0)} tests, {total.get('pass', 0)} "
@@ -813,61 +933,310 @@ def tree_fingerprint():
             return None
 
 
-def state_key(args):
-    """Clé d'un contrôle complet : empreinte de l'arbre, dernier commit et base (--quick, l'avis, les lignes et les
-    règles en dépendent), options qui changent ce qui tourne ; None hors git."""
+def tree_state():
+    """Empreintes de l'état du dépôt (tree_fingerprint) : arbre entier (tree), ses seuls .py (py : le banc n'a pas à
+    repasser sur des .py identiques) et tout sauf les .md (code : un .md seul ne relance ni banc ni interface) ;
+    None hors git."""
     tree = tree_fingerprint()
-    options = {k: getattr(args, k, None) for k in ("no_bench", "quick", "ui", "name", "repeat")}
-    return f"{tree} {ticket_base()} {merge_base()} {json.dumps(options, sort_keys=True)}" if tree else None
+    if not tree:
+        return None
+    entries = [e for e in git("ls-tree", "-r", "-z", tree).split("\0") if e]
+
+    def digest(keep):
+        return hashlib.sha256("\n".join(e for e in entries if keep(e.split("\t", 1)[-1])).encode()).hexdigest()
+    return {"tree": tree, "py": digest(lambda p: p.endswith(".py")), "code": digest(lambda p: not p.endswith(".md"))}
+
+
+def run_options(args):
+    """Options qui changent ce qu'un contrôle complet lance (clé de green_record)."""
+    return {k: getattr(args, k, None) for k in ("no_bench", "quick", "ui", "name", "repeat")}
+
+
+def state_key(args, state=None):
+    """Clé d'un contrôle complet : empreinte de l'arbre (state : tree_state, calculé sinon), dernier commit et base
+    (--quick, l'avis, les lignes et les règles en dépendent), options qui changent ce qui tourne ; None hors git."""
+    state = state or tree_state()
+    options = run_options(args)
+    return f"{state['tree']} {ticket_base()} {merge_base()} {json.dumps(options, sort_keys=True)}" if state else None
 
 
 def green_record(journal):
-    """Fichier du dernier contrôle vert (clé, date, lignes à citer), à côté du journal."""
+    """Fichier du dernier contrôle vert (clé, empreintes, options, date, lignes à citer), à côté du journal."""
     return journal + ".vert.json"
 
 
-def run_checks(args):
+def bench_record(journal):
+    """Fichier du dernier banc entier vert (empreinte des .py, date, ligne « Ran N tests »), à côté du journal."""
+    return journal + ".banc.json"
+
+
+def red_record(journal):
+    """Fichier des tests rouges du dernier passage (RED), relu par --failed, à côté du journal."""
+    return journal + ".rouge.json"
+
+
+def read_json(path):
+    """Contenu JSON de path, ou None (absent, illisible)."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def write_json(path, value):
+    """value écrit dans path d'un coup (fichier temporaire, puis os.replace) : un contrôle coupé ne laisse rien
+    d'illisible."""
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(value, f)
+    os.replace(tmp, path)
+
+
+def in_ci():
+    """Vrai dans la CI (GitHub Actions) : le banc y passe entier, sans rien sauter."""
+    return bool(os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"))
+
+
+def md_only(args, state, record):
+    """Dernier contrôle vert (record : green_record lu) si seuls des .md ont changé depuis, aux mêmes options : son
+    empreinte « code » (tout sauf les .md) est celle de l'arbre. Sinon None (et toujours avec --force, en CI)."""
+    if args.force or in_ci() or not state or not record:
+        return None
+    if record.get("code") != state["code"] or record.get("options") != run_options(args):
+        return None
+    return record
+
+
+def foreign_chromes():
+    """Nombre de Chrome sans écran (processus principaux) qui ne descendent pas de ce contrôle : d'autres sessions,
+    d'autres contrôles ; None si ps ne répond pas (Windows)."""
+    try:
+        out = subprocess.run(["ps", "-axo", "pid=,ppid=,command="], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    parent, chromes = {}, []
+    for line in out.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
+            parent[int(parts[0])] = int(parts[1])
+            if "--headless" in parts[2] and "--type=" not in parts[2]:
+                chromes.append(int(parts[0]))
+
+    def mine(pid):
+        for _ in range(64):
+            if pid == os.getpid():
+                return True
+            if pid not in parent or pid <= 1:
+                return False
+            pid = parent[pid]
+        return False
+    return sum(1 for pid in chromes if not mine(pid))
+
+
+def load_info():
+    """Charge du poste : moyennes de charge (1, 5, 15 min), Chrome sans écran étrangers au contrôle, QWEN_UI_JOBS."""
+    try:
+        load = [round(x, 2) for x in os.getloadavg()]
+    except (AttributeError, OSError):                  # Windows
+        load = None
+    return {"load": load, "chromes": foreign_chromes(), "jobs": UI_JOBS,
+            "jobs_set": bool(os.environ.get("QWEN_UI_JOBS"))}
+
+
+def load_line(info):
+    """Ligne du journal qui dit la charge (load_info)."""
+    load = " / ".join(str(x) for x in info["load"]) if info["load"] else "inconnue"
+    chromes = "?" if info["chromes"] is None else info["chromes"]
+    return (f"charge moyenne {load} ; {chromes} Chrome sans écran hors de ce contrôle ; QWEN_UI_JOBS "
+            f"{info['jobs']}{'' if info['jobs_set'] else ' (défaut)'}")
+
+
+def replay(failed, args):
+    """Rejoue seuls, une fois, les fichiers d'interface et les modules du banc en échec (REPLAY_MAX au plus, ni ceux
+    arrêtés au plafond, ni avec --repeat) : chaque faute de failed porte ensuite « (intermittent : vert seul) » ou
+    « (reproductible) ». Une faute verte seule a sans doute tenu à la charge : le contrôle reste en échec (un test
+    instable est à comprendre), mais le rejeu du fichier seul, ou --failed, suffit à le revoir. Renvoie {faute :
+    verdict}."""
+    files = [f for f in failed.get("Interface", []) if f.endswith(".test.mjs") and f not in CAPPED_FILES]
+    modules = list(dict.fromkeys(f.split(".")[0] for f in failed.get("Banc", []) if f != "banc"))
+    if args.repeat > 1 or not files + modules:
+        return {}
+    if len(files) + len(modules) > REPLAY_MAX:
+        print(f"Rejeu : pas de rejeu ({len(files) + len(modules)} fichiers ou modules en échec, plus de {REPLAY_MAX} : "
+              "sans doute un changement de sens, pas la charge)")
+        return {}
+    verdicts = {}
+    for f in files:
+        ok, lines, _ = run_ui([f], args.name, jobs=1)
+        verdicts[f] = "intermittent : vert seul" if ok else "reproductible"
+        print(f"Rejeu seul : {f} : {verdicts[f]} ({lines[-2].split(' fichier(s), ', 1)[-1]})")
+    for module in modules:
+        ok, lines, _ = run_bench(f"{module}.py")
+        verdicts[module] = "intermittent : vert seul" if ok else "reproductible"
+        print(f"Rejeu seul : {module}.py : {verdicts[module]} ({lines[-3].split(' : ', 1)[-1]})")
+    for name, key in (("Interface", lambda f: f), ("Banc", lambda f: f.split(".")[0])):
+        if name in failed:
+            failed[name] = [f"{f} ({verdicts[key(f)]})" if key(f) in verdicts else f for f in failed[name]]
+    return verdicts
+
+
+def failure_log_path():
+    """Journal persistant des tests rouges (FAILURE_LOG), dans le dossier temporaire du système."""
+    return os.path.join(tempfile.gettempdir(), FAILURE_LOG)
+
+
+def log_failures(info, verdicts):
+    """Tests rouges du passage (RED) ajoutés au journal persistant (FAILURE_LOG, dossier temporaire du système,
+    commun aux worktrees) : date, worktree, fichier, test, verdict du rejeu, charge ; FAILURE_LOG_KEPT lignes au
+    plus."""
+    path = failure_log_path()
+    when = time.strftime("%Y-%m-%d %H:%M:%S")
+    rows = [{"date": when, "dossier": os.path.basename(ROOT), "fichier": f, "test": t, "rejeu": verdicts.get(f),
+             **info} for f, titles in RED["ui"].items() for t in (titles or [None])]
+    rows += [{"date": when, "dossier": os.path.basename(ROOT), "fichier": f"tests/{m}.py", "test": t,
+              "rejeu": verdicts.get(m), **info} for m, names in RED["bench"].items() for t in (names or [None])]
+    if not rows:
+        return
+    try:
+        with open(path, encoding="utf-8") as f:
+            old = f.read().splitlines()
+    except OSError:
+        old = []
+    lines = (old + [json.dumps(r, ensure_ascii=False) for r in rows])[-FAILURE_LOG_KEPT:]
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    os.replace(tmp, path)
+    print(f"Journal des échecs : {path} ({len(rows)} ligne(s) ajoutée(s))")
+
+
+def run_checks(args, state=None, green=None):
     """Contrôles statiques, puis banc et interface s'ils passent : ({contrôle : fautes} des contrôles en échec, lignes
-    de résultat à citer : « Ran N tests … », verdict du banc, totaux de l'interface)."""
+    de résultat à citer : « Ran N tests … », verdict du banc, totaux de l'interface). state : tree_state (calculé
+    sinon) ; green : dernier contrôle vert quand seuls des .md ont changé depuis (md_only) : seules les lignes, les
+    règles et le test du dépôt public tournent. Le banc entier est sauté quand les .py sont ceux du dernier banc vert
+    (bench_record ; jamais en CI ni avec --force). Une faute du banc ou de l'interface est rejouée seule (replay)."""
+    state = state or tree_state()
     base = merge_base()
     failed = {}
-    for name, check in (("Python", check_python), ("JavaScript", check_js),
-                        ("Lignes", lambda: check_line_length(base)), ("Règles", lambda: check_rules(base))):
+    statics = (("Python", check_python), ("JavaScript", check_js),
+               ("Lignes", lambda: check_line_length(base)), ("Règles", lambda: check_rules(base)))
+    for name, check in statics[2:] if green else statics:
         faults = check()
         if faults:
             failed[name] = faults
     if failed:
         print("Banc et interface : pas lancés (contrôles ci-dessus en échec : les corriger d'abord)")
         return failed, []
+    if green:
+        print(f"Banc et interface : pas relancés : seuls des .md ont changé depuis le contrôle vert du {green['when']}"
+              " (mêmes options ; --force les relance) ; seul le test du dépôt public tourne")
+        ok, lines, faults = run_bench("test_public_repo.py")
+        print("\n".join(lines))
+        if not ok:
+            return {"Banc": faults}, []
+        return failed, [l for l in lines if CITED_RE.match(l)] + list(green.get("cited", []))
     if args.ui is not None and args.name:
+        titles = ui_titles(ui_files(args.ui))
         try:
-            found = any(re.search(args.name, t) for t in ui_titles(ui_files(args.ui)))
+            found = any(re.search(args.name, t) for t in titles)
         except re.error:                           # syntaxe propre à JavaScript : node jugera le motif
             found = True
         if not found:
             print(f"Interface : aucun test ne correspond au motif « {args.name} » : rien n'est lancé")
+            near = close_titles(args.name, titles)
+            if near:
+                print("  titres proches :\n" + "\n".join(f"    {t}" for t in near))
             return {"Interface": [f"motif « {args.name} » sans test"]}, []
-    jobs = []                                         # banc et interface : en parallèle (bancs indépendants)
+    jobs, cited = [], []                              # banc et interface : en parallèle (bancs indépendants)
+    bench_green = read_json(bench_record(journal_path())) or {}
     if args.no_bench:
         pass
     elif args.quick and not py_changed(ticket_base()):
         print("Banc : sauté (--quick, aucun .py changé depuis le dernier commit) ; seul le test du dépôt public tourne")
         jobs.append(("Banc", lambda: run_bench("test_public_repo.py")))
+    elif state and not args.force and not in_ci() and bench_green.get("py") == state["py"]:
+        print(f"Banc : sauté (mêmes .py que le banc vert du {bench_green['when']} ; --force le relance) ; seul le test "
+              "du dépôt public tourne")
+        jobs.append(("Banc", lambda: run_bench("test_public_repo.py")))
+        cited.append(f"Banc (vert du {bench_green['when']}, mêmes .py) : {bench_green['ran']}")
     else:
         jobs.append(("Banc", run_bench))
     if args.ui is not None:                           # banc ou plusieurs Chrome en même temps : attentes allongées
         wait = UI_WAIT_LOADED if jobs or min(UI_JOBS, len(ui_files(args.ui))) > 1 else None
         jobs.append(("Interface", lambda: run_ui(args.ui, args.name, wait, repeat=args.repeat)))
-    cited = []
+    RED["ui"].clear(), RED["bench"].clear(), CAPPED_FILES.clear()
+    info = load_info()
+    print(f"Charge au départ : {load_line(info)}")
     with concurrent.futures.ThreadPoolExecutor(max(len(jobs), 1)) as pool:
-        futures = [(name, pool.submit(job)) for name, job in jobs]
-        for name, future in futures:
+        futures = [(name, job, pool.submit(job)) for name, job in jobs]
+        for name, job, future in futures:
             ok, lines, faults = future.result()
             print("\n".join(lines))
             cited += [l for l in lines if CITED_RE.match(l)]
             if not ok:
                 failed[name] = faults
+            elif name == "Banc" and job is run_bench and state:   # banc entier vert : ses .py sont retenus
+                ran = next((l.split(" : ", 1)[1] for l in lines if l.startswith("Banc : Ran ")), None)
+                if ran:
+                    write_json(bench_record(journal_path()), {"py": state["py"], "ran": ran,
+                                                              "when": time.strftime("%d/%m/%Y %H:%M")})
+    if failed.get("Interface") or failed.get("Banc"):
+        print(f"Charge à la fin : {load_line(load_info())}")
+        verdicts = replay(failed, args)
+        log_failures(info, verdicts)
+    write_red()
     sensitive_notice(ticket_base())
+    return failed, cited
+
+
+def close_titles(pattern, titles, n=8):
+    """Titres de tests proches d'un motif sans test : ceux qui contiennent un de ses mots (sans la casse), puis les
+    plus ressemblants (difflib)."""
+    words = re.findall(r"\w{4,}", pattern.lower())
+    near = [t for t in titles if any(w in t.lower() for w in words)]
+    near += difflib.get_close_matches(pattern, titles, n=n, cutoff=0.3)
+    return list(dict.fromkeys(near))[:n]
+
+
+def write_red():
+    """Tests rouges du passage (RED) écrits pour --failed (red_record) ; aucun : le fichier est retiré."""
+    path = red_record(journal_path())
+    if RED["ui"] or RED["bench"]:
+        write_json(path, {"when": time.strftime("%d/%m/%Y %H:%M"), **RED})
+    else:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+
+def run_failed(args):
+    """--failed : rejoue seuls les tests rouges du dernier passage (red_record : ses titres, ou tout un fichier qui
+    a échoué hors d'un test), sans contrôles statiques ; le passage ne compte pas pour « déjà vert », et ses propres
+    rouges remplacent la liste. Même retour que run_checks."""
+    red = read_json(red_record(journal_path()))
+    if not red or not (red.get("ui") or red.get("bench")):
+        print("--failed : aucun test rouge noté au dernier passage : rien à rejouer")
+        return {}, []
+    print(f"--failed : tests rouges du passage du {red['when']}")
+    RED["ui"].clear(), RED["bench"].clear(), CAPPED_FILES.clear()
+    failed, cited = {}, []
+    for module, names in red.get("bench", {}).items():
+        ok, lines, faults = run_bench(f"{module}.py", names or ())
+        print("\n".join(lines))
+        cited += [l for l in lines if CITED_RE.match(l)]
+        if not ok:
+            failed.setdefault("Banc", []).extend(faults)
+    for f, titles in red.get("ui", {}).items():
+        name = "^(?:" + "|".join(re.escape(t) for t in titles) + ")$" if titles else None
+        ok, lines, faults = run_ui([f], name, jobs=1)
+        print("\n".join(lines))
+        cited += [l for l in lines if CITED_RE.match(l)]
+        if not ok:
+            failed.setdefault("Interface", []).extend(faults)
+    write_red()
     return failed, cited
 
 
@@ -883,7 +1252,10 @@ def parse_args(argv=None):
     ap.add_argument("--repeat", type=int, default=1, metavar="N", help="avec --ui : passer N fois chaque fichier "
                     "d'interface (échec intermittent)")
     ap.add_argument("--force", action="store_true",
-                    help="relancer même si un contrôle identique est déjà vert sur cet état de l'arbre")
+                    help="relancer même si un contrôle identique est déjà vert sur cet état de l'arbre, ou si seuls "
+                    "des .md ont changé, et lancer le banc entier même sur les .py du dernier banc vert")
+    ap.add_argument("--failed", action="store_true", help="rejouer seuls les tests rouges du dernier passage (banc et "
+                    "interface), sans les contrôles statiques")
     ap.add_argument("--lines", action="store_true",
                     help=f"seulement la longueur des lignes ajoutées depuis la base ({LINE_MAX} caractères)")
     ap.add_argument("--cached", action="store_true", help="avec --lines : juger l'index (hook avant commit)")
@@ -931,18 +1303,20 @@ def main(argv=None):
         return 1 if check_line_length(merge_base(), cached=args.cached) else 0
     reexec_in_venv()
     path, screen = journal_path(), sys.stdout
-    key = state_key(args)
-    shown = None if args.force else already_green(green_record(path), key)
+    state = None if args.failed else tree_state()
+    key = state_key(args, state) if state else None
+    shown = None if args.force or args.failed else already_green(green_record(path), key)
     if shown:
         print("\n".join(shown[:-1]))
         sensitive_notice(ticket_base())                # l'avis n'est pas gardé : refait (rapide)
         print(shown[-1])
         return 0
+    green = None if args.failed else md_only(args, state, read_json(green_record(path)))
     kept = None
     with open(path, "w", encoding="utf-8") as log:
         sys.stdout = tee = Tee(screen, log)
         try:
-            failed, cited = run_checks(args)
+            failed, cited = run_failed(args) if args.failed else run_checks(args, state, green)
             if tee.hidden:
                 print(f"({tee.hidden} ligne(s) de pile Node masquée(s) : dans le journal)")
             print(f"Journal complet : {path}")
@@ -956,10 +1330,10 @@ def main(argv=None):
             os.remove(green_record(path))
         except FileNotFoundError:
             pass
-    elif key:
-        with open(green_record(path), "w", encoding="utf-8") as f:
-            json.dump({"key": key, "when": time.strftime("%d/%m/%Y %H:%M"), "cited": cited,
-                       "lines": [f"Journal du passage : {path}"]}, f)
+    elif key:                                         # (un passage --failed, partiel, n'a pas de clé)
+        write_json(green_record(path), {"key": key, "code": state["code"], "options": run_options(args),
+                                        "when": time.strftime("%d/%m/%Y %H:%M"),
+                                        "cited": cited, "lines": [f"Journal du passage : {path}"]})
     return 1 if failed else 0
 
 

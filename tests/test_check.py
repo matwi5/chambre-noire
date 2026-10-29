@@ -144,11 +144,39 @@ class LinesTest(RepoCase):
         r = hook(os.path.join(self.root, "a.py"))
         self.assertEqual(r.returncode, 2, r.stderr)           # code 2 : Claude Code montre stderr
         self.assertIn("a.py:2 (121 caractères)", r.stderr)
-        self.assertIn("--lines --fix", r.stderr)
+        self.assertIn("à recouper à la main", r.stderr)
         r = hook(os.path.join(self.root, "b.md"))             # autre fichier, sans faute : rien
         self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
         r = hook(os.path.join(self.tmp.name, "hors-du-depot.py"))
         self.assertEqual((r.returncode, r.stderr), (0, ""))
+
+    def test_after_a_bash_command_the_hook_recuts_prose_and_names_long_code(self):
+        """Une écriture par Bash (heredoc, script : pas de file_path) : le hook juge les fichiers changés depuis le
+        dernier commit, recoupe seul la prose trop longue et signale le code trop long."""
+        self.install_check()
+        hook = lambda: subprocess.run([sys.executable, os.path.join(self.root, "tests", "check.py"), "--hook"],
+                                      input=json.dumps({"tool_name": "Bash", "cwd": self.root,
+                                                        "tool_input": {"command": "cat > notes.md <<'EOF' …"}}),
+                                      capture_output=True, text=True, cwd=self.tmp.name)
+        r = hook()
+        self.assertEqual((r.returncode, r.stderr), (0, ""), "rien de changé : rien")
+        prose = " ".join(["mot"] * 40)                    # 159 caractères, coupables entre les mots
+        self.write("notes.md", "Titre\n\n" + prose + "\n")
+        self.write("code.py", "x = '" + "y" * 130 + "'\n")
+        r = hook()
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("notes.md : 1 ligne(s) recoupée(s)", r.stderr)
+        self.assertIn("à relire avant de l'éditer", r.stderr)
+        self.assertIn("code.py:1 (136 caractères)", r.stderr)
+        with open(os.path.join(self.root, "notes.md"), encoding="utf-8") as f:
+            text = f.read()
+        self.assertEqual(text.split(), ("Titre\n\n" + prose).split(), "rien de perdu")
+        lines = text.splitlines()
+        self.assertGreater(len(lines), 3, "la ligne est coupée")
+        self.assertTrue(all(len(line) <= check.LINE_MAX for line in lines))
+        self.write("code.py", "x = 1\n")
+        r = hook()
+        self.assertEqual((r.returncode, r.stderr), (0, ""), "tout recoupé ou corrigé : plus rien")
 
     def test_the_hook_refuses_a_commit_that_adds_a_long_line(self):
         self.install_check()
@@ -208,7 +236,8 @@ class UiNameTest(unittest.TestCase):
         args = check.parse_args(["--ui", "tests/ui/smoke.test.mjs", "--name", "Révéler"])   # vise un test : lancé
         with mock.patch.object(check, "run_ui", return_value=(True, [], [])) as ui, \
                 mock.patch.object(check, "run_bench", return_value=(True, [], [])), \
-                mock.patch.object(check, "sensitive_notice"), contextlib.redirect_stdout(io.StringIO()):
+                mock.patch.object(check, "sensitive_notice"), mock.patch.object(check, "write_red"), \
+                contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(check.run_checks(args)[0], {})
         ui.assert_called_once()
 
@@ -259,6 +288,165 @@ class UiRepeatTest(unittest.TestCase):
             ok, lines, _ = check.run_ui(["a.test.mjs"], jobs=1)
         self.assertTrue(ok)
         self.assertIn("Interface : a.test.mjs : 3 tests, 0 en échec, 1 à faire", "\n".join(lines))
+
+
+RED_OUT = "✔ un vert (1.2ms)\n✖ un rouge (2.5ms)\nℹ tests 2\nℹ pass 1\nℹ fail 1"
+GREEN_OUT = "✔ un vert (1.2ms)\n✔ un rouge (2.5ms)\nℹ tests 2\nℹ pass 2\nℹ fail 0"
+BENCH_OK = (True, ["Banc : Ran 3 tests in 0.1s", "Banc : OK", "Banc : durée 1 s"], [])
+STATE = {"tree": "arbre", "py": "py-1", "code": "code-1"}
+
+
+class StaticsMocked(RepoCase):
+    """Contrôles statiques remplacés (verts), journal et journal des échecs dans le dossier temporaire du test, hors
+    de la CI (où rien ne se saute)."""
+    def setUp(self):
+        super().setUp()
+        self.journal = os.path.join(self.tmp.name, "journal.log")
+        for target, value in (("journal_path", self.journal), ("in_ci", False), ("reexec_in_venv", None),
+                              ("failure_log_path", os.path.join(self.tmp.name, "echecs.jsonl")),
+                              ("sensitive_notice", None)):
+            p = mock.patch.object(check, target, return_value=value)
+            p.start()
+            self.addCleanup(p.stop)
+        self.statics = {}
+        for name in ("check_python", "check_js", "check_line_length", "check_rules"):
+            p = mock.patch.object(check, name, return_value=[])
+            self.statics[name] = p.start()
+            self.addCleanup(p.stop)
+
+    def run_checks(self, *argv, state=STATE, ui=(), bench=(BENCH_OK,)):
+        """run_checks avec argv ; ui : sorties (texte, code) de run_ui_file dans l'ordre, bench : retours de
+        run_bench ; (fautes, sortie, appels de run_bench, drapeaux de chaque run_ui_file)."""
+        outputs, flags = iter(ui), []
+
+        def fake_file(f, given, env):
+            flags.append(given)
+            return next(outputs)
+        with mock.patch.object(check, "run_ui_file", fake_file), \
+                mock.patch.object(check, "run_bench", side_effect=list(bench)) as run_bench, \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            failed, _ = check.run_checks(check.parse_args(list(argv)), state)
+        return failed, out.getvalue(), run_bench.call_args_list, flags
+
+
+class ReplayTest(StaticsMocked):
+    """Un fichier d'interface ou un module du banc en échec est rejoué seul, une fois : « intermittent : vert seul » ou
+    « reproductible » dans la dernière ligne ; le journal dit la charge, et chaque test rouge va au journal des
+    échecs ; --failed rejoue les seuls tests rouges du dernier passage."""
+    UI = ("--no-bench", "--ui", "tests/ui/a.test.mjs")
+
+    def test_a_red_file_green_alone_is_intermittent(self):
+        failed, out, _, flags = self.run_checks(*self.UI, ui=[(RED_OUT, 1), (GREEN_OUT, 0)])
+        self.assertEqual(failed, {"Interface": ["tests/ui/a.test.mjs (intermittent : vert seul)"]})
+        self.assertEqual(len(flags), 2, "rejoué une fois")
+        self.assertIn("Rejeu seul : tests/ui/a.test.mjs : intermittent : vert seul", out)
+        self.assertIn("Charge au départ : charge moyenne ", out)
+        self.assertIn("Chrome sans écran hors de ce contrôle ; QWEN_UI_JOBS", out)
+        self.assertIn("intermittent : vert seul", check.summary(failed))
+        with open(os.path.join(self.tmp.name, "echecs.jsonl"), encoding="utf-8") as f:
+            row = json.loads(f.read().splitlines()[-1])
+        self.assertEqual((row["fichier"], row["test"], row["rejeu"]),
+                         ("tests/ui/a.test.mjs", "un rouge", "intermittent : vert seul"))
+        self.assertIn("load", row)
+
+    def test_a_red_file_red_alone_is_reproducible_and_failed_replays_its_tests(self):
+        failed, _, _, _ = self.run_checks(*self.UI, ui=[(RED_OUT, 1), (RED_OUT, 1)])
+        self.assertEqual(failed, {"Interface": ["tests/ui/a.test.mjs (reproductible)"]})
+        with mock.patch.object(check, "run_ui_file", return_value=(GREEN_OUT, 0)) as run_file, \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            failed, _ = check.run_failed(check.parse_args(["--failed"]))
+        self.assertEqual(failed, {}, out.getvalue())
+        self.assertEqual(run_file.call_args.args[0], "tests/ui/a.test.mjs")
+        self.assertIn("--test-name-pattern=^(?:un\\ rouge)$", run_file.call_args.args[1])
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            check.run_failed(check.parse_args(["--failed"]))
+        self.assertIn("rien à rejouer", out.getvalue(), "tout est revenu vert : plus rien de rouge")
+
+    def test_a_red_bench_module_is_replayed_alone(self):
+        red = (False, ["FAIL: test_y (test_x.C.test_y)", "Banc : Ran 3 tests in 0.1s", "Banc : FAILED (failures=1)",
+                       "Banc : durée 1 s"], ["test_x.C.test_y"])
+        ok = (True, ["Banc (test_x.py) : Ran 1 test in 0.1s", "Banc (test_x.py) : OK", "Banc (test_x.py) : durée 1 s"],
+              [])
+        failed, out, calls, _ = self.run_checks("--force", bench=[red, ok])
+        self.assertEqual(calls[1].args, ("test_x.py",))
+        self.assertEqual(failed, {"Banc": ["test_x.C.test_y (intermittent : vert seul)"]})
+        self.assertIn("Rejeu seul : test_x.py : intermittent : vert seul (Ran 1 test in 0.1s)", out)
+
+    def test_many_red_files_are_not_replayed(self):
+        files = [f"tests/ui/{c}.test.mjs" for c in "abcd"]
+        failed, out, _, flags = self.run_checks("--no-bench", "--ui", *files, ui=[(RED_OUT, 1)] * 4)
+        self.assertEqual(len(flags), 4, "aucun rejeu")
+        self.assertEqual(failed["Interface"], files)
+        self.assertIn("pas de rejeu (4 fichiers ou modules en échec", out)
+
+
+class BenchSkipTest(StaticsMocked):
+    """Le banc entier est sauté quand les .py sont ceux du dernier banc vert (décision du 29/10/2026) : seul le test
+    du dépôt public tourne, et la ligne « Ran N tests » de ce banc est citée ; --force et la CI le relancent ; seuls
+    des .md changés depuis le dernier contrôle vert : ni banc ni interface."""
+    def test_the_bench_runs_again_only_on_other_py_files(self):
+        _, _, calls, _ = self.run_checks()
+        self.assertEqual(calls[0].args, (), "premier banc : entier")
+        _, out, calls, _ = self.run_checks()
+        self.assertEqual(calls[0].args, ("test_public_repo.py",), out)
+        self.assertIn("mêmes .py que le banc vert du ", out)
+        with mock.patch.object(check, "run_bench", return_value=BENCH_OK), \
+                contextlib.redirect_stdout(io.StringIO()):
+            _, cited = check.run_checks(check.parse_args([]), STATE)
+        self.assertTrue(any(c.endswith(", mêmes .py) : Ran 3 tests in 0.1s") for c in cited), cited)
+        self.assertEqual(self.run_checks(state=dict(STATE, py="py-2"))[2][0].args, (), "autres .py : entier")
+        self.assertEqual(self.run_checks("--force", state=dict(STATE, py="py-2"))[2][0].args, (), "--force")
+        with mock.patch.object(check, "in_ci", return_value=True):
+            self.assertEqual(self.run_checks(state=dict(STATE, py="py-2"))[2][0].args, (), "en CI : entier")
+        red = (False, ["Banc : Ran 3 tests in 0.1s", "Banc : FAILED (failures=1)", "Banc : durée 1 s"], ["banc"])
+        self.run_checks("--force", state=dict(STATE, py="py-3"), bench=[red])
+        self.assertEqual(self.run_checks(state=dict(STATE, py="py-3"))[2][0].args, (), "un banc rouge ne compte pas")
+
+    def test_markdown_only_changes_run_lines_and_rules_only(self):
+        self.write("a.py", "x = 1\n")
+        self.write("notes.md", "Notes.\n")
+        sh(self.root, "git", "add", ".")
+        sh(self.root, "git", *GIT_USER, "commit", "-q", "-m", "code")
+
+        def main(*argv):
+            with mock.patch.object(check, "run_bench", side_effect=[BENCH_OK, BENCH_OK]) as run_bench, \
+                    contextlib.redirect_stdout(io.StringIO()) as out:
+                code = check.main(list(argv))
+            return code, out.getvalue(), run_bench.call_args_list
+        self.assertEqual(main()[0], 0)
+        self.statics["check_python"].reset_mock()
+        self.write("notes.md", "Notes changées.\n")
+        code, out, calls = main()
+        self.assertEqual(code, 0, out)
+        self.assertIn("seuls des .md ont changé depuis le contrôle vert du ", out)
+        self.assertEqual([c.args for c in calls], [("test_public_repo.py",)])
+        self.statics["check_python"].assert_not_called()
+        self.statics["check_rules"].assert_called()
+        self.assertIn("Banc : Ran 3 tests in 0.1s", out.strip().splitlines()[-1], "lignes du contrôle vert citées")
+        self.write("a.py", "x = 2\n")                        # du code changé : tout repasse
+        _, out, calls = main()
+        self.assertNotIn("seuls des .md", out)
+        self.statics["check_python"].assert_called()
+
+
+class FailCapTest(unittest.TestCase):
+    """Un fichier d'interface s'arrête à UI_FAIL_CAP tests en échec : la cascade d'un changement de sens ne coûte plus
+    30 s par test ; sa ligne le dit, avec ce qui a tourné."""
+    def test_a_file_stops_at_the_cap(self):
+        with tempfile.TemporaryDirectory(prefix="qwen-check-test-") as tmp:
+            path = os.path.join(tmp, "cascade.test.mjs")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("import { test } from 'node:test';\nimport assert from 'node:assert/strict';\n"
+                        "test('vert 1', () => {});\ntest('vert 2', () => {});\n"
+                        + "".join(f"test('rouge {k}', () => assert.equal({k}, 0));\n" for k in range(1, 9)))
+            with mock.patch.object(check, "UI_FAIL_CAP", 3):
+                ok, lines, faults = check.run_ui([path], jobs=1)
+        self.assertFalse(ok)
+        self.assertEqual(faults, [path])
+        text = "\n".join(lines)
+        self.assertIn("fichier arrêté après 3 échecs", text)
+        self.assertNotIn("rouge 4", text, "arrêté au troisième")
+        self.assertIn(f"Interface : {path} : 5 tests, 3 en échec, arrêté au plafond de 3 échecs", text)
 
 
 class NoticeBaseTest(RepoCase):
@@ -331,7 +519,8 @@ class QuickTest(RepoCase):
                 mock.patch.object(check, "check_line_length", return_value=[]), \
                 mock.patch.object(check, "check_rules", return_value=[]), \
                 mock.patch.object(check, "run_bench", return_value=(True, [], [])) as bench, \
-                mock.patch.object(check, "sensitive_notice"), contextlib.redirect_stdout(io.StringIO()):
+                mock.patch.object(check, "sensitive_notice"), mock.patch.object(check, "write_red"), \
+                contextlib.redirect_stdout(io.StringIO()):
             check.run_checks(args)
         bench.assert_called_once()
         return bench.call_args.args[0] if bench.call_args.args else None
@@ -412,7 +601,7 @@ class MainTest(RepoCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def fake_checks(self, args):
+    def fake_checks(self, args, *_):
         self.runs += 1
         print(self.printed)
         return self.failed, self.CITED
