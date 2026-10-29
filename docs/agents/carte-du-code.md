@@ -329,7 +329,8 @@ dernier bloc, après le HTML.
     `beforeHeld`, ni sur une image pas `posed`). Garder et Jeter visent
     une image par `pileKey` (nom, identifiant d'une privée), jamais par l'objet affiché.
   - « notifications » : `pushSubscribe`, `askNotifications`.
-  - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts` (ouverte par le
+  - « prompts enregistrés » (rien pendant « Sortir », `exiting()`) : `promptsApi` (routes de l'espace affiché),
+    `prompts`, `openPrompts` (ouverte par le
     bouton, filtre `promptUsage` sur la catégorie de la saisie, `inputKind`), `renderPrompts`, `usePrompt`,
     `savePrompt`.
   - « galerie et visionneuse » : `histItems`, `vList` (ce que parcourt la visionneuse : les Tirages ou la pile),

@@ -266,3 +266,50 @@ test('boutons de tri marqués data-sort : Entrée répétée n\'en active aucun,
     await page.eval(`$('futureSort').remove()`);
     page.assertNoErrors();
   });
+
+// Comment les boutons qui trient sont trouvés : par leurs écouteurs de clic (DOMDebugger.getEventListeners de Chrome,
+// sur chaque bouton de la page, attributs onclick compris), dont la source (Debugger.getScriptSource : 300 caractères
+// du script à partir de la position de l'écouteur, sur plusieurs lignes) appelle une fonction de tri (sortTop,
+// sortFromViewer, keepItem, discardItem, sendSort), jusqu'à l'instruction de premier niveau suivante ; une liste écrite
+// à la main laisserait passer un bouton nouveau.
+// Ne sont pas vus : un tri appelé par une fonction intermédiaire d'un autre nom, ou délégué à un ancêtre (un
+// écouteur sur la pile qui lirait le bouton touché) : le dire ici s'il en vient un. La liste des boutons est prise
+// une fois (un rendu pendant la boucle ne la décale pas).
+test('chaque bouton qui trie (Garder ou Jeter, pile et visionneuse) porte data-sort', async () => {
+  const sorting = [], scripts = new Map(), starts = new Map();
+  // début de chaque script dans le document (un bloc <script> : sa ligne et sa colonne dans index.html ; un attribut
+  // onclick : son propre texte) : la position d'un écouteur est comptée dans le document
+  page.on('Debugger.scriptParsed', p => starts.set(p.scriptId, [p.startLine, p.startColumn]));
+  await page.send('Debugger.enable');
+  const source = async l => {
+    if (!scripts.has(l.scriptId)) {
+      scripts.set(l.scriptId, (await page.send('Debugger.getScriptSource', { scriptId: l.scriptId })).scriptSource);
+    }
+    const [line0, col0] = starts.get(l.scriptId) || [0, 0];
+    const lines = scripts.get(l.scriptId).split('\n'), k = l.lineNumber - line0;
+    const col = l.lineNumber === line0 ? l.columnNumber - col0 : l.columnNumber;
+    const at = lines.slice(0, Math.max(0, k)).reduce((n, x) => n + x.length + 1, 0) + Math.max(0, col);
+    // (jusqu'à l'instruction de premier niveau suivante)
+    const text = scripts.get(l.scriptId).slice(at, at + 300), next = text.search(/\n\S/);
+    return next > 0 ? text.slice(0, next) : text;
+  };
+  const { result: list } = await page.send('Runtime.evaluate',
+    { expression: `[...document.querySelectorAll('button')]` });
+  const { result: items } = await page.send('Runtime.getProperties', { objectId: list.objectId, ownProperties: true });
+  const buttons = items.filter(p => /^\d+$/.test(p.name)).map(p => p.value.objectId);
+  assert.ok(buttons.length > 20, 'boutons de la page');
+  for (const objectId of buttons) {
+    const { listeners } = await page.send('DOMDebugger.getEventListeners', { objectId });
+    const sources = await Promise.all(listeners.filter(l => l.type === 'click').map(source));
+    if (sources.some(src => /\b(?:sortTop|sortFromViewer|keepItem|discardItem|sendSort)\s*\(/.test(src))) {
+      const { result } = await page.send('Runtime.callFunctionOn', { objectId, returnByValue: true,
+        functionDeclaration: `function () { return { name: this.id || this.textContent.trim(),
+          marked: this.hasAttribute('data-sort') }; }` });
+      sorting.push(result.value);
+    }
+  }
+  await page.send('Debugger.disable');
+  assert.equal(sorting.length, 4, `boutons qui trient : ${JSON.stringify(sorting)}`);
+  assert.deepEqual(sorting.filter(b => !b.marked), [], 'bouton qui trie sans data-sort');
+  page.assertNoErrors();
+});
