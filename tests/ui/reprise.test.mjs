@@ -54,7 +54,7 @@ test('rechargement : un lot repris montre le prompt complet et « Reprendre » r
   bench.release('lot');
   await page.waitFor(`pileView().filter(it => it.page && it.page.prompt === ${JSON.stringify(LONG)}).length === 2`,
     { what: 'lot terminé dans la pile', timeout: 30000 });
-  assert.equal(await page.eval(`$('pile').querySelector('[data-k="0"] .pprompt').textContent`), LONG, 'prompt du lot');
+  assert.equal(await page.topPrompt(), LONG, 'prompt du lot');
 
   await page.click('#pile [data-k="0"] [data-open]');   // visionneuse depuis la pile, puis « Reprendre »
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });

@@ -623,7 +623,6 @@ test('espaces : fermée par le Mac, la saisie privée attend le retour dans la p
   page.assertNoErrors();
 });
 
-// messages affichés depuis l'appel (chaque texte posé dans #toastBox, même remplacé aussitôt par un autre)
 const CLOSED = 'Espace privé fermé : retour dans l\'espace public';
 
 test('espaces : fermé sans « Sortir », le champ perd le curseur et un message dit le retour dans l\'espace public', async () => {

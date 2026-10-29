@@ -180,6 +180,35 @@ test('page.privateIdle : une vignette privée différée jamais chargée ne la r
     page.assertNoErrors();
   });
 
+test('page.close dans l\'espace privé : la vignette différée d\'une page restée derrière part avant le verrouillage',
+  async () => {
+    await page.enterPrivate('code-du-pilote');
+    await page.made('zp4 secrete', { shown: false });
+    const thumb = await page.eval(`thumbOf(pileItems.find(it => it.private))`);
+    const other = await chrome.phonePage();          // au premier plan : page passe derrière
+    let closed = false;
+    try {
+      await other.goto(bench.url + '/');
+      await other.waitFor(`inPrivate() && pileRead`, { what: 'autre page dans l\'espace' });
+      await page.waitFor(`document.hidden`, { what: 'page derrière l\'autre onglet' });
+      // vignette différée à l'écran de la page cachée : elle ne demandera son image qu'une fois la page devant
+      await page.eval(`(() => { const im = document.createElement('img'); im.id = 'zpLate'; im.loading = 'lazy';
+        im.style.cssText = 'position:fixed;left:0;top:0;width:40px;height:40px;z-index:90';
+        im.src = ${JSON.stringify(thumb + '&zp=late')}; document.body.append(im); })()`);
+      await other.close();
+      closed = true;
+    } finally {
+      if (!closed) await other.close();
+    }
+    await page.lockedOnMac();
+    await page.waitFor(`$('zpLate').complete`, { what: 'vignette différée arrivée' });
+    assert.equal(await page.eval(`$('zpLate').naturalWidth > 0`), true, 'vignette différée refusée (403)');
+    await page.eval(`$('zpLate').remove()`);
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`!inPrivate()`, { what: 'page sortie de l\'espace' });
+    page.assertNoErrors();
+  });
+
 // ce que la page voit de sa vue : largeur, pointeur principal, survol et tactile
 const SEEN = `({ width: innerWidth, height: innerHeight, coarse: matchMedia('(pointer: coarse)').matches,
   hover: matchMedia('(hover: hover)').matches, touch: navigator.maxTouchPoints > 0 })`;

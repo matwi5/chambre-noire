@@ -1520,7 +1520,8 @@ const afterBack = (act, state) => page.eval(`(async () => { const t0 = Date.now(
   while (zqBack == null) {
     if (Date.now() - t0 > 20000) throw new Error('page jamais revenue au premier plan');
     await new Promise(r => setTimeout(r, 5)); }   // règle levée : sondage serré, l'instant du retour compte
-  await new Promise(r => setTimeout(r, Math.max(0, 120 - (performance.now() - zqBack))));   // règle levée
+  // règle levée : geste 0,12 s après le retour, avant SORT_GAP
+  await new Promise(r => setTimeout(r, Math.max(0, 120 - (performance.now() - zqBack))));
   const late = Math.round(performance.now() - zqBack); ${act};
   await new Promise(r => setTimeout(r, 300));      // règle levée : au-delà de l'envol (0,22 s)
   return [late < SORT_GAP, ${state}]; })()`);

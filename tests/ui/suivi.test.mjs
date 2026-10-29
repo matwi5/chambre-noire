@@ -23,7 +23,6 @@ after(async () => {
 const CODE = 'code-du-banc-1';
 const post = (page, url, body = {}) =>
   page.eval(`postJson(${JSON.stringify(url)}, ${JSON.stringify(body)}).then(r => r.status)`);
-// toasts affichés depuis l'appel (comme saisie.test.mjs)
 // faux échec : un message « Échec… » (sur les Tirages), ou une génération gardée en échec par la page (sur le Labo, qui
 // ne montre pas de message)
 const failures = page => page.eval(`[...seenToasts.filter(t => t.startsWith('Échec')),
