@@ -782,11 +782,42 @@ def function_spans(path, text, name):
         if found != name:
             continue
         line = lines[k - 1]
-        at = next((pos for n, pos in _js_decls(line) if n == name), 0)   # second nom d'un const a = …, b = …
-        brace = line.find("{", at)
-        end = _js_block_end(text, offsets[k - 1] + brace) if brace >= 0 else None
+        at = next((pos for n, pos in _js_decls(line) if n == name), None)   # second nom d'un const a = …, b = …
+        if at is None:
+            at = line.find(name)
+        brace = _body_brace(text, offsets[k - 1] + max(at, 0))
+        end = _js_block_end(text, brace) if brace is not None else None
         spans.append((k, text.count("\n", 0, end) + 1 if end is not None else k))
     return spans
+
+
+def _body_brace(text, start):
+    """Position de l'accolade qui ouvre le corps de la déclaration nommée en start : la première hors des
+    parenthèses des paramètres (une déstructuration { a } = {} y reste), des chaînes, des gabarits `…${…}…` et des
+    commentaires ; None si la déclaration finit avant (« ; », ou fin de ligne hors des parenthèses)."""
+    depth, i, n = 0, start, len(text)
+    while i < n:
+        c = text[i]
+        if c in "'\"`":
+            i += 1
+            while i < n and text[i] != c and not (c != "`" and text[i] == "\n"):
+                i += 2 if text[i] == "\\" else 1
+        elif text.startswith("//", i):
+            i = text.find("\n", i)
+            if i < 0:
+                return None
+            if depth == 0:
+                return None
+        elif c in "([":
+            depth += 1
+        elif c in ")]":
+            depth -= 1
+        elif c == "{" and depth == 0:
+            return i
+        elif c in ";\n" and depth == 0:
+            return None
+        i += 1
+    return None
 
 
 JS_KEYWORDS = {"if", "for", "while", "switch", "catch", "function", "return", "with"}

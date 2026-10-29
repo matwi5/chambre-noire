@@ -143,6 +143,12 @@ class MapTest(unittest.TestCase):
               "      if (x) {\n      }\n    },\n  };\n"
         self.assertEqual([n for _, n in rules.code_index("d.mjs", mjs)], ["TOP", "waitUntil", "keepPile"])
         self.assertEqual(rules.function_spans("d.mjs", mjs, "keepPile"), [(5, 8)])
+        # paramètres déstructurés, sur plusieurs lignes, défaut en gabarit : le corps, pas la seule signature
+        params = "    async sort(a, { b = 1 } = {}) {\n      x();\n    },\nfunction f(x, {y}={},\n  z = `x ${y}`) {\n" \
+                 "  return 1;\n}\nconst g = (u, { v } = {}) => {\n  w();\n};\n"
+        self.assertEqual(rules.function_spans("d.mjs", params, "sort"), [(1, 3)])
+        self.assertEqual(rules.function_spans("d.mjs", params, "f"), [(4, 7)])
+        self.assertEqual(rules.function_spans("d.mjs", params, "g"), [(8, 10)])
         for name, where in (("privThumb", "tools/ui/index.html"), ("keepPile", "tests/ui/driver.mjs"),
                             ("wait_job", "tests/bench.py")):
             r = subprocess.run([sys.executable, os.path.join(HERE, "check.py"), "--show", name], capture_output=True,
