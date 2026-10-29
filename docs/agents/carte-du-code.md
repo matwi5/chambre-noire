@@ -345,7 +345,8 @@ dernier bloc, après le HTML.
     « Révéler » : suivi, `accepted` (vidage de la saisie de « Révéler », champ replié), message, haut du Labo), `again`
     (un geste à la fois ; rien pendant « Sortir », `exiting()`, comme « Révéler » `#go`) ;
     actions de la visionneuse : `viewerAction` (comme `inputAction`, `viewerShare`, `viewerCopy`, `downloadLot` et les
-    liens `#vDl`, `#ivDl` : rien pendant « Sortir »), `removeFromViewer`, `lotMembers`, `deleteItem` (« Supprimer » un
+    liens `#vDl`, `#ivDl` : rien pendant « Sortir » ; « Supprimer » : rien non plus tant que l'image d'avant est
+    tenue, `beforeHeld`), `removeFromViewer`, `lotMembers`, `deleteItem` (« Supprimer » un
     tirage ; « Sortir » revérifié après la confirmation), `forgetResult`.
   - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
     `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,

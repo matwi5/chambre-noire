@@ -558,7 +558,8 @@ dans la visionneuse ou sur la carte du dessus de la pile (rien sur une image non
 texte ou avec un panneau ouvert) ; là, Espace ne fait pas défiler la page et n'active aucun bouton qui a le focus
 (Entrée, oui). Le bouton de la carte ne trie rien et n'ouvre pas la visionneuse. Tant que l'image d'avant est à
 l'écran (bouton ou Espace tenus), rien ne trie l'image produite, qu'on ne voit pas : ✓, ✕, ← →, le balayage (la carte
-revient) et Garder ou Jeter de la visionneuse ne font rien ; il suffit de relâcher pour trier. Le bouton
+revient), Garder ou Jeter de la visionneuse et **Supprimer** (visionneuse des Tirages) ne font rien ; il suffit de
+relâcher pour trier ou supprimer. Le bouton
 Avant marche aussi dans l'espace privé (voir « Espace privé »).
 
 ### Prompts enregistrés

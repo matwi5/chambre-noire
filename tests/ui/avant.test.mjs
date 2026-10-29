@@ -620,3 +620,37 @@ test('visionneuse : Avant tenu (doigt) ou Espace tenue (PC), Garder et Jeter ne 
     await page.click('#undoBtn');
     page.assertNoErrors();
   });
+
+test('Tirages : Avant tenu (souris, doigt) ou Espace tenue, « Supprimer » ne fait rien ; relâché, il demande',
+  async () => {
+    await twoComparable('zw');
+    await page.click('#pileYes');                  // « zw dessus » dans les Tirages
+    await page.waitFor(`pileView().length === 1`, { what: 'zw dessus gardée' });
+    await page.tab('tirages');
+    await page.waitFor(`histItems.some(it => it.prompt === 'zw dessus')`, { what: 'zw dessus dans les Tirages' });
+    const at = await page.eval(`histItems.findIndex(it => it.prompt === 'zw dessus')`);
+    const asked = () => page.eval(`[openedSheet?.id ?? null, histItems.some(it => it.prompt === 'zw dessus')]`);
+    for (const how of ['souris', 'doigt', 'Espace']) {
+      if (how === 'Espace') await page.setView(PC);
+      try {
+        await page.viewTirage(at);
+        await page.imageShown('#vImg', 'tirage en grand');
+        await page.waitFor(`!document.querySelector('#vBefore').hidden`, { what: 'bouton Avant' });
+        if (how === 'Espace') { await page.eval(`document.activeElement?.blur()`); await page.keyDown(' '); }
+        else await page.hold(BUTTON, { mouse: how === 'souris' });
+        await beforeOn('#vBefore', `image d'avant (${how})`);
+        await page.eval(`$('vDelete').click()`);   // (un clic, comme d'un second doigt, ou Entrée)
+        await elapse(400);
+        assert.deepEqual(await asked(), [null, true], `« Supprimer » avec l'image d'avant (${how})`);
+        if (how === 'Espace') await page.keyUp(' '); else await page.release();
+        await page.closeViewer();
+      } finally { if (how === 'Espace') await page.setView(PHONE); }
+    }
+    await page.viewTirage(at);                     // relâché : « Supprimer » demande confirmation, refusée ici
+    await page.eval(`$('vDelete').click()`);
+    await page.waitFor(`openedSheet === $('askSheet')`, { what: 'confirmation de suppression' });
+    await page.eval(`answer(false)`);
+    await page.closeViewer();
+    await page.tab('labo');
+    page.assertNoErrors();
+  });

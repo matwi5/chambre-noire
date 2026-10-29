@@ -2680,6 +2680,9 @@ async function inputAction(kind){             // repartir de cette image d'entr�
 const resetInputZoom=zoomable($('ivStage'), $('ivImg'), $('iv'), d=>showInput(ivIndex+d), closeInputs);   // comme la visionneuse
 async function viewerAction(kind){
   const it=vList[vIndex]; if(!it || exiting()) return;
+  // « Supprimer » ne fait rien tant que l'image d'avant est tenue (beforeHeld), comme Garder et Jeter : l'image
+  // supprimée doit être à l'écran ; relâcher suffit (décision du porteur, retour du groupe F, 29/10/2026)
+  if(kind==='delete' && beforeHeld) return;
   if(kind==='edit' && refuseWhileDrawing()) return;   // refusé avant de fermer : l'image reste à l'écran
   if(kind==='edit' || kind==='mask'){ closeViewer(); return kind==='edit' ? useAsEditInput(it.name, srcOf(it)) : useAsMaskInput(it.name, srcOf(it)); }
   if(kind==='resume') return resumeFrom(it);
