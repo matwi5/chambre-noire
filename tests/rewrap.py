@@ -193,7 +193,7 @@ def rewrap_code(path, text, numbers, width=check.LINE_MAX):
             pieces = cut_with(line, m.group(1), marker, width)
         elif k in docs:
             indent = line[:len(line) - len(line.lstrip())]
-            pieces = cut_with(line, indent, docs[k], width)
+            pieces = cut_with(line, indent, max(indent, docs[k], key=len), width)   # (suites au retrait de la ligne)
         else:
             pieces = [line]
         if len(pieces) > 1:

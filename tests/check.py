@@ -47,11 +47,12 @@ un fichier créé passe les contrôles avant son premier commit.
    compris) : sur les lignes ajoutées, et sur des fichiers entiers pour celles du serveur et des imports ;
    si l'un de ces quatre contrôles échoue, check.py s'arrête là, sans lancer le banc ni l'interface ;
 5. lance le banc (unittest discover -s tests), recopie telles quelles sa ligne « Ran N tests … » et son verdict, et
-   affiche sa durée ; seul tests/test_public_repo.py tourne quand les .py (suivis et nouveaux, tests compris) sont
-   ceux du dernier banc entier vert (empreinte, à côté du journal ; la ligne « Ran N tests » de ce banc est citée avec
-   sa date ; décision du 29/10/2026), ou avec --quick et aucun .py changé depuis le dernier commit (ticket_base : non
-   suivis compris ; hors git, le banc tourne) ; jamais en CI (CI, GITHUB_ACTIONS : le banc entier, toujours), et
-   --force le relance ;
+   affiche sa durée ; seuls tests/test_public_repo.py et les modules qui lisent un fichier autre qu'un .py
+   (bench_readers : l'interface, la carte du code, le README…) tournent quand les .py (suivis et nouveaux, tests
+   compris) sont ceux du dernier banc entier vert (empreinte, à côté du journal ; la ligne « Ran N tests » de ce banc
+   est citée avec sa date ; décision du 29/10/2026), ou avec --quick et aucun .py changé depuis le dernier commit
+   (ticket_base : non suivis compris ; hors git, le banc tourne) ; jamais en CI (CI, GITHUB_ACTIONS : le banc entier,
+   toujours), et --force le relance ;
 6. avec --ui : les tests d'interface tests/ui/*.test.mjs, ou les seuls fichiers donnés (pilote Chrome, voir
    tests/ui/driver.mjs), UI_JOBS fichiers à la fois (3 par défaut, QWEN_UI_JOBS), chacun avec sa durée, en même
    temps que le banc : chacun son Chrome, et son serveur sur un port libre, depuis son propre dossier temporaire
@@ -61,8 +62,8 @@ un fichier créé passe les contrôles avant son premier commit.
    fichier est arrêté à UI_FAIL_CAP tests en échec (5, QWEN_UI_FAIL_CAP ; 0 : sans plafond), et sa ligne le dit : un
    changement de sens fait tomber des dizaines de tests à 30 s chacun ;
    quand seuls des .md ont changé depuis le dernier contrôle vert aux mêmes options (empreinte de tout sauf les .md),
-   ni banc ni interface ne repassent : les lignes, les règles et tests/test_public_repo.py, puis les lignes à citer
-   de ce contrôle vert ;
+   ni le reste du banc ni l'interface ne repassent : les lignes, les règles et les modules de bench_readers, puis
+   les lignes à citer du dernier contrôle qui les a lancés, datées (« (vert du …) ») ;
 7. avis, sans échec, « zone sensible : passe bogues /code-review requise » quand une ligne ajoutée dans tools/ depuis
    le dernier commit (ticket_base : le ticket en cours, arbre de travail compris ; donc aucun avis en CI) touche
    l'espace privé ou la suppression de données (SENSITIVE) ; il nomme la fonction (ou la route) de chaque ligne. Un
@@ -487,14 +488,23 @@ def fix_breaks(f, path, text):
     return None
 
 
+def hook_mark(data):
+    """Fichier qui note l'instant où une commande Bash démarre (hook PreToolUse), propre à cet appel d'outil
+    (tool_use_id, sinon la session) : le hook d'après n'en juge que les fichiers écrits depuis."""
+    key = re.sub(r"[^\w-]", "", str(data.get("tool_use_id") or data.get("session_id") or "sans-id"))[:80]
+    return os.path.join(tempfile.gettempdir(), f"qwen-hook-{key}.debut")
+
+
 def hook_lines(stdin):
-    """--hook (PostToolUse de Claude Code sur Edit, Write et Bash, .claude/settings.json) : juge le seul fichier écrit
-    (tool_input.file_path du JSON reçu) ou, après une commande Bash (sans file_path : un script, un heredoc), les
-    fichiers changés depuis le dernier commit (non suivis compris) du dépôt de son dossier (cwd du JSON, sinon
-    CLAUDE_PROJECT_DIR) ; un worktree compris, rien hors d'un dépôt de ce projet. La prose trop longue (Markdown,
-    commentaires, docstrings) est recoupée sur place (recut, comme --lines --fix), le code trop long est signalé.
-    Lignes recoupées et fautes restantes sur stderr avec le code 2 (que Claude Code montre : un fichier recoupé est à
-    relire avant de l'éditer de nouveau), sinon 0 sans rien écrire."""
+    """--hook (hooks de Claude Code, .claude/settings.json) : avant une commande Bash (PreToolUse), note l'instant
+    (hook_mark) ; après Edit et Write, juge le seul fichier écrit (tool_input.file_path du JSON reçu) ; après une
+    commande Bash (un script, un heredoc : sans file_path), les fichiers .py, .md, .mjs et .js changés depuis le dernier
+    commit (non suivis compris) et écrits pendant la commande (date de modification depuis l'instant noté, sinon dans
+    la dernière minute), du dépôt de son dossier (cwd du JSON, sinon CLAUDE_PROJECT_DIR) ; un worktree compris, rien
+    hors d'un dépôt de ce projet. La prose trop longue (Markdown, commentaires, docstrings) est recoupée sur place
+    (recut, comme --lines --fix), sauf pour un sous-agent (agent_id : il ne réécrit pas les fichiers d'un autre, il les
+    signale), et le code trop long est signalé. Lignes recoupées et fautes restantes sur stderr avec le code 2 (que
+    Claude Code montre : un fichier recoupé est à relire avant de l'éditer de nouveau), sinon 0 sans rien écrire."""
     global ROOT
     try:
         data = json.loads(stdin or "{}")
@@ -502,6 +512,13 @@ def hook_lines(stdin):
         folder = os.path.dirname(os.path.abspath(given)) if given else (data.get("cwd")
                                                                        or os.environ.get("CLAUDE_PROJECT_DIR", ""))
     except (ValueError, AttributeError):
+        return 0
+    if data.get("hook_event_name") == "PreToolUse":
+        try:
+            with open(hook_mark(data), "w", encoding="utf-8") as f:
+                f.write(str(time.time()))
+        except OSError:
+            pass
         return 0
     if not folder or not os.path.isdir(folder):
         return 0
@@ -517,16 +534,23 @@ def hook_lines(stdin):
         paths = [os.path.relpath(os.path.realpath(given), os.path.realpath(root)).replace(os.sep, "/")]
         if paths[0].startswith(".."):
             return 0
-    else:                                             # commande Bash : ce qui a changé depuis le dernier commit
+    else:                                             # commande Bash : ce qu'elle a écrit, depuis le dernier commit
         try:
-            paths = sorted(set(git("diff", "--name-only", "HEAD", "--", *LINE_FILES).splitlines()
-                               + new_files(*LINE_FILES)))
+            with open(hook_mark(data), encoding="utf-8") as f:
+                started = float(f.read()) - 1
+            os.remove(hook_mark(data))
+        except (OSError, ValueError):
+            started = time.time() - 60
+        try:
+            changed = set(git("diff", "--name-only", "HEAD", "--", *LINE_FILES).splitlines() + new_files(*LINE_FILES))
         except subprocess.CalledProcessError:         # pas encore de commit
             return 0
+        paths = sorted(p for p in changed if os.path.exists(os.path.join(ROOT, p))
+                       and os.path.getmtime(os.path.join(ROOT, p)) >= started)
     found = long_lines(base, paths=paths) if paths else []
     if not found:
         return 0
-    messages = [m for m in recut(found) if " : 0 ligne(s) recoupée(s)" not in m]
+    messages = [] if data.get("agent_id") else [m for m in recut(found) if " : 0 ligne(s) recoupée(s)" not in m]
     left = long_lines(base, paths=paths)
     if messages:
         print("Lignes de plus de {} caractères recoupées par le hook (fichier à relire avant de l'éditer) :"
@@ -679,6 +703,35 @@ def sensitive_notice(base):
         print("Avis : zone sensible : passe bogues /code-review requise (" + " ; ".join(parts) + ")")
 
 
+# un module du banc qui lit un fichier du dépôt autre qu'un .py (l'interface, la carte du code, le README, un
+# réglage) : il tourne même quand le banc est sauté sur des .py identiques, car son résultat dépend aussi de ce fichier
+NON_PY_READ_RE = re.compile(r"index\.html|sw\.js|\.md\b|README|carte-du-code|prompt_types\.json|tools/config\.json"
+                            r"|\.webmanifest|logo\.svg")
+
+
+def bench_readers():
+    """Modules du banc qui tournent quand le banc entier est sauté : tests/test_public_repo.py (dépôt public), puis
+    ceux dont la source nomme un fichier autre qu'un .py (NON_PY_READ_RE), relus à chaque fois (aucune liste à
+    tenir)."""
+    found = ["test_public_repo.py"]
+    for f in sorted(checked_files("tests/test_*.py")):
+        name = f.rsplit("/", 1)[-1]
+        if name not in found and NON_PY_READ_RE.search(read(f)):
+            found.append(name)
+    return found
+
+
+def cited_from(source):
+    """Lignes à citer d'un contrôle vert d'avant (source : {when, cited}), datées : « Banc (vert du …) : Ran … » ;
+    celles du test du dépôt public, refait à chaque passage, sont laissées."""
+    out = []
+    for line in source.get("cited", []):
+        label, sep, rest = line.partition(" : ")
+        if sep and not label.startswith("Banc (test_public_repo.py"):
+            out.append(f"{label} (vert du {source['when']}){sep}{rest}")
+    return out
+
+
 def py_changed(base):
     """Vrai si un .py a changé depuis base (arbre de travail et fichiers non suivis compris), ou sans base."""
     if not base:
@@ -706,18 +759,26 @@ def bench_fault(m):
     return where if where.endswith("." + name) else f"{where}.{name}"
 
 
-def run_bench(pattern=None, names=()):
-    """Banc (unittest discover -s tests, ou les seuls fichiers pattern ; names : les seuls tests de ces noms, -k) :
-    (réussi, lignes à afficher, fautes : identifiants des tests en échec, notés dans RED)."""
+def run_bench(pattern=None, names=(), modules=None):
+    """Banc (unittest discover -s tests, ou les seuls fichiers pattern ; names : les seuls tests de ces noms, -k ;
+    modules : ces seuls fichiers de tests/, nommés) : (réussi, lignes à afficher, fautes : identifiants des tests en
+    échec, notés dans RED)."""
     start = time.monotonic()
-    r = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", *(["-p", pattern] if pattern
-                                                                                        else []),
-                        *[a for n in names for a in ("-k", n)]], cwd=ROOT, capture_output=True, text=True)
+    if modules:
+        command = [sys.executable, "-m", "unittest", *[m[:-3] for m in modules]]
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, [os.path.join(ROOT, "tests"),
+                                                                        os.environ.get("PYTHONPATH")])))
+    else:
+        command = [sys.executable, "-m", "unittest", "discover", "-s", "tests", *(["-p", pattern] if pattern
+                                                                                  else []),
+                   *[a for n in names for a in ("-k", n)]]
+        env = None
+    r = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, env=env)
     out = r.stderr + r.stdout
     lines = out.strip().splitlines()
     ran = next((l for l in reversed(lines) if l.startswith("Ran ")), "Ran ? tests : ligne introuvable")
     verdict = next((l for l in reversed(lines) if l.startswith(("OK", "FAILED"))), "verdict introuvable")
-    label = "Banc" + (f" ({pattern})" if pattern else "")
+    label = "Banc" + (f" ({', '.join(modules)})" if modules else f" ({pattern})" if pattern else "")
     shown = [out.rstrip()] if r.returncode else []
     faults = list(dict.fromkeys(bench_fault(m) for m in BENCH_FAULT_RE.finditer(out)))
     for m in BENCH_FAULT_RE.finditer(out):
@@ -726,7 +787,8 @@ def run_bench(pattern=None, names=()):
             module = m.group(1)
         listed = RED["bench"].setdefault(module, [])
         if listed is not None and m.group(1).startswith("test"):
-            listed.append(m.group(1))
+            if m.group(1) not in listed:              # (le rejeu le revoit rouge : une seule fois)
+                listed.append(m.group(1))
         else:                                         # setUpClass, import… : le module entier
             RED["bench"][module] = None
     if r.returncode and not faults:
@@ -1089,7 +1151,8 @@ def failure_log_path():
 def log_failures(info, verdicts):
     """Tests rouges du passage (RED) ajoutés au journal persistant (FAILURE_LOG, dossier temporaire du système,
     commun aux worktrees) : date, worktree, fichier, test, verdict du rejeu, charge ; FAILURE_LOG_KEPT lignes au
-    plus."""
+    plus. Plusieurs contrôles peuvent finir ensemble : les lignes s'ajoutent en fin de fichier, sous un verrou du
+    fichier (fcntl ; sans lui, sous Windows, l'ajout seul), et le fichier n'est raccourci que sous ce verrou."""
     path = failure_log_path()
     when = time.strftime("%Y-%m-%d %H:%M:%S")
     rows = [{"date": when, "dossier": os.path.basename(ROOT), "fichier": f, "test": t, "rejeu": verdicts.get(f),
@@ -1099,15 +1162,21 @@ def log_failures(info, verdicts):
     if not rows:
         return
     try:
-        with open(path, encoding="utf-8") as f:
-            old = f.read().splitlines()
-    except OSError:
-        old = []
-    lines = (old + [json.dumps(r, ensure_ascii=False) for r in rows])[-FAILURE_LOG_KEPT:]
-    tmp = f"{path}.{os.getpid()}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
-    os.replace(tmp, path)
+        import fcntl
+    except ImportError:                                # Windows
+        fcntl = None
+    with open(path, "a+", encoding="utf-8") as f:
+        if fcntl:
+            fcntl.flock(f, fcntl.LOCK_EX)
+        f.write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+        f.flush()
+        if fcntl:
+            f.seek(0)
+            lines = f.read().splitlines(keepends=True)
+            if len(lines) > FAILURE_LOG_KEPT:
+                f.seek(0)
+                f.truncate()
+                f.write("".join(lines[-FAILURE_LOG_KEPT:]))
     print(f"Journal des échecs : {path} ({len(rows)} ligne(s) ajoutée(s))")
 
 
@@ -1130,13 +1199,15 @@ def run_checks(args, state=None, green=None):
         print("Banc et interface : pas lancés (contrôles ci-dessus en échec : les corriger d'abord)")
         return failed, []
     if green:
-        print(f"Banc et interface : pas relancés : seuls des .md ont changé depuis le contrôle vert du {green['when']}"
-              " (mêmes options ; --force les relance) ; seul le test du dépôt public tourne")
-        ok, lines, faults = run_bench("test_public_repo.py")
+        source = green.get("source") or green
+        print(f"Banc et interface : pas relancés : seuls des .md ont changé depuis le contrôle vert du "
+              f"{source['when']} (mêmes options ; --force les relance) ; seuls tournent le test du dépôt public et "
+              "les tests qui lisent d'autres fichiers que des .py")
+        ok, lines, faults = run_bench(modules=bench_readers())
         print("\n".join(lines))
         if not ok:
             return {"Banc": faults}, []
-        return failed, [l for l in lines if CITED_RE.match(l)] + list(green.get("cited", []))
+        return failed, [l for l in lines if CITED_RE.match(l)] + cited_from(source)
     if args.ui is not None and args.name:
         titles = ui_titles(ui_files(args.ui))
         try:
@@ -1154,12 +1225,13 @@ def run_checks(args, state=None, green=None):
     if args.no_bench:
         pass
     elif args.quick and not py_changed(ticket_base()):
-        print("Banc : sauté (--quick, aucun .py changé depuis le dernier commit) ; seul le test du dépôt public tourne")
-        jobs.append(("Banc", lambda: run_bench("test_public_repo.py")))
+        print("Banc : sauté (--quick, aucun .py changé depuis le dernier commit) ; seuls tournent le test du dépôt "
+              "public et les tests qui lisent d'autres fichiers que des .py")
+        jobs.append(("Banc", lambda: run_bench(modules=bench_readers())))
     elif state and not args.force and not in_ci() and bench_green.get("py") == state["py"]:
-        print(f"Banc : sauté (mêmes .py que le banc vert du {bench_green['when']} ; --force le relance) ; seul le test "
-              "du dépôt public tourne")
-        jobs.append(("Banc", lambda: run_bench("test_public_repo.py")))
+        print(f"Banc : sauté (mêmes .py que le banc vert du {bench_green['when']} ; --force le relance) ; seuls "
+              "tournent le test du dépôt public et les tests qui lisent d'autres fichiers que des .py")
+        jobs.append(("Banc", lambda: run_bench(modules=bench_readers())))
         cited.append(f"Banc (vert du {bench_green['when']}, mêmes .py) : {bench_green['ran']}")
     else:
         jobs.append(("Banc", run_bench))
@@ -1261,8 +1333,9 @@ def parse_args(argv=None):
     ap.add_argument("--cached", action="store_true", help="avec --lines : juger l'index (hook avant commit)")
     ap.add_argument("--fix", action="store_true", help="avec --lines : recouper les lignes trop longues qui peuvent "
                     "l'être sans risque (Markdown, commentaires, docstrings), puis vérifier")
-    ap.add_argument("--hook", action="store_true", help="hook PostToolUse de Claude Code : juge le fichier écrit "
-                    "(JSON sur l'entrée), fautes sur stderr, code 2")
+    ap.add_argument("--hook", action="store_true", help="hooks de Claude Code (JSON sur l'entrée) : juge le "
+                    "fichier écrit par Edit ou Write, ou ceux qu'une commande Bash a écrits ; recoupe la prose trop "
+                    "longue, signale le code trop long ; sur stderr, code 2")
     ap.add_argument("--link-venv", action="store_true",
                     help="worktree : liens vers venv et les notes du dossier principal ; hook avant commit")
     ap.add_argument("--map", nargs="?", const="", metavar="NOM",
@@ -1331,9 +1404,12 @@ def main(argv=None):
         except FileNotFoundError:
             pass
     elif key:                                         # (un passage --failed, partiel, n'a pas de clé)
-        write_json(green_record(path), {"key": key, "code": state["code"], "options": run_options(args),
-                                        "when": time.strftime("%d/%m/%Y %H:%M"),
-                                        "cited": cited, "lines": [f"Journal du passage : {path}"]})
+        now = time.strftime("%d/%m/%Y %H:%M")
+        # source : le dernier contrôle qui a lancé banc et interface, cité daté par les passages « .md seuls »
+        source = (green.get("source") or green) if green else {"when": now, "cited": cited}
+        write_json(green_record(path), {"key": key, "code": state["code"], "options": run_options(args), "when": now,
+                                        "cited": cited, "source": {"when": source["when"], "cited": source["cited"]},
+                                        "lines": [f"Journal du passage : {path}"]})
     return 1 if failed else 0
 
 

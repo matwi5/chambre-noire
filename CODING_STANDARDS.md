@@ -11,8 +11,10 @@ les tests viennent de bugs passés à travers les revues par ticket.
   `tools/ui/index.html`, tableaux Markdown et blocs de code : une ligne plus longue se lit mal dans un diff et sur un
   écran étroit. Vérifiée par `tests/check.py` sur les seules lignes ajoutées depuis la base (`git merge-base HEAD
   origin/main`) : les lignes existantes ne sont reprises que quand on les touche. `check.py --lines` (moins d'une
-  seconde), le hook avant commit et celui de Claude Code après chaque écriture (`check.py --hook`) la vérifient
-  seule ; `check.py --lines --fix` recoupe les seules lignes fautives (Markdown, commentaires, docstrings).
+  seconde) et le hook avant commit la vérifient seule ; celui de Claude Code (`check.py --hook`), après chaque
+  écriture par Edit ou Write et après chaque commande Bash (les fichiers qu'elle a écrits), recoupe seul la prose trop
+  longue et signale le code ; `check.py --lines --fix` recoupe les seules lignes fautives (Markdown, commentaires,
+  docstrings).
 - **Un comportement qui change change partout où il est décrit** : chercher son ancienne formulation par `git grep`
   sur tout le dépôt suivi (README, docstrings et commentaires, carte du code, et textes de l'interface :
   `tools/ui/index.html`, `LOGIN_PAGE` de `tools/launch.py`, page hors ligne de `tools/ui/sw.js`), et la reprendre dans

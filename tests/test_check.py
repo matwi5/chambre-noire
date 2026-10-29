@@ -178,6 +178,36 @@ class LinesTest(RepoCase):
         r = hook()
         self.assertEqual((r.returncode, r.stderr), (0, ""), "tout recoupé ou corrigé : plus rien")
 
+    def test_after_a_bash_command_only_the_files_it_wrote_are_judged(self):
+        """Avant la commande, le hook PreToolUse note l'instant : un fichier changé plus tôt (un autre agent, une
+        écriture d'avant) n'est ni jugé ni recoupé ; un sous-agent (agent_id) signale sans recouper."""
+        self.install_check()
+        prose = " ".join(["mot"] * 40)
+
+        def hook(event, **extra):
+            data = {"hook_event_name": event, "tool_name": "Bash", "tool_use_id": "outil-1", "cwd": self.root,
+                    "tool_input": {"command": "…"}, **extra}
+            return subprocess.run([sys.executable, os.path.join(self.root, "tests", "check.py"), "--hook"],
+                                  input=json.dumps(data), capture_output=True, text=True, cwd=self.tmp.name)
+        self.write("avant.md", prose + "\n")
+        past = os.path.getmtime(os.path.join(self.root, "avant.md")) - 30
+        os.utime(os.path.join(self.root, "avant.md"), (past, past))   # écrit avant la commande
+        self.assertEqual(hook("PreToolUse").returncode, 0)
+        self.write("pendant.md", prose + "\n")
+        r = hook("PostToolUse")
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("pendant.md : 1 ligne(s) recoupée(s)", r.stderr)
+        self.assertNotIn("avant.md", r.stderr)
+        with open(os.path.join(self.root, "avant.md"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), prose + "\n", "un fichier d'avant la commande n'est pas réécrit")
+        self.assertEqual(hook("PreToolUse").returncode, 0)
+        self.write("agent.md", prose + "\n")
+        r = hook("PostToolUse", agent_id="relecteur")
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("agent.md:1 (159 caractères)", r.stderr)
+        with open(os.path.join(self.root, "agent.md"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), prose + "\n", "un sous-agent ne recoupe rien")
+
     def test_the_hook_refuses_a_commit_that_adds_a_long_line(self):
         self.install_check()
         self.write("notes.md", "Titre\n\n" + LONG + "\n")
@@ -388,7 +418,8 @@ class BenchSkipTest(StaticsMocked):
         _, _, calls, _ = self.run_checks()
         self.assertEqual(calls[0].args, (), "premier banc : entier")
         _, out, calls, _ = self.run_checks()
-        self.assertEqual(calls[0].args, ("test_public_repo.py",), out)
+        self.assertEqual(calls[0].args, (), out)
+        self.assertEqual(calls[0].kwargs["modules"][0], "test_public_repo.py", out)
         self.assertIn("mêmes .py que le banc vert du ", out)
         with mock.patch.object(check, "run_bench", return_value=BENCH_OK), \
                 contextlib.redirect_stdout(io.StringIO()):
@@ -419,14 +450,32 @@ class BenchSkipTest(StaticsMocked):
         code, out, calls = main()
         self.assertEqual(code, 0, out)
         self.assertIn("seuls des .md ont changé depuis le contrôle vert du ", out)
-        self.assertEqual([c.args for c in calls], [("test_public_repo.py",)])
+        self.assertEqual([c.kwargs["modules"][0] for c in calls], ["test_public_repo.py"])
         self.statics["check_python"].assert_not_called()
         self.statics["check_rules"].assert_called()
-        self.assertIn("Banc : Ran 3 tests in 0.1s", out.strip().splitlines()[-1], "lignes du contrôle vert citées")
+        last = out.strip().splitlines()[-1]
+        self.assertIn("Banc (vert du ", last, "lignes du contrôle vert citées, datées")
+        self.assertIn(") : Ran 3 tests in 0.1s", last)
+        self.write("notes.md", "Notes changées deux fois.\n")   # un second .md seul : rien ne s'accumule
+        _, out, _ = main()
+        last = out.strip().splitlines()[-1]
+        self.assertEqual(last.count("Ran 3 tests in 0.1s"), 2, last)   # le banc réduit du passage, le vert d'origine
+        self.assertEqual(last.count("(vert du "), 2, last)                # Ran et OK du seul vert d'origine
         self.write("a.py", "x = 2\n")                        # du code changé : tout repasse
         _, out, calls = main()
         self.assertNotIn("seuls des .md", out)
         self.statics["check_python"].assert_called()
+
+
+class BenchReadersTest(unittest.TestCase):
+    """Banc sauté : tournent quand même le test du dépôt public et les modules qui lisent d'autres fichiers que des
+    .py (l'interface, la carte du code, le README), lus dans leur source."""
+    def test_modules_that_read_other_files_still_run(self):
+        readers = check.bench_readers()
+        self.assertEqual(readers[0], "test_public_repo.py")
+        for name in ("test_palette.py", "test_rules.py", "test_rewrap.py"):   # index.html, la carte, le README
+            self.assertIn(name, readers)
+        self.assertNotIn("test_queue.py", readers)
 
 
 class FailCapTest(unittest.TestCase):
@@ -523,7 +572,7 @@ class QuickTest(RepoCase):
                 contextlib.redirect_stdout(io.StringIO()):
             check.run_checks(args)
         bench.assert_called_once()
-        return bench.call_args.args[0] if bench.call_args.args else None
+        return (bench.call_args.kwargs.get("modules") or [None])[0]
 
     def test_quick_compares_to_the_last_commit(self):
         sh(self.root, "git", "checkout", "-q", "-b", "dev")
