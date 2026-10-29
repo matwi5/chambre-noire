@@ -6,7 +6,7 @@
 //   venv/bin/python tests/check.py --no-bench --ui tests/ui/clavier.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, waitUntil, PC } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, PC, TOP } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -25,12 +25,8 @@ after(async () => {
   await bench?.stop();
 });
 
-const TOP = `$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`;   // prompt de la carte du dessus
 // focus rendu à la page (aucun bouton ni champ ne le tient)
 const unfocus = () => page.eval(`document.activeElement?.blur()`);
-// la carte du dessus affichée depuis 0,3 s et le tri d'avant fini (sortBusy) : un nouveau tri est permis
-const settled = what => page.waitFor(`!sortBusy() && posed($('pile').querySelector('[data-k="0"] .pimg img'))`,
-  { what });
 // bandeau Annuler affiché pour le Jeter en attente
 const banner = what => page.waitFor(`!$('undoBar').hidden && !!discarding`, { what });
 // pile vidée : un Jeter en attente annulé, puis tout gardé
@@ -44,25 +40,25 @@ test('→ garde l\'image du dessus ; ← la jette avec le bandeau ; Z et Ctrl/�
   await page.made('zk1 dessous');
   await page.made('zk1 dessus');
   await unfocus();
-  await settled('pile prête');
+  await page.topShown();
   await page.watchSorts();
   await page.press('ArrowRight');
   await waitUntil(() => bench.kept('zk1 dessus'), { what: '→ : gardée' });
   await page.waitFor(`${TOP} === 'zk1 dessous'`, { what: 'la suivante dessus' });
-  await settled('carte suivante affichée');
+  await page.topShown();
   await page.press('ArrowLeft');
   await banner('← : bandeau');
   assert.equal(await page.topPrompt(), undefined, 'carte partie');
   assert.equal(await page.sortsSent('discard'), 0, 'Jeter envoyé avant la fin du bandeau');
   await page.press('z');
   await page.waitFor(`$('undoBar').hidden && ${TOP} === 'zk1 dessous'`, { what: 'Z : carte remise' });
-  await settled('carte remise affichée');
+  await page.topShown();
   for (const modifiers of [['ctrl'], ['meta']]) {
     await page.press('ArrowLeft');
     await banner('← : bandeau');
     await page.press('z', { modifiers });
     await page.waitFor(`$('undoBar').hidden && ${TOP} === 'zk1 dessous'`, { what: `${modifiers} + Z : carte remise` });
-    await settled('carte remise affichée');
+    await page.topShown();
   }
   await page.press('z');                            // sans bandeau : rien
   assert.equal(await page.topPrompt(), 'zk1 dessous');
@@ -75,16 +71,16 @@ test('→ garde l\'image du dessus ; ← la jette avec le bandeau ; Z et Ctrl/�
 test('← maintenue (répétition du système) : une seule image jetée, même la suivante affichée', async () => {
   for (const p of ['zk2 a', 'zk2 b', 'zk2 c']) await page.made(p);
   await unfocus();
-  await settled('pile prête');
+  await page.topShown();
   await page.watchSorts();
   await page.keyDown('ArrowLeft');
   for (let k = 0; k < 8; k++) await page.keyDown('ArrowLeft', { repeat: true });
   await banner('bandeau du premier Jeter');
   await page.waitFor(`${TOP} === 'zk2 b'`, { what: 'zk2 b dessus' });
-  await settled('zk2 b affichée');
+  await page.topShown();
   for (let k = 0; k < 8; k++) await page.keyDown('ArrowLeft', { repeat: true });   // touche toujours tenue
   await page.keyUp('ArrowLeft');
-  await settled('rien de plus en route');
+  await page.topShown();
   assert.equal(await page.topPrompt(), 'zk2 b', 'la touche tenue a jeté la suivante');
   assert.equal(await page.sortsSent('discard'), 0, 'Jeter envoyé avant la fin du bandeau');
   assert.equal(await page.eval(`pileView().length`), 2);
@@ -96,11 +92,11 @@ test('← ← rapides : la seconde attend la carte suivante affichée ; ← ← 
   async () => {
     for (const p of ['zk3 a', 'zk3 b', 'zk3 c']) await page.made(p);
     await unfocus();
-    await settled('pile prête');
+    await page.topShown();
     await page.watchSorts();
     await page.press('ArrowLeft'); await page.press('ArrowLeft');   // pendant l'envol de la première
     await banner('bandeau');
-    await settled('suivante affichée');
+    await page.topShown();
     assert.deepEqual([await page.topPrompt(), await page.sortsSent('discard')], ['zk3 b', 0], 'second ← ignoré');
     await page.press('ArrowLeft');                  // zk3 b : le Jeter de zk3 c part, comme au doigt
     await waitUntil(async () => await page.sortsSent('discard') === 1, { what: 'premier Jeter envoyé' });
@@ -133,15 +129,15 @@ test('carte d\'échec en tête : → et ← ne font rien', async () => {
 
 test('Entrée maintenue sur ✕ ou sur Jeter de la visionneuse : une seule image jetée', async () => {
   for (const p of ['zk5 a', 'zk5 b', 'zk5 c']) await page.made(p);
-  await settled('pile prête');
+  await page.topShown();
   await page.watchSorts();
   await page.eval(`$('pileNo').focus()`);
   await page.keyDown('Enter');                      // un appui voulu : jetée
   await banner('bandeau');
-  await settled('zk5 b affichée');
+  await page.topShown();
   for (let k = 0; k < 6; k++) await page.keyDown('Enter', { repeat: true });
   await page.keyUp('Enter');
-  await settled('rien de plus en route');
+  await page.topShown();
   assert.equal(await page.topPrompt(), 'zk5 b', 'Entrée répétée a jeté la suivante');
   await page.press('z');
   await page.waitFor(`${TOP} === 'zk5 c'`, { what: 'zk5 c remise' });
@@ -163,7 +159,7 @@ test('Entrée maintenue sur ✕ ou sur Jeter de la visionneuse : une seule image
 test('aucun raccourci pendant la saisie dans le prompt, avec une feuille ouverte, ni avec ⌘ ou Alt', async () => {
   await page.made('zk6 a');
   await page.made('zk6 b');
-  await settled('pile prête');
+  await page.topShown();
   await page.watchSorts();
   await page.eval(`$('prompt').focus()`);
   for (const key of ['ArrowLeft', 'ArrowRight', 'z']) await page.press(key);

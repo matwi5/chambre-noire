@@ -23,10 +23,6 @@ after(async () => {
 const CODE = 'code-du-banc-1';
 const post = (page, url, body = {}) =>
   page.eval(`postJson(${JSON.stringify(url)}, ${JSON.stringify(body)}).then(r => r.status)`);
-// toasts affichés depuis l'appel (comme saisie.test.mjs)
-const watchToasts = page => page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
-  window.toastWatch = new MutationObserver(() => seenToasts.push($('toastBox').textContent));
-  toastWatch.observe($('toastBox'), { childList: true, characterData: true, subtree: true }); })()`);
 // faux échec : un message « Échec… » (sur les Tirages), ou une génération gardée en échec par la page (sur le Labo, qui
 // ne montre pas de message)
 const failures = page => page.eval(`[...seenToasts.filter(t => t.startsWith('Échec')),
@@ -57,8 +53,8 @@ test('deux pages : celle qui a repris la génération la voit oubliée par l\'au
   await enterPrivate(first);
   await second.eval(`refreshStatus()`);
   await second.waitFor(`inPrivate()`, { what: 'seconde page dans l\'espace privé (cookie partagé)' });
-  await watchToasts(first);
-  await watchToasts(second);
+  await first.watchToasts();
+  await second.watchToasts();
   const id = await launch(first, 'HOLD=deux zq7 un phare la nuit');
   await second.eval(`refreshStatus()`);
   await second.waitFor(`pageJobs.some(p => p.id === ${JSON.stringify(id)} && p.adopted)`,
@@ -87,7 +83,7 @@ test('deux pages : celle qui a repris la génération la voit oubliée par l\'au
 test('espace fermé avant que /api/status le dise : le 404 du suivi ne donne pas « Échec »', async () => {
   await open(first);
   await enterPrivate(first);
-  await watchToasts(first);
+  await first.watchToasts();
   await launch(first, 'HOLD=ferme zq7 une forêt sous la neige');
   // plus d'interrogation de /api/status : la page ne peut apprendre la fermeture que par le suivi
   await first.eval(`clearTimeout(statusTimer); window.refreshStatus = async () => {}`);

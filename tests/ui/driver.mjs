@@ -4,7 +4,9 @@
 //   const bench = await startBench();            // serveur du banc sur un port libre, dossier temporaire
 //   const chrome = await launchChrome();         // profil temporaire, supprimé par chrome.close()
 //   const page = await chrome.phonePage();       // vue du téléphone du porteur : 367×760, densité 2,5, tactile ;
-//                                                // connectée au banc direct en cours (cookie du code d'accès)
+//                                                // connectée au banc direct en cours (cookie du code d'accès),
+//                                                // au premier plan (page cachée, le verrou court de la pile ne
+//                                                // compte pas : topShown, made, viewPile la font passer devant)
 //   const pc = await chrome.newPage(PC);         // autre vue, connectée de même : PC (1280×800, densité 1, souris,
 //                                                // sans tactile), TABLET (tablette Android 800×1280, tactile),
 //                                                // TABLET_WIDE (la même en largeur, 1280×800), PHONE
@@ -48,7 +50,9 @@
 //   await page.enterPrivate('code')              // dans l'espace privé (créé la première fois), vu par la page,
 //                                                // puis au repos ; await page.privateIdle() : espace au repos
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
-//   await page.topPrompt()                       // prompt de la carte du dessus de la pile
+//   await page.topPrompt()                       // prompt de la carte du dessus de la pile ; TOP : la même
+//                                                // expression, pour une attente (`${TOP} === 'x'`)
+//   await page.watchToasts(); …; seenToasts      // messages affichés par la page à partir de l'appel
 //   await page.topShown()                        // image du dessus affichée (posed), pile au repos : ✓, ✕, les
 //                                                // flèches et le balayage la trient (sauf l'image d'avant tenue)
 //   await page.watchSorts(); …; await page.sortsSent('discard')   // demandes keep, discard, delete de la page
@@ -103,6 +107,9 @@ export const START_TIMEOUT = 60000;
 const WRITTEN = ['outputs', 'jobs', 'logs', 'private', 'tools'];
 
 const pause = ms => new Promise(r => setTimeout(r, ms));
+// prompt de la carte du dessus de la pile affichée (expression évaluée dans la page ; undefined sans carte) : lu par
+// page.topPrompt, et mis tel quel dans une attente (page.waitFor(`${TOP} === 'x'`))
+export const TOP = `$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`;
 // délai voulu d'un test (un minuteur de l'interface à dépasser : « rien n'est parti au bout de 5 s ») : la seule
 // attente fixe permise dans un test (tests/rules.py refuse un setTimeout nu) ; toute autre attente suit une condition
 export const elapse = ms => pause(ms);
@@ -282,11 +289,13 @@ export async function launchChrome() {
   return {
     pid: proc.pid,
     phonePage() { return this.newPage(PHONE); },
-    // page dans la vue view (PHONE, PC, TABLET, TABLET_WIDE), connectée au banc direct comme phonePage
+    // page dans la vue view (PHONE, PC, TABLET, TABLET_WIDE), connectée au banc direct comme phonePage, passée au
+    // premier plan (les autres pages de ce Chrome, cachées derrière elle, le reprennent à sa fermeture : page.close)
     async newPage(view) {
       const target = await (await devtools('new?about:blank')).json();
       const page = await connect(target.webSocketDebuggerUrl, { closeTab: () => closeTab(target.id), siblings: pages });
       pages.push(page);
+      await page.send('Page.bringToFront');
       await applyView(page, view);
       if (directBench) await setAccessCookie(page, directBench);
       return page;
@@ -327,13 +336,16 @@ function keyInfo(key) {
   }
   throw new Error(`touche inconnue du pilote : ${key}`);
 }
-// événement d'une touche : type keyDown (texte d'un caractère seul, ou d'Entrée, s'il n'y a ni Ctrl ni ⌘) ou keyUp
+// événement d'une touche : type keyDown (texte d'un caractère seul, ou d'Entrée, s'il n'y a ni Ctrl ni ⌘) ou keyUp.
+// Sans nativeVirtualKeyCode : Chrome sur Mac y lit un code de touche du Mac, pas celui de Windows ; une touche que la
+// page laisse passer (← sur une carte d'échec) y devenait une commande de Chrome qui ouvre l'onglet de l'aide
+// (chrome://settings/help) par-dessus la page de test, cachée dès lors (minuteurs ralentis, images non décodées)
 function keyEvent(type, key, modifiers, repeat) {
   const { code, vk } = keyInfo(key);
   const mask = modifiers.reduce((m, name) => m | MODIFIERS[name][0], 0);
   const text = type === 'keyDown' && !(mask & 6) ? (key === 'Enter' ? '\r' : key.length === 1 ? key : '') : '';
   return { type: text ? 'keyDown' : type === 'keyDown' ? 'rawKeyDown' : 'keyUp', key, code, modifiers: mask,
-    windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, autoRepeat: repeat, text, unmodifiedText: text };
+    windowsVirtualKeyCode: vk, autoRepeat: repeat, text, unmodifiedText: text };
 }
 
 // cookie du code d'accès d'un banc posé dans le navigateur de la page (même cookie que la saisie du code)
@@ -374,7 +386,17 @@ async function connect(wsUrl, { closeTab, siblings }) {
   on('Log.entryAdded', p => {
     if (p.entry.level === 'error')
       record(`${p.entry.source} : ${p.entry.text}${p.entry.url ? ` (${p.entry.url})` : ''}`); });
-  await Promise.all([send('Runtime.enable'), send('Log.enable'), send('Page.enable')]);
+  // images demandées, ni reçues ni en échec, vues par Chrome : identifiant de la requête → chemin de l'adresse
+  // (privateIdle). Une image différée hors de l'écran n'y est pas : sa requête ne part jamais. Un nouveau document
+  // les oublie (celles de l'ancien sont abandonnées) ; le suivi reste actif toute la vie de la page (page.send refuse
+  // Network.disable)
+  const imageLoads = new Map();
+  on('Network.requestWillBeSent', p => {
+    if (p.type === 'Image' && /^https?:/.test(p.request.url))
+      imageLoads.set(p.requestId, new URL(p.request.url).pathname); });
+  for (const end of ['Network.loadingFinished', 'Network.loadingFailed']) on(end, p => imageLoads.delete(p.requestId));
+  on('Page.frameNavigated', p => { if (!p.frame.parentId) imageLoads.clear(); });
+  await Promise.all([send('Runtime.enable'), send('Log.enable'), send('Page.enable'), send('Network.enable')]);
   // requêtes privées comptées dès le chargement de chaque document (privateIdle, page.close)
   await send('Page.addScriptToEvaluateOnNewDocument', { source: COUNT_PRIVATE });
 
@@ -408,7 +430,12 @@ async function connect(wsUrl, { closeTab, siblings }) {
   }
   let holding = null, holdHook = false;              // requêtes retenues en cours (page.holdRequests), écouteur posé
   const page = {
-    send, on, errors,
+    on, errors,
+    // commande du protocole ; Network.disable refusé : il couperait le suivi des images (privateIdle)
+    send(method, params) {
+      if (method === 'Network.disable') return Promise.reject(new Error('Network.disable : suivi du pilote coupé'));
+      return send(method, params);
+    },
     // évalue une expression dans la page (promesse attendue) et renvoie sa valeur (JSON) ; échoue après timeout ms
     // (une promesse jamais tenue, comme une confirmation qui attend sa réponse, ne bloque pas le test)
     async eval(expression, { timeout = EVAL_TIMEOUT } = {}) {
@@ -468,14 +495,24 @@ async function connect(wsUrl, { closeTab, siblings }) {
     // du document ; sur un document déjà chargé avant la connexion, à partir de l'appel
     countPrivate() { return page.eval(COUNT_PRIVATE); },
     // espace privé au repos : pile privée lue, aucune requête privée en route (comptées dès le chargement du
-    // document), aucune image privée en chargement (une vignette différée hors de l'écran n'est jamais chargée : elle
-    // fait échouer l'attente). À attendre avant de fermer l'espace sans « Sortir »
-    // (le Mac, une fermeture de la page) : une requête servie après la fermeture répondrait 403, ce que la page ne peut
-    // pas savoir
+    // document), aucune image de l'espace (secretUrl) en cours de décodage (secretLoads), ni demandée et pas encore
+    // reçue, attachée ou non (requêtes vues par Chrome), ni sur le point de l'être : image non différée de la page pas
+    // encore chargée. Une image différée (loading=lazy) part, si elle doit partir (à l'écran ou près de lui), au rendu
+    // qui suit : la page visible, deux rendus passent avant le relevé ; hors de l'écran, elle ne demande pas la sienne
+    // et ne retient pas l'attente. Une page cachée ne rend rien : ses images différées partiraient à son retour au
+    // premier plan (page.close la fait passer devant avant d'attendre). À attendre avant de fermer l'espace sans
+    // « Sortir » (le Mac, une fermeture de la page) : une requête servie après la fermeture répondrait 403, ce que la
+    // page ne peut pas savoir
     async privateIdle() {
       await page.countPrivate();
-      await page.waitFor(`!__privInflight && pileRead && !secretLoads.size && ![...document.querySelectorAll('img')]
-        .some(i => secretUrl(i.getAttribute('src')) && !i.complete)`, { what: 'espace privé au repos' });
+      await waitUntil(async () => {
+        if (!await page.eval(`(async () => { if (!document.hidden)
+          await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+          return !__privInflight && pileRead && !secretLoads.size && ![...document.querySelectorAll('img')]
+            .some(i => secretUrl(i.getAttribute('src')) && !i.complete && i.loading !== 'lazy'); })()`)) return false;
+        // requêtes lues après la réponse : Chrome envoie avant elle les événements des requêtes déjà parties
+        return page.eval(`!${JSON.stringify([...imageLoads.values()])}.some(secretUrl)`);
+      }, { what: 'espace privé au repos' });
     },
     // autre vue (PHONE, PC, TABLET, TABLET_WIDE) sans recharger la page, comme une fenêtre redimensionnée
     setView(view) { return applyView(page, view); },
@@ -554,11 +591,20 @@ async function connect(wsUrl, { closeTab, siblings }) {
         return n; } })()`);
     },
     // prompt de la carte du dessus de la pile affichée (undefined sans carte)
-    topPrompt() { return page.eval(`$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`); },
+    topPrompt() { return page.eval(TOP); },
+    // messages (toasts) affichés par la page à partir de l'appel, notés dans seenToasts (texte de chacun) ; un nouvel
+    // appel repart d'une liste vide
+    watchToasts() {
+      return page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
+        window.toastWatch = new MutationObserver(() => seenToasts.push($('toastBox').textContent));
+        toastWatch.observe($('toastBox'), { childList: true, characterData: true, subtree: true }); })()`);
+    },
     // image de la carte du dessus affichée (posed : sinon un geste de tri l'ignore) et aucun tri en cours (un geste
-    // de tri l'ignore aussi tant que l'image d'avant est tenue, beforeHeld)
-    topShown() {
-      return page.waitFor(`posed($('pile').querySelector('[data-k="0"] .pimg img')) && !sortBusy()`,
+    // de tri l'ignore aussi tant que l'image d'avant est tenue, beforeHeld). La page passe d'abord au premier plan,
+    // comme sous le doigt : page cachée, le verrou court ne compte pas (onScreen)
+    async topShown() {
+      await send('Page.bringToFront');
+      await page.waitFor(`posed($('pile').querySelector('[data-k="0"] .pimg img')) && !sortBusy()`,
         { what: 'image du dessus affichée, pile au repos' });
     },
     // demandes de tri et de suppression (keep, discard, delete) envoyées par la page à partir de l'appel, notées dans
@@ -591,7 +637,10 @@ async function connect(wsUrl, { closeTab, siblings }) {
       await page.eval(`openViewer(${at}, pileView())`);
       await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
       // son image vue 0,3 s (sortHeld levé) : sinon Garder et Jeter l'ignorent encore ({ seen: false } : sans)
-      if (seen) await page.waitFor(`!sortHeld`, { what: 'image de la visionneuse vue 0,3 s' });
+      if (seen) {                                    // (au premier plan : page cachée, rien n'est vu)
+        await send('Page.bringToFront');
+        await page.waitFor(`!sortHeld`, { what: 'image de la visionneuse vue 0,3 s' });
+      }
     },
     // visionneuse ouverte sur le tirage de rang index des Tirages affichés, son image chargée
     async viewTirage(index = 0) {
@@ -655,6 +704,7 @@ async function connect(wsUrl, { closeTab, siblings }) {
         { what: `« ${prompt} » dans la pile`, timeout: 30000 });
       // sur le dessus, son image affichée (posed) depuis SORT_GAP (verrou court d'une carte arrivée : sortBusy) :
       // sinon ✓, ✕ et les flèches l'ignorent encore
+      if (shown) await send('Page.bringToFront');   // (page cachée : le verrou court ne compte pas)
       if (shown) await page.waitFor(`(c => !c || c.querySelector('.pprompt').textContent !== ${JSON.stringify(prompt)}
         || posed(c.querySelector('.pimg img')) && !sortBusy())($('pile').querySelector('[data-k="0"]'))`,
       { what: `image de « ${prompt} » affichée`, timeout: 30000 });
@@ -777,14 +827,18 @@ async function connect(wsUrl, { closeTab, siblings }) {
     },
     // onglet fermé (pagehide, comme une vraie fermeture), connexion coupée. Une page fermée qui voit l'espace privé
     // ouvert (même conditions que son pagehide) le reverrouille : chaque page du même Chrome dans l'espace est d'abord
-    // attendue au repos (privateIdle), aucune requête privée en route ne reçoit de 403. Le verrouillage, lui, peut
-    // arriver au Mac après la fin de close (page.lockedOnMac l'attend). disconnect ne coupe que la connexion (l'onglet
-    // reste chargé)
+    // passée au premier plan et attendue au repos (privateIdle), aucune requête privée en route ne reçoit de 403. Le
+    // verrouillage, lui, peut arriver au Mac après la fin de close (page.lockedOnMac l'attend). disconnect ne coupe que
+    // la connexion (l'onglet reste chargé)
     async close() {
       const relocks = await page.eval(`typeof privState === 'object'
         && !!(privState.unlocked || relock || entering || marked)`).catch(() => false);
       for (const p of relocks ? siblings.filter(x => livePages.has(x)) : []) {
-        if (await p.eval(`typeof inPrivate === 'function' && inPrivate()`).catch(() => false)) await p.privateIdle();
+        if (!await p.eval(`typeof inPrivate === 'function' && inPrivate()`).catch(() => false)) continue;
+        // au premier plan, comme quand l'onglet fermé la laissera devant : ses images différées et ses décodages en
+        // attente partent avant le verrouillage, pas après
+        await p.send('Page.bringToFront');
+        await p.privateIdle();
       }
       page.disconnect();
       await closeTab();

@@ -1752,25 +1752,31 @@ const SORT_GAP=300;
 // view() : ce que montre une vue qui trie, {key, shown} (topView, ou l'image de la visionneuse) ; afterSeen appelle
 // done() une fois ce qu'elle montre vu depuis SORT_GAP ms (le compte repart de zéro quand elle montre autre chose, key,
 // ou plus rien) ; renvoie de quoi l'abandonner. (minuteur : une page cachée n'a plus d'images d'animation, mais ses
-// minuteurs ; la vue est notée au plus 50 ms après)
-function afterSeen(view, done){ let key, since=null, timer=null;
+// minuteurs ; la vue est notée au plus 50 ms après.) Le compte repart aussi de zéro quand la page passe en
+// arrière-plan ou en revient (visibilitychange), et après un relevé manqué (plus de SORT_GAP ms depuis le précédent :
+// page gelée, minuteurs ralentis) : le temps où personne n'a regardé ne compte pas
+function afterSeen(view, done){ let key, since=null, timer=null, last=-Infinity;
+  const away=()=>{ since=null; };
+  const stop=()=>{ clearTimeout(timer); document.removeEventListener('visibilitychange', away); };
   const wait=()=>{ const v=view() || {}, now=performance.now();
-    if(v.key!==key){ key=v.key; since=null; }
-    if(!v.shown) since=null; else if(since==null) since=now;
-    if(since!=null && now-since>=SORT_GAP) done(); else timer=setTimeout(wait, 50); };
-  wait(); return ()=>clearTimeout(timer); }
+    if(v.key!==key || !v.shown || now-last>SORT_GAP){ key=v.key; since=null; }
+    if(v.shown && since==null) since=now;
+    last=now;
+    if(since!=null && now-since>=SORT_GAP){ stop(); done(); } else timer=setTimeout(wait, 50); };
+  document.addEventListener('visibilitychange', away);
+  wait(); return stop; }
 // sortHeld : verrou de l'image de la visionneuse ; topHeld : verrou de la carte du dessus (pile seulement : la
 // visionneuse montre sa propre image). stopSort, stopTop : abandon de leur attente
 let sortHeld=false, topHeld=false, stopSort=null, stopTop=null;
 const sortBusy=()=>flying || sortHeld || topHeld;   // ✓, ✕, ← → et le balayage l'ignorent (la visionneuse : sans topHeld)
 function holdSort(view){ if(stopSort) stopSort(); sortHeld=true; stopSort=afterSeen(view, ()=>{ stopSort=null; sortHeld=false; }); }
 function holdTop(){ if(stopTop) stopTop(); topHeld=true; stopTop=afterSeen(topView, ()=>{ stopTop=null; topHeld=false; }); }
-// el à l'écran, ce que l'œil en voit : son milieu dans la fenêtre (pas sorti par défilement), et rien par-dessus, ni
-// une visionneuse (images d'entrée comprises ; pas celle qui contient el) ni une feuille, même pendant leur effacement,
-// ni le voile. (Pas
-// document.hidden : Chrome sans écran laisse les pages des tests derrière un autre onglet)
+// el à l'écran, ce que l'œil en voit : la page visible (pas en arrière-plan : autre appli, téléphone verrouillé, autre
+// onglet ; un verrou court en cours repart de zéro au retour, et une image déjà vue avant reste triable, décision du
+// porteur du 29/10/2026, groupe G), son milieu dans la fenêtre (pas sorti par défilement), et rien par-dessus, ni une visionneuse (images d'entrée comprises ; pas celle qui
+// contient el) ni une feuille, même pendant leur effacement, ni le voile
 const onScreen = el => { const r=el.getBoundingClientRect(), y=(r.top+r.bottom)/2, x=(r.left+r.right)/2;
-  return !!r.height && y>=0 && y<=innerHeight && x>=0 && x<=innerWidth
+  return !document.hidden && !!r.height && y>=0 && y<=innerHeight && x>=0 && x<=innerWidth
     && ![...document.querySelectorAll('.viewer, .sheet')].some(v=>!v.contains(el) && getComputedStyle(v).visibility==='visible')
     && !(+getComputedStyle($('scrim')).opacity); };
 // la carte du dessus dessinée (data-key) et vue : Labo affiché, carte pas masquée (Dessiner : shownTop) et à l'écran,

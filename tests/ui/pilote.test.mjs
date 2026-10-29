@@ -81,11 +81,13 @@ test('chrome.phonePage : connectée au banc ; sans le cookie, le Mac lui-même r
   }
 });
 
-test('page.close ferme l\'onglet : la page restée ouverte repasse au premier plan', async () => {
+test('chrome.phonePage s\'ouvre au premier plan ; page.close ferme l\'onglet : la page restée ouverte y repasse',
+  async () => {
   const other = await chrome.phonePage();
   try {
     await other.goto(bench.url + '/');
     await other.ready();
+    assert.equal(await other.eval(`document.visibilityState`), 'visible', 'nouvelle page au premier plan');
     assert.equal(await page.eval(`document.visibilityState`), 'hidden', 'page derrière l\'autre onglet (prémisse)');
     other.assertNoErrors();
   } finally { await other.close(); }
@@ -140,6 +142,68 @@ test('page.close dans l\'espace privé : une requête privée partie avant tout 
       await (closing || other.close());
     }
     await page.lockedOnMac();
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`!inPrivate()`, { what: 'page sortie de l\'espace' });
+    page.assertNoErrors();
+  });
+
+test('page.privateIdle : une vignette privée différée jamais chargée ne la retient pas, une image privée en route si',
+  async () => {
+    await page.enterPrivate('code-du-pilote');
+    await page.made('zp3 secrete');
+    const thumb = await page.eval(`thumbOf(pileItems.find(it => it.private))`);
+    // vignette différée dans un bloc caché (comme les Tirages quand on est au Labo) : sa requête ne part jamais
+    await page.eval(`(() => { const d = document.createElement('div'); d.id = 'zpLazy'; d.hidden = true;
+      const im = document.createElement('img'); im.loading = 'lazy'; im.src = ${JSON.stringify(thumb + '&zp=lazy')};
+      d.append(im); document.body.append(d); })()`);
+    assert.equal(await page.eval(`$('zpLazy').firstChild.complete`), false, 'vignette pas chargée (prémisse)');
+    await page.privateIdle();
+    assert.equal(await page.eval(`$('zpLazy').firstChild.complete`), false, 'vignette différée chargée quand même');
+    // une image privée dont la requête est partie (retenue avant le Mac) : attendue jusqu'à sa réponse
+    const held = await page.holdRequests(['*/api/private/thumb*'], p => p.request.url.includes('zp=held'));
+    let idle = false, waiting = null;
+    try {
+      // (image détachée, comme celles que la page charge à part : seule sa requête la montre)
+      await page.eval(`(() => { window.zpHeld = new Image(); zpHeld.src = ${JSON.stringify(thumb + '&zp=held')}; })()`);
+      await waitUntil(() => held.held.length > 0, { what: 'image privée en route' });
+      waiting = page.privateIdle().then(() => { idle = true; });
+      await elapse(500);
+      assert.equal(idle, false, 'espace dit au repos avec une image privée en route');
+    } finally {
+      await held.release();
+    }
+    await waiting;
+    await page.eval(`$('zpLazy').remove(); window.zpHeld = null`);
+    await page.keepPile();
+    await page.click('#privExit');
+    await page.waitFor(`!inPrivate()`, { what: 'page sortie de l\'espace' });
+    page.assertNoErrors();
+  });
+
+test('page.close dans l\'espace privé : la vignette différée d\'une page restée derrière part avant le verrouillage',
+  async () => {
+    await page.enterPrivate('code-du-pilote');
+    await page.made('zp4 secrete', { shown: false });
+    const thumb = await page.eval(`thumbOf(pileItems.find(it => it.private))`);
+    const other = await chrome.phonePage();          // au premier plan : page passe derrière
+    let closed = false;
+    try {
+      await other.goto(bench.url + '/');
+      await other.waitFor(`inPrivate() && pileRead`, { what: 'autre page dans l\'espace' });
+      await page.waitFor(`document.hidden`, { what: 'page derrière l\'autre onglet' });
+      // vignette différée à l'écran de la page cachée : elle ne demandera son image qu'une fois la page devant
+      await page.eval(`(() => { const im = document.createElement('img'); im.id = 'zpLate'; im.loading = 'lazy';
+        im.style.cssText = 'position:fixed;left:0;top:0;width:40px;height:40px;z-index:90';
+        im.src = ${JSON.stringify(thumb + '&zp=late')}; document.body.append(im); })()`);
+      await other.close();
+      closed = true;
+    } finally {
+      if (!closed) await other.close();
+    }
+    await page.lockedOnMac();
+    await page.waitFor(`$('zpLate').complete`, { what: 'vignette différée arrivée' });
+    assert.equal(await page.eval(`$('zpLate').naturalWidth > 0`), true, 'vignette différée refusée (403)');
+    await page.eval(`$('zpLate').remove()`);
     await page.eval(`refreshStatus()`);
     await page.waitFor(`!inPrivate()`, { what: 'page sortie de l\'espace' });
     page.assertNoErrors();
@@ -201,6 +265,14 @@ test('page.keyDown, keyUp, press : touche maintenue, répétée, relâchée, ave
       'keydown Meta MetaLeft false metaKey', 'keydown Enter Enter false metaKey', 'keyup Enter Enter false metaKey',
       'keyup Meta MetaLeft false ',
       'keydown Escape Escape false ', 'keyup Escape Escape false ']);
+    // aucune touche, laissée passer par la page, n'a ouvert d'onglet de Chrome par-dessus elle
+    await p.press('ArrowLeft');
+    await p.press('ArrowRight');
+    await p.eval(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+    assert.deepEqual((await p.send('Target.getTargets')).targetInfos
+      .filter(t => t.type === 'page' && t.url.startsWith('chrome:'))
+      .map(t => t.url), [], 'onglet de Chrome ouvert par une touche');
+    assert.equal(await p.eval(`document.visibilityState`), 'visible', 'page cachée par une touche');
     p.assertNoErrors();
   } finally { await p.close(); }
 });

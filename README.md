@@ -362,9 +362,11 @@ suite l'effacement de la précédente (un seul bandeau à la fois). Après un tr
 ignorent un nouvel appui tant que l'image suivante n'est pas affichée depuis 0,3 s : un double appui ne trie jamais
 une image qu'on n'a pas vue. De même, une carte arrivée sur le dessus sans tri sur cet appareil (nouvelle image, tri
 fait sur un autre appareil, image remise par Annuler) ne se trie par ✓, ✕, les flèches ou le balayage que 0,3 s après
-qu'on a pu la voir (Labo affiché, sans visionneuse, panneau ni Dessiner par-dessus) : un ✕ visé sur l'ancienne ne jette
-pas la nouvelle, même arrivée pendant que la visionneuse la couvrait. Dans la visionneuse, toute image de la pile attend
-de même 0,3 s après son affichage avant que Garder ou Jeter la trie : à l'ouverture, après un pas (← →) ou un tri. Plus
+qu'on a pu la voir (application au premier plan, Labo affiché, sans visionneuse, panneau ni Dessiner par-dessus) : un ✕
+visé sur l'ancienne ne jette pas la nouvelle, même arrivée pendant que la visionneuse la couvrait ou que l'application
+était en arrière-plan (autre application, téléphone verrouillé, autre onglet : les 0,3 s ne comptent qu'au retour ;
+une carte déjà vue avant de partir se trie tout de suite). Dans la visionneuse, toute image de la pile attend de même
+0,3 s après son affichage avant que Garder ou Jeter la trie : à l'ouverture, après un pas (← →) ou un tri. Plus
 généralement, aucun geste (bouton, touche, balayage, visionneuse) ne trie une image
 dont ni la miniature ni l'image n'est encore à l'écran ; une image que le navigateur n'arrive pas à lire se trie une
 fois son chargement fini en échec, pour ne pas bloquer la pile. Dans l'espace privé, un Jeter en attente est abandonné
@@ -1166,8 +1168,8 @@ pile (ordre, cartes de lot, ✓ et ✕, balayage au doigt et à la souris, bande
 au rechargement, deux Jeter de suite, un second ✓ pendant le départ d'une carte, « Sortir » pendant le chargement d'une
 image privée, rien de trié ni relancé pendant « Sortir », la carte qui partait revenue et la pile qui garde ses images,
 aucun tri d'une image pas encore affichée ni dans les 0,3 s qui suivent son affichage, carte arrivée d'ailleurs
-comprise, carte masquée par Dessiner jamais triée, image illisible triable, « Déjà triée », visionneuse, carte
-d'échec, pile privée, message « Image prête »), Garder et Jeter par nom
+ou pendant que la page était cachée comprise, carte masquée par Dessiner jamais triée, image illisible triable, « Déjà
+triée », visionneuse, carte d'échec, pile privée, message « Image prête »), Garder et Jeter par nom
 après une relecture de la pile, la saisie (unique, dans le Labo, Dessiner, collage, campagne à partir de 2 images,
 plusieurs photos d'un coup, vidage après « Révéler », saisie propre à chaque espace), le champ de création (replié avec
 une pile, déplié pile vide, replié après « Révéler », par sa poignée ou un toucher sur la pile sans rien perdre de la
