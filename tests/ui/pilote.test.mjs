@@ -81,11 +81,13 @@ test('chrome.phonePage : connectée au banc ; sans le cookie, le Mac lui-même r
   }
 });
 
-test('page.close ferme l\'onglet : la page restée ouverte repasse au premier plan', async () => {
+test('chrome.phonePage s\'ouvre au premier plan ; page.close ferme l\'onglet : la page restée ouverte y repasse',
+  async () => {
   const other = await chrome.phonePage();
   try {
     await other.goto(bench.url + '/');
     await other.ready();
+    assert.equal(await other.eval(`document.visibilityState`), 'visible', 'nouvelle page au premier plan');
     assert.equal(await page.eval(`document.visibilityState`), 'hidden', 'page derrière l\'autre onglet (prémisse)');
     other.assertNoErrors();
   } finally { await other.close(); }

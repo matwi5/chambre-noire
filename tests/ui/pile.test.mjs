@@ -1500,6 +1500,126 @@ test('carte arrivée hors de l\'écran (page défilée) : ✕ ignoré 0,3 s apr�
   page.assertNoErrors();
 });
 
+// Page cachée (G3) : la page passe derrière un autre onglet, ouvert au premier plan ; behind(during) joue during
+// pendant qu'elle est cachée, puis ferme l'onglet : la page revient au premier plan. Le retour est noté dans la page
+// (zqBack : instant où elle redevient visible)
+async function behind(during) {
+  const other = await chrome.phonePage();
+  try {
+    await page.waitFor(`document.hidden`, { what: 'page cachée derrière l\'autre onglet' });
+    await during();
+    await page.eval(`(() => { window.zqBack = null; document.addEventListener('visibilitychange',
+      () => { if (!document.hidden) zqBack = performance.now(); }, { once: true }); })()`);
+  } finally {
+    await other.close();
+  }
+}
+// geste act (source évaluée dans la page) 0,12 s après le retour de la page au premier plan ; renvoie le délai réel
+// et l'état que rend state (source)
+const afterBack = (act, state) => page.eval(`(async () => { const t0 = Date.now();
+  while (zqBack == null) {
+    if (Date.now() - t0 > 20000) throw new Error('page jamais revenue au premier plan');
+    await new Promise(r => setTimeout(r, 5)); }   // règle levée : sondage serré, l'instant du retour compte
+  await new Promise(r => setTimeout(r, Math.max(0, 120 - (performance.now() - zqBack))));   // règle levée
+  const late = Math.round(performance.now() - zqBack); ${act};
+  await new Promise(r => setTimeout(r, 300));      // règle levée : au-delà de l'envol (0,22 s)
+  return [late < SORT_GAP, ${state}]; })()`);
+
+test('carte arrivée page cachée (autre onglet) : ✕ ignoré 0,3 s après le retour de la page', async () => {
+  await page.waitFor(`!inPrivate()`, { what: 'espace public' });
+  await clear();
+  await page.made('zp52 ancienne');
+  await page.topShown();
+  await page.eval(`sorts.length = 0`);
+  await behind(async () => {
+    await page.launch('zp52 nouvelle', { steps: 2 });   // (comme depuis un autre appareil)
+    await bench.idle();
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`${TOP} === 'zp52 nouvelle' && posed($('pile').querySelector('[data-k="0"] .pimg img'))`,
+      { what: 'nouvelle carte posée, page cachée' });
+    await elapse(2500);    // au-delà de SORT_GAP, même aux minuteurs ralentis d'une page cachée (une fois par seconde)
+    assert.equal(await page.eval(`topHeld`), true, 'carte vue page cachée');
+  });
+  assert.deepEqual(await afterBack(`$('pileNo').click()`, `!!discarding`), [true, false],
+    '✕ 0,12 s après le retour de la page');
+  await page.topShown();
+  await page.click('#pileNo');
+  await page.waitFor(`!!discarding && ${TOP} === 'zp52 ancienne'`, { what: 'la nouvelle jetée une fois vue 0,3 s' });
+  await page.click('#undoBtn');
+  await clear();
+  page.assertNoErrors();
+});
+
+// page gelée ou en arrière-plan sans qu'aucun relevé du verrou ne tombe pendant l'absence (iOS gèle vite une appli
+// quittée) : simulée par un fil de la page bloqué 0,6 s, minuteurs compris ; le premier relevé d'après ne compte pas
+// le temps de l'absence
+test('carte vue 0,1 s puis page gelée 0,6 s : ✕ ignoré dans les 0,3 s qui suivent la reprise', async () => {
+  await page.waitFor(`!inPrivate()`, { what: 'espace public' });
+  await clear();
+  await page.made('zp55 ancienne');
+  await page.topShown();
+  await page.eval(`sorts.length = 0`);
+  await page.launch('zp55 nouvelle', { steps: 2 });   // (comme depuis un autre appareil)
+  const frozen = page.eval(`(async () => { const t0 = Date.now();
+    const img = () => $('pile').querySelector('[data-k="0"] .pimg img');
+    while (!(${TOP} === 'zp55 nouvelle' && posed(img()))) {
+      if (Date.now() - t0 > 20000) throw new Error('nouvelle carte jamais affichée');
+      await new Promise(r => setTimeout(r, 5)); }   // règle levée : sondage serré, l'instant de l'affichage compte
+    await new Promise(r => setTimeout(r, 100));      // règle levée : vue 0,1 s
+    for (const end = performance.now() + 600; performance.now() < end;) { /* page gelée */ }
+    await new Promise(r => setTimeout(r, 80));       // règle levée : un relevé du verrou après la reprise
+    $('pileNo').click(); await new Promise(r => setTimeout(r, 300));   // règle levée : au-delà de l'envol (0,22 s)
+    return !!discarding; })()`);
+  await bench.idle({ page });
+  await page.eval(`refreshStatus()`);
+  assert.equal(await frozen, false, '✕ 0,08 s après la reprise d\'une page gelée');
+  await page.topShown();
+  await page.click('#pileNo');
+  await page.waitFor(`!!discarding && ${TOP} === 'zp55 ancienne'`, { what: 'la nouvelle jetée une fois vue 0,3 s' });
+  await page.click('#undoBtn');
+  await clear();
+  page.assertNoErrors();
+});
+
+test('carte déjà vue avant que la page passe derrière un autre onglet : ✕ la trie dès le retour', async () => {
+  await page.waitFor(`!inPrivate()`, { what: 'espace public' });
+  await clear();
+  await page.made('zp54 vue');
+  await page.topShown();
+  await behind(async () => {});
+  // décision du porteur du 29/10/2026 (groupe G) : la même carte à l'écran au retour, sans nouveau verrou
+  assert.deepEqual(await afterBack(`$('pileNo').click()`, `!!discarding`), [true, true],
+    '✕ ignoré au retour sur une carte déjà vue');
+  await page.click('#undoBtn');
+  await clear();
+  page.assertNoErrors();
+});
+
+test('visionneuse : image passée page cachée (autre onglet), Jeter ignoré 0,3 s après le retour', async () => {
+  await page.waitFor(`!inPrivate()`, { what: 'espace public' });
+  await clear();
+  await page.made('zp53 a');
+  await page.made('zp53 b');
+  await page.eval(`sorts.length = 0`);
+  await page.viewPile('zp53 b');
+  await behind(async () => {
+    await page.eval(`stepViewer(1)`);              // (l'image suivante, montrée pendant que la page est cachée)
+    await page.waitFor(`vList[vIndex]?.prompt === 'zp53 a' && posed($('vImg'))`,
+      { what: 'image suivante posée, page cachée' });
+    await elapse(2500);    // au-delà de SORT_GAP, même aux minuteurs ralentis d'une page cachée (une fois par seconde)
+    assert.equal(await page.eval(`sortHeld`), true, 'image vue page cachée');
+  });
+  assert.deepEqual(await afterBack(`sortFromViewer('discard')`, `[vIndex >= 0, sorts.length, !!discarding]`),
+    [true, [true, 0, false]], 'Jeter 0,12 s après le retour de la page');
+  await page.waitFor(`!sortHeld`, { what: 'image vue 0,3 s' });
+  await page.eval(`sortFromViewer('discard')`);
+  await page.waitFor(`!!discarding`, { what: 'Jeter une fois vue 0,3 s' });
+  await page.closeViewer();
+  await page.click('#undoBtn');
+  await clear();
+  page.assertNoErrors();
+});
+
 // Jeter dans la visionneuse 0,12 s après l'affichage de son image : renvoie [visionneuse ouverte, demandes envoyées,
 // Jeter en attente]
 const viewerSeenThenNo = () => page.eval(`(async () => { const t0 = Date.now();

@@ -4,7 +4,8 @@
 //   const bench = await startBench();            // serveur du banc sur un port libre, dossier temporaire
 //   const chrome = await launchChrome();         // profil temporaire, supprimé par chrome.close()
 //   const page = await chrome.phonePage();       // vue du téléphone du porteur : 367×760, densité 2,5, tactile ;
-//                                                // connectée au banc direct en cours (cookie du code d'accès)
+//                                                // connectée au banc direct en cours (cookie du code d'accès),
+//                                                // au premier plan (une page cachée ne voit rien : verrou de tri)
 //   const pc = await chrome.newPage(PC);         // autre vue, connectée de même : PC (1280×800, densité 1, souris,
 //                                                // sans tactile), TABLET (tablette Android 800×1280, tactile),
 //                                                // TABLET_WIDE (la même en largeur, 1280×800), PHONE
@@ -287,11 +288,13 @@ export async function launchChrome() {
   return {
     pid: proc.pid,
     phonePage() { return this.newPage(PHONE); },
-    // page dans la vue view (PHONE, PC, TABLET, TABLET_WIDE), connectée au banc direct comme phonePage
+    // page dans la vue view (PHONE, PC, TABLET, TABLET_WIDE), connectée au banc direct comme phonePage, passée au
+    // premier plan (les autres pages de ce Chrome, cachées derrière elle, le reprennent à sa fermeture : page.close)
     async newPage(view) {
       const target = await (await devtools('new?about:blank')).json();
       const page = await connect(target.webSocketDebuggerUrl, { closeTab: () => closeTab(target.id), siblings: pages });
       pages.push(page);
+      await page.send('Page.bringToFront');
       await applyView(page, view);
       if (directBench) await setAccessCookie(page, directBench);
       return page;

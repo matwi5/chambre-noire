@@ -300,7 +300,9 @@ dernier bloc, après le HTML.
     image de la pile de même (ouverture, pas, tri : `openViewer`), `holdSort`, `sortHeld` ; l'attente commune,
     `afterSeen`, suit ce que
     montre la vue (`topView` : Labo sans visionneuse ni feuille, carte pas masquée, image posée ; ou l'image
-    de la visionneuse) et repart de zéro quand elle change ; `releaseSort` les lève à l'appui sur « Sortir » et à la
+    de la visionneuse ; toutes deux par `onScreen`, faux aussi page cachée, `document.hidden`) et repart de zéro quand
+    elle change, que la page passe en arrière-plan ou en revient (`visibilitychange`), ou après un relevé manqué (page
+    gelée) ; `releaseSort` les lève à l'appui sur « Sortir » et à la
     sortie de l'espace), `pileSwipe`
     (balayage de
     la carte du dessus par Pointer Events, doigt et souris : seuil au tiers de la largeur ou geste vif ; `swiped` :
@@ -547,6 +549,11 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
 (`driver.mjs`, `serve.py`, tests `*.test.mjs`). Commandes dans `CLAUDE.md`. Vues du pilote : `PHONE` (celle de
 `phonePage`), `PC` (souris), `TABLET` et `TABLET_WIDE` (tactile), ouvertes par `newPage` et changées sans
 rechargement par `setView` (`applyView`) ; clavier par `keyDown`, `keyUp` et `press`, appui maintenu par `hold`.
+Chaque page s'ouvre au premier plan (`Page.bringToFront`) : une page cachée derrière un autre onglet ne laisse pas
+trier sa pile (verrou court, `onScreen`). Les touches n'envoient pas de `nativeVirtualKeyCode` : Chrome sur Mac y lit
+un code du Mac, et une flèche laissée passer par la page ouvrait l'onglet de l'aide par-dessus la page de test.
+`page.privateIdle` suit les images en route par le domaine Network (`imageLoads`) ; `page.send` refuse
+`Network.disable`.
 
 Recettes visuelles (pas de script jetable) :
 
