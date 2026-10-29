@@ -295,6 +295,12 @@ les messages de commit.
     redessinée) ; aucune image de la pile ne se trie avant d'avoir été vue 0,3 s (topHeld, sortHeld, onScreen). On
     l'ajoute ? » → « Oui, l'ajouter (Recommandé) » : « Ce sont deux invariants que toute future modification de
     l'interface doit respecter ; je l'ajoute à la puce « Interface » des pièges. »
+- **Groupe G, verrou et page en arrière-plan** (29/10/2026), réponse par bouton : « Pendant F4, tu as renvoyé à plus
+  tard la règle « le verrou de 0,3 s ne compte pas quand la page est en arrière-plan », faute d'un pilote fiable (des
+  pages de test restent « cachées » dans Chrome sans écran). Le groupe G touche déjà le pilote. On l'y ajoute ? » →
+  « Oui, ticket G3 (Recommandé) » : « Un 3e ticket, sensible (suppression) : rendre le premier plan fiable dans le
+  pilote (ouverture de chaque page, cause dans clavier.test.mjs), puis le verrou ne compte que page visible. Invariant
+  d'E3. Je crée le ticket dans Asana avant de lancer. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
