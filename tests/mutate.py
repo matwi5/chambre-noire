@@ -25,9 +25,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rules  # noqa: E402  (tests/rules.py : fonction qui contient une ligne)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# échec d'un test : unittest (« FAIL: test_y (mod.Classe.test_y) » puis sa trace), node --test (« ✖ titre (12ms) »
-# dans le résumé « ✖ failing tests: », puis son message)
-UNITTEST_RE = re.compile(r"^(?:FAIL|ERROR): (\S+) \((\S+)\)\n-+\n(.*?)(?=^={20,}|^-{20,}\nRan |\Z)", re.M | re.S)
+# échec d'un test : unittest (« FAIL: test_y (mod.Classe.test_y) », un éventuel sous-test « (cas=…) » ou « [msg] »,
+# la première ligne de sa docstring, puis sa trace), node --test (« ✖ titre (12ms) », puis son message dans le résumé
+# « ✖ failing tests: » ; sans résumé, fichier arrêté au plafond ou au délai de check.py : la ligne ✖ seule)
+UNITTEST_RE = re.compile(r"^(?:FAIL|ERROR): (\S+) \((\S+)\)[^\n]*\n(?:(?!-{20,})[^\n]*\n)?-{20,}\n(.*?)"
+                         r"(?=^={20,}|^-{20,}\nRan |\Z)", re.M | re.S)
 NODE_FAIL_RE = re.compile(r"^\s*✖ (.+) \([\d.]+m?s\)$")
 
 
@@ -63,13 +65,18 @@ def failures(out):
         lines = [l.strip() for l in m.group(3).splitlines() if l.strip()]
         message = next((l for l in lines if re.match(r"\w*(?:Error|Exception)\b", l)), lines[-1] if lines else "")
         found.append((m.group(2), message))
-    tail = out.split("✖ failing tests:", 1)
-    lines = tail[1].splitlines() if len(tail) == 2 else []
+    head, _, tail = out.partition("✖ failing tests:")
+    lines = tail.splitlines()
+    summary = {}                                       # titre → premier message, lus dans le résumé
     for k, line in enumerate(lines):
         m = NODE_FAIL_RE.match(line)
         if m:
-            message = next((l.strip() for l in lines[k + 1:] if l.strip()), "")
-            found.append((m.group(1), message))
+            summary.setdefault(m.group(1), next((l.strip() for l in lines[k + 1:] if l.strip()), ""))
+    for line in head.splitlines():                     # l'arbre : aussi un fichier arrêté avant son résumé
+        m = NODE_FAIL_RE.match(line)
+        if m and not line.lstrip().startswith("✖ failing tests"):
+            found.append((m.group(1), summary.get(m.group(1), "(message dans le journal : fichier arrêté avant)")))
+    found += [(t, msg) for t, msg in summary.items() if not any(t == f for f, _ in found)]
     return list(dict.fromkeys(found))
 
 
@@ -153,8 +160,10 @@ def main(argv=None):
         print(f"mutate : la commande échoue avec la mutation (code {code}) : garde prouvée ; {args.file} rendu")
         for test, message in failed:
             print(f"mutate : en échec : {test} : {message}")
-        if not failed:
-            print("mutate : aucun test en échec lu dans la sortie : vérifier que l'échec vient bien d'un test")
+        if not failed:                                 # (une règle, une compilation, une erreur : pas une preuve)
+            print("mutate : aucun test en échec lu dans la sortie : preuve non notée ; vérifier que l'échec vient "
+                  "bien de l'assertion du test")
+            return 0
         rows = record(args.file, original, args.old, failed)
         print(f"mutate : preuve notée ({', '.join(sorted({r['fonction'] for r in rows}))}) : {proofs_path()}")
         return 0

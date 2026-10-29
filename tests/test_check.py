@@ -525,7 +525,10 @@ class NoticeBaseTest(RepoCase):
         self.assertIn("sans preuve rouge de tests/mutate.py depuis le dernier commit (tools/launch.py : purge, autre)",
                       notice)
         with open(self.proofs, "w", encoding="utf-8") as f:
-            f.write(json.dumps({"t": time.time() + 5, "fichier": "tools/launch.py", "fonction": "purge"}) + "\n")
+            f.write(json.dumps({"t": time.time() + 5, "fichier": "tools/launch.py", "fonction": "purge",
+                                "tests": ["test_x.C.test_purge"]}) + "\n")
+            f.write(json.dumps({"t": time.time() + 5, "fichier": "tools/launch.py", "fonction": "autre",
+                                "tests": []}) + "\n")   # sans test en échec : pas une preuve
             f.write(json.dumps({"t": 0, "fichier": "tools/launch.py", "fonction": "autre"}) + "\n")   # trop vieille
         self.assertIn("(tools/launch.py : autre)", self.notice())
 

@@ -733,7 +733,8 @@ def proved():
             rows = [json.loads(line) for line in f if line.strip()]
     except (OSError, ValueError, subprocess.CalledProcessError):
         return set()
-    return {(r.get("fichier"), str(r.get("fonction", "")).split(" [")[0]) for r in rows if r.get("t", 0) >= since}
+    return {(r.get("fichier"), str(r.get("fonction", "")).split(" [")[0]) for r in rows
+            if r.get("t", 0) >= since and r.get("tests")}    # (une preuve sans test en échec ne compte pas)
 
 
 # un module du banc qui lit un fichier du dépôt autre qu'un .py (l'interface, la carte du code, le README, un

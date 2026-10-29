@@ -6,6 +6,8 @@ from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MUTATE = os.path.join(HERE, "mutate.py")
+sys.path.insert(0, HERE)
+import mutate  # noqa: E402
 ORIGINAL = "def garde(x):\n    if x is None:\n        return False\n    return True\n"
 
 
@@ -92,6 +94,19 @@ class MutateTest(unittest.TestCase):
             rows = [json.loads(line) for line in f]
         self.assertEqual([row["fonction"] for row in rows], ["garde", "garde"])
         self.assertEqual(rows[0]["tests"], ["test_x.GardeTest.test_garde", "rien ne part pendant « Sortir »"])
+        doc = ("FAIL: test_doc (test_y.C.test_doc)\nLa garde refuse.\n" + "-" * 70 + "\nTraceback:\n"
+               "AssertionError: 1 != 2\n\n" + "=" * 70 + "\nFAIL: test_cas (test_y.C.test_cas) (cookie='x')\n"
+               + "-" * 70 + "\nAssertionError: 403 != 200\n\n" + "-" * 70 + "\nRan 2 tests\n")
+        capped = "✔ vert (1ms)\n✖ rouge un (2ms)\n✖ rouge deux (3ms)\nfichier arrêté après 2 échecs\n"
+        failed = mutate.failures(doc + capped)
+        self.assertEqual([t for t, _ in failed], ["test_y.C.test_doc", "test_y.C.test_cas", "rouge un", "rouge deux"])
+        self.assertEqual(failed[0][1], "AssertionError: 1 != 2", "docstring de test sautée")
+        empty = subprocess.run([sys.executable, MUTATE, self.path, "--old", "if x is None:", "--new", "if False:",
+                                "--", sys.executable, "-c", "import sys; sys.exit('erreur hors test')"],
+                               capture_output=True, text=True, timeout=60, env=dict(os.environ,
+                                                                                  QWEN_MUTATE_JOURNAL=journal + "2"))
+        self.assertIn("preuve non notée", empty.stdout)
+        self.assertFalse(os.path.exists(journal + "2"), "un échec hors d'un test n'est pas une preuve")
         r = subprocess.run([sys.executable, MUTATE, self.path, "--old", "a", "--old", "b", "--new", "c", "--",
                             sys.executable, "-c", "pass"], capture_output=True, text=True, timeout=60)   # incomplètes
         self.assertEqual(r.returncode, 2)
