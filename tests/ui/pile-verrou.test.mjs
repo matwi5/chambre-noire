@@ -7,7 +7,8 @@
 //   venv/bin/python tests/check.py --no-bench --ui tests/ui/pile-verrou.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, waitUntil, elapse, PHONE, TOP } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, elapse, PHONE,
+  TOP, PRESS, VIEWER_PRESS, SORT_IDLE, VIEWER_SEEN } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -36,7 +37,7 @@ async function heldTop(prompt) {
   await page.waitFor(`!inPrivate()`, { what: 'espace public' });
   await page.emptyPile(bench);
   await page.made(`${prompt} dessous`);
-  await page.waitFor(`!sortBusy()`, { what: 'pile au repos' });
+  await page.waitFor(`${SORT_IDLE}`, { what: 'pile au repos' });
   const h = await page.holdRequests(['*/api/result*', '*/api/thumb*'], () => true);
   await page.generate(`${prompt} dessus`);
   await page.waitFor(`${TOP} === ${JSON.stringify(`${prompt} dessus`)}`, { what: 'carte du dessus dessinée' });
@@ -52,15 +53,17 @@ test('image du dessus pas encore affichée : ni ✓, ni ✕, ni flèches, ni bal
   try {
     // verrou court levé à la main : seule la garde de l'image affichée (posed) reste, c'est elle qu'on éprouve
     await page.eval(`releaseSort()`);
-    for (const [what, act] of [['✓', () => page.click('#pileYes')], ['✕', () => page.click('#pileNo')],
-      ['→', () => page.press('ArrowRight')], ['←', () => page.press('ArrowLeft')],
+    for (const [what, act] of [['✓', () => page.sort('keep', { ready: false })],
+      ['✕', () => page.sort('discard', { ready: false })],
+      ['→', () => page.sort('keep', { by: 'key', ready: false })],
+      ['←', () => page.sort('discard', { by: 'key', ready: false })],
       ['balayage', () => page.swipe('#pile .pimg', -200)]]) {
       await act();
       await elapse(400);
       assert.deepEqual(await topState(), unseen, `${what} sur une image pas affichée`);
     }
     await page.viewPile('zp31 dessus', { seen: false });   // visionneuse : son image retenue elle aussi
-    await page.eval(`$('vSort').querySelector('.btn').click()`);   // Jeter
+    await page.eval(`${VIEWER_PRESS.discard}`);   // Jeter
     await elapse(400);
     assert.deepEqual(await page.eval(`[vIndex >= 0 && vList[vIndex]?.prompt, !!discarding, sorts.length]`),
       ['zp31 dessus', false, 0], 'Jeter de la visionneuse sur une image pas affichée');
@@ -70,7 +73,7 @@ test('image du dessus pas encore affichée : ni ✓, ni ✕, ni flèches, ni bal
   }
   // l'image arrive : ✕ la jette (bandeau), comme d'habitude
   await page.topShown();
-  await page.click('#pileNo');
+  await page.sort('discard', { ready: false });
   await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
   await page.click('#undoBtn');
   await page.emptyPile(bench);
@@ -92,10 +95,10 @@ test('après un tri, la suivante pas encore affichée : ✕ ne la jette pas, mê
     await h.free(u => u.includes(pass));
     await page.topShown();
     await page.eval(`sorts.length = 0`);
-    await page.click('#pileYes');                  // le dessus gardé : la suivante dessus, sans son image
+    await page.sort('keep', { ready: false });                  // le dessus gardé : la suivante dessus, sans son image
     await page.waitFor(`${TOP} === 'zp33 suivante'`, { what: 'suivante sur le dessus' });
     await elapse(3200);                            // (l'ancien plafond du verrou, 3 s, dépassé)
-    await page.click('#pileNo');
+    await page.sort('discard', { ready: false });
     await elapse(400);
     assert.deepEqual(await topState(), { top: 'zp33 suivante', posed: false, discarding: false, sorts: 1 },
       '✕ 3 s plus tard sur une image pas affichée (seul le Garder d\'avant envoyé)');
@@ -116,7 +119,7 @@ test('image du dessus illisible : la carte se trie une fois l\'échec du chargem
     // la page redonne l'adresse au navigateur, qui la redemande (retenue) : adresse posée, chargement en cours
     await page.waitFor(`(i => !!i?.getAttribute('src') && !i.complete)(${TOP_IMG})`,
       { what: 'nouvel essai du navigateur en cours' });
-    await page.click('#pileNo');
+    await page.sort('discard', { ready: false });
     await elapse(400);
     assert.deepEqual(await topState(), { top: 'zp32 dessus', posed: false, discarding: false, sorts: 0 },
       '✕ pendant le nouvel essai');
@@ -124,8 +127,8 @@ test('image du dessus illisible : la carte se trie une fois l\'échec du chargem
   } finally {
     await h.release();
   }
-  await page.waitFor(`!sortBusy()`, { what: 'pile au repos' });
-  await page.click('#pileNo');
+  await page.waitFor(`${SORT_IDLE}`, { what: 'pile au repos' });
+  await page.sort('discard', { ready: false });
   await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau sur la carte illisible' });
   await page.click('#undoBtn');
   await page.emptyPile(bench);
@@ -142,7 +145,7 @@ const seenThenNo = prompt => page.eval(`(async () => { const t0 = Date.now();
     if (Date.now() - t0 > 20000) throw new Error('carte du dessus jamais affichée : ' + ${JSON.stringify(prompt)});
     await new Promise(r => setTimeout(r, 5)); }   // règle levée : sondage serré, l'instant de l'affichage compte
   await new Promise(r => setTimeout(r, 120));      // règle levée : appui 0,12 s après l'affichage, avant SORT_GAP
-  $('pileNo').click(); await new Promise(r => setTimeout(r, 300));   // règle levée : au-delà de l'envol (0,22 s)
+  ${PRESS.discard}; await new Promise(r => setTimeout(r, 300));   // règle levée : au-delà de l'envol (0,22 s)
   return !!discarding; })()`);
 
 test('après un tri, ✕ ignoré 0,3 s après l\'affichage de la carte suivante, même arrivée tard', async () => {
@@ -158,7 +161,7 @@ test('après un tri, ✕ ignoré 0,3 s après l\'affichage de la carte suivante,
     await h.free(u => u.includes(pass));
     await page.topShown();
     await page.eval(`sorts.length = 0`);
-    await page.click('#pileYes');                  // le dessus gardé : la suivante dessus, son image retenue
+    await page.sort('keep', { ready: false });   // le dessus gardé : la suivante dessus, son image retenue
     await page.waitFor(`${TOP} === 'zp44 suivante'`, { what: 'suivante sur le dessus' });
     await elapse(600);                             // (au-delà de SORT_GAP compté depuis le tri)
     const shown = seenThenNo('zp44 suivante');
@@ -168,7 +171,7 @@ test('après un tri, ✕ ignoré 0,3 s après l\'affichage de la carte suivante,
     await h.release();
   }
   await elapse(300);
-  await page.click('#pileNo');
+  await page.sort('discard', { ready: false });
   await page.waitFor(`!!discarding`, { what: '✕ une fois la suivante vue 0,3 s' });
   await page.click('#undoBtn');
   await page.emptyPile(bench);
@@ -188,7 +191,7 @@ test('carte du dessus remplacée sans tri d\'ici (nouvelle image) : ✕ ignoré 
   assert.equal(await shown, false, '✕ 0,12 s après l\'arrivée de la nouvelle carte');
   assert.equal(await page.eval(`sorts.length`), 0);
   await elapse(300);
-  await page.click('#pileNo');
+  await page.sort('discard', { ready: false });
   await page.waitFor(`!!discarding && ${TOP} === 'zp45 ancienne'`, { what: 'la nouvelle jetée une fois vue 0,3 s' });
   await page.click('#undoBtn');
   await page.emptyPile(bench);
@@ -238,7 +241,7 @@ test('visionneuse : après Jeter, Jeter ignoré 0,3 s après l\'affichage de l\'
       await page.topShown();
       await page.viewPile('zp47 dessus');
       await page.imageShown('#vImg', 'image du dessus en grand');
-      await page.eval(`sorts.length = 0; sortFromViewer('discard')`);   // la suivante, son image retenue
+      await page.eval(`sorts.length = 0; ${VIEWER_PRESS.discard}`);   // la suivante, son image retenue
       await page.waitFor(`vList.length === 1 && vList[vIndex]?.prompt === 'zp47 suivante'`,
         { what: 'visionneuse sur la suivante' });
       await elapse(600);                           // (au-delà de SORT_GAP compté depuis le Jeter)
@@ -247,14 +250,14 @@ test('visionneuse : après Jeter, Jeter ignoré 0,3 s après l\'affichage de l\'
           if (Date.now() - t0 > 20000) throw new Error('image suivante jamais affichée');
           await new Promise(r => setTimeout(r, 5)); }   // règle levée : sondage serré, l'instant de l'affichage compte
         await new Promise(r => setTimeout(r, 120));   // règle levée : Jeter 0,12 s après l'affichage, avant SORT_GAP
-        sortFromViewer('discard'); return [vIndex >= 0, sorts.length]; })()`);
+        ${VIEWER_PRESS.discard}; return [vIndex >= 0, sorts.length]; })()`);
       await h.release();                           // l'image arrive
       assert.deepEqual(await again, [true, 0], 'Jeter 0,12 s après l\'affichage de la suivante');
     } finally {
       await h.release();
     }
-    await page.waitFor(`!sortHeld`, { what: 'image suivante vue 0,3 s' });
-    await page.eval(`sortFromViewer('discard')`);  // vue 0,3 s : Jeter part (le premier Jeter envoyé)
+    await page.waitFor(`${VIEWER_SEEN}`, { what: 'image suivante vue 0,3 s' });
+    await page.eval(`${VIEWER_PRESS.discard}`);  // vue 0,3 s : Jeter part (le premier Jeter envoyé)
     await page.waitFor(`vIndex < 0 && !!discarding && sorts.length === 1`, { what: 'Jeter une fois vue 0,3 s' });
     await page.closeViewer();
     await page.click('#undoBtn');
@@ -277,10 +280,10 @@ test('carte arrivée sous la visionneuse : ✕ ignoré 0,3 s après la fin de so
   // ✕ 0,42 s après la fermeture : la visionneuse s'efface encore 0,3 s, la carte n'est vue qu'ensuite
   assert.equal(await page.eval(`(async () => { closeViewer();
     await new Promise(r => setTimeout(r, 420));      // règle levée : ✕ pendant les 0,3 s qui suivent l'effacement
-    $('pileNo').click(); await new Promise(r => setTimeout(r, 300));   // règle levée : au-delà de l'envol (0,22 s)
+    ${PRESS.discard}; await new Promise(r => setTimeout(r, 300));   // règle levée : au-delà de l'envol (0,22 s)
     return !!discarding; })()`), false, '✕ 0,42 s après la fermeture de la visionneuse');
   await page.topShown();
-  await page.click('#pileNo');
+  await page.sort('discard', { ready: false });
   await page.waitFor(`!!discarding && ${TOP} === 'zp48 ancienne'`, { what: 'la nouvelle jetée une fois vue 0,3 s' });
   await page.click('#undoBtn');
   await page.emptyPile(bench);
@@ -305,11 +308,11 @@ test('carte arrivée hors de l\'écran (page défilée) : ✕ ignoré 0,3 s apr�
     await elapse(500);                               // (au-delà de SORT_GAP, hors de l'écran)
     assert.equal(await page.eval(`(async () => { scrollTo(0, 0);
       await new Promise(r => setTimeout(r, 120));   // règle levée : ✕ 0,12 s après le retour à l'écran, avant SORT_GAP
-      $('pileNo').click(); await new Promise(r => setTimeout(r, 300));   // règle levée : au-delà de l'envol (0,22 s)
+      ${PRESS.discard}; await new Promise(r => setTimeout(r, 300));   // règle levée : au-delà de l'envol (0,22 s)
       return !!discarding; })()`), false, '✕ 0,12 s après le retour de la carte à l\'écran');
   } finally { await page.setView(PHONE); }
   await page.topShown();
-  await page.click('#pileNo');
+  await page.sort('discard', { ready: false });
   await page.waitFor(`!!discarding && ${TOP} === 'zp49 ancienne'`, { what: 'la nouvelle jetée une fois vue 0,3 s' });
   await page.click('#undoBtn');
   await page.emptyPile(bench);
@@ -355,12 +358,12 @@ test('carte arrivée page cachée (autre onglet) : ✕ ignoré 0,3 s après le r
     await page.waitFor(`${TOP} === 'zp52 nouvelle' && posed($('pile').querySelector('[data-k="0"] .pimg img'))`,
       { what: 'nouvelle carte posée, page cachée' });
     await elapse(2500);    // au-delà de SORT_GAP, même aux minuteurs ralentis d'une page cachée (une fois par seconde)
-    assert.equal(await page.eval(`topHeld`), true, 'carte vue page cachée');
+    assert.equal((await page.sortState()).topHeld, true, 'carte vue page cachée');
   });
-  assert.deepEqual(await afterBack(`$('pileNo').click()`, `!!discarding`), [true, false],
+  assert.deepEqual(await afterBack(`${PRESS.discard}`, `!!discarding`), [true, false],
     '✕ 0,12 s après le retour de la page');
   await page.topShown();
-  await page.click('#pileNo');
+  await page.sort('discard', { ready: false });
   await page.waitFor(`!!discarding && ${TOP} === 'zp52 ancienne'`, { what: 'la nouvelle jetée une fois vue 0,3 s' });
   await page.click('#undoBtn');
   await page.emptyPile(bench);
@@ -385,13 +388,13 @@ test('carte vue 0,1 s puis page gelée 0,6 s : ✕ ignoré dans les 0,3 s qui su
     await new Promise(r => setTimeout(r, 100));      // règle levée : vue 0,1 s
     for (const end = performance.now() + 600; performance.now() < end;) { /* page gelée */ }
     await new Promise(r => setTimeout(r, 80));       // règle levée : un relevé du verrou après la reprise
-    $('pileNo').click(); await new Promise(r => setTimeout(r, 300));   // règle levée : au-delà de l'envol (0,22 s)
+    ${PRESS.discard}; await new Promise(r => setTimeout(r, 300));   // règle levée : au-delà de l'envol (0,22 s)
     return !!discarding; })()`);
   await bench.idle({ page });
   await page.eval(`refreshStatus()`);
   assert.equal(await frozen, false, '✕ 0,08 s après la reprise d\'une page gelée');
   await page.topShown();
-  await page.click('#pileNo');
+  await page.sort('discard', { ready: false });
   await page.waitFor(`!!discarding && ${TOP} === 'zp55 ancienne'`, { what: 'la nouvelle jetée une fois vue 0,3 s' });
   await page.click('#undoBtn');
   await page.emptyPile(bench);
@@ -405,7 +408,7 @@ test('carte déjà vue avant que la page passe derrière un autre onglet : ✕ l
   await page.topShown();
   await behind(async () => {});
   // décision du porteur du 29/10/2026 (groupe G) : la même carte à l'écran au retour, sans nouveau verrou
-  assert.deepEqual(await afterBack(`$('pileNo').click()`, `!!discarding`), [true, true],
+  assert.deepEqual(await afterBack(`${PRESS.discard}`, `!!discarding`), [true, true],
     '✕ ignoré au retour sur une carte déjà vue');
   await page.click('#undoBtn');
   await page.emptyPile(bench);
@@ -424,12 +427,12 @@ test('visionneuse : image passée page cachée (autre onglet), Jeter ignoré 0,3
     await page.waitFor(`vList[vIndex]?.prompt === 'zp53 a' && posed($('vImg'))`,
       { what: 'image suivante posée, page cachée' });
     await elapse(2500);    // au-delà de SORT_GAP, même aux minuteurs ralentis d'une page cachée (une fois par seconde)
-    assert.equal(await page.eval(`sortHeld`), true, 'image vue page cachée');
+    assert.equal((await page.sortState()).sortHeld, true, 'image vue page cachée');
   });
-  assert.deepEqual(await afterBack(`sortFromViewer('discard')`, `[vIndex >= 0, sorts.length, !!discarding]`),
+  assert.deepEqual(await afterBack(`${VIEWER_PRESS.discard}`, `[vIndex >= 0, sorts.length, !!discarding]`),
     [true, [true, 0, false]], 'Jeter 0,12 s après le retour de la page');
-  await page.waitFor(`!sortHeld`, { what: 'image vue 0,3 s' });
-  await page.eval(`sortFromViewer('discard')`);
+  await page.waitFor(`${VIEWER_SEEN}`, { what: 'image vue 0,3 s' });
+  await page.eval(`${VIEWER_PRESS.discard}`);
   await page.waitFor(`!!discarding`, { what: 'Jeter une fois vue 0,3 s' });
   await page.closeViewer();
   await page.click('#undoBtn');
@@ -444,7 +447,7 @@ const viewerSeenThenNo = () => page.eval(`(async () => { const t0 = Date.now();
     if (Date.now() - t0 > 20000) throw new Error('image de la visionneuse jamais affichée');
     await new Promise(r => setTimeout(r, 5)); }   // règle levée : sondage serré, l'instant de l'affichage compte
   await new Promise(r => setTimeout(r, 120));      // règle levée : Jeter 0,12 s après l'affichage, avant SORT_GAP
-  sortFromViewer('discard'); return [vIndex >= 0, sorts.length, !!discarding]; })()`);
+  ${VIEWER_PRESS.discard}; return [vIndex >= 0, sorts.length, !!discarding]; })()`);
 
 test('visionneuse : Jeter ignoré dans les 0,3 s qui suivent l\'ouverture ou un pas (← →)', async () => {
   await page.waitFor(`!inPrivate()`, { what: 'espace public' });
@@ -454,12 +457,12 @@ test('visionneuse : Jeter ignoré dans les 0,3 s qui suivent l\'ouverture ou un 
   await page.eval(`sorts.length = 0`);
   await page.viewPile('zp50 b', { seen: false });
   assert.deepEqual(await viewerSeenThenNo(), [true, 0, false], 'Jeter 0,12 s après l\'ouverture');
-  await page.waitFor(`!sortHeld`, { what: 'image vue 0,3 s' });
+  await page.waitFor(`${VIEWER_SEEN}`, { what: 'image vue 0,3 s' });
   await page.eval(`stepViewer(1)`);
   assert.deepEqual(await viewerSeenThenNo(), [true, 0, false], 'Jeter 0,12 s après un pas');
   assert.equal(await page.eval(`vList[vIndex].prompt`), 'zp50 a');
-  await page.waitFor(`!sortHeld`, { what: 'image vue 0,3 s' });
-  await page.eval(`sortFromViewer('discard')`);    // vue 0,3 s : Jeter part au bandeau
+  await page.waitFor(`${VIEWER_SEEN}`, { what: 'image vue 0,3 s' });
+  await page.eval(`${VIEWER_PRESS.discard}`);    // vue 0,3 s : Jeter part au bandeau
   await page.waitFor(`!!discarding`, { what: 'Jeter une fois vue 0,3 s' });
   await page.closeViewer();
   await page.click('#undoBtn');

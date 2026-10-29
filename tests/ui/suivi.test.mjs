@@ -34,13 +34,7 @@ async function open(page) {
   await page.goto(bench.url + '/');
   await page.ready();
 }
-async function enterPrivate(page) {
-  const exists = await page.eval(`privState.exists`);
-  assert.equal(await post(page, exists ? '/api/private/unlock' : '/api/private/create', { code: CODE }), 200);
-  await page.eval(`refreshStatus()`);
-  await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
-}
-async function launch(page, prompt) {
+async function launchFrom(page, prompt) {
   await page.typePrompt(prompt);
   await page.click('#go');
   await page.waitFor(`pageJobs.some(p => p.private && !p.adopted)`, { what: 'génération privée suivie par la page' });
@@ -50,12 +44,12 @@ async function launch(page, prompt) {
 test('deux pages : celle qui a repris la génération la voit oubliée par l\'autre, sans « Échec »', async () => {
   await open(first);
   await open(second);
-  await enterPrivate(first);
+  await first.enterPrivate(CODE, { settle: false });   // (comme avant : sans attendre le repos)
   await second.eval(`refreshStatus()`);
   await second.waitFor(`inPrivate()`, { what: 'seconde page dans l\'espace privé (cookie partagé)' });
   await first.watchToasts();
   await second.watchToasts();
-  const id = await launch(first, 'HOLD=deux zq7 un phare la nuit');
+  const id = await launchFrom(first, 'HOLD=deux zq7 un phare la nuit');
   await second.eval(`refreshStatus()`);
   await second.waitFor(`pageJobs.some(p => p.id === ${JSON.stringify(id)} && p.adopted)`,
     { what: 'génération reprise par la seconde page' });
@@ -82,9 +76,9 @@ test('deux pages : celle qui a repris la génération la voit oubliée par l\'au
 
 test('espace fermé avant que /api/status le dise : le 404 du suivi ne donne pas « Échec »', async () => {
   await open(first);
-  await enterPrivate(first);
+  await first.enterPrivate(CODE, { settle: false });   // (comme avant : sans attendre le repos)
   await first.watchToasts();
-  await launch(first, 'HOLD=ferme zq7 une forêt sous la neige');
+  await launchFrom(first, 'HOLD=ferme zq7 une forêt sous la neige');
   // plus d'interrogation de /api/status : la page ne peut apprendre la fermeture que par le suivi
   await first.eval(`clearTimeout(statusTimer); window.refreshStatus = async () => {}`);
   assert.equal(await post(first, '/api/private/lock'), 200);  // session fermée, comme par le Mac après 15 minutes

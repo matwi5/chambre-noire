@@ -44,7 +44,8 @@ un fichier créé passe les contrôles avant son premier commit.
    commit (hook PostToolUse de .claude/settings.json, moins d'une seconde) : il recoupe seul la prose trop longue,
    comme --fix, et signale le code trop long (sur stderr, code 2 : un fichier recoupé est à relire avant de l'éditer) ;
 4. règles mécaniques de CODING_STANDARDS.md (tests/rules.py, liste à la fin de ce fichier, noms de la carte du code
-   compris) : sur les lignes ajoutées, et sur des fichiers entiers pour celles du serveur et des imports ;
+   compris) : sur les lignes ajoutées, et sur des fichiers entiers pour celles du serveur, des imports et du tri,
+   des pages, des aides du pilote et des préfixes de prompt des tests d'interface ;
    si l'un de ces quatre contrôles échoue, check.py s'arrête là, sans lancer le banc ni l'interface ;
 5. lance le banc (unittest discover -s tests), recopie telles quelles sa ligne « Ran N tests … » et son verdict, et
    affiche sa durée ; seuls tests/test_public_repo.py et les modules qui lisent un fichier autre qu'un .py
@@ -114,6 +115,7 @@ AGENT_NOTES, CODE_MAP = "docs/agents", "carte-du-code.md"
 HOOKS = ".githooks"                                  # hooks versionnés (core.hooksPath), posés par --link-venv
 MAPPED = ("tools/launch.py", "tools/ui/index.html")  # fichiers que la carte du code décrit (--map en donne l'index)
 UI_TESTS = "tests/ui/*.test.mjs"
+DRIVER = "tests/ui/driver.mjs"                      # pilote des tests d'interface (ses aides)
 USES_PLACES = ("tools", "tests", "README.md", f"{AGENT_NOTES}/{CODE_MAP}")   # où --uses cherche
 # délais des tests d'interface : par test (ms, node --test-timeout ; QWEN_UI_TEST_TIMEOUT le change), par fichier (s)
 UI_TEST_TIMEOUT = int(os.environ.get("QWEN_UI_TEST_TIMEOUT") or 180000)
@@ -578,7 +580,9 @@ def check_rules(base):
     (index.html) ; attente fixe, aide ou attente recopiée d'un fichier à l'autre, espace privé fermé sans attendre son
     repos, entrée privée écrite à la main (tests d'interface). Sur des fichiers entiers : print qui dépend de secret(),
     route absente de la docstring, écriture sous PRIVATE_LOCK sans finish_rekey() (launch.py), import interne cassé
-    (tous les .py) ; chaque nom cité par la carte du code existe dans le code. Liste des fautes (fichier:ligne)."""
+    (tous les .py) ; tri brut, flèche de tri ou verrou lu sans le pilote, page ouverte sans fermeture dans un finally,
+    fermeture d'une page sans await, aide du pilote redéfinie, préfixe de prompt repris par un autre test (tests
+    d'interface) ; chaque nom cité par la carte du code existe dans le code. Liste des fautes (fichier:ligne)."""
     bad = []
 
     def report(f, found):
@@ -586,6 +590,7 @@ def check_rules(base):
             print(f"  {f}:{k} : {why}")
             bad.append(f"{f}:{k}")
 
+    ui_tests = {f: read(f) for f in checked_files(UI_TESTS)}
     if base:
         added = added_lines(base, "tools/ui/index.html", "tests/")
         html, ui_added = read("tools/ui/index.html"), added.get("tools/ui/index.html", set())
@@ -596,7 +601,6 @@ def check_rules(base):
             lines = read(f).splitlines()
             report(f, rules.unchecked_every(lines, added.get(f, set())) + rules.unawaited_then(lines,
                                                                                                added.get(f, set())))
-        ui_tests = {f: read(f) for f in checked_files(UI_TESTS)}
         for f, text in ui_tests.items():
             lines, mine = text.splitlines(), added.get(f, set())
             report(f, rules.fixed_waits(lines, mine) + rules.unsettled_private_close(lines, mine)
@@ -604,6 +608,12 @@ def check_rules(base):
         ui_added = {f: added.get(f, set()) for f in ui_tests}
         for f, k, why in rules.copied_helpers(ui_tests, ui_added) + rules.copied_waits(ui_tests, ui_added):
             report(f, [(k, why)])
+    driver = rules.driver_names(read(DRIVER))
+    for f, text in ui_tests.items():                  # fichiers entiers
+        lines = text.splitlines()
+        report(f, rules.raw_sorts(lines) + rules.unclosed_pages(lines) + rules.unawaited_close(lines)
+               + rules.driver_redefined(lines, driver) + rules.prefix_reuse(lines))
+    if base:
         for f in checked_files("tests/*.py"):
             if f == "tests/test_rules.py":                # ses exemples fautifs sont voulus
                 continue

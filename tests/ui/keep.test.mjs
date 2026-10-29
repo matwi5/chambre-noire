@@ -5,7 +5,7 @@
 //   venv/bin/python tests/check.py --quick --ui tests/ui/keep.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, waitUntil } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, VIEWER_SEEN } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -37,7 +37,7 @@ async function viewSecond(prompt) {
   await page.waitFor(`pileItems.filter(it => it.lot && it.lot.id === ${JSON.stringify(lot)}).length === 3`,
     { what: 'lot dans la pile' });
   await page.eval(`openViewer(pileView().findIndex(it => it.name === ${JSON.stringify(names[1])}), pileView())`);
-  await page.waitFor(`$('viewer').classList.contains('on') && !$('vSort').hidden && !sortHeld`,
+  await page.waitFor(`$('viewer').classList.contains('on') && !$('vSort').hidden && ${VIEWER_SEEN}`,
     { what: 'visionneuse sur l\'image 2, vue 0,3 s' });
   assert.equal(await page.eval(`(async () => { const before = pileItems; await loadPile();
     return pileItems !== before; })()`), true, 'pile relue (nouveaux objets)');
@@ -46,7 +46,7 @@ async function viewSecond(prompt) {
 
 test('Garder depuis la visionneuse, la pile relue : seule l\'image vue part dans les Tirages', async () => {
   const { lot, names } = await viewSecond('variantes à départager');
-  await page.click('#vSort .btn:not(.secondary)');            // Garder
+  await page.sort('keep', { by: 'viewer', ready: false });            // Garder
   await waitUntil(async () => (await lotNames('/api/history', lot)).length === 1, { what: 'image gardée' });
   assert.deepEqual(await lotNames('/api/history', lot), [names[1]], 'l\'image vue, et elle seule, gardée');
   assert.deepEqual(await lotNames('/api/pile', lot), [names[0], names[2]], 'les autres restent dans la pile');
@@ -57,7 +57,7 @@ test('Garder depuis la visionneuse, la pile relue : seule l\'image vue part dans
 
 test('Jeter depuis la visionneuse après une relecture de la pile : seule l\'image vue est effacée', async () => {
   const { lot, names } = await viewSecond('variantes à jeter');
-  await page.click('#vSort .btn.secondary');                  // Jeter
+  await page.sort('discard', { by: 'viewer', ready: false });                  // Jeter
   await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau Annuler' });
   await waitUntil(async () => (await lotNames('/api/pile', lot)).length === 2, { what: 'image jetée', timeout: 10000 });
   assert.deepEqual(await lotNames('/api/pile', lot), [names[0], names[2]], 'les autres restent dans la pile');

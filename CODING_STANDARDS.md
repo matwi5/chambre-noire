@@ -106,6 +106,19 @@ relire, un échec dit la ligne et la raison.
   n'attend pas le repos lui-même) juste après `await page.privateIdle()` (ligne de code précédente) ; on y entre par
   `page.enterPrivate(code)`, pas par `/api/private/create` ou `/unlock`. Un cas voulu porte `// règle levée : <raison>`
   sur sa ligne ou celle d'avant.
+- Tests d'interface, sur le fichier entier (même levée) : un tri passe par le pilote, qui seul sait quand une image se
+  trie (E3 puis F4 en ont changé le moment, et des dizaines de tests ont cassé en trois vagues) : ni clic sur
+  `#pileYes`, `#pileNo` ou un bouton de `#vSort` (`click`, `tryClick`, `querySelector(…).click()`) ni appel de
+  `sortTop` ou `sortFromViewer`, mais `page.sort(action, { by, ready })` (ou `PRESS`, `VIEWER_PRESS` dans la page) ;
+  aucune flèche ← → écrite en clair (`page.sort(…, { by: 'key' })`, `page.stepViewer(±1)`, `ARROWS`) ; ni lecture de
+  `sortHeld`, `sortBusy` ou `topHeld` (`SORT_IDLE`, `VIEWER_SEEN`, `LOCKS`, `page.sortState()`). Une levée de cette
+  règle nomme le tri dans sa raison (tri, appui, flèche, touche, verrou) : celle d'une autre règle sur la même ligne ne
+  vaut pas pour elle. Une page ouverte dans un test (`phonePage`, `newPage`) se ferme dans le bloc `finally` (elle, ou
+  le Chrome qui l'a ouverte), et chaque `.close()` d'une page est attendu (`await`) ; aucune aide du pilote (export,
+  méthode de `page`, `bench`, `chrome`) n'est redéfinie au premier niveau d'un fichier de test ; un préfixe de prompt
+  de test (`zp25`, `zqC4`, `zqE4file` : `z`, une à trois lettres, des chiffres ; ou `z` et une ou deux lettres seules,
+  `zt`) ne crée d'images (`made`, `generate`, `launch`, `typePrompt`, un appel `post…` ou `ask…`) que dans un test, ou
+  dans le test qui suit tout de suite un test qui le nomme (une suite voulue).
 - Sur des fichiers entiers, avant le banc : aucun `print` de `tools/launch.py` ne dépend de `secret(…)` ; chaque route
   `/api/…` du serveur est dans sa docstring ; un bloc `with PRIVATE_LOCK:` qui appelle quelque chose passe par
   `finish_rekey()` (sauf `store_private` et la suppression de tout l'espace) ; un import interne (`from bench import

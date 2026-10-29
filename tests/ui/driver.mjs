@@ -52,6 +52,14 @@
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
 //   await page.topPrompt()                       // prompt de la carte du dessus de la pile ; TOP : la même
 //                                                // expression, pour une attente (`${TOP} === 'x'`)
+//   await page.sort('keep', { by, ready })       // tri, seule voie permise dans un test (tests/rules.py) : by
+//                                                // 'button' (✓ ✕), 'key' (→ ←), 'viewer' (Garder, Jeter de la
+//                                                // visionneuse) ; ready (défaut) : l'image triable d'abord ;
+//                                                // ready: false : tout de suite (un tri qui doit être ignoré)
+//   await page.sortState()                       // verrous { flying, topHeld, sortHeld, busy } ; dans une
+//                                                // expression : SORT_IDLE, VIEWER_SEEN, LOCKS, PRESS, VIEWER_PRESS
+//   await page.stepViewer(1)                     // → dans une visionneuse (-1 : ←), sans tri ; ARROWS : les flèches
+//   await page.postGenerate(`{ prompt: 'x' }`)   // demande envoyée telle quelle par la page : son code HTTP
 //   await page.pileCards()                       // prompts des cartes dessinées de la pile, du dessus au dessous
 //   await page.emptyPile(bench)                  // Mac et page au repos, puis la pile gardée (repartir de rien)
 //   await page.watchToasts(); …; seenToasts      // messages affichés par la page à partir de l'appel
@@ -112,6 +120,31 @@ const pause = ms => new Promise(r => setTimeout(r, ms));
 // prompt de la carte du dessus de la pile affichée (expression évaluée dans la page ; undefined sans carte) : lu par
 // page.topPrompt, et mis tel quel dans une attente (page.waitFor(`${TOP} === 'x'`))
 export const TOP = `$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`;
+// Tri et verrous de tri, nommés ici seulement (tests/rules.py refuse dans un test un clic sur ✓, ✕ ou un bouton
+// [data-sort], une flèche ← → et la lecture de sortHeld, sortBusy ou topHeld) : quand l'interface change le moment où
+// une image se trie, seul le pilote change. Expressions évaluées dans la page, à mettre telles quelles dans une
+// attente ou une évaluation (`${SORT_IDLE} && …`), comme TOP :
+// SORT_IDLE : pile au repos, ni envol ni verrou court (sortBusy) ; VIEWER_SEEN : image de la visionneuse vue 0,3 s
+// (sortHeld levé) ; LOCKS : état des verrous ({ flying, topHeld, sortHeld, busy }, page.sortState) ; PRESS et
+// VIEWER_PRESS : appui sur ✓ ✕ de la pile, sur Garder et Jeter de la visionneuse, dans la page (au moment voulu par
+// le test, sans attendre : un double appui, un appui pendant un envol)
+export const SORT_IDLE = `!sortBusy()`;
+export const VIEWER_SEEN = `!sortHeld`;
+export const LOCKS = `({ flying, topHeld, sortHeld, busy: sortBusy() })`;
+const SORT_BUTTONS = { keep: '#pileYes', discard: '#pileNo' };
+const VIEWER_BUTTONS = { keep: '#vSort [data-sort]:not(.secondary)', discard: '#vSort [data-sort].secondary' };
+export const PRESS = { keep: `$('pileYes').click()`, discard: `$('pileNo').click()` };
+// touches qui trient la pile (→ garde, ← jette), pour une touche tenue ou répétée (page.keyDown, keyUp)
+export const ARROWS = { keep: 'ArrowRight', discard: 'ArrowLeft' };
+export const VIEWER_PRESS = Object.fromEntries(Object.entries(VIEWER_BUTTONS)
+  .map(([k, sel]) => [k, `document.querySelector(${JSON.stringify(sel)}).click()`]));
+// carte du dessus triable par ✓ ✕, les flèches ou le balayage (ce que sortTop exige) : vue 0,3 s, rien en cours, ni
+// « Sortir », ni l'image d'avant tenue, ni masquée par Dessiner ; son image posée (une carte d'échec n'en a pas)
+const TOP_SORTABLE = `(c => !!c && !sortBusy() && !exiting() && !beforeHeld && !!shownTop()
+  && (!c.querySelector('.pimg img') || posed(c.querySelector('.pimg img'))))($('pile').querySelector('[data-k="0"]'))`;
+// image de la visionneuse triable par Garder et Jeter (ce que sortFromViewer exige) : une image de la pile, vue 0,3 s,
+// sans envol ni « Sortir » ni image d'avant tenue
+const VIEWER_SORTABLE = `!!vList[vIndex]?.pile && !flying && !sortHeld && !exiting() && !beforeHeld`;
 // délai voulu d'un test (un minuteur de l'interface à dépasser : « rien n'est parti au bout de 5 s ») : la seule
 // attente fixe permise dans un test (tests/rules.py refuse un setTimeout nu) ; toute autre attente suit une condition
 export const elapse = ms => pause(ms);
@@ -594,6 +627,28 @@ async function connect(wsUrl, { closeTab, siblings }) {
     },
     // prompt de la carte du dessus de la pile affichée (undefined sans carte)
     topPrompt() { return page.eval(TOP); },
+    // tri comme au doigt ou au clavier, par la seule aide qui le fait (tests/rules.py) : action 'keep' ou 'discard' ;
+    // by : 'button' (✓ ✕ de la pile, par défaut), 'key' (→ garde, ← jette, avec modifiers comme page.press),
+    // 'viewer' (Garder, Jeter de la visionneuse). ready (par défaut) : d'abord attendre que l'image se trie (pile :
+    // TOP_SORTABLE ; visionneuse : VIEWER_SORTABLE, ce que sortTop et sortFromViewer exigent), au premier plan ; ready:
+    // false : envoyé tout de suite, quand le test veut un tri ignoré ou a attendu lui-même l'état voulu. force :
+    // appui sans le contrôle « sous le doigt » de page.click (élément recouvert exprès : le dire en commentaire)
+    async sort(action, { by = 'button', ready = true, modifiers = [], force = false } = {}) {
+      if (!SORT_BUTTONS[action] || !['button', 'key', 'viewer'].includes(by)) {
+        throw new Error(`page.sort : tri inconnu (${action}, ${by})`);
+      }
+      if (ready) {
+        await send('Page.bringToFront');             // (page cachée : rien n'est vu)
+        await page.waitFor(by === 'viewer' ? VIEWER_SORTABLE : TOP_SORTABLE,
+          { what: by === 'viewer' ? 'image de la visionneuse triable' : 'carte du dessus triable' });
+      }
+      if (by === 'key') return page.press(ARROWS[action], { modifiers });
+      return page.click(by === 'viewer' ? VIEWER_BUTTONS[action] : SORT_BUTTONS[action], { force });
+    },
+    // état des verrous de tri de la page (LOCKS) : { flying, topHeld, sortHeld, busy }
+    sortState() { return page.eval(LOCKS); },
+    // → (step 1) ou ← (step -1) dans une visionneuse ouverte : image suivante ou précédente (ni tri ni attente)
+    stepViewer(step) { return page.press(step > 0 ? 'ArrowRight' : 'ArrowLeft'); },
     // prompts des cartes dessinées de la pile affichée, du dessus vers le dessous
     pileCards() {
       return page.eval(`[...$('pile').querySelectorAll('.pcard')].map(c => c.querySelector('.pprompt').textContent)`);
@@ -779,6 +834,13 @@ async function connect(wsUrl, { closeTab, siblings }) {
         ...${JSON.stringify(extra)} }).then(async r => ({ status: r.status, body: await r.json() }))`);
       if (r.status !== 202) throw new Error(`génération « ${prompt} » refusée : ${r.status} ${JSON.stringify(r.body)}`);
       return r.body;
+    },
+    // demande de génération envoyée telle quelle par la page (postJson('/api/generate')) : body, source d'un objet
+    // évalué dans la page, dont les champs remplacent ceux par défaut (512×512, 8 étapes, sans aperçu ni image
+    // d'entrée) ; rend le code HTTP de la réponse, sans échouer (page.launch, lui, exige 202)
+    postGenerate(body) {
+      return page.eval(`postJson('/api/generate', { width: 512, height: 512, steps: 8, cfg: 1, seed: -1, preview: false,
+        ref_images: [], ...${body} }).then(r => r.status)`);
     },
     // marqueurs (mots de prompts, identifiants, réglages) restés dans la page : texte et attributs du document (caché
     // compris, scripts exceptés), valeurs des champs, localStorage et sessionStorage, et tout l'état global de la page

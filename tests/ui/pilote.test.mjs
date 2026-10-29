@@ -107,6 +107,7 @@ test('page.close dans l\'espace privé : chaque page de l\'espace attendue au re
     await page.eval(`void loadPile()`);
     await waitUntil(() => held.held.length > 0, { what: 'lecture privée en route' });
     let closed = false;
+    // règle levée : fermeture suivie sans l'attendre (elle doit attendre la requête privée), attendue au finally
     closing = other.close().then(() => { closed = true; });
     await elapse(500);
     assert.equal(closed, false, 'onglet fermé (espace reverrouillé) avec une requête privée en route');
@@ -134,6 +135,7 @@ test('page.close dans l\'espace privé : une requête privée partie avant tout 
       await other.eval(`void fetch('/api/private/history')`);
       await waitUntil(() => held.held.length > 0, { what: 'lecture privée de l\'autre page en route' });
       let closed = false;
+      // règle levée : fermeture suivie sans l'attendre (elle doit attendre la requête privée), attendue au finally
       closing = other.close().then(() => { closed = true; });
       await elapse(500);
       assert.equal(closed, false, 'onglet fermé (espace reverrouillé) avec sa propre requête privée en route');
@@ -253,7 +255,7 @@ test('page.keyDown, keyUp, press : touche maintenue, répétée, relâchée, ave
     await p.keyDown(' ', { repeat: true });
     await p.keyDown(' ', { repeat: true });
     await p.keyUp(' ');
-    await p.press('ArrowLeft');
+    await p.press('ArrowLeft');   // règle levée : touches du pilote lui-même
     await p.press('z', { modifiers: ['ctrl'] });
     await p.press('Enter', { modifiers: ['meta'] });
     await p.press('Escape');
@@ -266,8 +268,8 @@ test('page.keyDown, keyUp, press : touche maintenue, répétée, relâchée, ave
       'keyup Meta MetaLeft false ',
       'keydown Escape Escape false ', 'keyup Escape Escape false ']);
     // aucune touche, laissée passer par la page, n'a ouvert d'onglet de Chrome par-dessus elle
-    await p.press('ArrowLeft');
-    await p.press('ArrowRight');
+    await p.press('ArrowLeft');   // règle levée : touches du pilote lui-même
+    await p.press('ArrowRight');   // règle levée : touches du pilote lui-même
     await p.eval(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
     assert.deepEqual((await p.send('Target.getTargets')).targetInfos
       .filter(t => t.type === 'page' && t.url.startsWith('chrome:'))

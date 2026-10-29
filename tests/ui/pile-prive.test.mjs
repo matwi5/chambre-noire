@@ -9,7 +9,8 @@
 //   venv/bin/python tests/check.py --no-bench --ui tests/ui/pile-prive.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, waitUntil, elapse, TOP } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, elapse, TOP, PRESS, VIEWER_PRESS, SORT_IDLE, VIEWER_SEEN, LOCKS }
+  from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -48,7 +49,7 @@ test('espace privé : pile privée par ses routes ; un Jeter en attente à la so
   await page.made('zp11 secrete jete');
   assert.deepEqual(await page.pileCards(), ['zp11 secrete jete', 'zp11 secrete garde'], 'aucune carte publique');
   await page.eval(`sorts.length = 0`);
-  await page.click('#pileNo');
+  await page.sort('discard', { ready: false });
   await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
   await page.click('#privExit');                   // sortie pendant le bandeau
   await page.waitFor(`!inPrivate() && pileItems.some(it => it.prompt === 'zp11 publique')`, { what: 'pile publique' });
@@ -60,7 +61,7 @@ test('espace privé : pile privée par ses routes ; un Jeter en attente à la so
   await page.enterPrivate(CODE);
   await page.waitFor(`inPrivate() && pileItems.length === 2`, { what: 'pile privée intacte' });
   await page.topShown();
-  await page.click('#pileYes');
+  await page.sort('keep', { ready: false });
   await page.waitFor(`sorts.some(s => s.url.endsWith('/api/private/keep')) && pileItems.length === 1`,
     { what: 'gardée par la route privée' });
   await page.click('#privExit');
@@ -82,9 +83,9 @@ test('espace privé : ✕ jette par la route privée après le bandeau ; un Gard
   await page.made('zp20 privee jetee');
   await page.made('zp20 privee gardee');
   await page.eval(`sorts.length = 0`);
-  await page.click('#pileYes');                    // le dessus, « gardee », passe aux Tirages privés
-  await page.waitFor(`sorts.length === 1 && !sortBusy() && pileView().length === 1`, { what: 'gardée' });
-  await page.click('#pileNo');                     // puis « jetee », après son bandeau
+  await page.sort('keep', { ready: false });                    // le dessus, « gardee », passe aux Tirages privés
+  await page.waitFor(`sorts.length === 1 && ${SORT_IDLE} && pileView().length === 1`, { what: 'gardée' });
+  await page.sort('discard', { ready: false });                     // puis « jetee », après son bandeau
   await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
   await page.waitFor(`sorts.some(s => s.url.endsWith('/api/private/discard'))`,
     { what: 'Jeter envoyé par la route privée à la fin du bandeau', timeout: 10000 });
@@ -114,7 +115,7 @@ test('espace privé : un Jeter en attente est abandonné dès l\'appui sur « So
     await page.enterPrivate(CODE);
     await page.made('zp17 secrete');
     await page.eval(`sorts.length = 0`);
-    await page.click('#pileNo');
+    await page.sort('discard', { ready: false });
     await page.waitFor(`!$('undoBar').hidden`, { what: 'bandeau' });
     // la réponse du Mac à « Sortir » se fait attendre ; une image privée demandée pendant ce temps est notée
     const x = await exitHeld({ noting: true });
@@ -127,7 +128,7 @@ test('espace privé : un Jeter en attente est abandonné dès l\'appui sur « So
       assert.deepEqual(x.after.filter(u => /\/(image|thumb)/.test(u)), [],
         'image privée demandée pendant la sortie (carte remise par l\'abandon)');
       // ✓ ou ✕ pendant la sortie : aucun tri privé ne part
-      await page.eval(`sortBusy() || sortTop('keep')`);
+      await page.eval(`${SORT_IDLE} && ${PRESS.keep}`);
       await elapse(600);                           // au-delà de l'envol (0,22 s), à la fin duquel un tri part
       assert.equal(await page.eval(`sorts.length`), 0, 'tri privé envoyé pendant la sortie');
       // un Jeter privé qui arriverait à sa fin pendant l'aller-retour ne part pas non plus (garde leavingPrivate)
@@ -224,7 +225,7 @@ test('espace privé : un Garder privé refusé pendant « Sortir » ne redessine
     await page.made('zp22 secrete suivante');
     const x = await exitHeld({ keep: true });
     try {
-      await page.click('#pileYes');                // Garder la carte du dessus : sa réponse se fait attendre
+      await page.sort('keep', { ready: false });   // Garder la carte du dessus : sa réponse se fait attendre
       await waitUntil(() => x.h.held.some(r => r.url.endsWith('/keep')), { what: 'Garder envoyé' });
       await watchPrivateSrc();
       x.noting = true;
@@ -423,16 +424,16 @@ test('espace privé : « Sortir » pendant le chargement d\'une image de la pile
 
 test('espace privé : la pile redessinée efface les images des cartes qu\'elle retire', async () => {
   await enterPile();
-  await page.made('zp24 secrete dessous');
-  await page.made('zp24 secrete dessus');
+  await page.made('zp61 secrete dessous');
+  await page.made('zp61 secrete dessus');
   try {
     // (la pile privée peut garder des images des tests d'avant : deux cartes au moins)
     await page.waitFor(`(l => l.length >= 2 && l.every(i => i.getAttribute('src')))(
       [...$('pile').querySelectorAll('.pimg img')])`, { what: 'images des cartes posées' });
     // les images des cartes dessinées (bouton Avant compris), gardées après leur retrait de la page
     await page.eval(`window.oldImgs = [...$('pile').querySelectorAll('img')]`);
-    await page.click('#pileYes');
-    await page.waitFor(`!oldImgs[0].isConnected && !sortBusy()`, { what: 'pile redessinée' });
+    await page.sort('keep', { ready: false });
+    await page.waitFor(`!oldImgs[0].isConnected && ${SORT_IDLE}`, { what: 'pile redessinée' });
     assert.deepEqual(await page.eval(`oldImgs.filter(i => i.getAttribute('src') || i.want).length`), 0,
       'image privée gardée par une carte retirée');
   } finally {
@@ -468,7 +469,7 @@ async function privateTwo(tag) {
   await page.emptyPile(bench);
   await page.made(`${tag} secrete dessous`);
   await page.made(`${tag} secrete dessus`);
-  await page.waitFor(`!sortBusy()`, { what: 'pile au repos' });
+  await page.waitFor(`${SORT_IDLE}`, { what: 'pile au repos' });
   await page.eval(`sorts.length = 0`);
   return exitHeld();
 }
@@ -481,8 +482,10 @@ test('espace privé : pendant « Sortir », ✓, ✕, les flèches et le balayag
     try {
       await page.click('#privExit');
       await waitUntil(() => x.locking(), { what: 'sortie demandée' });
-      for (const [what, act] of [['✓', () => page.click('#pileYes')], ['✕', () => page.click('#pileNo')],
-        ['→', () => page.press('ArrowRight')], ['←', () => page.press('ArrowLeft')],
+      for (const [what, act] of [['✓', () => page.sort('keep', { ready: false })],
+        ['✕', () => page.sort('discard', { ready: false })],
+        ['→', () => page.sort('keep', { by: 'key', ready: false })],
+        ['←', () => page.sort('discard', { by: 'key', ready: false })],
         ['balayage', () => page.swipe('#pile .pimg', -200)]]) {
         await act();
         await elapse(400);                         // (au-delà de l'envol d'une carte, 0,22 s)
@@ -506,7 +509,7 @@ test('espace privé : une carte privée déjà en partance à l\'appui sur « So
       // ✕ puis « Sortir » pendant l'envol, la carte lâchée comme au bout d'un balayage à gauche (--swipe : tampon
       // « Jeter » montré)
       await page.eval(`$('pile').querySelector('[data-k="0"]').style.setProperty('--swipe', '-1.6');
-        $('pileNo').click(); $('privExit').click()`);
+        ${PRESS.discard}; $('privExit').click()`);
       await waitUntil(() => x.locking(), { what: 'sortie demandée' });
       await elapse(400);
       assert.deepEqual(await stillTop(),
@@ -531,11 +534,11 @@ test('espace privé : pendant « Sortir », Garder et Jeter de la visionneuse ne
     // (la visionneuse couvre l'en-tête au doigt ; le clavier y mène par Tab puis Entrée : ici, appui par la page)
     await page.eval(`$('privExit').click()`);
     await waitUntil(() => x.locking(), { what: 'sortie demandée' });
-    for (const k of [0, 1]) {                      // Jeter, puis Garder
-      await page.eval(`$('vSort').querySelectorAll('.btn')[${k}].click()`);
+    for (const [action, label] of [['discard', 'Jeter'], ['keep', 'Garder']]) {
+      await page.eval(VIEWER_PRESS[action]);
       await elapse(400);
       assert.deepEqual(await page.eval(`[vIndex >= 0 && vList[vIndex]?.prompt, !!discarding, sorts.length]`),
-        ['zp30 secrete seule', false, 0], `${k ? 'Garder' : 'Jeter'} de la visionneuse pendant « Sortir »`);
+        ['zp30 secrete seule', false, 0], `${label} de la visionneuse pendant « Sortir »`);
     }
   } finally {
     await endExitHeld(x);
@@ -550,8 +553,8 @@ const watchGenerate = () => page.eval(`(() => { window.asked = 0; if (window.ask
   window.fetch = (u, o) => { if (String(u) === '/api/generate') asked++; return f(u, o); }; })()`);
 // la carte du dessus et les images de la pile affichée : chacune a une adresse (aucune carte redessinée sans image)
 const pileShot = () => page.eval(`({ top: ${TOP}, bare: [...$('pile').querySelectorAll('.pimg img')]
-  .filter(i => !i.getAttribute('src')).length, discarding: !!discarding, undo: !$('undoBar').hidden, held: sortHeld,
-  sorts: sorts.length })`);
+  .filter(i => !i.getAttribute('src')).length, discarding: !!discarding, undo: !$('undoBar').hidden,
+  held: ${LOCKS}.sortHeld, sorts: sorts.length })`);
 
 test('espace privé : pendant « Sortir », Relancer d\'une carte d\'échec privée ne fait rien', async () => {
   await enterPile();
@@ -622,7 +625,7 @@ test('espace privé : un Jeter privé en attente à l\'appui sur « Sortir » : 
   const x = await privateTwo('zp36');
   try {
     await page.topShown();
-    await page.click('#pileNo');                   // le dessus jeté : bandeau, le dessous sur le dessus
+    await page.sort('discard', { ready: false });   // le dessus jeté : bandeau, le dessous sur le dessus
     await page.waitFor(`!!discarding && ${TOP} === 'zp36 secrete dessous'`, { what: 'Jeter en attente' });
     await page.topShown();
     // verrou de la visionneuse tenu comme si son image suivante n'était jamais vue (il ne se lèverait pas)
@@ -634,7 +637,7 @@ test('espace privé : un Jeter privé en attente à l\'appui sur « Sortir » : 
     assert.deepEqual(await pileShot(), back, 'pile pendant « Sortir »');
     await page.refuseExit(x.h);
     // la carte du dessus redessinée au refus (son image a pu être abandonnée) reprend le verrou court
-    assert.equal(await page.eval(`topHeld`), true, 'carte remise sans verrou court après le refus');
+    assert.equal((await page.sortState()).topHeld, true, 'carte remise sans verrou court après le refus');
     await page.topShown();
     assert.deepEqual(await pileShot(), back, 'pile après le refus');
   } finally {
@@ -752,7 +755,7 @@ test('espace privé : pendant « Sortir », les images d\'entrée affichées ne 
   try {
     await page.eval(`$('privExit').click()`);      // (la vue couvre l'en-tête)
     await waitUntil(() => x.locking(), { what: 'sortie demandée' });
-    await page.press('ArrowRight');
+    await page.stepViewer(1);
     await elapse(300);
     assert.deepEqual(await shot(), before, 'image d\'entrée suivante pendant « Sortir »');
   } finally {
@@ -791,8 +794,8 @@ test('espace privé : une carte privée en partance quand le Mac ferme l\'espace
   // l'espace fermé par le Mac, sans « Sortir » ; ✕ juste avant que la page l'apprenne : elle l'apprend (l'état lu,
   // appliqué comme le fait refreshStatus) pendant l'envol (0,22 s), vérifié dans la même évaluation
   await page.eval(`postJson('/api/private/lock', {})`);
-  assert.deepEqual(await page.eval(`(() => { $('pileNo').click(); const was = flying;
-    applyPrivate({ ...privState, unlocked: false }); return [was, flying, !!flight, sortHeld]; })()`),
+  assert.deepEqual(await page.eval(`(() => { ${PRESS.discard}; const was = flying;
+    applyPrivate({ ...privState, unlocked: false }); return [was, flying, !!flight, ${LOCKS}.sortHeld]; })()`),
   [true, false, false, false], 'carte privée en vol, ou verrou de tri tenu');
   await page.eval(`refreshStatus()`);
   await elapse(400);                               // (au-delà de l'envol)
@@ -809,11 +812,11 @@ test('espace privé : « Sortir » refusé, l\'image de la pile ouverte en grand
   try {
     await page.eval(`$('privExit').click()`);      // (la visionneuse couvre l'en-tête)
     await page.refuseExit(x.h);
-    assert.equal(await page.eval(`sortHeld`), true, 'Garder et Jeter permis aussitôt après le refus');
+    assert.equal((await page.sortState()).sortHeld, true, 'Garder et Jeter permis aussitôt après le refus');
   } finally {
     await x.h.release();
   }
-  await page.waitFor(`!sortHeld`, { what: 'image vue 0,3 s' });
+  await page.waitFor(`${VIEWER_SEEN}`, { what: 'image vue 0,3 s' });
   await page.closeViewer();
   await page.privateIdle();
   await page.click('#privExit');

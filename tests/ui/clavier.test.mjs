@@ -6,7 +6,7 @@
 //   venv/bin/python tests/check.py --no-bench --ui tests/ui/clavier.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, waitUntil, PC, TOP } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, PC, TOP, SORT_IDLE, VIEWER_SEEN, ARROWS } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -30,7 +30,7 @@ const unfocus = () => page.eval(`document.activeElement?.blur()`);
 // bandeau Annuler affiché pour le Jeter en attente
 const banner = what => page.waitFor(`!$('undoBar').hidden && !!discarding`, { what });
 // pile vidée : un Jeter en attente annulé, puis tout gardé
-async function emptyPile() {
+async function clearPile() {
   if (await page.eval(`!!discarding`)) await page.click('#undoBtn');
   await bench.idle({ page });
   await page.keepPile();
@@ -42,11 +42,11 @@ test('→ garde l\'image du dessus ; ← la jette avec le bandeau ; Z et Ctrl/�
   await unfocus();
   await page.topShown();
   await page.watchSorts();
-  await page.press('ArrowRight');
+  await page.sort('keep', { by: 'key', ready: false });
   await waitUntil(() => bench.kept('zk1 dessus'), { what: '→ : gardée' });
   await page.waitFor(`${TOP} === 'zk1 dessous'`, { what: 'la suivante dessus' });
   await page.topShown();
-  await page.press('ArrowLeft');
+  await page.sort('discard', { by: 'key', ready: false });
   await banner('← : bandeau');
   assert.equal(await page.topPrompt(), undefined, 'carte partie');
   assert.equal(await page.sortsSent('discard'), 0, 'Jeter envoyé avant la fin du bandeau');
@@ -54,7 +54,7 @@ test('→ garde l\'image du dessus ; ← la jette avec le bandeau ; Z et Ctrl/�
   await page.waitFor(`$('undoBar').hidden && ${TOP} === 'zk1 dessous'`, { what: 'Z : carte remise' });
   await page.topShown();
   for (const modifiers of [['ctrl'], ['meta']]) {
-    await page.press('ArrowLeft');
+    await page.sort('discard', { by: 'key', ready: false });
     await banner('← : bandeau');
     await page.press('z', { modifiers });
     await page.waitFor(`$('undoBar').hidden && ${TOP} === 'zk1 dessous'`, { what: `${modifiers} + Z : carte remise` });
@@ -64,7 +64,7 @@ test('→ garde l\'image du dessus ; ← la jette avec le bandeau ; Z et Ctrl/�
   assert.equal(await page.topPrompt(), 'zk1 dessous');
   assert.deepEqual([await page.sortsSent('discard'), await page.sortsSent('delete'), await bench.inPile('zk1 dessous')],
     [0, 0, true]);
-  await emptyPile();
+  await clearPile();
   page.assertNoErrors();
 });
 
@@ -73,18 +73,18 @@ test('← maintenue (répétition du système) : une seule image jetée, même l
   await unfocus();
   await page.topShown();
   await page.watchSorts();
-  await page.keyDown('ArrowLeft');
-  for (let k = 0; k < 8; k++) await page.keyDown('ArrowLeft', { repeat: true });
+  await page.keyDown(ARROWS.discard);
+  for (let k = 0; k < 8; k++) await page.keyDown(ARROWS.discard, { repeat: true });
   await banner('bandeau du premier Jeter');
   await page.waitFor(`${TOP} === 'zk2 b'`, { what: 'zk2 b dessus' });
   await page.topShown();
-  for (let k = 0; k < 8; k++) await page.keyDown('ArrowLeft', { repeat: true });   // touche toujours tenue
-  await page.keyUp('ArrowLeft');
+  for (let k = 0; k < 8; k++) await page.keyDown(ARROWS.discard, { repeat: true });   // touche toujours tenue
+  await page.keyUp(ARROWS.discard);
   await page.topShown();
   assert.equal(await page.topPrompt(), 'zk2 b', 'la touche tenue a jeté la suivante');
   assert.equal(await page.sortsSent('discard'), 0, 'Jeter envoyé avant la fin du bandeau');
   assert.equal(await page.eval(`pileView().length`), 2);
-  await emptyPile();
+  await clearPile();
   page.assertNoErrors();
 });
 
@@ -94,18 +94,19 @@ test('← ← rapides : la seconde attend la carte suivante affichée ; ← ← 
     await unfocus();
     await page.topShown();
     await page.watchSorts();
-    await page.press('ArrowLeft'); await page.press('ArrowLeft');   // pendant l'envol de la première
+    await page.sort('discard', { by: 'key', ready: false });   // ← ← : la seconde pendant l'envol de la première
+    await page.sort('discard', { by: 'key', ready: false });
     await banner('bandeau');
     await page.topShown();
     assert.deepEqual([await page.topPrompt(), await page.sortsSent('discard')], ['zk3 b', 0], 'second ← ignoré');
-    await page.press('ArrowLeft');                  // zk3 b : le Jeter de zk3 c part, comme au doigt
+    await page.sort('discard', { by: 'key', ready: false });   // zk3 b : le Jeter de zk3 c part, comme au doigt
     await waitUntil(async () => await page.sortsSent('discard') === 1, { what: 'premier Jeter envoyé' });
     await waitUntil(async () => !(await bench.inPile('zk3 c')), { what: 'zk3 c effacée' });
     assert.equal(await page.eval(`document.querySelectorAll('.undo:not([hidden])').length`), 1, 'un seul bandeau');
     await page.press('z');
     await page.waitFor(`${TOP} === 'zk3 b'`, { what: 'zk3 b remise' });
     assert.equal(await bench.inPile('zk3 b'), true);
-    await emptyPile();
+    await clearPile();
     page.assertNoErrors();
   });
 
@@ -115,15 +116,15 @@ test('carte d\'échec en tête : → et ← ne font rien', async () => {
   await page.waitFor(`topEntry()?.fail?.prompt === 'FAIL zk4 échec'`, { what: 'carte de l\'échec en tête' });
   await unfocus();
   await page.watchSorts();
-  await page.press('ArrowLeft');
-  await page.press('ArrowRight');
+  await page.sort('discard', { by: 'key', ready: false });
+  await page.sort('keep', { by: 'key', ready: false });
   assert.equal(await page.eval(`!!$('pile').querySelector('[data-k="0"] .pfail') && !flying && $('undoBar').hidden`),
     true, 'la carte d\'échec reste');
-  await page.waitFor(`!sortBusy()`, { what: 'carte d\'échec vue 0,3 s' });   // (verrou court d'une carte arrivée)
-  await page.click('#pileNo');                      // ✕ la retire, comme avant
+  await page.waitFor(`${SORT_IDLE}`, { what: 'carte d\'échec vue 0,3 s' });   // (verrou court d'une carte arrivée)
+  await page.sort('discard', { ready: false });                      // ✕ la retire, comme avant
   await page.waitFor(`${TOP} === 'zk4 reussie'`, { what: 'échec retiré' });
   assert.equal(await page.sortsSent('discard'), 0);
-  await emptyPile();
+  await clearPile();
   page.assertNoErrors();
 });
 
@@ -144,15 +145,16 @@ test('Entrée maintenue sur ✕ ou sur Jeter de la visionneuse : une seule image
   await page.viewPile('zk5 c');
   await page.eval(`$('vSort').querySelector('.btn').focus()`);   // Jeter de la visionneuse
   await page.keyDown('Enter');
-  await page.waitFor(`!!discarding && vList[vIndex]?.prompt === 'zk5 b' && !sortHeld`, { what: 'suivante affichée' });
+  await page.waitFor(`!!discarding && vList[vIndex]?.prompt === 'zk5 b' && ${VIEWER_SEEN}`,
+    { what: 'suivante affichée' });
   for (let k = 0; k < 6; k++) await page.keyDown('Enter', { repeat: true });
   await page.keyUp('Enter');
-  await page.waitFor(`!sortHeld`, { what: 'rien de plus en route' });
+  await page.waitFor(`${VIEWER_SEEN}`, { what: 'rien de plus en route' });
   assert.deepEqual(await page.eval(`[vList.length, vList[vIndex].prompt]`), [2, 'zk5 b'], 'seconde image jetée');
   assert.equal(await page.sortsSent('discard'), 0);
   await page.closeViewer();
   await page.press('z');
-  await emptyPile();
+  await clearPile();
   page.assertNoErrors();
 });
 
@@ -162,19 +164,19 @@ test('aucun raccourci pendant la saisie dans le prompt, avec une feuille ouverte
   await page.topShown();
   await page.watchSorts();
   await page.eval(`$('prompt').focus()`);
-  for (const key of ['ArrowLeft', 'ArrowRight', 'z']) await page.press(key);
+  for (const key of [ARROWS.discard, ARROWS.keep, 'z']) await page.press(key);
   await unfocus();
   await page.eval(`openQueue()`);
   await page.waitFor(`openedSheet === $('fileSheet')`, { what: 'feuille de la file' });
-  for (const key of ['ArrowLeft', 'ArrowRight']) await page.press(key);
+  for (const key of [ARROWS.discard, ARROWS.keep]) await page.press(key);
   await page.closeSheet();
   for (const modifiers of [['meta'], ['alt'], ['ctrl'], ['shift']]) {
-    await page.press('ArrowLeft', { modifiers });
-    await page.press('ArrowRight', { modifiers });
+    await page.sort('discard', { by: 'key', ready: false, modifiers });
+    await page.sort('keep', { by: 'key', ready: false, modifiers });
   }
   assert.equal(await page.eval(`!flying && $('undoBar').hidden && pileView().length`), 2, 'une image triée');
   assert.equal(await page.eval(`sorts.length`), 0);
-  await emptyPile();
+  await clearPile();
   page.assertNoErrors();
 });
 
@@ -183,14 +185,14 @@ test('visionneuse de la pile : ← → parcourent, rien n\'est trié ; Échap la
   await page.viewPile('zk7 c');
   await unfocus();
   await page.watchSorts();
-  await page.press('ArrowRight');
+  await page.stepViewer(1);
   await page.waitFor(`vList[vIndex]?.prompt === 'zk7 b'`, { what: '→ : image suivante' });
-  await page.press('ArrowLeft');
+  await page.stepViewer(-1);
   await page.waitFor(`vList[vIndex]?.prompt === 'zk7 c'`, { what: '← : image précédente' });
   await page.press('Escape');
   await page.waitFor(`vIndex < 0`, { what: 'Échap : fermée' });
   assert.deepEqual(await page.eval(`[sorts.length, pileView().length, !discarding]`), [0, 3, true]);
-  await emptyPile();
+  await clearPile();
   page.assertNoErrors();
 });
 
@@ -201,7 +203,7 @@ test('aucune touche ne supprime un tirage : Tirages et visionneuse des Tirages',
   await page.waitFor(`histItems.some(it => it.prompt === 'zk8 tirage')`, { what: 'tirage affiché' });
   await unfocus();
   await page.watchSorts();
-  const keys = [['ArrowLeft'], ['ArrowRight'], ['Delete'], ['Backspace'], ['Backspace', { modifiers: ['meta'] }],
+  const keys = [[ARROWS.discard], [ARROWS.keep], ['Delete'], ['Backspace'], ['Backspace', { modifiers: ['meta'] }],
     ['z'], ['Enter']];
   for (const k of keys) await page.press(...k);
   await page.viewTirage(0);
@@ -244,7 +246,7 @@ test('Ctrl/⌘ + Entrée dans le prompt : « Révéler », une demande par appui
   assert.equal(await page.eval(`asked`), 0, 'demande envoyée sous une feuille ouverte');
   await unfocus();
   await page.typePrompt('');
-  await emptyPile();
+  await clearPile();
   page.assertNoErrors();
 });
 

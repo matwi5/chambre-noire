@@ -24,12 +24,6 @@ after(async () => {
 
 const CODE = 'code-du-banc-1';
 const post = (url, body = {}) => page.eval(`postJson(${JSON.stringify(url)}, ${JSON.stringify(body)}).then(async r => ({ status: r.status, body: await r.json() }))`);
-async function enterPrivate() {
-  const exists = await page.eval(`privState.exists`);
-  assert.equal((await post(exists ? '/api/private/unlock' : '/api/private/create', { code: CODE })).status, 200);
-  await page.eval(`refreshStatus()`);
-  await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
-}
 // génération de la page annulée depuis la file du Labo
 async function cancelOwnFromQueue() {
   await page.openQueue();
@@ -41,7 +35,7 @@ const cards = () => page.eval(`[...$('queueList').querySelectorAll('.qcard')].ma
 const count = n => `$('queueList').querySelectorAll('.qcard').length === ${n}`;
 
 test('espace privé : la file ne montre que les générations privées, avec leur prompt, derrière le travail caché', async () => {
-  await enterPrivate();
+  await page.enterPrivate(CODE, { settle: false });
   const pub = await page.launch('SLOW=1 zq9public en cours');
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => s.busy)`,
     { what: 'génération publique en cours' });
@@ -97,14 +91,14 @@ test('sortie : la génération privée quitte l\'écran et la page ; elle revien
   await page.waitFor(`pageJobs.some(p => !p.private && p.j.status === 'running')`,
     { what: 'génération publique en cours' });
 
-  await enterPrivate();                            // elle quitte l'écran, reste suivie en mémoire
+  await page.enterPrivate(CODE, { settle: false });   // elle quitte l'écran, reste suivie en mémoire
   assert.deepEqual(await onScreen(), { shown: null, card: false, chip: false });
   assert.deepEqual(await jobs(), ['publique ' + PUB]);
   await page.generate(SECRET);                                // génération privée, en attente derrière la publique
   await page.waitFor(`shown && shown.private`, { what: 'génération privée à l\'écran' });
 
   await page.closeSheet();                         // le voile d'une feuille ouverte recouvre l'en-tête
-  await page.click('#privExit');                   // « Sortir » : la privée quitte l'écran et la page, la publique revient
+  await page.click('#privExit');   // « Sortir » : la privée quitte l'écran et la page, la publique revient
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.deepEqual(await jobs(), ['publique ' + PUB]);
   const out = await onScreen();
@@ -112,13 +106,14 @@ test('sortie : la génération privée quitte l\'écran et la page ; elle revien
   assert.equal(out.card, true);
   assert.doesNotMatch(await page.eval(`document.body.innerText`), /zq9secret/);
 
-  await enterPrivate();                            // retour : la page suit de nouveau la génération privée
+  await page.enterPrivate(CODE, { settle: false });   // retour : la page suit de nouveau la génération privée
   await page.waitFor(`pageJobs.some(p => p.private && isActive(p))`, { what: 'génération privée retrouvée' });
   assert.equal((await onScreen()).shown, 'privée ' + SECRET);
 
   await page.goto(bench.url + '/');                // rechargement dans l'espace privé
   await page.ready();
-  if (!await page.eval(`inPrivate()`)) await enterPrivate();   // la fermeture de la page a pu verrouiller l'espace
+  // la fermeture de la page a pu verrouiller l'espace
+  if (!await page.eval(`inPrivate()`)) await page.enterPrivate(CODE, { settle: false });
   await page.waitFor(`pageJobs.some(p => p.private && isActive(p))`,
     { what: 'génération privée retrouvée après le rechargement' });
   assert.equal((await onScreen()).shown, 'privée ' + SECRET);
@@ -141,7 +136,7 @@ test('fermé par le Mac : la génération privée quitte l\'écran comme après 
   await page.goto(bench.url + '/');
   await page.ready();
   const pub = await page.launch('SLOW=1 zq9public d\'un autre appareil');   // la privée attend derrière
-  await enterPrivate();
+  await page.enterPrivate(CODE, { settle: false });
   await page.generate(SECRET);
   await page.waitFor(`shown && shown.private`, { what: 'génération privée à l\'écran' });
   assert.equal((await post('/api/private/lock')).status, 200);   // session fermée sans « Sortir »
@@ -151,7 +146,7 @@ test('fermé par le Mac : la génération privée quitte l\'écran comme après 
   // la génération publique d'un autre appareil tourne : la carte la montre, rien de la privée
   assert.deepEqual(await onScreen(), { shown: null, card: true, chip: false });
   assert.doesNotMatch(await page.eval(`document.body.innerText`), /zq9secret/);
-  await enterPrivate();
+  await page.enterPrivate(CODE, { settle: false });
   await page.waitFor(`pageJobs.some(p => p.private && isActive(p))`, { what: 'génération privée retrouvée' });
   await cancelOwnFromQueue();                      // en attente derrière la publique, cachée
   await page.waitFor(`!pageJobs.some(isActive)`, { what: 'génération privée annulée' });
@@ -165,7 +160,7 @@ test('fermé par le Mac : la génération privée quitte l\'écran comme après 
 });
 
 test('espace public : une génération privée en cours n\'a pas de carte et n\'est pas dans la file', async () => {
-  await enterPrivate();
+  await page.enterPrivate(CODE, { settle: false });
   const priv = await page.launch('SLOW=1 zq9secret en cours', { private: true });
   await page.closeSheet();                         // le voile d'une feuille ouverte recouvre l'en-tête
   await page.click('#privExit');
@@ -189,7 +184,7 @@ test('espace public : une génération privée en cours n\'a pas de carte et n\'
   assert.match(await page.eval(`$('queueNote').textContent`), /^1 en attente · file vide vers \d+ h \d\d \(≈ /);
   await page.click('#queueList .qcard.own [data-kind="cancel"]');
   await page.waitFor(`!pageJobs.some(p => !p.private && isActive(p))`, { what: 'génération publique annulée' });
-  await enterPrivate();
+  await page.enterPrivate(CODE, { settle: false });
   assert.equal((await post(`/api/job/${priv.id}/cancel`)).status, 200);
   await page.closeSheet();                         // le voile d'une feuille ouverte recouvre l'en-tête
   await page.click('#privExit');

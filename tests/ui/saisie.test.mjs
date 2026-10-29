@@ -17,7 +17,8 @@ import { startBench, launchChrome } from './driver.mjs';
 function png(w, h, gray = 128) {
   const chunk = (type, data) => { const len = Buffer.alloc(4), crc = Buffer.alloc(4), td = Buffer.concat([Buffer.from(type), data]);
     len.writeUInt32BE(data.length); crc.writeUInt32BE(zlib.crc32(td)); return Buffer.concat([len, td, crc]); };
-  const head = Buffer.alloc(13); head.writeUInt32BE(w, 0); head.writeUInt32BE(h, 4); head[8] = 8; head[9] = 0;   // 8 bits, gris
+  // 8 bits, gris
+  const head = Buffer.alloc(13); head.writeUInt32BE(w, 0); head.writeUInt32BE(h, 4); head[8] = 8; head[9] = 0;
   const rows = Buffer.alloc((w + 1) * h, gray); for (let y = 0; y < h; y++) rows[y * (w + 1)] = 0;   // filtre 0
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', head), chunk('IDAT', zlib.deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
 }
@@ -28,7 +29,8 @@ before(async () => {
   bench = await startBench();
   chrome = await launchChrome();
   page = await chrome.phonePage();
-  // demandes de génération interceptées (Fetch.enable, voir generate) : le Mac répond par une erreur, ou est injoignable ;
+  // demandes de génération interceptées (Fetch.enable, voir generateNow) : le Mac répond par une erreur, ou est
+  // injoignable ;
   // 'hold' : la demande attend que le test la laisse partir (held)
   page.on('Fetch.requestPaused', p => refusal === 'hold' ? held.resolve(p.requestId)
     : refusal === 'unreachable' ? page.send('Fetch.failRequest', { requestId: p.requestId, errorReason: 'ConnectionRefused' })
@@ -100,7 +102,7 @@ test('Saisie : un fichier illisible est annoncé et n\'arrête pas les images su
 test('« Éditer » depuis la pile : l\'image rejoint les images d\'entrée, Labo, 10 au plus', async () => {
   await fresh();
   await page.typePrompt('un phare à éditer');
-  await generate();
+  await generateNow();
   await page.waitFor(`pageJobs.at(-1).result`, { what: 'image finie', timeout: 30000 });
   await page.waitFor(`pileView().length > 0`, { what: 'image dans la pile' });
   await page.eval(`openViewer(0, pileView()); viewerAction('edit')`);
@@ -131,7 +133,7 @@ async function paint() {
 // « Révéler » ; refuse : 'error' (le Mac répond par une erreur) ou 'unreachable' (Mac injoignable), simulés au niveau
 // du réseau de Chrome. Demande acceptée : suivie par la page, toujours sur le Labo ; refusée : elle reste sur
 // l'onglet
-async function generate({ refuse = null } = {}) {
+async function generateNow({ refuse = null } = {}) {
   refusal = refuse;
   if (refuse) await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/generate', requestStage: 'Request' }] });
   const jobsBefore = await page.eval(`pageJobs.length`), tab = await page.eval(`mode`);
@@ -218,13 +220,13 @@ test('Dessiner : la demande part en masque, ou en annotation ; sans zone peinte,
   await page.click('#go');
   await toastSays('Peignez une zone.');
   await paint();
-  await generate();
+  await generateNow();
   assert.deepEqual(await lastJob(), { mode: 'mask', lot: null });
   await drawOne();
   await page.eval(`$('mask_mode').querySelector('[value=annotation]').click()`);
   await paint();
   await page.typePrompt('une fenêtre ouverte');
-  await generate();
+  await generateNow();
   assert.deepEqual(await lastJob(), { mode: 'annot', lot: null });
   page.assertNoErrors();
 });
@@ -257,7 +259,7 @@ test('Collage : une image collée s\'ajoute ; un texte reste un texte ; refusé 
 test('geste « Dessiner » : l\'image seule, dessin actif ; confirmation s\'il y avait des images', async () => {
   await fresh();
   await page.typePrompt('un phare à dessiner');
-  await generate();
+  await generateNow();
   await page.waitFor(`pageJobs.at(-1).result`, { what: 'image finie', timeout: 30000 });
   await page.waitFor(`pileView().length > 0`, { what: 'image dans la pile' });
   const name = await page.eval(`pileView()[0].name`);
@@ -299,13 +301,13 @@ test('Saisie : sans image d\'entrée la demande part du texte, avec des images c
     && !!$('inDrop').getClientRects().length`), true, 'ajout d\'images offert sur le Labo');
   assert.match(await page.eval(`$('prompt').placeholder`), /^Décrivez l'image/);
   await page.typePrompt('un phare au crépuscule');
-  await generate();
+  await generateNow();
   assert.deepEqual(await lastJob(), { mode: 't2i', lot: null });
   await page.setFiles('#inFiles', photos(2));
   await page.waitFor(`inputImages.length === 2`, { what: 'deux images' });
   assert.match(await page.eval(`$('prompt').placeholder`), /^Que faut-il changer/);
   await page.typePrompt('mettre un chapeau');
-  await generate();
+  await generateNow();
   assert.deepEqual(await lastJob(), { mode: 'edit', lot: null });
   assert.match(await page.eval(`$('prompt').placeholder`), /^Décrivez l'image/,
     'images parties : l\'exemple redevient celui du texte');
@@ -317,7 +319,7 @@ test('Saisie : texte et brouillon vidés quand la demande est acceptée, Réglag
   await page.typePrompt('un phare au crépuscule');
   assert.equal(await draft(), 'un phare au crépuscule');
   const opts = await settings();
-  await generate();
+  await generateNow();
   assert.equal(await page.eval(`$('prompt').value`), '');
   assert.equal(await draft(), null);
   assert.equal(await settings(), opts);
@@ -331,7 +333,7 @@ test('Créer avec des images : texte et images vidés quand la demande est accep
   await page.waitFor(`inputImages.length === 2`, { what: 'deux images' });
   await page.typePrompt('mettre un chapeau');
   const opts = await settings();
-  await generate();
+  await generateNow();
   assert.equal(await settings(), opts);
   assert.equal(await page.eval(`$('prompt').value`), '');
   assert.equal(await page.eval(`inputImages.length + $('inThumbs').children.length`), 0);
@@ -347,7 +349,7 @@ test('Dessiner : texte, image et tracé vidés quand la demande est acceptée', 
   assert.match(await page.eval(`$('prompt').placeholder`), /^Que mettre dans la zone peinte/);
   await page.typePrompt('une fenêtre ouverte');
   const opts = JSON.parse(await settings());
-  await generate();
+  await generateNow();
   // le format « Image » suit l'image à retoucher : il part avec elle, comme quand on la retire à la main ; le reste des
   // Réglages ne bouge pas
   assert.equal(opts.opt.ratio, 'image');
@@ -377,7 +379,7 @@ test('Campagne : proposée dès 2 images, ignorée sinon ; photos vidées, inter
   assert.equal(await shown(), false);
   assert.doesNotMatch(await page.eval(`$('setGrid').textContent`), /Campagne/);
   await page.typePrompt('voiture bleue');
-  await generate();
+  await generateNow();
   assert.deepEqual(await lastJob(), { mode: 'edit', lot: null });
   assert.equal(await page.eval(`campaignOn`), true, 'réglage gardé');
   await page.click('#composerLine');               // replié après « Révéler »
@@ -386,7 +388,7 @@ test('Campagne : proposée dès 2 images, ignorée sinon ; photos vidées, inter
   assert.equal(await page.eval(`$('campChk').checked && !!$('campSwitch').getClientRects().length`), true,
     'de nouveau proposée, active');
   await page.typePrompt('voiture bleue');
-  await generate();
+  await generateNow();
   assert.deepEqual(await lastJob(), { mode: 'edit', lot: { size: 2, campaign: true } });
   assert.equal(await page.eval(`inputImages.length + $('inThumbs').children.length`), 0);
   assert.equal(await page.eval(`campaignOn && $('campChk').checked`), true);
@@ -409,7 +411,7 @@ test('Variantes : proposées avec des images et en Dessiner hors campagne, la de
   // HOLD : chaque lot ne finit qu'une fois la page passée sur les Tirages (fini sur le Labo, il n'aurait pas de
   // message)
   await page.typePrompt('HOLD=chapeau deux essais d\'un chapeau');
-  await generate();
+  await generateNow();
   assert.deepEqual(await lastJob(), { mode: 'edit', lot: { size: 2, campaign: false } });
   // campagne : la rangée disparaît et le nombre choisi est ignoré (une image par photo)
   await page.setFiles('#inFiles', photos(3));
@@ -418,7 +420,7 @@ test('Variantes : proposées avec des images et en Dessiner hors campagne, la de
   await page.waitFor(`campaignOn`, { what: 'campagne activée' });
   assert.equal(await countShown(), false, 'pas de variantes en campagne');
   await page.typePrompt('HOLD=voiture voiture bleue');
-  await generate();
+  await generateNow();
   await page.tab('tirages');
   bench.release('chapeau');                        // les deux lots, une fois sur les Tirages
   bench.release('voiture');
@@ -435,7 +437,7 @@ test('Variantes : proposées avec des images et en Dessiner hors campagne, la de
   await pick(3);
   await paint();
   await page.typePrompt('une fenêtre ouverte');
-  await generate();
+  await generateNow();
   assert.deepEqual(await lastJob(), { mode: 'mask', lot: { size: 3, campaign: false } });
   assert.equal(await page.eval(`pageJobs.slice(-3).every(p => p.j.mode === 'mask' && p.lot.size === 3)`), true);
   page.assertNoErrors();
@@ -447,7 +449,7 @@ test('Saisie : rien n\'est vidé quand le Mac refuse la demande ou est injoignab
   await page.waitFor(`inputImages.length === 2`, { what: 'deux images' });
   await page.typePrompt('mettre un chapeau');
   for (const refuse of ['error', 'unreachable']) {
-    await generate({ refuse });
+    await generateNow({ refuse });
     assert.equal(await page.eval(`$('prompt').value`), 'mettre un chapeau', refuse);
     assert.equal(await page.eval(`inputImages.length`), 2, refuse);
     assert.equal(await draft(), 'mettre un chapeau', refuse);
@@ -461,7 +463,6 @@ test('Saisie : rien n\'est vidé quand le Mac refuse la demande ou est injoignab
 const CODE = 'code-du-banc-1';
 const post = (url, body = {}) => page.eval(`postJson(${JSON.stringify(url)}, ${JSON.stringify(body)}).then(r => r.status)`);
 // entrée dans l'espace privé (créé la première fois) ; la page le voit à son interrogation suivante de /api/status
-const enterPrivate = () => page.enterPrivate(CODE);
 // fermeture de l'espace par le Mac (15 minutes sans requête privée) : la session est fermée sans passer par « Sortir ».
 // Le Mac ne ferme qu'un espace au repos (page.privateIdle)
 async function closedByMac() {
@@ -482,13 +483,13 @@ test('espaces : la saisie privée disparaît à « Sortir », la saisie publique
   await page.eval(`$('mask_mode').querySelector('[value=annotation]').click()`);
   await page.typePrompt('chapeau public');
 
-  await enterPrivate();                            // première entrée : saisie privée vide
+  await page.enterPrivate(CODE);                            // première entrée : saisie privée vide
   assert.deepEqual(await page.eval(`[$('prompt').value, inputImages.length, drawOn, ${SHOWN}]`), ['', 0, false, false]);
   assert.equal(await page.eval(`paintedPixels()`), 0, 'aucun tracé public sur le canevas');
   await page.setFiles('#inFiles', photos(2));
   await page.waitFor(`inputImages.length === 2`, { what: 'deux images privées' });
   await page.typePrompt('chapeau secret');
-  await generate();                                // génération privée : la saisie privée est vidée
+  await generateNow();                                // génération privée : la saisie privée est vidée
   assert.equal(await page.eval(`pageJobs.at(-1).private`), true);
   assert.deepEqual(await page.eval(`[$('prompt').value, inputImages.length]`), ['', 0]);
   await page.setFiles('#inFiles', photos(1));
@@ -507,7 +508,7 @@ test('espaces : la saisie privée disparaît à « Sortir », la saisie publique
   assert.equal(await page.eval(`maskMode()`), 'annotation', 'mode du dessin public');
   assert.equal(await marked(), 0, 'aucun onglet marqué');
 
-  await enterPrivate();                            // « Sortir » a effacé la saisie privée
+  await page.enterPrivate(CODE);                            // « Sortir » a effacé la saisie privée
   assert.deepEqual(await page.eval(`[$('prompt').value, inputImages.length, drawOn]`), ['', 0, false]);
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
@@ -516,7 +517,7 @@ test('espaces : la saisie privée disparaît à « Sortir », la saisie publique
 
 test('espaces : un dessin privé ne laisse ni image, ni tracé, ni taille d\'image après « Sortir »', async () => {
   await fresh();
-  await enterPrivate();
+  await page.enterPrivate(CODE);
   await drawOne();
   await paint();
   await page.click('#privExit');
@@ -548,7 +549,7 @@ test('espaces : dessin actif des deux côtés, l\'image du dessin n\'est jamais 
   const pub = await page.eval(`inputImages[0].dataUrl`);
   // dans l'espace privé, Dessiner ouvre le choix d'une image ; le Mac ferme l'espace pendant que le sélecteur est
   // ouvert, puis l'image choisie arrive : elle va dans la saisie privée mise de côté, jamais encore affichée
-  await enterPrivate();
+  await page.enterPrivate(CODE);
   await page.eval(`$('drawFile').addEventListener('click', e => e.preventDefault(), { once: true })`);
   await page.click('#drawBtn');
   await closedByMac();
@@ -558,7 +559,7 @@ test('espaces : dessin actif des deux côtés, l\'image du dessin n\'est jamais 
   await page.waitFor(paintLoaded, { what: 'dessin public de nouveau affiché' });
 
   await watchPaint();
-  await enterPrivate();                            // public → privé : l'image privée remplace la publique
+  await page.enterPrivate(CODE);                            // public → privé : l'image privée remplace la publique
   await page.waitFor(`drawOn && ${paintLoaded}`, { what: 'dessin privé affiché' });
   const priv = await page.eval(`inputImages[0].dataUrl`);
   assert.notEqual(priv, pub);
@@ -579,7 +580,7 @@ test('espaces : dessin actif des deux côtés, l\'image du dessin n\'est jamais 
 test('espaces : un trait commencé dans l\'espace privé ne continue pas sur le tracé public', async () => {
   await fresh();
   await drawOne();                                 // dessin public, tracé vide
-  await enterPrivate();
+  await page.enterPrivate(CODE);
   await drawOne();
   const box = await page.eval(`(() => { const c = $('paintCanvas'); c.scrollIntoView({ block: 'center' });
     const r = c.getBoundingClientRect();
@@ -599,7 +600,7 @@ test('espaces : un trait commencé dans l\'espace privé ne continue pas sur le 
 test('espaces : fermée par le Mac, la saisie privée attend le retour dans la page ; supprimée avec l\'espace', async () => {
   await fresh();
   await page.typePrompt('texte public');
-  await enterPrivate();
+  await page.enterPrivate(CODE);
   await page.typePrompt('un long texte privé');
   await page.setFiles('#inFiles', photos(1));
   await page.waitFor(`inputImages.length === 1`, { what: 'une image privée' });
@@ -607,7 +608,7 @@ test('espaces : fermée par le Mac, la saisie privée attend le retour dans la p
   assert.equal(await value(), 'texte public');
   assert.equal(await page.eval(`inputImages.length`), 0);
   assert.equal(await marked(), 0, 'aucun onglet marqué');
-  await enterPrivate();
+  await page.enterPrivate(CODE);
   assert.equal(await value(), 'un long texte privé', 'retrouvé au retour');
   assert.equal(await page.eval(`inputImages.length`), 1, 'son image aussi');
   await closedByMac();
@@ -615,7 +616,7 @@ test('espaces : fermée par le Mac, la saisie privée attend le retour dans la p
   assert.equal(await post('/api/private/reset', { confirm: 'SUPPRIMER' }), 200);   // espace supprimé (sur le Mac)
   await page.eval(`refreshStatus()`);
   await page.waitFor(`!privState.exists`, { what: 'espace supprimé vu par la page' });
-  await enterPrivate();                            // recréé : rien de l'ancien espace
+  await page.enterPrivate(CODE);                            // recréé : rien de l'ancien espace
   assert.deepEqual(await page.eval(`[$('prompt').value, inputImages.length]`), ['', 0]);
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
@@ -627,7 +628,7 @@ const CLOSED = 'Espace privé fermé : retour dans l\'espace public';
 
 test('espaces : fermé sans « Sortir », le champ perd le curseur et un message dit le retour dans l\'espace public', async () => {
   await fresh();
-  await enterPrivate();
+  await page.enterPrivate(CODE);
   await page.eval(`$('prompt').focus()`);
   assert.equal(await page.eval(`document.activeElement === $('prompt')`), true);
   await page.watchToasts();
@@ -636,7 +637,7 @@ test('espaces : fermé sans « Sortir », le champ perd le curseur et un message
   assert.deepEqual(await page.eval(`seenToasts`), [CLOSED]);
   assert.equal(await page.eval(`$('toastBox').classList.contains('on')`), true);
 
-  await enterPrivate();                            // espace supprimé depuis le Mac pendant qu'on tape
+  await page.enterPrivate(CODE);                            // espace supprimé depuis le Mac pendant qu'on tape
   await page.eval(`$('prompt').focus()`);
   await page.watchToasts();
   assert.equal(await post('/api/private/reset', { confirm: 'SUPPRIMER' }), 200);
@@ -645,7 +646,7 @@ test('espaces : fermé sans « Sortir », le champ perd le curseur et un message
   assert.equal(await page.eval(`document.activeElement === $('prompt')`), false, 'le champ a perdu le curseur');
   assert.deepEqual(await page.eval(`seenToasts`), [CLOSED]);
 
-  await enterPrivate();                            // « Sortir » : la sortie est demandée, pas de message de fermeture
+  await page.enterPrivate(CODE);   // « Sortir » : la sortie est demandée, pas de message de fermeture
   await page.eval(`$('prompt').focus()`);
   await page.watchToasts();
   await page.click('#privExit');
@@ -657,12 +658,12 @@ test('espaces : fermé sans « Sortir », le champ perd le curseur et un message
 test('espaces : une demande privée acceptée après la fermeture par le Mac ne vide pas la saisie publique', async () => {
   await fresh();
   await page.typePrompt('texte public');
-  await enterPrivate();
+  await page.enterPrivate(CODE);
   await page.typePrompt('demande privée');
   refusal = 'hold'; held = Promise.withResolvers();
   await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/generate', requestStage: 'Response' }] });
   await page.click('#go');
-  const requestId = await held.promise;            // le Mac a accepté la demande privée, la page n'a pas encore sa réponse
+  const requestId = await held.promise;   // le Mac a accepté la demande privée, la page n'a pas encore sa réponse
   await closedByMac();                             // pendant l'attente : la saisie publique revient à l'écran
   await page.send('Fetch.continueRequest', { requestId });
   await page.send('Fetch.disable');
@@ -673,7 +674,7 @@ test('espaces : une demande privée acceptée après la fermeture par le Mac ne 
   assert.equal(await page.eval(`pageJobs.some(p => p.private)`), false, 'hors de l\'espace, la page ne suit pas la génération privée');
   assert.equal(await value(), 'texte public', 'la saisie publique reste');
   assert.equal(await draft(), 'texte public', 'son brouillon aussi');
-  await enterPrivate();
+  await page.enterPrivate(CODE);
   assert.equal(await value(), '', 'c\'est la saisie privée de la demande qui est vidée');
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });

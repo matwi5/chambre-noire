@@ -93,8 +93,6 @@ const ref = color => `(() => { const c = document.createElement('canvas'); c.wid
   const x = c.getContext('2d'); x.fillStyle = '${color}'; x.fillRect(0, 0, 256, 256);
   return c.toDataURL('image/png'); })()`;
 // une génération envoyée hors de l'interface (comme d'un autre appareil), 512×512 en 8 étapes : Carré, 360p, Low
-const send = body => page.eval(`postJson('/api/generate', { width: 512, height: 512, steps: 8, cfg: 1, seed: -1,
-  preview: false, ref_images: [], ...${body} }).then(r => r.status)`);
 // couleur du centre de chaque image d'entrée de la saisie affichée
 const colors = () => page.eval(`inputImages.map(x => { const c = document.createElement('canvas');
   c.width = c.height = 1; const g = c.getContext('2d'); g.drawImage(x.img, x.w / 2, x.h / 2, 1, 1, 0, 0, 1, 1);
@@ -109,12 +107,6 @@ async function fresh() {
   await page.eval(`localStorage.clear()`);
   await page.goto(bench.url + '/');
   await page.ready();
-}
-async function enterPrivate() {
-  const exists = await page.eval(`privState.exists`);
-  assert.equal(await post(exists ? '/api/private/unlock' : '/api/private/create', { code: CODE }), 200);
-  await page.eval(`refreshStatus()`);
-  await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
 }
 // les images de la pile gardées par ✓, puis la visionneuse des Tirages sur l'image au prompt donné
 async function view(prompt) {
@@ -141,7 +133,7 @@ const SQUARE_LOW = { ratio: '1:1', res: 'low', steps: 'low' };   // réglages d'
 
 test('« Reprendre » une édition : texte, références, réglages, confirmée ; refus : rien ne bouge', async () => {
   await fresh();
-  assert.equal(await send(`{ mode: 'edit', prompt: 'zr1 edition',
+  assert.equal(await page.postGenerate(`{ mode: 'edit', prompt: 'zr1 edition',
     ref_images: [${ref('#c02020')}, ${ref('#2060c0')}] }`), 202);
   await bench.idle();
   await page.eval(`opt.ratio = '16:9'; opt.res = 'high'; opt.steps = 'max'; campaignOn = $('campChk').checked = true;
@@ -170,9 +162,10 @@ test('« Reprendre » une édition : texte, références, réglages, confirmée 
 
 test('« Reprendre » un dessin : masque sur l\'image de départ, tracé vide ; annotation en édition', async () => {
   await fresh();
-  assert.equal(await send(`{ mode: 'mask', prompt: 'zr2 masque', init_image: ${ref('#30a050')},
+  assert.equal(await page.postGenerate(`{ mode: 'mask', prompt: 'zr2 masque', init_image: ${ref('#30a050')},
     mask_image: ${ref('#ffffff')}, ref_images: [${ref('#808080')}] }`), 202);
-  assert.equal(await send(`{ mode: 'annot', prompt: 'zr3 annotation', ref_images: [${ref('#a040c0')}] }`), 202);
+  assert.equal(await page.postGenerate(`{ mode: 'annot', prompt: 'zr3 annotation',
+    ref_images: [${ref('#a040c0')}] }`), 202);
   await bench.idle();
   await page.eval(`setMaskMode('annotation')`);
   await view('zr2 masque');
@@ -196,8 +189,9 @@ test('« Reprendre » un dessin : masque sur l\'image de départ, tracé vide ; 
 
 test('« Reprendre » un texte → image : le texte seul, sans images ; absent sans images d\'entrée connues', async () => {
   await fresh();
-  assert.equal(await send(`{ mode: 't2i', prompt: 'zr4 texte' }`), 202);
-  assert.equal(await send(`{ mode: 'edit', prompt: 'zr4 edition', ref_images: [${ref('#c02020')}] }`), 202);
+  assert.equal(await page.postGenerate(`{ mode: 't2i', prompt: 'zr4 texte' }`), 202);
+  assert.equal(await page.postGenerate(`{ mode: 'edit', prompt: 'zr4 edition',
+    ref_images: [${ref('#c02020')}] }`), 202);
   await bench.idle();
   await page.eval(`(async () => { inputImages.push(await toEntry('a.png', ${ref('#204080')})); renderInputs(); })()`);
   await page.waitFor(`inputImages.length === 1`, { what: 'une image dans la saisie' });
@@ -251,8 +245,9 @@ test('« Reprendre » une image de la pile lancée ici : images de sa demande ga
 
 test('« Reprendre » une image privée : images lues dans l\'espace privé, rien d\'elle après « Sortir »', async () => {
   await fresh();
-  await enterPrivate();
-  assert.equal(await send(`{ mode: 'edit', prompt: 'zr6 privee', ref_images: [${ref('#106070')}], private: true }`),
+  await page.enterPrivate(CODE, { settle: false });
+  assert.equal(await page.postGenerate(`{ mode: 'edit', prompt: 'zr6 privee',
+    ref_images: [${ref('#106070')}], private: true }`),
     202);
   await bench.idle();
   await view('zr6 privee');
@@ -268,14 +263,14 @@ test('« Reprendre » une image privée : images lues dans l\'espace privé, rie
 
 test('« Reprendre » : espace changé pendant la lecture, l\'image va dans la saisie de l\'espace du geste', async () => {
   await fresh();
-  assert.equal(await send(`{ mode: 'edit', prompt: 'zr7 course', ref_images: [${ref('#c02020')}, ${ref('#2060c0')}] }`),
-    202);
+  assert.equal(await page.postGenerate(`{ mode: 'edit', prompt: 'zr7 course',
+    ref_images: [${ref('#c02020')}, ${ref('#2060c0')}] }`), 202);
   await bench.idle();
   await view('zr7 course');
   await holdInput();
   await page.click('#vResume');                    // saisie publique vide : lecture tout de suite
   await held.promise;                              // première image d'entrée demandée, pas encore reçue
-  await enterPrivate();
+  await page.enterPrivate(CODE, { settle: false });
   await releaseInput();
   await page.waitFor(`asideInput && asideInput.images.length === 2`, { what: 'images dans la saisie publique' });
   assert.deepEqual(await page.eval(`[$('prompt').value, inputImages.length]`), ['', 0], 'saisie privée intacte');
@@ -289,7 +284,7 @@ test('« Reprendre » : espace changé pendant la lecture, l\'image va dans la s
 
 test('« Reprendre » : un texte tapé pendant la lecture n\'est pas remplacé sans confirmation', async () => {
   await fresh();
-  assert.equal(await send(`{ mode: 'edit', prompt: 'zr8 frappe', ref_images: [${ref('#c02020')}] }`), 202);
+  assert.equal(await page.postGenerate(`{ mode: 'edit', prompt: 'zr8 frappe', ref_images: [${ref('#c02020')}] }`), 202);
   await bench.idle();
   await view('zr8 frappe');
   await holdInput();

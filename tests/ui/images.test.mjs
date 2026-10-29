@@ -5,7 +5,7 @@
 //   venv/bin/python tests/check.py --quick --ui tests/ui/images.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, waitUntil, PHONE } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, PHONE, VIEWER_PRESS, VIEWER_SEEN } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -211,16 +211,16 @@ test('espace privé : la feuille « Voir le lot » d\'un lot privé se ferme et 
 test('pile : une image jetée depuis la visionneuse, son lien de téléchargement part avec elle', async () => {
   await page.waitFor(`!inPrivate()`, { what: 'espace public' });
   await page.tab('labo');
-  await page.typePrompt('zq3 jetée');
+  await page.typePrompt('zq31 jetée');
   await page.click('#go');
-  await page.waitFor(`pileView()[0]?.prompt === 'zq3 jetée'`, { what: 'image dans la pile', timeout: 30000 });
+  await page.waitFor(`pileView()[0]?.prompt === 'zq31 jetée'`, { what: 'image dans la pile', timeout: 30000 });
   const name = await page.eval(`pileView()[0].name`);
   await page.eval(`openViewer(0, pileView())`);
   await page.waitFor(`$('vDl').getAttribute('download') === ${JSON.stringify(name)}`,
     { what: 'lien de la visionneuse' });
   await page.imageShown('#vImg');                  // (Jeter ignore une image pas encore affichée)
-  await page.waitFor(`!sortHeld`, { what: 'image vue 0,3 s' });   // (ni vue depuis moins de 0,3 s)
-  await page.eval(`sortFromViewer('discard')`);
+  await page.waitFor(`${VIEWER_SEEN}`, { what: 'image vue 0,3 s' });   // (ni vue depuis moins de 0,3 s)
+  await page.eval(`${VIEWER_PRESS.discard}`);
   await page.eval(`closeViewer()`);
   await page.waitFor(`!discarding && !pileItems.some(it => it.name === ${JSON.stringify(name)})`,
     { what: 'image jetée', timeout: 10000 });
