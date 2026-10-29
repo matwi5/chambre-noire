@@ -306,6 +306,19 @@ les messages de commit.
   arrière-plan, au retour, se trie-t-elle tout de suite ? » → « Oui, tout de suite (Recommandé) » : « Seule une image
   pas encore vue 0,3 s page visible attend ; celle qu'on avait déjà vue n'a pas changé, c'est la même carte à l'écran
   au retour. Le ticket ne demande que ça. »
+- **Retour du groupe G** (29/10/2026), réponses par bouton :
+  - « G3 : le verrou court repart de zéro aussi après un relevé manqué de plus de 0,3 s (appli gelée par iOS ou
+    Android, retour par le cache du navigateur, ou page visible dont le fil a été bloqué plus de 0,3 s). Déjà codé et
+    testé. On garde ? » → « Garder (Recommandé) » : « Le temps où personne n'a pu regarder ne compte jamais. Coût : un
+    ✕ de plus ignoré après un gel. Test « page gelée » de pile.test.mjs. »
+  - « Le bandeau Annuler d'un Jeter (5 s) continue de s'écouler page cachée : un ✕ tapé juste avant de verrouiller le
+    téléphone part sans que le bandeau ait été visible au retour (l'image était à l'écran au geste : l'invariant
+    tient). Que faire ? » → « Piste de durcissement (Recommandé) » : « Noté pour un prochain durcissement (le bandeau
+    ne s'écoulerait que page visible), rien dans ce parcours. »
+  - « La session propose de préciser la règle du verrou dans le piège « Interface » du CLAUDE.md : « vue 0,3 s page
+    visible (onScreen exige !document.hidden ; afterSeen repart de zéro au visibilitychange et après un relevé
+    manqué) ; une image déjà vue avant que la page passe en arrière-plan se trie dès le retour ». On remplace ? » →
+    « Oui, remplacer (Recommandé) » : « La règle du CLAUDE.md suit le code de G3. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
