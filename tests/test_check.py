@@ -3,7 +3,7 @@ git, est contrôlé comme un fichier suivi ; une adresse donnée à la main à u
 trop longue est refusée par --lines, par le hook avant commit et par le contrôle complet, qui s'arrête alors avant le
 banc ; --link-venv relie les notes du dossier principal dans un worktree ; les fichiers d'interface tournent sur
 plusieurs Chrome à la fois ; l'avis « zone sensible » ne regarde que le travail de la branche en cours."""
-import contextlib, io, json, os, shutil, subprocess, sys, tempfile, threading, unittest
+import contextlib, io, json, os, shutil, subprocess, sys, tempfile, threading, time, unittest
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -502,10 +502,32 @@ class NoticeBaseTest(RepoCase):
     """L'avis « zone sensible » compte depuis le dernier commit (le ticket en cours, arbre de travail et fichiers
     nouveaux compris ; décision du 25/10/2026), quelle que soit la branche : un ticket n'hérite plus des mots des
     tickets d'avant. Il compte aussi la suppression de données et nomme la fonction (ou la route) de chaque ligne."""
+    def setUp(self):
+        super().setUp()
+        self.proofs = os.path.join(self.tmp.name, "preuves.jsonl")      # journal de tests/mutate.py du test
+        p = mock.patch.dict(os.environ, QWEN_MUTATE_JOURNAL=self.proofs)
+        p.start()
+        self.addCleanup(p.stop)
+
     def notice(self):
         with contextlib.redirect_stdout(io.StringIO()) as out:
             check.sensitive_notice(check.ticket_base())
         return out.getvalue()
+
+    def test_a_sensitive_function_without_a_red_proof_is_named(self):
+        """L'avis liste les fonctions sensibles touchées sans preuve rouge au journal de mutate.py depuis le dernier
+        commit (décision du 29/10/2026 : un avis, rien ne bloque)."""
+        self.write("tools/launch.py", "def purge(name):\n    return 1\n\n\ndef autre():\n    return 2\n")
+        self.commit("serveur")
+        self.write("tools/launch.py", "def purge(name):\n    delete_output(name)\n    return 1\n\n\n"
+                                      "def autre():\n    secret(None)\n    return 2\n")
+        notice = self.notice()
+        self.assertIn("sans preuve rouge de tests/mutate.py depuis le dernier commit (tools/launch.py : purge, autre)",
+                      notice)
+        with open(self.proofs, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"t": time.time() + 5, "fichier": "tools/launch.py", "fonction": "purge"}) + "\n")
+            f.write(json.dumps({"t": 0, "fichier": "tools/launch.py", "fonction": "autre"}) + "\n")   # trop vieille
+        self.assertIn("(tools/launch.py : autre)", self.notice())
 
     def commit(self, message):
         sh(self.root, "git", "add", ".")

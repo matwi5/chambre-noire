@@ -70,8 +70,11 @@ les tests viennent de bugs passés à travers les revues par ticket.
   d'interface ne sont apparus que dans Chrome, banc au vert.
 - **Le test d'une garde d'une zone sensible (espace privé, suppression) est prouvé rouge** sur le code
   sans la branche qu'il protège (retirée le temps de l'essai), puis vert ; le message du commit le dit. L'essai passe
-  par `tests/mutate.py <fichier> --old <texte> --new <texte> -- <commande>`, qui rend toujours le fichier (échec,
-  interruption), pas par un script jetable qui modifie l'arbre.
+  par `tests/mutate.py <fichier> --old <texte> --new <texte> -- <commande>` (plusieurs paires `--old`/`--new` pour
+  une garde en plusieurs endroits), qui rend toujours le fichier (échec, interruption), pas par un script jetable qui
+  modifie l'arbre. L'échec doit venir de l'assertion qui porte le titre du test : `mutate.py` nomme chaque test en
+  échec et le premier message de son assertion (une erreur de la page ou une autre assertion ne prouve rien), et
+  garde la preuve dans son journal, où l'avis « zone sensible » de `check.py` cherche les fonctions touchées.
 - **Une assertion « rien ne change » attend d'abord la fin de l'action qui pourrait changer quelque chose** (réponse
   reçue, Mac au repos : `bench.idle()`) : vérifiée trop tôt, elle passe avant que le changement arrive.
 - **Un fichier de test se termine par `if __name__ == "__main__": unittest.main()`**, pour se lancer seul.

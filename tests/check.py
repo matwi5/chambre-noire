@@ -67,8 +67,9 @@ un fichier créé passe les contrôles avant son premier commit.
    les lignes à citer du dernier contrôle qui les a lancés, datées (« (vert du …) ») ;
 7. avis, sans échec, « zone sensible : passe bogues /code-review requise » quand une ligne ajoutée dans tools/ depuis
    le dernier commit (ticket_base : le ticket en cours, arbre de travail compris ; donc aucun avis en CI) touche
-   l'espace privé ou la suppression de données (SENSITIVE) ; il nomme la fonction (ou la route) de chaque ligne. Un
-   indice : la ligne « Zone sensible » du ticket fait foi.
+   l'espace privé ou la suppression de données (SENSITIVE) ; il nomme la fonction (ou la route) de chaque ligne, puis
+   celles qui n'ont pas de preuve rouge au journal de tests/mutate.py depuis le dernier commit (un avis : rien ne
+   bloque le commit, décision du 29/10/2026). Un indice : la ligne « Zone sensible » du ticket fait foi.
 
 La sortie complète va aussi dans un journal (chemin imprimé à la fin ; les lignes de pile de Node n'y sont qu'à lui) ;
 un passage en échec garde le sien sous un nom horodaté (FAILURES_DIR, les FAILURES_KEPT derniers). La dernière ligne
@@ -693,10 +694,12 @@ def sensitive_notice(base):
     """Avis (jamais un échec) quand une ligne ajoutée depuis base (ticket_base) dans le code de l'application (tools/,
     hors .md) touche une zone sensible (SENSITIVE) : le ticket demande peut-être la passe bogues de /code-review (la
     ligne « Zone sensible » du ticket fait foi). L'avis nomme, par fichier, la fonction (ou la route) de chaque ligne
-    touchée et ses mots. Les tests, qui nomment ces zones pour les vérifier, ne déclenchent pas l'avis."""
+    touchée et ses mots, puis celles qui n'ont pas de preuve rouge au journal de tests/mutate.py depuis le dernier
+    commit (proved : même fichier, même fonction) : un avis, rien ne bloque (décision du 29/10/2026). Les tests, qui
+    nomment ces zones pour les vérifier, ne déclenchent pas l'avis."""
     if not base:
         return
-    parts = []
+    parts, unproved, proofs = [], [], proved()
     for f, numbers in sorted(added_lines(base, "tools/", ":!*.md").items()):
         try:
             text = read(f)
@@ -709,8 +712,27 @@ def sensitive_notice(base):
                 where.setdefault(rules.enclosing_name(f, text, k), set()).update(words)
         if where:
             parts.append(f"{f} : " + ", ".join(f"{name} ({', '.join(sorted(ws))})" for name, ws in where.items()))
+            missing = [name for name in where if (f, name.split(" [")[0]) not in proofs]
+            if missing:
+                unproved.append(f"{f} : {', '.join(missing)}")
     if parts:
         print("Avis : zone sensible : passe bogues /code-review requise (" + " ; ".join(parts) + ")")
+    if unproved:
+        print("Avis : zone sensible : sans preuve rouge de tests/mutate.py depuis le dernier commit (" + " ; ".join(
+            unproved) + ") : prouver chaque garde rouge, et le dire dans le message du commit")
+
+
+def proved():
+    """Fonctions prouvées rouges depuis le dernier commit au journal de tests/mutate.py : {(fichier, fonction)} ;
+    vide sans journal ou hors git."""
+    import mutate                                    # ici : mutate importe rules, comme check
+    try:
+        since = int(git("log", "-1", "--format=%ct", "HEAD").strip() or 0)
+        with open(mutate.proofs_path(), encoding="utf-8") as f:
+            rows = [json.loads(line) for line in f if line.strip()]
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        return set()
+    return {(r.get("fichier"), str(r.get("fonction", "")).split(" [")[0]) for r in rows if r.get("t", 0) >= since}
 
 
 # un module du banc qui lit un fichier du dépôt autre qu'un .py (l'interface, la carte du code, le README, un
