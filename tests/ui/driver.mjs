@@ -48,7 +48,9 @@
 //   await page.enterPrivate('code')              // dans l'espace privé (créé la première fois), vu par la page,
 //                                                // puis au repos ; await page.privateIdle() : espace au repos
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
-//   await page.topPrompt()                       // prompt de la carte du dessus de la pile
+//   await page.topPrompt()                       // prompt de la carte du dessus de la pile ; TOP : la même
+//                                                // expression, pour une attente (`${TOP} === 'x'`)
+//   await page.watchToasts(); …; seenToasts      // messages affichés par la page à partir de l'appel
 //   await page.topShown()                        // image du dessus affichée (posed), pile au repos : ✓, ✕, les
 //                                                // flèches et le balayage la trient (sauf l'image d'avant tenue)
 //   await page.watchSorts(); …; await page.sortsSent('discard')   // demandes keep, discard, delete de la page
@@ -103,6 +105,9 @@ export const START_TIMEOUT = 60000;
 const WRITTEN = ['outputs', 'jobs', 'logs', 'private', 'tools'];
 
 const pause = ms => new Promise(r => setTimeout(r, ms));
+// prompt de la carte du dessus de la pile affichée (expression évaluée dans la page ; undefined sans carte) : lu par
+// page.topPrompt, et mis tel quel dans une attente (page.waitFor(`${TOP} === 'x'`))
+export const TOP = `$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`;
 // délai voulu d'un test (un minuteur de l'interface à dépasser : « rien n'est parti au bout de 5 s ») : la seule
 // attente fixe permise dans un test (tests/rules.py refuse un setTimeout nu) ; toute autre attente suit une condition
 export const elapse = ms => pause(ms);
@@ -327,13 +332,16 @@ function keyInfo(key) {
   }
   throw new Error(`touche inconnue du pilote : ${key}`);
 }
-// événement d'une touche : type keyDown (texte d'un caractère seul, ou d'Entrée, s'il n'y a ni Ctrl ni ⌘) ou keyUp
+// événement d'une touche : type keyDown (texte d'un caractère seul, ou d'Entrée, s'il n'y a ni Ctrl ni ⌘) ou keyUp.
+// Sans nativeVirtualKeyCode : Chrome sur Mac y lit un code de touche du Mac, pas celui de Windows ; une touche que la
+// page laisse passer (← sur une carte d'échec) y devenait une commande de Chrome qui ouvre l'onglet de l'aide
+// (chrome://settings/help) par-dessus la page de test, cachée dès lors (minuteurs ralentis, images non décodées)
 function keyEvent(type, key, modifiers, repeat) {
   const { code, vk } = keyInfo(key);
   const mask = modifiers.reduce((m, name) => m | MODIFIERS[name][0], 0);
   const text = type === 'keyDown' && !(mask & 6) ? (key === 'Enter' ? '\r' : key.length === 1 ? key : '') : '';
   return { type: text ? 'keyDown' : type === 'keyDown' ? 'rawKeyDown' : 'keyUp', key, code, modifiers: mask,
-    windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, autoRepeat: repeat, text, unmodifiedText: text };
+    windowsVirtualKeyCode: vk, autoRepeat: repeat, text, unmodifiedText: text };
 }
 
 // cookie du code d'accès d'un banc posé dans le navigateur de la page (même cookie que la saisie du code)
@@ -576,7 +584,14 @@ async function connect(wsUrl, { closeTab, siblings }) {
         return n; } })()`);
     },
     // prompt de la carte du dessus de la pile affichée (undefined sans carte)
-    topPrompt() { return page.eval(`$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`); },
+    topPrompt() { return page.eval(TOP); },
+    // messages (toasts) affichés par la page à partir de l'appel, notés dans seenToasts (texte de chacun) ; un nouvel
+    // appel repart d'une liste vide
+    watchToasts() {
+      return page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
+        window.toastWatch = new MutationObserver(() => seenToasts.push($('toastBox').textContent));
+        toastWatch.observe($('toastBox'), { childList: true, characterData: true, subtree: true }); })()`);
+    },
     // image de la carte du dessus affichée (posed : sinon un geste de tri l'ignore) et aucun tri en cours (un geste
     // de tri l'ignore aussi tant que l'image d'avant est tenue, beforeHeld)
     topShown() {

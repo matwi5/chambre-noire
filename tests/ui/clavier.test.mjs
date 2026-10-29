@@ -6,7 +6,7 @@
 //   venv/bin/python tests/check.py --no-bench --ui tests/ui/clavier.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, waitUntil, PC } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, PC, TOP } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -25,7 +25,6 @@ after(async () => {
   await bench?.stop();
 });
 
-const TOP = `$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`;   // prompt de la carte du dessus
 // focus rendu à la page (aucun bouton ni champ ne le tient)
 const unfocus = () => page.eval(`document.activeElement?.blur()`);
 // la carte du dessus affichée depuis 0,3 s et le tri d'avant fini (sortBusy) : un nouveau tri est permis

@@ -234,6 +234,14 @@ test('page.keyDown, keyUp, press : touche maintenue, répétée, relâchée, ave
       'keydown Meta MetaLeft false metaKey', 'keydown Enter Enter false metaKey', 'keyup Enter Enter false metaKey',
       'keyup Meta MetaLeft false ',
       'keydown Escape Escape false ', 'keyup Escape Escape false ']);
+    // aucune touche, laissée passer par la page, n'a ouvert d'onglet de Chrome par-dessus elle
+    await p.press('ArrowLeft');
+    await p.press('ArrowRight');
+    await p.eval(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+    assert.deepEqual((await p.send('Target.getTargets')).targetInfos
+      .filter(t => t.type === 'page' && t.url.startsWith('chrome:'))
+      .map(t => t.url), [], 'onglet de Chrome ouvert par une touche');
+    assert.equal(await p.eval(`document.visibilityState`), 'visible', 'page cachée par une touche');
     p.assertNoErrors();
   } finally { await p.close(); }
 });

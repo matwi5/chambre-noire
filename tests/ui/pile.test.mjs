@@ -20,7 +20,7 @@
 //   venv/bin/python tests/check.py --quick --ui tests/ui/pile.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, waitUntil, elapse, PHONE } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, elapse, PHONE, TOP } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -44,10 +44,6 @@ const CODE = 'code-du-banc-1';
 // prompts des cartes dessinées, du dessus vers le dessous
 const cards = () => page.eval(`[...$('pile').querySelectorAll('.pcard')]
   .map(c => c.querySelector('.pprompt').textContent)`);
-const TOP = `$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`;   // prompt de la carte du dessus
-const watchToasts = () => page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
-  window.toastWatch = new MutationObserver(() => seenToasts.push($('toastBox').textContent));
-  toastWatch.observe($('toastBox'), { childList: true, characterData: true, subtree: true }); })()`);
 // toute adresse privée donnée à une image à partir de l'appel (attachée ou non : Chrome charge une image détachée,
 // et sert sans requête une image déjà chargée par la page), notée dans srcAfter ; la surveillance n'est posée qu'une
 // fois par page (srcWatched), chaque appel vide la liste
@@ -102,12 +98,12 @@ test('✕ : bandeau « Annuler » de 5 s, rien envoyé avant ; « Annuler » rem
   await page.waitFor(`!$('undoBar').hidden && !$('pile').querySelector('.pcard')`, { what: 'bandeau, carte partie' });
   assert.equal(await page.eval(`$('undoBar').textContent`), 'Image jetéeAnnuler');
   assert.equal(await page.eval(`$('runCount').hidden`), true, 'l\'image jetée ne compte plus');
-  await new Promise(r => setTimeout(r, 2500));      // au milieu du délai : rien n'est parti
+  await elapse(2500);                               // au milieu du délai : rien n'est parti
   assert.equal(await page.sortsSent('discard'), 0, 'Jeter envoyé avant la fin du bandeau');
   await page.click('#undoBtn');
   await page.waitFor(`$('undoBar').hidden && ${TOP} === 'zp2 a jeter'`,
     { what: 'carte remise sur le dessus' });
-  await new Promise(r => setTimeout(r, 3500));      // au-delà des 5 s du premier geste : toujours rien
+  await elapse(3500);                               // au-delà des 5 s du premier geste : toujours rien
   assert.equal(await page.sortsSent('discard'), 0, 'Jeter envoyé malgré « Annuler »');
   assert.equal(await bench.inPile('zp2 a jeter'), true);
   // ✕ jusqu'au bout : la demande part à la fin du bandeau, pas avant
@@ -127,7 +123,7 @@ test('double appui sur ✕ : une seule image part, rien avant 5 s ; Annuler, vis
   await page.made('zp2b double');
   await page.eval(`sorts.length = 0; $('pileNo').click(); $('pileNo').click()`);   // deux appuis pendant l'envol
   await page.waitFor(`!$('undoBar').hidden && ${TOP} === 'zp2b dessous'`, { what: 'bandeau, la suivante dessus' });
-  await new Promise(r => setTimeout(r, 1000));
+  await page.topShown();                            // les deux appuis joués : envol fini, la suivante vue 0,3 s
   assert.equal(await page.sortsSent('discard'), 0, 'Jeter envoyé par le second appui');
   assert.equal(await page.eval(`pileView().some(it => it.prompt === 'zp2b dessous')`), true, 'la suivante reste');
   await page.click('#undoBtn');
@@ -270,7 +266,7 @@ test('rechargement pendant le bandeau : rien n\'est envoyé, l\'image est encore
   await page.goto(bench.url + '/');
   await page.ready('page rechargée');
   await page.waitFor(`pileItems.some(it => it.prompt === 'zp3 doute')`, { what: 'image dans la pile rechargée' });
-  await new Promise(r => setTimeout(r, 5500));      // au-delà du délai : rien n'est parti avant le rechargement
+  await elapse(5500);                               // au-delà du délai : rien n'est parti avant le rechargement
   assert.equal(await bench.inPile('zp3 doute'), true, 'image effacée malgré la fermeture de la page');
   assert.equal(await page.eval(`$('undoBar').hidden`), true);
   await page.watchSorts();
@@ -311,7 +307,7 @@ test('« Déjà triée » : l\'image gardée par une autre page quitte la pile',
   await waitUntil(async () => !(await bench.inPile('zp5 disputee')), { what: 'gardée par l\'autre page' });
   other.assertNoErrors();
   await other.close();
-  await watchToasts();
+  await page.watchToasts();
   await page.click('#pileYes');
   await page.waitFor(`seenToasts.includes('Déjà triée') && !pileItems.length`,
     { what: '« Déjà triée », pile vide' });
@@ -329,7 +325,7 @@ test('✓ puis une autre carte sur le dessus avant le départ : un second ✓ ne
   await page.eval(`$('pileYes').click(); pileItems = [pileItems[1], pileItems[0], ...pileItems.slice(2)];
     pileShown = ''; renderPile(); $('pileYes').click()`);
   await page.waitFor(`sorts.length > 0 && !flying`, { what: 'Garder envoyé' });
-  await new Promise(r => setTimeout(r, 600));
+  await page.topShown();                           // les deux appuis joués : la carte suivante vue, rien en route
   assert.equal(await page.eval(`sorts.length`), 1, 'deux tris pour un départ');
   assert.deepEqual([await bench.kept('zp14 seconde'), await bench.inPile('zp14 premiere')], [true, true],
     'pas l\'image du premier appui qui est gardée');
@@ -345,7 +341,7 @@ test('double appui sur Jeter dans la visionneuse, et ✕ juste après un envol :
     await page.waitFor(`$('viewer').classList.contains('on') && vList.length === 3 && !sortHeld`,
       { what: 'visionneuse, image vue 0,3 s' });
     await page.eval(`sorts.length = 0; sortFromViewer('discard'); sortFromViewer('discard')`);   // double appui
-    await new Promise(r => setTimeout(r, 1000));
+    await page.waitFor(`!flying && !sortHeld`, { what: 'les deux appuis joués, image suivante vue 0,3 s' });
     assert.equal(await page.sortsSent('discard'), 0, 'Jeter de la première envoyé par le second appui');
     assert.deepEqual(await page.eval(`[vList.length, vList[vIndex].prompt]`), [2, 'zp16 b'], 'seconde image triée');
     await page.click('#undoBtn');
@@ -353,8 +349,9 @@ test('double appui sur Jeter dans la visionneuse, et ✕ juste après un envol :
     await page.waitFor(`${TOP} === 'zp16 c'`, { what: 'carte remise' });
     await page.topShown();                         // (la carte remise, vue 0,3 s : verrou court)
     // ✕ puis un second ✕ juste après la fin de l'envol (220 ms) : la carte suivante ne part pas
-    await page.eval(`sorts.length = 0; $('pileNo').click(); setTimeout(() => $('pileNo').click(), 250)`);
-    await new Promise(r => setTimeout(r, 1000));
+    await page.eval(`sorts.length = 0; window.zqSecond = false; $('pileNo').click();
+      setTimeout(() => { $('pileNo').click(); zqSecond = true; }, 250)`);
+    await page.waitFor(`zqSecond && !flying`, { what: 'second ✕ joué' });
     assert.equal(await page.sortsSent('discard'), 0, 'Jeter envoyé par le second ✕');
     assert.equal(await page.eval(`discarding && pileView().length`), 2, 'deux cartes encore dans la pile');
     await page.click('#undoBtn');
@@ -434,7 +431,7 @@ test('échec : carte en tête avec le message du Mac et Relancer, ✓ grisé, �
 });
 
 test('sur les Tirages : « Image prête » mène au Labo', async () => {
-  await watchToasts();
+  await page.watchToasts();
   await page.generate('HOLD=pret zp10 vue des Tirages');
   await page.tab('tirages');
   bench.release('pret');                           // elle finit pendant qu'on est sur les Tirages
@@ -463,7 +460,7 @@ test('espace privé : pile privée par ses routes ; un Jeter en attente à la so
   await page.waitFor(`!inPrivate() && pileItems.some(it => it.prompt === 'zp11 publique')`, { what: 'pile publique' });
   assert.equal(await page.eval(`$('undoBar').hidden`), true, 'bandeau privé parti avec l\'espace');
   assert.deepEqual(await cards(), ['zp11 publique']);
-  await new Promise(r => setTimeout(r, 5500));
+  await elapse(5500);                               // au-delà des 5 s du bandeau : le Jeter privé n'est pas parti
   assert.equal(await page.sortsSent('discard'), 0, 'Jeter privé envoyé après la sortie');
   // de retour dans l'espace : l'image jetée avant la sortie y est encore ; ✓ la garde dans les Tirages privés
   assert.equal(await page.eval(`postJson('/api/private/unlock', { code: ${JSON.stringify(CODE)} })
@@ -533,12 +530,13 @@ test('espace privé : un Jeter en attente est abandonné dès l\'appui sur « So
       await page.click('#privExit');
       await waitUntil(() => x.locking(), { what: 'sortie demandée' });
       assert.deepEqual(await page.eval(`[discarding, $('undoBar').hidden]`), [null, true], 'Jeter encore en attente');
-      await new Promise(r => setTimeout(r, 300));
+      await page.waitFor(`${TOP} === 'zp17 secrete'`, { what: 'carte remise par l\'abandon' });
+      await elapse(300);                           // le temps qu'une demande de son image parte (il n'en part aucune)
       assert.deepEqual(x.after.filter(u => /\/(image|thumb)/.test(u)), [],
         'image privée demandée pendant la sortie (carte remise par l\'abandon)');
       // ✓ ou ✕ pendant la sortie : aucun tri privé ne part
       await page.eval(`sortBusy() || sortTop('keep')`);
-      await new Promise(r => setTimeout(r, 600));
+      await elapse(600);                           // au-delà de l'envol (0,22 s), à la fin duquel un tri part
       assert.equal(await page.eval(`sorts.length`), 0, 'tri privé envoyé pendant la sortie');
       // un Jeter privé qui arriverait à sa fin pendant l'aller-retour ne part pas non plus (garde leavingPrivate)
       await page.eval(`(() => { const d = { tag: 'pzz', priv: true, body: { id: 'zz' } }; discarding = d;
@@ -819,7 +817,7 @@ test('espace privé : « Sortir » pendant le chargement d\'une image de la pile
       await page.waitFor(`!inPrivate()`, { what: 'sorti' });
       // les chargements retenus échouent (abandonnés par la page) : une image qui les attendait ne redemande rien
       for (let k = 0; k < 2; k++) {
-        await new Promise(r => setTimeout(r, 400));
+        await elapse(400);                         // une demande refaite par une image en échec arrive, retenue
         await fail();
       }
     } finally {
