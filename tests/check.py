@@ -7,6 +7,7 @@
   venv/bin/python tests/check.py --quick    # banc sauté si aucun .py n'a changé depuis le dernier commit
   venv/bin/python tests/check.py --ui tests/ui/x.test.mjs --repeat 3   # un fichier passé 3 fois (intermittent)
   venv/bin/python tests/check.py --failed   # seuls les tests rouges du dernier passage, rejoués
+  venv/bin/python tests/check.py --at dev --ui tests/ui/x.test.mjs [--name <motif>]   # tests actuels, tools/ de dev
   python3 tests/check.py --lines [--fix]    # longueur des lignes ajoutées seule (moins d'une seconde) ; --fix recoupe
   python3 tests/check.py --link-venv        # worktree : liens vers venv et les notes du dossier principal, hook
   python3 tests/check.py --map <nom> | --show <nom> | --uses <mot>   # situer, lire, chercher sans grep
@@ -86,6 +87,12 @@ fichier seul, ou --failed, suffit. Le journal note la charge au départ et à la
 worktrees (FAILURE_LOG du dossier temporaire du système : date, dossier, fichier, test, verdict du rejeu, charge),
 pour repérer les tests qui reviennent rouges. --failed rejoue seuls les tests rouges du dernier passage (titres des
 tests d'interface, méthodes du banc), sans les contrôles statiques ni le rejeu ; il n'enregistre aucun vert.
+
+--at <commit> --ui <fichiers> [--name <motif>] : rejoue des tests d'interface de l'arbre de travail contre l'interface
+et le serveur d'un autre commit (comparer à la base, voir si un test aurait vu un bogue) : worktree temporaire du
+commit, dossier tests/ de l'arbre de travail copié par-dessus (pilote, banc et tests actuels ; le pilote prend tools/
+du worktree), contrôle de l'interface seul (ni contrôles statiques, ni banc ; son journal à part), puis le worktree
+retiré, même sur un échec ou une interruption. Code de sortie de ce contrôle.
 
 Le Python des contrôles est celui du venv du dépôt (venv/ à la racine, sinon celui du dossier principal quand on est
 dans un worktree), sinon l'interpréteur qui lance ce script (cas de la CI) : check.py se relance de lui-même avec le
@@ -1225,6 +1232,9 @@ def run_checks(args, state=None, green=None):
     failed = {}
     statics = (("Python", check_python), ("JavaScript", check_js),
                ("Lignes", lambda: check_line_length(base)), ("Règles", lambda: check_rules(base)))
+    if os.environ.get("QWEN_CHECK_AT"):               # --at : les tests actuels sur un autre commit, interface seule
+        print(f"Contrôles statiques : sautés (--at {os.environ['QWEN_CHECK_AT']})")
+        statics = ()
     for name, check in statics[2:] if green else statics:
         faults = check()
         if faults:
@@ -1318,6 +1328,37 @@ def write_red():
             pass
 
 
+def run_at(args):
+    """--at : les tests d'interface donnés (args.ui), de l'arbre de travail, contre tools/ du commit args.at, dans un
+    worktree temporaire (tests/ copié par-dessus), retiré à la fin quoi qu'il arrive. Code de sortie du contrôle."""
+    if not args.ui:
+        print("--at : donner les fichiers d'interface à rejouer (--ui tests/ui/x.test.mjs)", file=sys.stderr)
+        return 2
+    tree = tempfile.mkdtemp(prefix="qwen-check-at-")
+    try:
+        git("worktree", "add", "--detach", tree, args.at)
+    except subprocess.CalledProcessError as e:
+        shutil.rmtree(tree, ignore_errors=True)
+        print(f"--at : worktree de « {args.at} » impossible : {e.stderr.strip()}", file=sys.stderr)
+        return 2
+    try:
+        shutil.rmtree(os.path.join(tree, "tests"), ignore_errors=True)
+        shutil.copytree(os.path.join(ROOT, "tests"), os.path.join(tree, "tests"),
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        commit = git("rev-parse", "--short", args.at).strip()
+        print(f"--at : tests de l'arbre de travail, interface et serveur de {args.at} ({commit}), dans {tree}")
+        journal = os.path.join(tempfile.gettempdir(), f"qwen-check-at-{commit}.log")
+        sys.stdout.flush()
+        command = [sys.executable, os.path.join(tree, "tests", "check.py"), "--no-bench", "--force", "--ui",
+                   *args.ui, *(["--name", args.name] if args.name else [])]
+        return subprocess.run(command, cwd=tree, env=dict(os.environ, QWEN_CHECK_AT=commit,
+                                                          QWEN_CHECK_JOURNAL=journal)).returncode
+    finally:
+        subprocess.run(["git", "worktree", "remove", "--force", tree], cwd=ROOT, capture_output=True)
+        shutil.rmtree(tree, ignore_errors=True)
+        subprocess.run(["git", "worktree", "prune"], cwd=ROOT, capture_output=True)
+
+
 def run_failed(args):
     """--failed : rejoue seuls les tests rouges du dernier passage (red_record : ses titres, ou tout un fichier qui
     a échoué hors d'un test), sans contrôles statiques ; le passage ne compte pas pour « déjà vert », et ses propres
@@ -1360,6 +1401,8 @@ def parse_args(argv=None):
     ap.add_argument("--force", action="store_true",
                     help="relancer même si un contrôle identique est déjà vert sur cet état de l'arbre, ou si seuls "
                     "des .md ont changé, et lancer le banc entier même sur les .py du dernier banc vert")
+    ap.add_argument("--at", metavar="COMMIT", help="avec --ui : rejouer ces tests d'interface (de l'arbre de travail) "
+                    "contre tools/ de ce commit, dans un worktree temporaire retiré ensuite")
     ap.add_argument("--failed", action="store_true", help="rejouer seuls les tests rouges du dernier passage (banc et "
                     "interface), sans les contrôles statiques")
     ap.add_argument("--lines", action="store_true",
@@ -1406,6 +1449,8 @@ def main(argv=None):
         return print_body(args.show)
     if args.hook:                                     # bibliothèque standard seulement : pas de relance dans le venv
         return hook_lines(sys.stdin.read())
+    if args.at:
+        return run_at(args)
     if args.lines and args.fix:
         return fix_lines(merge_base())
     if args.lines:

@@ -185,14 +185,34 @@ function within(promise, ms, what) {
 }
 
 // attend que cond() (synchrone ou promesse) soit vraie, interrogée toutes les 50 ms ; échoue après timeout ms
+// (délai dépassé : le message ajoute l'état de chaque page ouverte, page.state)
 export async function waitUntil(cond, { timeout = WAIT, what = 'la condition' } = {}) {
   const end = Date.now() + timeout;
   for (;;) {
     if (await cond()) return;
-    if (Date.now() > end) throw new Error(`${what} : toujours fausse après ${timeout / 1000} s`);
+    if (Date.now() > end) throw new Error(`${what} : toujours fausse après ${timeout / 1000} s${await states()}`);
     await pause(50);
   }
 }
+
+// état des pages ouvertes (page.state), une ligne chacune, pour un message de délai dépassé
+async function states() {
+  const lines = await Promise.all([...livePages].map(p => p.state().catch(e => `état illisible (${e.message})`)));
+  return lines.map(l => `\n  ${l}`).join('');
+}
+
+// ce que montre une page, lu par page.state (une variable absente de la page vaut undefined, sans erreur)
+const STATE = `(() => { const g = n => { try { return eval(n); } catch { return undefined; } };
+  return { visibility: document.visibilityState, focus: document.hasFocus(), url: location.pathname,
+    mode: g('mode'), topHeld: g('topHeld'), sortHeld: g('sortHeld'), flying: g('flying'),
+    sortBusy: g('typeof sortBusy === "function" ? sortBusy() : undefined') }; })()`;
+// nom lisible d'un élément de la page (source d'une fonction évaluée dans la page) : #id, ou balise et classes, et
+// l'élément nommé qui le contient
+const NAME_OF = `e => { if (!e) return 'rien (hors de l\\'écran)';
+  const name = x => x.id ? '#' + x.id : x.tagName.toLowerCase() + (typeof x.className === 'string'
+    && x.className.trim() ? '.' + x.className.trim().split(/\\s+/).join('.') : '');
+  const holder = e.id ? null : e.parentElement?.closest('[id]');
+  return name(e) + (holder ? ' (dans #' + holder.id + ')' : ''); }`;
 
 // fichiers sous dir (liens non suivis) : { chemin : taille et date de modification }
 function files(dir, out = {}) {
@@ -328,7 +348,8 @@ export async function launchChrome() {
     // premier plan (les autres pages de ce Chrome, cachées derrière elle, le reprennent à sa fermeture : page.close)
     async newPage(view) {
       const target = await (await devtools('new?about:blank')).json();
-      const page = await connect(target.webSocketDebuggerUrl, { closeTab: () => closeTab(target.id), siblings: pages });
+      const page = await connect(target.webSocketDebuggerUrl, { closeTab: () => closeTab(target.id), siblings: pages,
+        tabs: async () => (await (await devtools('list')).json()).filter(t => t.type === 'page').map(t => t.url) });
       pages.push(page);
       await page.send('Page.bringToFront');
       await applyView(page, view);
@@ -396,7 +417,7 @@ const COUNT_PRIVATE = `(() => { if (window.__privFetch) return; const f = window
 
 // une page : commandes du protocole, évaluation de JavaScript, attente d'une condition, erreurs de la console ;
 // closeTab ferme son onglet dans Chrome, siblings : les pages du même Chrome (page.close)
-async function connect(wsUrl, { closeTab, siblings }) {
+async function connect(wsUrl, { closeTab, siblings, tabs = async () => [] }) {
   const ws = new WebSocket(wsUrl);
   await new Promise((resolve, reject) => { ws.addEventListener('open', resolve, { once: true }); ws.addEventListener('error', reject, { once: true }); });
   let id = 0;
@@ -449,8 +470,13 @@ async function connect(wsUrl, { closeTab, siblings }) {
         await frames(); const n = el.getBoundingClientRect();
         if (n.top === r.top && n.left === r.left) break;
         r = n; }
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+      const x = r.left + r.width / 2, y = r.top + r.height / 2, top = document.elementFromPoint(x, y);
+      return { x, y, off: top === el || el.contains(top) ? null : (${NAME_OF})(top) }; })()`);
     if (!c) throw new Error(`élément absent : ${selector}`);
+    // le point d'appui doit être dans la cible : sinon le geste part sur un autre élément (une tuile d'ajout, une
+    // feuille) et le test échoue loin de là, sans dire pourquoi
+    if (c.off) throw new Error(`geste à côté de ${selector} : le point (${Math.round(c.x)}, ${Math.round(c.y)}) `
+      + `tombe sur ${c.off}`);
     const x = k => c.x + dx * k, y = k => c.y + dy * k;
     const input = mouse
       ? { down: 'mousePressed', move: 'mouseMoved', up: 'mouseReleased',
@@ -475,7 +501,9 @@ async function connect(wsUrl, { closeTab, siblings }) {
     // (une promesse jamais tenue, comme une confirmation qui attend sa réponse, ne bloque pas le test)
     async eval(expression, { timeout = EVAL_TIMEOUT } = {}) {
       const r = await within(send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true,
-        userGesture: true }), timeout, `dans la page : ${expression}`);
+        userGesture: true }), timeout, `dans la page : ${expression}`).catch(async e => {
+        e.message += `\n  ${await page.state()}`;     // (délai dépassé : ce que montre la page)
+        throw e; });
       if (r.exceptionDetails) throw new Error(`dans la page : ${r.exceptionDetails.exception?.description || r.exceptionDetails.text}\n  ${expression}`);
       return r.result.value;
     },
@@ -548,6 +576,22 @@ async function connect(wsUrl, { closeTab, siblings }) {
         // requêtes lues après la réponse : Chrome envoie avant elle les événements des requêtes déjà parties
         return page.eval(`!${JSON.stringify([...imageLoads.values()])}.some(secretUrl)`);
       }, { what: 'espace privé au repos' });
+    },
+    // état de la page en une ligne, ajouté au message d'un délai dépassé (waitFor, waitUntil, eval) : page visible ou
+    // cachée (visibilityState), focus (hasFocus), adresse, onglet affiché (mode), verrous de tri (topHeld, sortHeld,
+    // sortBusy, flying) et adresses des onglets Chrome de type page (un onglet de Chrome passé devant la cache). Lu
+    // en 2 s au plus : au-delà, « la page ne répond plus »
+    async state() {
+      const urls = await within(tabs(), 2000, 'onglets').catch(() => ['?']);
+      const r = await within(send('Runtime.evaluate', { expression: STATE, returnByValue: true }), 2000, 'état')
+        .catch(() => null);
+      if (!r || r.exceptionDetails) {
+        return `état : la page ne répond plus (aucune réponse en 2 s) ; onglets Chrome : ${urls.join(', ')}`;
+      }
+      const v = r.result.value;
+      const locks = ['topHeld', 'sortHeld', 'sortBusy', 'flying'].map(k => `${k} ${v[k]}`).join(', ');
+      return `état : page ${v.visibility === 'visible' ? 'visible' : 'cachée'}, focus ${v.focus ? 'oui' : 'non'}, `
+        + `${v.url}, onglet ${v.mode}, ${locks} ; onglets Chrome : ${urls.join(', ')}`;
     },
     // autre vue (PHONE, PC, TABLET, TABLET_WIDE) sans recharger la page, comme une fenêtre redimensionnée
     setView(view) { return applyView(page, view); },

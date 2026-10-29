@@ -467,6 +467,18 @@ class BenchSkipTest(StaticsMocked):
         self.statics["check_python"].assert_called()
 
 
+class AtTest(unittest.TestCase):
+    """--at rejoue des tests d'interface sur un autre commit : il lui faut des fichiers (--ui) et un commit qui existe ;
+    sinon rien n'est lancé ni laissé (code 2)."""
+    def test_at_needs_files_and_a_commit(self):
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(check.main(["--at", "HEAD"]), 2)
+            self.assertEqual(check.main(["--at", "pas-un-commit-zz", "--ui", "tests/ui/smoke.test.mjs"]), 2)
+        self.assertIn("donner les fichiers d'interface", err.getvalue())
+        self.assertIn("worktree de « pas-un-commit-zz » impossible", err.getvalue())
+        self.assertNotIn("qwen-check-at-", check.git("worktree", "list"))
+
+
 class BenchReadersTest(unittest.TestCase):
     """Banc sauté : tournent quand même le test du dépôt public et les modules qui lisent d'autres fichiers que des
     .py (l'interface, la carte du code, le README), lus dans leur source."""

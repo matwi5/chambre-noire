@@ -308,6 +308,41 @@ test('délais : page.eval et bench.idle échouent au lieu d\'attendre sans fin',
   page.assertNoErrors();
 });
 
+test('délais : le message dit l\'état de la page, cachée ou qui ne répond plus', async () => {
+  await assert.rejects(page.eval('new Promise(() => {})', { timeout: 300 }),
+    // règle levée : le pilote lui-même, sa ligne d'état nomme les verrous
+    e => /état : page visible, focus \w+, \/, onglet labo, topHeld \w+, sortHeld \w+, sortBusy \w+, flying \w+ ; /
+      .test(e.message) && /onglets Chrome : http/.test(e.message), 'état de la page, onglets');
+  const other = await chrome.phonePage();                // passe devant : la page du test est cachée
+  try {
+    await assert.rejects(page.waitFor('false', { timeout: 300 }), /état : page cachée/);
+    await other.goto(bench.url + '/');
+    await other.ready();
+    // une page dont le fil est bloqué 4 s (au-delà des 2 s du relevé d'état) : elle ne répond plus
+    const busy = other.eval(`(() => { const t = Date.now(); while (Date.now() - t < 4000); })()`, { timeout: 10000 });
+    assert.match(await other.state(), /état : la page ne répond plus \(aucune réponse en 2 s\) ; onglets Chrome : /);
+    await busy;
+  } finally {
+    await other.close();
+  }
+  page.assertNoErrors();
+});
+
+test('geste : un point d\'appui hors de sa cible lève une erreur qui nomme l\'élément touché', async () => {
+  // un voile posé sur l'en-tête : un doigt sur la lampe tomberait sur lui
+  await page.eval(`(() => { const v = document.createElement('div'); v.id = 'zpVoile';
+    v.style.cssText = 'position:fixed;inset:0;z-index:9999'; document.body.append(v); })()`);
+  try {
+    await assert.rejects(page.hold('#lamp'), /geste à côté de #lamp : le point \(\d+, \d+\) tombe sur #zpVoile/);
+    await assert.rejects(page.swipe('#lamp', 50), /tombe sur #zpVoile/);
+  } finally {
+    await page.eval(`$('zpVoile').remove()`);
+  }
+  await page.hold('#lamp');                               // sans voile : le geste part
+  await page.release();
+  page.assertNoErrors();
+});
+
 test('erreurs : une erreur de console laissée par ce test…', async () => {
   await page.eval(`console.error('zpErr1')`);
   await waitUntil(() => page.errors.length > 0, { what: 'erreur reçue par le pilote' });

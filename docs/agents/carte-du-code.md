@@ -3,7 +3,8 @@
 Où trouver quoi dans les deux gros fichiers, pour s'orienter sans les lire en entier (`tools/launch.py` ≈ 110 Ko,
 `tools/ui/index.html` ≈ 170 Ko). Repères par noms de fonctions, de constantes et de sections, jamais par numéros de
 ligne : `venv/bin/python tests/check.py --map worker` donne la ligne de chaque fonction, classe ou constante dont le
-nom contient « worker » (`--map` seul : tout l'index des deux fichiers), puis lire autour. `check.py` échoue si un nom
+nom contient « worker » (`--map` seul : tout l'index des quatre fichiers, pilote et banc compris), puis lire autour.
+`check.py` échoue si un nom
 cité ici entre accents graves n'existe plus dans le code : un renommage met la carte à jour dans le même commit.
 L'API locale (routes, champs, codes d'erreur) est décrite dans le README, « Fonctionnement technique » ; les formats
 et les raisons dans `DECISIONS.md`.
@@ -567,7 +568,11 @@ court d'une carte ou d'une image pas encore vue ne compte pas (`onScreen`) ; `to
 touches n'envoient pas de `nativeVirtualKeyCode` : Chrome sur Mac y lit
 un code du Mac, et une flèche laissée passer par la page ouvrait l'onglet de l'aide par-dessus la page de test.
 `page.privateIdle` suit les images en route par le domaine Network (`imageLoads`) ; `page.send` refuse
-`Network.disable`.
+`Network.disable`. Un tri passe par `page.sort` (et `PRESS`, `VIEWER_PRESS`, `SORT_IDLE`, `VIEWER_SEEN`, `LOCKS`,
+`ARROWS` dans la page), seul endroit qui sait quand une image se trie (`TOP_SORTABLE`, `VIEWER_SORTABLE`). Un délai
+dépassé (`waitUntil`, `waitFor`, `eval`) ajoute à son message l'état de chaque page (`page.state` : page visible ou
+cachée, focus, onglet, verrous de tri, onglets de Chrome ; « ne répond plus » au-delà de 2 s), et un geste (`swipe`,
+`hold`) vérifie que son point d'appui tombe dans sa cible, sinon l'erreur nomme l'élément touché.
 
 Recettes visuelles (pas de script jetable) :
 
@@ -576,7 +581,14 @@ Recettes visuelles (pas de script jetable) :
   tailles de `SIZES` (téléphone, tablette en hauteur et en largeur, PC ; la page redimensionnée sans rechargement), une
   rangée par taille et par version ; la rangée « avant » est jouée par la sonde de ce commit dans un worktree
   temporaire (supprimé à la fin). `PLANCHE_SORTIE` choisit le fichier, `PLANCHE_VUES` les vues, `PLANCHE_TAILLES` les
-  tailles. Chaque capture attend la fin des transitions (`SETTLED`).
+  tailles. Chaque capture attend la fin des transitions et des animations d'ouverture (`SETTLED`). Vues d'état :
+  `avant` (bouton Avant tenu sur la carte du dessus, au doigt ou à la souris selon la taille) et `encours` (carte en
+  cours et pastille « +1 en attente », générations retenues par `HOLD=planche`).
+- Mesurer des éléments : `node tests/ui/probe.mjs --measure '#pile,#composer'` (rectangle, `scrollHeight`,
+  visibilité) ; état de la page : `--dump` (la ligne de `page.state`).
+- Rejouer un test d'aujourd'hui sur un autre commit (comparer à la base, voir si un test aurait vu un bogue) :
+  `venv/bin/python tests/check.py --at <commit> --ui tests/ui/x.test.mjs [--name <motif>]` (worktree temporaire,
+  retiré ensuite ; `tests/` de l'arbre de travail par-dessus).
 - PNG d'une icône depuis son SVG : `node tests/ui/probe.mjs --svg tools/ui/logo.svg --size 512 --shot
   /tmp/icone.png`. Piège de Chrome sans écran : sa fenêtre est plus haute que la zone affichée, une capture sans coupe
   sort plus haute que demandé ; la sonde fixe la vue à la taille voulue (densité 1, fond transparent) et coupe la
