@@ -3,7 +3,7 @@ git, est contrôlé comme un fichier suivi ; une adresse donnée à la main à u
 trop longue est refusée par --lines, par le hook avant commit et par le contrôle complet, qui s'arrête alors avant le
 banc ; --link-venv relie les notes du dossier principal dans un worktree ; les fichiers d'interface tournent sur
 plusieurs Chrome à la fois ; l'avis « zone sensible » ne regarde que le travail de la branche en cours."""
-import contextlib, io, json, os, shutil, subprocess, sys, tempfile, threading, time, unittest
+import contextlib, io, json, os, shutil, stat, subprocess, sys, tempfile, threading, time, unittest
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -496,6 +496,54 @@ class BenchSkipTest(StaticsMocked):
         _, out, calls = main()
         self.assertNotIn("seuls des .md", out)
         self.statics["check_python"].assert_called()
+
+
+@unittest.skipIf(os.name == "nt", "propriétaire et droits POSIX ; sous Windows, %TEMP% est déjà propre au compte")
+class PrivateTmpTest(unittest.TestCase):
+    """Les fichiers de check.py, mutate.py et du hook (journaux, verts, rouges, banc, échecs, preuves, marqueurs)
+    vivent dans un dossier privé qwen-<uid> du dossier temporaire, en 0700, créé s'il manque ; un dossier existant
+    qui n'est pas à l'utilisateur, pas en 0700, ou un lien, est refusé : un autre compte pourrait sinon forger ces
+    fichiers ou faire écrire au travers (revue de sécurité, C2 ; décision du 29/10/2026)."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="qwen-check-test-")
+        self.addCleanup(self.tmp.cleanup)
+        p = mock.patch.object(check.tempfile, "gettempdir", return_value=self.tmp.name)
+        p.start()
+        self.addCleanup(p.stop)
+        self.private = os.path.join(self.tmp.name, f"qwen-{os.getuid()}")
+        for name in ("QWEN_CHECK_JOURNAL", "QWEN_MUTATE_JOURNAL"):
+            p = mock.patch.dict(os.environ)
+            p.start()
+            self.addCleanup(p.stop)
+            os.environ.pop(name, None)
+
+    def test_every_file_goes_to_the_private_folder(self):
+        sys.path.insert(0, HERE)
+        import mutate                                    # noqa: E402
+        paths = [check.journal_path(), check.failure_log_path(), check.hook_mark({"tool_use_id": "x"}),
+                 mutate.proofs_path(), check.red_record(check.journal_path())]
+        self.assertEqual(len(paths), 5)
+        self.assertTrue(all(os.path.dirname(p) == self.private for p in paths), paths)
+        self.assertEqual(stat.S_IMODE(os.lstat(self.private).st_mode), 0o700)
+
+    def test_an_unsafe_folder_is_refused(self):
+        os.mkdir(self.private, 0o755)
+        os.chmod(self.private, 0o755)
+        with self.assertRaisesRegex(check.UnsafeTmp, "0700"):
+            check.private_tmp()
+        os.rmdir(self.private)
+        os.symlink(self.tmp.name, self.private)           # un lien posé par un autre
+        with self.assertRaisesRegex(check.UnsafeTmp, "lien"):
+            check.private_tmp()
+        os.remove(self.private)
+        os.mkdir(self.private, 0o700)
+        with mock.patch.object(check.os, "getuid", return_value=os.getuid() + 1), \
+                self.assertRaisesRegex(check.UnsafeTmp, "propriétaire"):
+            check.private_tmp(uid=os.getuid() + 1)
+        with mock.patch.object(check, "private_tmp", side_effect=check.UnsafeTmp("dossier refusé")), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(check.main(["--failed"]), 2)
+        self.assertIn("dossier refusé", err.getvalue())
 
 
 class AtTest(unittest.TestCase):

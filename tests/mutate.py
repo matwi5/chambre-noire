@@ -13,7 +13,7 @@ s'arrête). Code 0 si la commande échoue avec la mutation (la garde est prouvé
 mutation n'est pas vue : test à revoir). La sortie de la commande passe telle quelle, puis mutate nomme chaque test en
 échec avec le premier message de son assertion (node --test et unittest) : l'échec doit venir de l'assertion qui
 porte le titre du test, pas d'une autre ni d'une erreur de la page. Une preuve réussie va au journal des preuves
-(proofs_path : dossier temporaire du système, un par dossier de travail ; QWEN_MUTATE_JOURNAL le change) : date,
+(proofs_path : dossier privé de check.py, un par dossier de travail ; QWEN_MUTATE_JOURNAL le change) : date,
 commit, fichier, fonction de chaque texte muté (rules.enclosing_name), tests en échec ; l'avis « zone sensible » de
 check.py y cherche les fonctions sensibles touchées depuis le dernier commit. Un arrêt brutal (SIGKILL) ne laisse
 pas le temps de rendre le fichier : « git checkout -- <fichier> » le remet. La commande voit le fichier muté sur le
@@ -38,8 +38,10 @@ class Interrupted(Exception):
 
 
 def proofs_path():
-    """Journal des preuves rouges de ce dossier de travail (QWEN_MUTATE_JOURNAL, sinon le dossier temporaire)."""
-    return os.environ.get("QWEN_MUTATE_JOURNAL") or os.path.join(tempfile.gettempdir(),
+    """Journal des preuves rouges de ce dossier de travail (QWEN_MUTATE_JOURNAL, sinon le dossier privé de check.py,
+    private_tmp)."""
+    import check                                     # ici : check importe mutate (proved)
+    return os.environ.get("QWEN_MUTATE_JOURNAL") or os.path.join(check.private_tmp(),
                                                                   f"qwen-preuves-{os.path.basename(ROOT)}.jsonl")
 
 
@@ -169,7 +171,11 @@ def main(argv=None):
             print("mutate : aucun test en échec lu dans la sortie : preuve non notée ; vérifier que l'échec vient "
                   "bien de l'assertion du test")
             return 0
-        rows = record(args.file, original, args.old, failed)
+        try:
+            rows = record(args.file, original, args.old, failed)
+        except Exception as e:                         # (check.UnsafeTmp : dossier privé refusé) : la preuve tient
+            print(f"mutate : preuve non notée : {e}")
+            return 0
         print(f"mutate : preuve notée ({', '.join(sorted({r['fonction'] for r in rows}))}) : {proofs_path()}")
         return 0
     print(f"mutate : la commande passe malgré la mutation : elle ne la voit pas ; {args.file} rendu")

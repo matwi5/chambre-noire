@@ -1143,18 +1143,20 @@ et que chaque nom cité par la carte du code existe encore ; `--map <nom>` impri
 rapides (compilation, JavaScript, longueur des lignes, règles) passent d'abord : si l'un échoue, le banc et
 l'interface ne sont pas lancés. La dernière ligne de la sortie nomme chaque faute (`fichier:ligne`, test du banc,
 fichier d'interface) et recopie les comptes du banc (« Ran N tests … ») et de l'interface ; la sortie complète va
-aussi dans un journal, dont le chemin est affiché
-(les lignes de pile de Node n'y sont qu'à lui), et le journal d'un passage en échec est gardé sous un nom horodaté
+aussi dans un journal, dont le chemin est affiché (les lignes de pile de Node n'y sont qu'à lui), rangé avec les
+autres fichiers des contrôles dans un dossier privé du dossier temporaire (`qwen-<uid>`, en 0700 ; un dossier à un
+autre compte, ou ouvert aux autres, est refusé), et le journal d'un passage en échec est gardé sous un nom horodaté
 (les dix derniers), cité par la dernière ligne. Un contrôle vert enregistre l'état de l'arbre : relancé à
 l'identique (mêmes fichiers, mêmes options), il dit « déjà vert sur cet état » sans rien relancer (`--force` pour
 relancer). Le banc et chaque fichier d'interface affichent leur durée. Un fichier d'interface ou un module du banc
 en échec est rejoué seul, une fois, en fin de passage : la dernière ligne dit « intermittent : vert seul » ou
 « reproductible » ; le journal note la charge du poste (moyennes de charge, autres Chrome sans écran, `QWEN_UI_JOBS`),
 et chaque test rouge s'ajoute à un journal des échecs commun aux worktrees, pour repérer ceux qui reviennent.
-`--failed` rejoue seuls les tests rouges du dernier passage. Un fichier d'interface s'arrête au cinquième test en
-échec (`QWEN_UI_FAIL_CAP`), et sa ligne le dit. `python3 tests/check.py --lines` ne vérifie que
-la longueur des lignes ajoutées, en moins d'une seconde ; le hook avant commit du dépôt (`.githooks/pre-commit`,
-activé par `python3 tests/check.py --link-venv`) le lance sur ce qui va être enregistré et refuse le commit fautif.
+`--failed` rejoue seuls les tests rouges du dernier passage (rien d'autre que des fichiers de test du dépôt). Un
+fichier d'interface s'arrête au cinquième test en échec (`QWEN_UI_FAIL_CAP`), et sa ligne le dit.
+`python3 tests/check.py --lines` ne vérifie que la longueur des lignes ajoutées, en moins d'une seconde ; le hook
+avant commit du dépôt (`.githooks/pre-commit`, activé par `python3 tests/check.py --link-venv`) le lance sur ce qui va
+être enregistré et refuse le commit fautif.
 `python3 tests/check.py --lines --fix` recoupe les seules lignes fautives quand c'est sans risque (Markdown,
 commentaire seul sur sa ligne, docstring Python), en gardant retrait, puces et citations, sans remettre en forme le
 reste du paragraphe, et nomme celles qui restent à recouper à la main ; `python3 tests/rewrap.py <fichier>.md` fait

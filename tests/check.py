@@ -72,6 +72,9 @@ un fichier créé passe les contrôles avant son premier commit.
    celles qui n'ont pas de preuve rouge au journal de tests/mutate.py depuis le dernier commit (un avis : rien ne
    bloque le commit, décision du 29/10/2026). Un indice : la ligne « Zone sensible » du ticket fait foi.
 
+Les fichiers de check.py, de mutate.py et du hook (journaux, verts, rouges, banc, échecs, preuves, marqueurs)
+vivent dans un dossier privé, qwen-<uid> du dossier temporaire du système, en 0700, créé s'il manque ; un dossier
+existant qui est un lien, n'est pas à l'utilisateur ou n'est pas en 0700 est refusé (code 2, avec la raison).
 La sortie complète va aussi dans un journal (chemin imprimé à la fin ; les lignes de pile de Node n'y sont qu'à lui) ;
 un passage en échec garde le sien sous un nom horodaté (FAILURES_DIR, les FAILURES_KEPT derniers). La dernière ligne
 récapitule les fautes (fichier:ligne, test du banc, fichier d'interface), les lignes de résultat à citer et le journal
@@ -84,7 +87,7 @@ alors « (intermittent : vert seul) » ou « (reproductible) » dans la dernièr
 test instable se comprend, il ne s'ignore pas), mais un intermittent n'appelle pas un nouveau contrôle complet : le
 fichier seul, ou --failed, suffit. Le journal note la charge au départ et à la fin (moyennes de charge, Chrome sans
 écran étrangers au contrôle, QWEN_UI_JOBS) ; chaque test rouge va aussi dans un journal persistant, commun aux
-worktrees (FAILURE_LOG du dossier temporaire du système : date, dossier, fichier, test, verdict du rejeu, charge),
+worktrees (FAILURE_LOG du dossier privé : date, dossier, fichier, test, verdict du rejeu, charge),
 pour repérer les tests qui reviennent rouges. --failed rejoue seuls les tests rouges du dernier passage (titres des
 tests d'interface, méthodes du banc), sans les contrôles statiques ni le rejeu ; il n'enregistre aucun vert ; il ne
 lance que des fichiers de tests/ui et des modules du banc qui existent (toute autre entrée est ignorée et dite).
@@ -100,8 +103,8 @@ Le Python des contrôles est celui du venv du dépôt (venv/ à la racine, sinon
 dans un worktree), sinon l'interpréteur qui lance ce script (cas de la CI) : check.py se relance de lui-même avec le
 bon. Code de sortie non nul au moindre échec.
 """
-import argparse, concurrent.futures, difflib, glob, hashlib, json, os, re, shutil, signal, subprocess, sys, tempfile
-import threading, time
+import argparse, concurrent.futures, difflib, glob, hashlib, json, os, re, shutil, signal, stat, subprocess, sys
+import tempfile, threading, time
 
 import rules                                          # tests/rules.py : règles mécaniques, index de la carte
 
@@ -505,7 +508,7 @@ def hook_mark(data):
     """Fichier qui note l'instant où une commande Bash démarre (hook PreToolUse), propre à cet appel d'outil
     (tool_use_id, sinon la session) : le hook d'après n'en juge que les fichiers écrits depuis."""
     key = re.sub(r"[^\w-]", "", str(data.get("tool_use_id") or data.get("session_id") or "sans-id"))[:80]
-    return os.path.join(tempfile.gettempdir(), f"qwen-hook-{key}.debut")
+    return os.path.join(private_tmp(), f"qwen-hook-{key}.debut")
 
 
 def hook_lines(stdin):
@@ -1005,10 +1008,43 @@ class Tee:
         self.log.flush()
 
 
+class UnsafeTmp(Exception):
+    pass
+
+
+def private_tmp(uid=None):
+    """Dossier privé des fichiers de check.py, de mutate.py et du hook (journaux, verts, rouges, banc, échecs,
+    preuves, marqueurs) : qwen-<uid> dans le dossier temporaire du système, en 0700, créé s'il manque. Un dossier
+    existant qui est un lien, n'est pas à l'utilisateur ou n'est pas en 0700 est refusé (UnsafeTmp) : un autre compte
+    du poste qui l'aurait posé pourrait forger ces fichiers ou faire écrire au travers (revue de sécurité, C2 ;
+    décision du 29/10/2026). Sous Windows, le dossier temporaire est déjà propre au compte : qwen-<compte>, sans ces
+    contrôles."""
+    base = tempfile.gettempdir()
+    if os.name == "nt":
+        path = os.path.join(base, f"qwen-{os.environ.get('USERNAME') or 'compte'}")
+        os.makedirs(path, exist_ok=True)
+        return path
+    uid = os.getuid() if uid is None else uid
+    path = os.path.join(base, f"qwen-{uid}")
+    try:
+        os.mkdir(path, 0o700)
+    except FileExistsError:
+        pass
+    st = os.lstat(path)
+    if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode):
+        raise UnsafeTmp(f"{path} : un lien ou un fichier, pas un dossier : refusé (le retirer s'il est à vous)")
+    if st.st_uid != uid:
+        raise UnsafeTmp(f"{path} : propriétaire {st.st_uid}, pas {uid} : refusé (un autre compte l'a posé)")
+    if stat.S_IMODE(st.st_mode) != 0o700:
+        raise UnsafeTmp(f"{path} : droits {oct(stat.S_IMODE(st.st_mode))[2:]}, pas 0700 : refusé "
+                        f"(chmod 700 {path} s'il est à vous)")
+    return path
+
+
 def journal_path():
-    """Journal de la sortie complète : QWEN_CHECK_JOURNAL, sinon dans le dossier temporaire du système, un par dossier
-    de travail."""
-    return os.environ.get("QWEN_CHECK_JOURNAL") or os.path.join(tempfile.gettempdir(),
+    """Journal de la sortie complète : QWEN_CHECK_JOURNAL, sinon dans le dossier privé (private_tmp), un par dossier
+    de travail ; les verts, rouges, banc et journaux gardés vont à côté."""
+    return os.environ.get("QWEN_CHECK_JOURNAL") or os.path.join(private_tmp(),
                                                                 f"qwen-check-{os.path.basename(ROOT)}.log")
 
 
@@ -1209,12 +1245,12 @@ def intended_red():
 
 
 def failure_log_path():
-    """Journal persistant des tests rouges (FAILURE_LOG), dans le dossier temporaire du système."""
-    return os.path.join(tempfile.gettempdir(), FAILURE_LOG)
+    """Journal persistant des tests rouges (FAILURE_LOG), dans le dossier privé (private_tmp)."""
+    return os.path.join(private_tmp(), FAILURE_LOG)
 
 
 def log_failures(info, verdicts):
-    """Tests rouges du passage (RED) ajoutés au journal persistant (FAILURE_LOG, dossier temporaire du système,
+    """Tests rouges du passage (RED) ajoutés au journal persistant (FAILURE_LOG, dossier privé private_tmp,
     commun aux worktrees) : date, worktree, fichier, test, verdict du rejeu, charge ; FAILURE_LOG_KEPT lignes au
     plus. Plusieurs contrôles peuvent finir ensemble : les lignes s'ajoutent en fin de fichier, sous un verrou du
     fichier (fcntl ; sans lui, sous Windows, l'ajout seul), et le fichier n'est raccourci que sous ce verrou."""
@@ -1397,7 +1433,7 @@ def at_worktree(args):
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         commit = git("rev-parse", "--short", args.at).strip()
         print(f"--at : tests de l'arbre de travail, interface et serveur de {args.at} ({commit}), dans {tree}")
-        journal = os.path.join(tempfile.gettempdir(), f"qwen-check-at-{commit}.log")
+        journal = os.path.join(private_tmp(), f"qwen-check-at-{commit}.log")
         sys.stdout.flush()
         command = [sys.executable, os.path.join(tree, "tests", "check.py"), "--no-bench", "--force", "--ui",
                    *args.ui, *(["--name", args.name] if args.name else [])]
@@ -1506,6 +1542,15 @@ def already_green(record, key):
 
 
 def main(argv=None):
+    """Contrôles (main_body) ; un dossier temporaire privé refusé (private_tmp) arrête tout, code 2."""
+    try:
+        return main_body(argv)
+    except UnsafeTmp as e:
+        print(f"check.py : dossier temporaire privé refusé : {e}", file=sys.stderr)
+        return 2
+
+
+def main_body(argv=None):
     args = parse_args(argv)
     if args.link_venv:
         return link_venv()
