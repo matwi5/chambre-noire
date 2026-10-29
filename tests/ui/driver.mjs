@@ -579,12 +579,11 @@ async function connect(wsUrl, { closeTab, siblings, tabs = async () => [] }) {
     },
     // état de la page en une ligne, ajouté au message d'un délai dépassé (waitFor, waitUntil, eval) : page visible ou
     // cachée (visibilityState), focus (hasFocus), adresse, onglet affiché (mode), verrous de tri (topHeld, sortHeld,
-    // sortBusy, flying) et adresses des onglets Chrome de type page (un onglet de Chrome passé devant la cache). Lu
-    // en 2 s au plus : au-delà, « la page ne répond plus »
+    // sortBusy, flying) et adresses des onglets Chrome de type page (un onglet de Chrome passé devant la cache). Les
+    // deux relevés en même temps, en 2 s au plus : au-delà, « la page ne répond plus » (onglets illisibles : « ? »)
     async state() {
-      const urls = await within(tabs(), 2000, 'onglets').catch(() => ['?']);
-      const r = await within(send('Runtime.evaluate', { expression: STATE, returnByValue: true }), 2000, 'état')
-        .catch(() => null);
+      const [urls, r] = await Promise.all([within(tabs(), 2000, 'onglets').catch(() => ['?']),
+        within(send('Runtime.evaluate', { expression: STATE, returnByValue: true }), 2000, 'état').catch(() => null)]);
       if (!r || r.exceptionDetails) {
         return `état : la page ne répond plus (aucune réponse en 2 s) ; onglets Chrome : ${urls.join(', ')}`;
       }

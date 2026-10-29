@@ -46,15 +46,17 @@ les tests viennent de bugs passés à travers les revues par ticket.
   Python et JavaScript »), avec les deux emplacements : sinon l'un change sans l'autre et rien ne casse visiblement.
 - **Une action asynchrone de l'interface liée à un espace note ce qu'elle vise avant sa première attente** (`await`,
   `fetch`, lecture d'un fichier) : l'espace (`inPrivate()`), la liste, l'onglet ou la route ; après l'attente, elle
-  écrit dans ce qu'elle a noté, ou abandonne si l'espace a changé, sans relire l'état global. Sinon une image privée
+  écrit dans ce qu'elle a noté, ou abandonne si l'espace a changé, sans relire l'état global pour sa cible (ses
+  gardes, elles, se relisent : règle suivante). Sinon une image privée
   tombe dans la saisie publique, une confirmation montre un titre privé dans l'espace public (groupes A et C du
   15/10/2026). `changedSpace` ferme toute feuille qui montre une donnée de l'espace quitté. Une garde (plafond,
   dessin, confirmation) se refait à l'arrivée sur la liste notée, et une question au porteur ne porte que sur la
   saisie affichée.
 - **Une action qui attend revérifie après l'attente qu'elle a encore le droit d'agir** : après un `await` (une
-  confirmation, un `fetch`, la lecture d'un fichier), elle relit `exiting()` (« Sortir » en cours) et `beforeHeld`
-  (image d'avant tenue) avant d'envoyer quoi que ce soit ; vérifiés seulement avant l'attente, ils laissaient partir
-  une requête privée pendant « Sortir » (chaque passe « bogues » du groupe F en a retrouvé une).
+  confirmation, un `fetch`, la lecture d'un fichier), elle relit ses gardes, `exiting()` (« Sortir » en cours, la
+  règle de `CLAUDE.md`, « Interface ») et `beforeHeld` (image d'avant tenue), avant d'envoyer quoi que ce soit ;
+  vérifiées seulement avant l'attente, elles laissaient partir une requête privée pendant « Sortir » (chaque passe
+  « bogues » du groupe F en a retrouvé une). La cible, elle, reste celle notée avant l'attente (règle précédente).
 - **Une hauteur réservée en CSS nomme ce qu'elle réserve** (un commentaire : l'élément et son cas le plus haut), et
   son test mesure ce cas le plus chargé : une hauteur en pixels réservée pour une carte a été corrigée trois fois.
 - **Un élément montré ou caché par `hidden` dont le CSS fixe `display` a sa règle `[hidden]{display:none}`** : sinon

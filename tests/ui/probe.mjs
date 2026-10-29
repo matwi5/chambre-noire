@@ -12,7 +12,8 @@
 //   node tests/ui/probe.mjs --dump                                         # état de la page (page.state du pilote)
 //
 // --measure sel1,sel2 : pour chaque sélecteur, chaque élément trouvé (rectangle à l'écran, scrollHeight et
-// clientHeight, visible : présent, ni masqué ni sans boîte, au moins en partie dans la fenêtre), sans script jetable ;
+// clientHeight, visible : présent, avec une boîte, ni masqué ni display:none, ni visibility:hidden ni opacité nulle
+// sur lui ou un ancêtre, au moins en partie dans la fenêtre), sans script jetable ;
 // --dump : la ligne d'état que le pilote ajoute à un délai dépassé (page visible, focus, onglets, onglet affiché,
 // verrous de tri). Les deux se combinent avec --eval ou --script (évalués d'abord), ou s'emploient seuls.
 //
@@ -49,7 +50,8 @@ function measure(page, selectors) {
   if (cur.trim()) list.push(cur.trim());
   return page.eval(`Object.fromEntries(${JSON.stringify(list)}.map(sel => [sel,
     [...document.querySelectorAll(sel)].map(el => { const r = el.getBoundingClientRect();
-      const shown = !el.hidden && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
+      const shown = !el.hidden && el.getClientRects().length > 0 && el.checkVisibility({ visibilityProperty: true,
+        opacityProperty: true });                  // (visionneuse, feuilles : visibility ; voile : opacité)
       return { id: el.id || undefined, rect: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width),
         height: Math.round(r.height) }, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight,
         visible: shown && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth }; })]))`);

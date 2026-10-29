@@ -66,10 +66,11 @@ Retirer une image de la pile et la supprimer de l'ordinateur (balayage vers la g
 _À éviter_ : supprimer (réservé à un tirage), rejeter
 
 **Vue** (une image de la pile) :
-Une image de la pile est vue quand elle est posée (sa miniature ou son image affichée), à l'écran, sans rien
-par-dessus (ni visionneuse, ni feuille, ni voile), la page visible, depuis 0,3 s ; avant, ni Garder ni Jeter ne la
-trient. L'interface le décide par `afterSeen` (avec `topView` pour la carte du dessus, `viewerView` dans la
-visionneuse).
+Une image de la pile, arrivée sur le dessus ou dans la visionneuse (ouverture, pas, tri), est vue une fois restée
+0,3 s d'affilée posée (sa miniature ou son image affichée), à l'écran, sans rien par-dessus (ni visionneuse, ni
+feuille, ni voile), la page visible ; avant, ni Garder ni Jeter ne la trient ; vue, elle le reste (un retour
+d'arrière-plan ne la reverrouille pas). L'interface le décide par `afterSeen` (avec `topView` pour la carte du dessus,
+`viewerView` dans la visionneuse) ; la règle complète est dans le README, « Utilisation » (la pile).
 _À éviter_ : affichée, chargée (une image chargée peut ne pas être vue)
 
 **Avant** :

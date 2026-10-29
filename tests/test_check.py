@@ -476,7 +476,10 @@ class AtTest(unittest.TestCase):
             self.assertEqual(check.main(["--at", "pas-un-commit-zz", "--ui", "tests/ui/smoke.test.mjs"]), 2)
         self.assertIn("donner les fichiers d'interface", err.getvalue())
         self.assertIn("worktree de « pas-un-commit-zz » impossible", err.getvalue())
-        self.assertNotIn("qwen-check-at-", check.git("worktree", "list"))
+        before = check.git("worktree", "list")
+        with contextlib.redirect_stderr(io.StringIO()):
+            check.main(["--at", "pas-un-commit-zz", "--ui", "tests/ui/smoke.test.mjs"])
+        self.assertEqual(check.git("worktree", "list"), before, "aucun worktree laissé")
 
 
 class BenchReadersTest(unittest.TestCase):
