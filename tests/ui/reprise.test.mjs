@@ -54,7 +54,7 @@ test('rechargement : un lot repris montre le prompt complet et « Reprendre » r
   bench.release('lot');
   await page.waitFor(`pileView().filter(it => it.page && it.page.prompt === ${JSON.stringify(LONG)}).length === 2`,
     { what: 'lot terminé dans la pile', timeout: 30000 });
-  assert.equal(await page.eval(`$('pile').querySelector('[data-k="0"] .pprompt').textContent`), LONG, 'prompt du lot');
+  assert.equal(await page.topPrompt(), LONG, 'prompt du lot');
 
   await page.click('#pile [data-k="0"] [data-open]');   // visionneuse depuis la pile, puis « Reprendre »
   await page.waitFor(`$('viewer').classList.contains('on')`, { what: 'visionneuse ouverte' });
@@ -228,6 +228,11 @@ test('« Reprendre » une image de la pile lancée ici : images de sa demande ga
   await page.waitFor(`inputImages.length === 1`, { what: 'une image dans la saisie' });
   await page.typePrompt('zr5 terminee');
   await page.click('#go');
+  // la carte du dessus charge aussi en avance l'image d'entrée de son bouton Avant, une fois son image affichée :
+  // attendue avant la visionneuse, qui reprend ce chargement au lieu d'en lancer un second
+  await page.waitFor(`pileView()[0]?.prompt === 'zr5 terminee'`,
+    { what: 'image arrivée dans la pile', timeout: 30000 });
+  await page.imageShown('#pile [data-k="0"] .pimg img', 'carte du dessus');
   await page.viewPile('zr5 terminee');
   assert.equal(await resumable(), true);
   // la visionneuse charge en avance la première image d'entrée (par /api/input) : attendue avant de compter

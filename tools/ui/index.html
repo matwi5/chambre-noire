@@ -392,6 +392,24 @@
   .acts.iv-acts { grid-template-columns:repeat(3, 1fr); }
   .viewer.iv.single .v-nav { display:none; }
   .v-stage img { touch-action:none; }
+  /* ------------------------------------------------------------ bouton Avant : maintenu, l'image d'entrée remplace
+     l'image produite dans le même cadre (.bfr, posé sur le contenu affiché de l'image par placeBefore), sans transition ;
+     l'étiquette « Avant » pendant l'appui. Bouton en plaque, icône et libellé (choix du porteur, 28/10/2026) */
+  .bfr { position:absolute; z-index:2; pointer-events:none; }
+  #vBefore { border-radius:var(--r-m); }
+  .bfr .bimg { position:absolute; inset:0; width:100%; height:100%; max-width:none; max-height:none; object-fit:contain;
+    background:var(--void); border-radius:inherit; box-shadow:none; visibility:hidden; }   /* (visionneuse : mêmes
+     transitions que l'image produite, .v-stage img) */
+  .bfr .bimg.fill { object-fit:fill; }
+  .bfr.on .bimg[src], .bfr.on .bimg[src] ~ .btag { visibility:visible; }   /* étiquette : avec l'image d'entrée */
+  .btag { position:absolute; left:10px; top:10px; padding:3px 9px; border-radius:var(--r-s); font:500 15px/1.2 var(--pixel);
+    color:var(--accent); background:var(--badge); visibility:hidden; }
+  .bbtn { position:absolute; right:10px; bottom:10px; display:flex; align-items:center; justify-content:center; gap:6px;
+    height:36px; padding:0 12px 0 9px; border:0; border-radius:var(--r-s); font:500 15px/1 var(--pixel);
+    color:var(--accent); background:var(--badge); cursor:pointer; pointer-events:auto; touch-action:none;
+    user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+  .bbtn svg { flex:none; width:18px; height:18px; }
+  .bfr.on .bbtn { color:var(--on-accent); background:var(--accent); }
   /* ------------------------------------------------------------ carte en cours : la génération de l'espace se
      révèle en pixels sur un canevas ; sur le dessus quand la pile est vide, sinon juste derrière elle, réduite à un
      bandeau au bord de la pile (vignette, étape, fin prévue), le liseré d'avancement en bas */
@@ -439,7 +457,7 @@
      la ligne repliée du champ et la barre d'onglets (388px), moins la carte en cours derrière la pile (82px) et la
      pastille de la file (48px) quand elles sont là : ✓ et ✕ restent au-dessus de la ligne repliée */
   .pilezone { --pimg-h:clamp(160px, calc(100svh - 388px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
-    - var(--less-run, 0px) - var(--less-chip, 0px)), 420px); }
+    - var(--less-run, 0px) - var(--less-chip, 0px)), var(--pimg-max, 420px)); }
   .pilezone:has(#runCard.behind:not([hidden])) { --less-run:82px; }
   .pilezone:has(#queueChip:not([hidden])) { --less-chip:48px; }
   .pile { order:2; display:grid; padding-bottom:20px; }
@@ -579,6 +597,54 @@
   .hempty .btn { font-family:var(--sans); }
   :is(#go small, .estimate b, .opt small, .rtxt b, #runPhase, .reta, #vCount, #ivCount, .facts .code, .tabcount, .plot, .pset, .pcount) {
     font-family:var(--mono); }
+  /* ------------------------------------------------------------ tablette en hauteur (700 à 1023 px) : une seule
+     colonne élargie, l'image de la carte peut grandir */
+  @media (min-width: 700px) and (max-width: 1023px) {
+    body:not(.m-tirages) main { width:min(100%, 760px); }
+    .pilezone { --pimg-max:600px; } }
+  /* ------------------------------------------------------------ grand écran (à partir de 1024 px : PC, tablette en
+     largeur) : le Labo en deux colonnes, la pile et la carte en cours à gauche, le champ toujours déplié à droite
+     (applyComposer), sur toute la hauteur de la colonne (dépôt d'images partout dessus, surbrillance dropping) ;
+     largeur totale bornée. --top-h : barre du haut (60px) et haut de main (6px) ; --bottom-h : le bas de main, sans
+     barre d'onglets à y réserver (elle est dans la barre du haut) */
+  @media (min-width: 1024px) {
+    :root { --top-h:calc(66px + env(safe-area-inset-top)); --bottom-h:calc(16px + env(safe-area-inset-bottom));
+      --col-h:calc(100svh - var(--top-h) - var(--bottom-h)); }
+    main { padding-bottom:var(--bottom-h); }
+    body:not(.m-tirages) main { width:min(100%, 1480px); padding:6px 24px var(--bottom-h); }   /* sans défilement */
+    #pane-labo.active { display:grid; grid-template-columns:minmax(0, 1fr) clamp(360px, 32vw, 460px); gap:24px;
+      align-items:start; }
+    /* image de la carte : la hauteur de la colonne, moins le texte de la carte, ✓ et ✕ et leurs écarts (172px,
+       mesurés au PC) */
+    .pilezone { position:sticky; top:var(--top-h);
+      --pimg-h:max(240px, calc(var(--col-h) - 172px - var(--less-run, 0px) - var(--less-chip, 0px))); }
+    /* carte en cours sur le dessus (pile vide) : la hauteur de la colonne, moins sa ligne d'étape (56px) et son prompt
+       sur trois lignes avec sa marge (75px), soit 136px avec ses bords et un peu d'air (déduits des règles de la carte,
+       pas mesurés), et la pastille de la file quand elle est là (--less-chip, posée sur .pilezone) */
+    .rframe { width:min(100%, calc((var(--col-h) - 136px - var(--less-chip, 0px)) * var(--ar, 1))); }
+    .empty { aspect-ratio:auto; min-height:min(var(--col-h), 520px); }
+    #composer { position:sticky; top:var(--top-h); height:var(--col-h); overflow:auto; overscroll-behavior:contain; }
+    #composer.drawing:not(.folded) { min-height:0; }
+    #composerGrab { display:none; }
+    #pane-labo:has(#composer.drawing:not(.folded)) .pilezone { display:flex; }
+    #composer.dropping { outline:2px dashed var(--accent); outline-offset:-2px; }
+    /* onglets : mêmes boutons, repère, anneau et nombre, centrés dans la barre du haut (6px d'air dans ses 60px) ;
+       le glissement d'onglet au doigt reste (tabSwipe) */
+    .tabbar { top:calc(6px + env(safe-area-inset-top)); bottom:auto; width:300px; height:48px; padding:4px; }
+    .tabbar button { flex-direction:row; gap:8px; font-size:13px; }
+    .lens { top:4px; bottom:4px; left:4px; width:calc((100% - 8px) / 2); }
+    /* visionneuse : l'image à gauche sur toute la hauteur (sous la barre de ses boutons), le panneau en colonne à
+       droite, défilant s'il est long ; le mode immersif le masque toujours */
+    #viewer { display:grid; grid-template-columns:minmax(0, 1fr) 380px; grid-template-rows:auto minmax(0, 1fr); }
+    #viewer .v-top { grid-area:1 / 1; }
+    #viewer .v-stage { grid-area:2 / 1; }
+    #viewer .v-panel { grid-area:1 / 2 / 3 / 3; align-self:start; width:auto; margin:12px 12px 12px 0;
+      max-height:calc(100svh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow:auto;
+      overscroll-behavior:contain; }
+    #viewer.immersive .v-panel { transform:translateX(24px); }
+    /* Tirages : grandes vignettes, marges plus larges */
+    body.m-tirages main { padding-inline:32px; }
+    .hgrid { grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:14px; } }
   /* ------------------------------------------------------------ téléphone (html.lite) : effets allégés pour le GPU
      Rien de flou ni d'animé en fond : le halo et le grain sont fixes, et gardés. Les animations d'interface restent
      courtes. ?lite=1 ou ?lite=0 dans l'adresse force le choix. */
@@ -605,7 +671,7 @@
       <i class="rbar" id="runBar"></i>
     </article>
     <div class="pile" id="pile"></div>
-    <div class="pile-acts" id="pileActs" hidden><button class="pbtn mat" id="pileNo" aria-label="Jeter" title="Jeter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button><span class="pcount" id="pileCount"></span><button class="pbtn yes" id="pileYes" aria-label="Garder" title="Garder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+    <div class="pile-acts" id="pileActs" hidden><button class="pbtn mat" id="pileNo" data-sort aria-label="Jeter" title="Jeter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button><span class="pcount" id="pileCount"></span><button class="pbtn yes" id="pileYes" data-sort aria-label="Garder" title="Garder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
     <!-- pile vide : une cuve vide en pixels -->
     <div class="empty mat" id="pileEmpty" hidden><svg viewBox="0 0 16 16" fill="currentColor" fill-rule="evenodd" shape-rendering="crispEdges" aria-hidden="true"><path d="M1 8h1v5h12V8h1v6H1z"/><path d="M2 10h3v1H2zM7 10h2v1H7zM11 10h3v1h-3z"/><path d="M7 3h2v1H7zM6 4h1v1H6zM9 4h1v1H9zM8 5h1v1H8zM7 6h1v1H7z"/></svg><p>Rien à trier</p><small>Chaque image terminée arrive ici : gardez-la ou jetez-la.</small></div>
   </section>
@@ -676,6 +742,7 @@
   </div>
   <div class="v-stage" id="vStage">
     <img id="vImg" alt="">
+    <div class="bfr" id="vBefore" hidden><img class="bimg" id="vBeforeImg" alt="" draggable="false"></div>
     <button class="btn-icon mat v-nav prev" onclick="stepViewer(-1)" aria-label="Image précédente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"/></svg></button>
     <button class="btn-icon mat v-nav next" onclick="stepViewer(1)" aria-label="Image suivante"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg></button>
   </div>
@@ -683,7 +750,7 @@
     <div class="m-chips" id="vChips"></div>
     <button class="v-inputs" id="vInputs" onclick="openInputs(0)" hidden></button>
     <div class="v-lot" id="vLot" hidden><button class="btn secondary small" id="vLotOpen" onclick="openLot()">Voir le lot</button><button class="btn secondary small" onclick="downloadLot()">Tout télécharger</button></div>
-    <div class="v-sort" id="vSort" hidden><button class="btn secondary" onclick="sortFromViewer('discard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>Jeter</button><button class="btn" onclick="sortFromViewer('keep')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>Garder</button></div>
+    <div class="v-sort" id="vSort" hidden><button class="btn secondary" data-sort onclick="sortFromViewer('discard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>Jeter</button><button class="btn" data-sort onclick="sortFromViewer('keep')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>Garder</button></div>
     <div class="acts v-acts">
       <button class="act" onclick="viewerAction('edit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/></svg><span>Éditer</span></button>
       <button class="act" onclick="viewerAction('mask')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg><span>Dessiner</span></button>
@@ -1196,7 +1263,7 @@ function refuseWhileDrawing(list=inputImages){
 const maskMode = () => document.querySelector('input[name=mask_mode]:checked').value;
 const setMaskMode = k => { document.querySelector(`input[name=mask_mode][value=${k}]`).checked=true; };
 // images d'entrée de la saisie : vignettes numérotées, interrupteur Campagne à partir de 2 images, bouton et zone de dessin
-function renderInputs(){ const t=$('inThumbs'); t.innerHTML='';
+function renderInputs(){ const t=$('inThumbs'); clearImages(t); t.innerHTML='';
   if(inputImages.length!==1) drawOn=false;         // dessin : sur une image seule (en-tête et campagne en dépendent)
   const k=inputImages.length, camp=inCampaign();   // campagne : des photos éditées une à une
   $('refTitle').textContent = camp ? 'Photos de la campagne' : 'Images d\'entrée';
@@ -1217,23 +1284,38 @@ function renderInputs(){ const t=$('inThumbs'); t.innerHTML='';
 // touche pas la saisie ; la ligne repliée dit le nombre d'images d'entrée.
 // labIdle : dernier état « rien à trier ni en cours » vu (null : pas encore lu dans cet espace) ; autoOpen : déplié
 // d'office et pas touché depuis
-let labIdle=null, autoOpen=true;
-function setComposer(open){ const c=$('composer');
+// Grand écran (WIDE, à partir de 1024 px : deux colonnes) : le champ reste toujours déplié ; la règle du téléphone
+// continue d'en tenir l'état (composerOpen), repris quand la fenêtre repasse sous 1024 px, saisie gardée
+let labIdle=null, autoOpen=true, composerOpen=true;
+const WIDE=matchMedia('(min-width: 1024px)');
+function setComposer(open){ composerOpen=open; applyComposer(); }
+function applyComposer(){ const c=$('composer'), open=composerOpen || WIDE.matches;
   if(!open && c.contains(document.activeElement)) document.activeElement.blur();   // (clavier du téléphone fermé)
   c.classList.toggle('folded', !open); $('composerLine').setAttribute('aria-expanded', open); }
+WIDE.addEventListener('change', applyComposer);
 function openComposer(){ autoOpen=false; setComposer(true); }
 function foldComposer(){ autoOpen=false; setComposer(false); }
 function followLabIdle(idle){ if(idle===labIdle) return; labIdle=idle;
-  if(idle && $('composer').classList.contains('folded')){ setComposer(true); autoOpen=true; }
+  if(idle && !composerOpen){ setComposer(true); autoOpen=true; }
   else if(!idle && autoOpen) setComposer(false); }
 ['pointerdown', 'focusin', 'input'].forEach(t=>$('composer').addEventListener(t, ()=>{ autoOpen=false; }));
 $('composerLine').onclick=()=>showLabo('composer');
 // une image glissée sur le champ (replié compris) le déplie et rejoint les images d'entrée, comme sur la tuile d'ajout
-// (sinon le navigateur ouvrirait le fichier à la place de la page)
-$('composer').addEventListener('dragover', e=>{ if(![...e.dataTransfer.types].includes('Files')) return;
-  e.preventDefault(); if($('composer').classList.contains('folded')) openComposer(); });
-$('composer').addEventListener('drop', e=>{ if(e.target.closest('#inDrop')) return;   // (la tuile l'ajoute elle-même)
+// (sinon le navigateur ouvrirait le fichier à la place de la page) ; le champ survolé est en surbrillance (classe
+// dropping, dessinée sur grand écran, où le champ est toute la colonne de droite), jusqu'à sa sortie ou au dépôt
+const dropping=on=>$('composer').classList.toggle('dropping', on);
+['dragenter', 'dragover'].forEach(t=>$('composer').addEventListener(t, e=>{
+  if(![...e.dataTransfer.types].includes('Files')) return;
+  e.preventDefault(); dropping(true); if(!composerOpen) openComposer(); }));   // (l'état tenu : WIDE n'en replie rien)
+$('composer').addEventListener('dragleave', e=>{ if(!$('composer').contains(e.relatedTarget)) dropping(false); });
+$('composer').addEventListener('drop', e=>{ dropping(false);
+  if(e.target.closest('#inDrop')) return;            // (la tuile l'ajoute elle-même)
   const files=[...e.dataTransfer.files]; if(!files.length) return; e.preventDefault(); addInputFiles(files); });
+// un fichier lâché hors des zones de dépôt (colonne de la pile au PC) est ignoré : sans cela, le navigateur l'ouvrirait
+// à la place de l'interface ; un texte glissé garde le comportement du navigateur
+['dragover', 'drop'].forEach(t=>addEventListener(t, e=>{
+  if(e.defaultPrevented || ![...e.dataTransfer.types].includes('Files')) return;
+  e.preventDefault(); if(t==='dragover') e.dataTransfer.dropEffect='none'; }));
 (function foldGesture(){                           // glissement vers le bas sur la poignée, ou un toucher
   const grab=$('composerGrab'); let y0=null;
   grab.addEventListener('pointerdown', e=>{ y0=e.clientY; grab.setPointerCapture(e.pointerId); });
@@ -1355,16 +1437,24 @@ const secretLoads=new Set();
 const FADE_MS=350;                                // fondu de fermeture de .viewer (CSS, 0,3 s)
 // « Sortir » en attente du Mac (leavingPrivate) : aucune image de l'espace (secretUrl) n'est demandée ni posée, quel
 // que soit le chemin qui redessine (pile, fin ou échec d'une génération, visionneuse) : entrée abandonnée (gone) ; si
-// la sortie est refusée, privLock redessine
-function preload(url){ if(secretUrl(url) && leavingPrivate) return { url, gone:true, im:null, p:Promise.resolve(null) };
+// la sortie est refusée, privLock redessine. Hors de l'espace, une adresse privée (un rappel tardif) l'est aussi ;
+// pas les aperçus (/api/job/), qui servent aussi l'espace public
+const refused = url => secretUrl(url) && leavingPrivate || url.startsWith('/api/private/') && !inPrivate();
+function preload(url){ if(refused(url)) return { url, gone:true, im:null, p:Promise.resolve(null) };
   let e=ready.get(url);
   if(e) ready.delete(url);                        // la plus récente en dernier : les plus anciennes partent d'abord
   else { const im=new Image(); im.decoding='async'; im.src=url;
     e={ el:im, url, im:undefined, p:im.decode().then(()=>im, ()=>null) };
     if(secretUrl(url)) secretLoads.add(e);
-    e.p.then(x=>{ e.im=x; secretLoads.delete(e); if(!x && ready.get(url)===e) ready.delete(url); }); }   // illisible : redemandée la fois suivante
-  ready.set(url, e); while(ready.size>READY_MAX) ready.delete(ready.keys().next().value);
+    e.p.then(x=>{ e.im=x; secretLoads.delete(e); if(!x) unready(e); })   // illisible : redemandée la fois suivante
+      .then(()=>{ if(e.out) clearImage(im); }); }  // retirée de ready pendant son chargement : vidée à son arrivée
+  ready.set(url, e); while(ready.size>READY_MAX) unready(ready.get(ready.keys().next().value));
   return e; }
+// entrée retirée de ready (évincée par de plus récentes, illisible, servie une fois, oubliée) : son image vidée, comme
+// une image retirée de l'écran ; encore en chargement (out), elle l'est à son arrivée, après le showImage qui
+// l'attendait (plus haut). Un aperçu de la carte en cours (revealPreview) quitte ready dès sa demande, sans passer par
+// là ; elle le vide en le lâchant. (el absent : entrée refusée, refused)
+function unready(e){ e.out=true; if(ready.get(e.url)===e) ready.delete(e.url); if(e.el && e.im!==undefined) clearImage(e.el); }
 // keep : laisser l'image d'avant jusqu'à la nouvelle (aperçu suivant de la même génération), même si la nouvelle est
 // illisible ; sans keep, une image illisible est confiée au navigateur (nouvel essai, ou image cassée comme avant).
 // then(ok) : appelée quand la nouvelle image est à l'écran (ok faux : illisible). once : image servie une seule fois
@@ -1376,7 +1466,7 @@ function preload(url){ if(secretUrl(url) && leavingPrivate) return { url, gone:t
 function showImage(img, url, {thumb, keep, then, once, fit, dims, decoded}={}){
   if(img.want===url && img.getAttribute('src')===url && img.complete && img.naturalWidth){ if(then) then(true); return; }   // déjà là
   img.want=url;                                    // adresse attendue : une image chargée trop tard pour un autre choix est ignorée
-  const put=e=>{ if(once && ready.get(url)===e) ready.delete(url);
+  const put=e=>{ if(once && ready.get(url)===e) unready(e);
     if(img.want!==url || e.gone) return;           // gone : abandonné à la sortie de l'espace (image détachée comprise)
     if((e.im || !keep) && img.getAttribute('src')!==url){ img.src=url; unfit(img); }
     if(then) then(!!e.im); };
@@ -1389,6 +1479,9 @@ function showImage(img, url, {thumb, keep, then, once, fit, dims, decoded}={}){
     if(t.im!==undefined) side(); else t.p.then(side); }
   e.p.then(()=>put(e)); }
 function clearImage(img){ img.want=null; img.removeAttribute('src'); unfit(img); }
+// contenu remplacé ou vidé (innerHTML) : ses images vidées d'abord, pour qu'une image détachée ne garde pas son adresse
+// (privée) jusqu'au ramasse-miettes, ni ne reçoive un chargement qu'elle attendait encore
+function clearImages(el){ el.querySelectorAll('img').forEach(clearImage); }
 // miniature affichée à la taille de l'image complète de dimensions [w, h] dans la scène de la visionneuse : sa forme, et
 // la plus petite largeur entre la sienne, celle de la scène et celle que permet la hauteur de la scène. Taille en unités
 // de la scène (cqw, cqh) : recalculée par le navigateur quand la scène change (panneau, rotation).
@@ -1404,14 +1497,75 @@ const secretUrl = u => !!u && (u.startsWith('/api/private/') || u.startsWith('/a
 // détachée de la page par un nouveau dessin de la pile, ne reçoit rien ni ne redemande l'adresse à son échec.
 // prefix : seulement les adresses qui commencent ainsi (les aperçus d'une génération finie, finish)
 function abortPrivateLoads(prefix=''){ for(const e of [...secretLoads]){ if(!e.url.startsWith(prefix)) continue;
-  e.gone=true; secretLoads.delete(e); e.el.src=''; if(ready.get(e.url)===e) ready.delete(e.url); } }
+  e.gone=true; secretLoads.delete(e); clearImage(e.el); if(ready.get(e.url)===e) ready.delete(e.url); } }
 function forgetPrivateImages(){ if(reveal.img) clearReveal();   // canevas de la carte en cours (aperçus : /api/job/)
-  abortPrivateLoads(); for(const u of [...ready.keys()]) if(secretUrl(u)) ready.delete(u);
+  abortPrivateLoads(); for(const e of [...ready.values()]) if(secretUrl(e.url)) unready(e);
   document.querySelectorAll('img').forEach(i=>{   // affichée, ou attendue (chargement en cours : ignorée à son arrivée)
     if(secretUrl(i.getAttribute('src')) || secretUrl(i.want)) clearImage(i); });
   document.querySelectorAll('[href]').forEach(a=>{   // liens de téléchargement, et leur nom de fichier (prive_<id>)
     if(secretUrl(a.getAttribute('href'))) dropLink(a); }); }
 
+// ------------------------------------------------------------ bouton Avant : l'image d'entrée à la place de l'image
+// produite, dans le même cadre, tant qu'on le maintient (visionneuse, carte du dessus de la pile)
+// Image comparable (seule source de la règle) : une édition à une seule image d'entrée (variantes sur une photo et
+// campagne comprises, chaque image ayant sa copie) → cette image ; un Dessin avec masque → sa photo non peinte
+// (init.png, déjà à la taille de la sortie, la référence peinte ignorée) ; rien d'autre (texte → image, plusieurs
+// images d'entrée, annotation, dont seule la photo peinte en rouge est gardée)
+function beforeFile(it){ const ins=it.inputs || [];
+  if(it.mode==='edit' && ins.length===1) return ins[0];
+  if(it.mode==='mask' && ins.includes('init.png')) return 'init.png';
+  return null; }
+// bouton montré : image comparable, publique ou privée (son entrée par la route privée, inputUrl : une <img> de la
+// page, que forgetPrivateImages vide à la sortie) ; masqué sur une image privée dès l'appui sur « Sortir »
+// (leavingPrivate), l'image d'entrée privée n'étant plus demandée (décision du porteur, groupe B du 27/10/2026)
+const beforeShown = it => !!it && !(it.private && leavingPrivate) && !!beforeFile(it);
+// cadres revisés sur leur image (« Sortir » demandé, ou refusé)
+const reaimBefore = () => document.querySelectorAll('.bfr').forEach(fr=>{ if(fr.of) aimBefore(fr, fr.it, fr.of); });
+const BEFORE_KNOBS = '<span class="btag" aria-hidden="true">Avant</span>'
+  + '<button class="bbtn" type="button" aria-label="Maintenir pour voir l\'image d\'entrée">'
+  + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M12 3v18"/><path d="M3.5 7v10a2 2 0 0 0 2 2H12V5H5.5a2 2 0 0 0-2 2z" fill="currentColor" stroke="none"/></svg>'
+  + '<span>Avant</span></button>';
+const BEFORE_STRETCH=.02;                          // écart de forme au plus étiré (arrondi des dimensions de sortie)
+let beforeHeld=null;                               // cadre dont le bouton est maintenu
+// cadre fr (.bfr) prêt pour l'image it, montrée par l'image produite of : appui en cours relâché, image avant d'une
+// autre image retirée, bouton affiché si it est comparable ; son image d'entrée complète (url) et sa miniature (thumb)
+function aimBefore(fr, it, of){ dropBefore(fr);
+  const f=beforeShown(it) ? beforeFile(it) : null, img=fr.querySelector('.bimg');
+  fr.it=it; fr.of=of; fr.url=f && inputUrl(it, f); fr.thumb=f && inputUrl(it, f, '&thumb=1&t='+it.time);
+  if(!fr.url || img.want!==fr.url) clearImage(img);
+  placeBefore(fr); }
+// le cadre posé sur le contenu affiché de l'image produite : sa boîte (offset*, que le zoom ne change pas), réduite à
+// la forme de l'image (object-fit: contain dans la pile) ; masqué tant que l'image produite n'est pas là. L'image avant
+// y est étirée si les formes diffèrent d'au plus BEFORE_STRETCH, sinon entière et centrée
+function placeBefore(fr){ const of=fr.of, it=fr.it, w=of ? of.offsetWidth : 0, h=of ? of.offsetHeight : 0;
+  const ratio=it && it.width && it.height ? it.width/it.height : of && of.naturalWidth ? of.naturalWidth/of.naturalHeight : 0;
+  if(!fr.url || !ratio || !w || !h || !of.getAttribute('src')){ fr.hidden=true; dropBefore(fr); return; }
+  const cw=Math.min(w, h*ratio), ch=Math.min(h, w/ratio);
+  Object.assign(fr.style, {left:of.offsetLeft+(w-cw)/2+'px', top:of.offsetTop+(h-ch)/2+'px', width:cw+'px', height:ch+'px'});
+  fr.hidden=false;
+  const img=fr.querySelector('.bimg'), r=img.naturalWidth ? img.naturalWidth/img.naturalHeight : 0;
+  img.classList.toggle('fill', !!r && Math.abs(r/ratio-1)<=BEFORE_STRETCH); }
+// appui : l'image avant visible tout de suite (déjà chargée en avance, sinon sa miniature d'abord), par showImage
+function holdBefore(fr){ if(beforeHeld && beforeHeld!==fr) dropBefore(beforeHeld);
+  if(fr.hidden || !fr.url) return;
+  beforeHeld=fr; fr.classList.add('on'); showImage(fr.querySelector('.bimg'), fr.url, {thumb:fr.thumb});
+  placeBefore(fr); }                               // (image déjà prête : sa forme est connue tout de suite)
+// relâché (où que soit le doigt), fenêtre quittée, image changée : l'image produite revient
+function dropBefore(fr=beforeHeld){ if(!fr) return; fr.classList.remove('on'); fr.holder=null;
+  if(beforeHeld===fr) beforeHeld=null; }
+// bouton et étiquette d'un cadre, et son geste (Pointer Events, pointeur capturé : le relâché revient au bouton) ;
+// l'appui ne va ni au balayage de la pile ni au zoom de la visionneuse (qui ignorent un appui parti d'un bouton)
+function armBefore(fr){ fr.insertAdjacentHTML('beforeend', BEFORE_KNOBS);
+  fr.querySelector('.bimg').addEventListener('load', ()=>placeBefore(fr));
+  const b=fr.querySelector('.bbtn'), up=e=>{ if(e.pointerId===fr.holder) dropBefore(fr); };
+  b.addEventListener('pointerdown', e=>{ if(e.button>0 || fr.holder!=null) return; e.preventDefault();
+    fr.holder=e.pointerId; b.setPointerCapture(e.pointerId); holdBefore(fr); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t=>b.addEventListener(t, up));
+  b.addEventListener('contextmenu', e=>e.preventDefault()); }
+addEventListener('blur', ()=>dropBefore());
+// cadres recalés quand l'image produite ou sa place change de taille (fenêtre, carte en cours derrière la pile,
+// miniature puis image complète)
+const beforeSizes=new ResizeObserver(()=>document.querySelectorAll('.bfr').forEach(fr=>{ if(fr.of) placeBefore(fr); }));
 // ------------------------------------------------------------ générations de la page, carte en cours et file
 // La page suit les générations qu'elle a lancées (ou reprises après un rechargement), dans l'ordre : pageJobs. La carte
 // en cours du Labo (runNow, renderRunCard) en montre une (shown) : celle qui tourne, sinon la prochaine ; finie, son
@@ -1487,8 +1641,9 @@ const failText = p => 'Échec : '+(p.j.error||'génération impossible');
 // dont le tri attend son bandeau ou la réponse du Mac (« p » ou « n » suivi de pileKey), tenues hors de la pile
 // affichée même si une relecture les rend encore ; discarding : le Jeter qui attend la fin de son bandeau ({tag, priv,
 // body, timer}) ; flying : la carte du dessus part (un second appui ne vise pas la même image) ; pileShown : les cartes
-// dessinées (redessinées seulement quand elles changent)
-let pileItems=[], pileRead=false, pileRev=null, pileSeq=0, discarding=null, flying=false, pileShown='';
+// dessinées (redessinées seulement quand elles changent) ; pileTop : la clé de la carte du dessus dessinée (une autre,
+// arrivée sur le dessus, prend le verrou court : holdTop)
+let pileItems=[], pileRead=false, pileRev=null, pileSeq=0, discarding=null, flying=false, pileShown='', pileTop='';
 const sorting=new Set();
 const pileApi = (route, priv) => (priv ? '/api/private/' : '/api/')+route;   // pile, keep, discard
 const pileKey = it => it.private ? it.id : it.name;
@@ -1527,53 +1682,122 @@ const pileSettings = it => [it.width && it.height ? it.width+'×'+it.height : ''
   it.seconds ? fmt(it.seconds) : ''].filter(Boolean).join(' · ');
 function pileCard(it, k){
   return `<article class="pcard" data-k="${k}" data-key="${esc(pileTag(it))}"><button class="pimg" data-open aria-label="Voir l'image en grand"><img alt="" draggable="false"></button>`
+    + (k ? '' : '<div class="bfr" hidden><img class="bimg" alt="" draggable="false"></div>')
     + (it.lot ? `<b class="plot">${it.lot.rank}/${it.lot.size}</b>` : '') + STAMPS
     + `<div class="pbody"><p class="pprompt">${esc(it.prompt||'')}</p><p class="pset">${esc(pileSettings(it))}</p></div></article>`; }
 function failCard(p, k){
   return `<article class="pcard" data-k="${k}" data-key="f${esc(p.id)}"><div class="pfail"><span class="qicon">${dicon('fail')}</span><p class="pprompt">${esc(p.prompt)}</p>`
     + `<p class="perr">${esc(failText(p))}</p>${p.req ? `<button class="btn secondary small" data-again>${dicon('again')}Relancer</button>` : ''}</div>${STAMPS}</article>`; }
 // la carte du dessus et les deux suivantes (devinées dessous), les boutons ✕ et ✓, l'état vide, la pastille de l'onglet
-function renderPile(){
+// rien pendant « Sortir » (exiting) : les images privées y sont refusées, la pile redessinée resterait sans images ;
+// privLock la redessine au refus, changedSpace à la sortie (décision du porteur, groupe F du 28/10/2026)
+function renderPile(){ if(exiting()) return;
   const fails=pileFails(), items=pileView(), list=[...fails.map(p=>({fail:p})), ...items.map(it=>({it}))];
   $('pileActs').hidden=!list.length;
   $('pileYes').disabled=!!fails.length;            // échec en tête : rien à garder, ✕ le retire
   $('pileCount').textContent=items.length ? items.length+' à trier' : '';
   renderRunTab(); renderRunCard();
   const shownNow=list.slice(0, 3), key=JSON.stringify(shownNow.map(e=>e.fail ? 'f'+e.fail.id : pileTag(e.it)));
-  // (flying reste vrai jusqu'au tri de la carte qui partait, même redessinée entre-temps : sinon un second appui
+  // (flying reste vrai jusqu'au tri de la carte qui partait, ou jusqu'à son retour par landFlight, même redessinée
+  // entre-temps : sinon un second appui
   // viserait une carte que le premier n'a pas encore retirée)
   if(key===pileShown) return; pileShown=key;
   dropSwipe();                                     // un geste ne trie jamais une carte qu'il ne tient pas
+  if(beforeHeld && beforeHeld!==$('vBefore')) dropBefore();   // (le bouton Avant de la carte remplacée)
+  // images des cartes retirées vidées : une carte détachée ne garde pas son adresse (privée) jusqu'au ramasse-miettes,
+  // et un chargement qu'elle attendait encore ne lui pose rien (ni son image d'entrée chargée en avance)
+  clearImages($('pile'));
   $('pile').innerHTML=shownNow.map((e, k)=>e.fail ? failCard(e.fail, k) : pileCard(e.it, k)).join('');
   // images par showImage (jamais l'image d'avant), la miniature d'abord ; dessous, la miniature seule
-  shownNow.forEach((e, k)=>{ if(e.fail) return; const img=$('pile').querySelector(`[data-k="${k}"] img`);
-    if(k) showImage(img, thumbOf(e.it)); else showImage(img, srcOf(e.it), {thumb:thumbOf(e.it)}); }); }
+  // carte du dessus : son bouton Avant, et son image d'entrée chargée en avance une fois l'image là
+  shownNow.forEach((e, k)=>{ if(e.fail) return; const img=$('pile').querySelector(`[data-k="${k}"] .pimg img`);
+    if(k) return showImage(img, thumbOf(e.it));
+    const fr=img.closest('.pcard').querySelector('.bfr'); armBefore(fr); aimBefore(fr, e.it, img);
+    img.addEventListener('load', ()=>placeBefore(fr));
+    showImage(img, srcOf(e.it), {thumb:thumbOf(e.it), then:()=>{ if(fr.url){ preload(fr.thumb); preload(fr.url); } }}); });
+  // carte du dessus remplacée (nouvelle image, tri ailleurs, Annuler…) : le même verrou court, compté depuis son
+  // affichage (celui d'un tri d'ici la suit aussi)
+  const top0=$('pile').querySelector('[data-k="0"]')?.dataset.key || '';
+  if(top0 && top0!==pileTop) holdTop();
+  pileTop=top0; }
 // ce que montre la carte du dessus dessinée : un échec de la page, ou une image de la pile, retrouvés par leur nom
 function topEntry(){ const c=$('pile').querySelector('[data-k="0"]'), key=c && c.dataset.key; if(!key) return null;
   if(key[0]==='f'){ const p=pileFails().find(q=>q.id===key.slice(1)); return p ? {fail:p} : null; }
   const it=pileView().find(x=>pileTag(x)===key); return it ? {it} : null; }
-// la carte du dessus part à droite (Garder) ou à gauche (Jeter), puis go() ; un seul départ à la fois
+// la carte du dessus part à droite (Garder) ou à gauche (Jeter), puis go() ; un seul départ à la fois. flight : le
+// départ en cours ({c, dir, timer}) ; landFlight l'annule, la carte revient à sa place sans tri (« Sortir » appuyé
+// pendant l'envol : aucune image privée ne quitte l'écran sans tri, décision du porteur, groupe E du 28/10/2026)
+let flight=null;
 function flyOut(dir, go){ const c=$('pile').querySelector('[data-k="0"]'); flying=true;
   if(!c){ flying=false; return go(); }
   c.style.transform=''; c.classList.add('out-'+dir);   // (depuis là où le balayage l'a laissée)
-  setTimeout(()=>{ flying=false; go(); }, 220); }
-// après un tri (✓, ✕, ou Garder et Jeter de la visionneuse), les suivants attendent que l'image suivante soit
-// affichée, SORT_GAP ms au moins : un double appui ne trie jamais l'image suivante sans l'avoir vue, et un Jeter
-// n'envoie jamais celui d'avant sans son bandeau (décision du 24/10/2026) ; 3 s au plus si l'image ne vient pas
-// (une image en échec ne bloque pas le tri pour toujours)
-const SORT_GAP=300, SORT_HOLD_MAX=3000;
-let sortHeld=false;
-const sortBusy=()=>flying || sortHeld;           // un tri en cours ou son attente : ✓, ✕ et la visionneuse l'ignorent
-function holdSort(shown){ sortHeld=true; const t0=performance.now();   // (minuteur : une page cachée n'a plus
-  const wait=()=>{ const t=performance.now()-t0;                       // d'images d'animation, mais ses minuteurs)
-    if(t>=SORT_HOLD_MAX || t>=SORT_GAP && shown()) sortHeld=false; else setTimeout(wait, 50); };
-  setTimeout(wait, SORT_GAP); }
-// vrai si la carte part (un échec ne part qu'à gauche, retiré de la page)
-function sortTop(action){ if(sortBusy()) return false; const top=topEntry(); if(!top) return false;
+  flight={c, dir, timer:setTimeout(()=>{ flight=null; flying=false; go(); }, 220)}; }
+function landFlight(){ if(!flight) return; const c=flight.c; clearTimeout(flight.timer); c.classList.remove('out-'+flight.dir);
+  c.style.setProperty('--swipe', 0);               // (tampon « Garder » ou « Jeter » d'un balayage retiré)
+  flight=null; flying=false; }
+// Règle (suppression) : « Aucun geste (touche, clic, doigt) ne jette une image de la pile qui n'est pas affichée à
+// l'écran. » Une image de la pile ne se trie (✓, ✕, ← →, balayage, Garder et Jeter de la visionneuse) qu'une fois
+// posée : sa miniature ou son image à l'écran, ou son chargement fini en échec (image illisible : la carte, son texte
+// et ses réglages, se trie, sinon elle bloquerait la pile) ; jamais pendant son chargement (décisions du porteur du
+// 28/10/2026, groupe « durcissement » et groupe E)
+const posed = img => !!img && !!img.getAttribute('src') && img.complete;
+// Verrou de tri qui suit ce que l'œil voit : toute carte qui arrive sur le dessus de la pile (après un tri d'ici, une
+// nouvelle image, un tri sur un autre appareil, Annuler, une carte d'échec : renderPile, pileTop) ne se trie qu'une fois
+// vue SORT_GAP ms (holdTop, topHeld) : un double appui ne trie jamais l'image suivante sans l'avoir vue, un Jeter
+// n'envoie jamais celui d'avant sans son bandeau (décision du 24/10/2026), un ✕ visé sur l'ancienne ne jette pas la
+// nouvelle (décisions du porteur, « Verrou court » et « Toute carte », 28/10/2026). Dans la visionneuse, toute image de
+// la pile de même, à l'ouverture, après un pas ou un tri (holdSort, sortHeld, posé par openViewer). Une image qui ne vient pas ne se trie pas pour autant (posed) ;
+// son verrou ne bloque que sa vue : passer à une autre image (visionneuse) le reprend sur celle-ci
+const SORT_GAP=300;
+// view() : ce que montre une vue qui trie, {key, shown} (topView, ou l'image de la visionneuse) ; afterSeen appelle
+// done() une fois ce qu'elle montre vu depuis SORT_GAP ms (le compte repart de zéro quand elle montre autre chose, key,
+// ou plus rien) ; renvoie de quoi l'abandonner. (minuteur : une page cachée n'a plus d'images d'animation, mais ses
+// minuteurs ; la vue est notée au plus 50 ms après.) Le compte repart aussi de zéro quand la page passe en
+// arrière-plan ou en revient (visibilitychange), et après un relevé manqué (plus de SORT_GAP ms depuis le précédent :
+// page gelée, minuteurs ralentis) : le temps où personne n'a regardé ne compte pas
+function afterSeen(view, done){ let key, since=null, timer=null, last=-Infinity;
+  const away=()=>{ since=null; };
+  const stop=()=>{ clearTimeout(timer); document.removeEventListener('visibilitychange', away); };
+  const wait=()=>{ const v=view() || {}, now=performance.now();
+    if(v.key!==key || !v.shown || now-last>SORT_GAP){ key=v.key; since=null; }
+    if(v.shown && since==null) since=now;
+    last=now;
+    if(since!=null && now-since>=SORT_GAP){ stop(); done(); } else timer=setTimeout(wait, 50); };
+  document.addEventListener('visibilitychange', away);
+  wait(); return stop; }
+// sortHeld : verrou de l'image de la visionneuse ; topHeld : verrou de la carte du dessus (pile seulement : la
+// visionneuse montre sa propre image). stopSort, stopTop : abandon de leur attente
+let sortHeld=false, topHeld=false, stopSort=null, stopTop=null;
+const sortBusy=()=>flying || sortHeld || topHeld;   // ✓, ✕, ← → et le balayage l'ignorent (la visionneuse : sans topHeld)
+function holdSort(view){ if(stopSort) stopSort(); sortHeld=true; stopSort=afterSeen(view, ()=>{ stopSort=null; sortHeld=false; }); }
+function holdTop(){ if(stopTop) stopTop(); topHeld=true; stopTop=afterSeen(topView, ()=>{ stopTop=null; topHeld=false; }); }
+// el à l'écran, ce que l'œil en voit : la page visible (pas en arrière-plan : autre appli, téléphone verrouillé, autre
+// onglet ; un verrou court en cours repart de zéro au retour, et une image déjà vue avant reste triable, décision du
+// porteur du 29/10/2026, groupe G), son milieu dans la fenêtre (pas sorti par défilement), et rien par-dessus, ni une visionneuse (images d'entrée comprises ; pas celle qui
+// contient el) ni une feuille, même pendant leur effacement, ni le voile
+const onScreen = el => { const r=el.getBoundingClientRect(), y=(r.top+r.bottom)/2, x=(r.left+r.right)/2;
+  return !document.hidden && !!r.height && y>=0 && y<=innerHeight && x>=0 && x<=innerWidth
+    && ![...document.querySelectorAll('.viewer, .sheet')].some(v=>!v.contains(el) && getComputedStyle(v).visibility==='visible')
+    && !(+getComputedStyle($('scrim')).opacity); };
+// la carte du dessus dessinée (data-key) et vue : Labo affiché, carte pas masquée (Dessiner : shownTop) et à l'écran,
+// envol fini, image posée (carte d'échec, pile vide : rien à attendre)
+const topView = () => { const c=$('pile').querySelector('[data-k="0"]'), img=c && c.querySelector('.pimg img');
+  return {key:c ? c.dataset.key : '',
+    shown:!flying && (!c || !!shownTop() && onScreen(img || c)) && (!img || posed(img))}; };
+// verrou levé tout de suite (« Sortir » : la pile ne bouge plus, et l'image suivante n'arrivera pas avant la réponse)
+function releaseSort(){ if(stopSort) stopSort(); if(stopTop) stopTop(); stopSort=stopTop=null; sortHeld=topHeld=false; }
+// vrai si la carte part (un échec ne part qu'à gauche, retiré de la page). Pendant « Sortir » (exiting), rien ne part,
+// carte d'échec comprise : la carte reste à l'écran, sans tri, jusqu'à la fin de la sortie (décision du porteur,
+// « Ne bouge pas », 28/10/2026)
+// Tant que l'image d'avant est à l'écran (bouton Avant tenu, Espace tenue : beforeHeld, carte du dessus ou
+// visionneuse), rien ne part non plus : l'image produite n'est pas affichée ; relâcher suffit pour trier (décision du
+// porteur, « Rien », groupe F du 28/10/2026)
+// (carte masquée par Dessiner, shownTop : rien non plus)
+function sortTop(action){ if(sortBusy() || exiting() || beforeHeld || !shownTop()) return false;
+  const top=topEntry(); if(!top) return false;
   if(top.fail && action!=='discard') return false;   // ✓ sur un échec : rien ne part, rien n'attend
-  // la carte suivante affichée : envol fini et son image posée (ou la pile vide)
-  holdSort(()=>{ const img=$('pile').querySelector('[data-k="0"] img');
-    return !flying && (!img || !!img.getAttribute('src')); });
+  const topImg = () => $('pile').querySelector('[data-k="0"] .pimg img');   // (aucune sur une carte d'échec)
+  if(!top.fail && !posed(topImg())) return false;    // image pas encore affichée : rien ne part
   if(top.fail){ flyOut('l', ()=>drop(top.fail)); return true; }
   const it=top.it; flyOut(action==='keep' ? 'r' : 'l', ()=>action==='keep' ? keepItem(it) : discardItem(it)); return true; }
 // envoie Garder ou Jeter (route) d'une image de l'espace priv ; l'image reste hors de la pile affichée jusqu'à la
@@ -1640,7 +1864,7 @@ let swiped=false, dropSwipe=()=>{};
   $('pile').addEventListener('pointerdown', e=>{ if(!e.isPrimary) return;   // un second doigt ne prend pas le geste
     abandon();                                     // (un geste laissé en route, souris lâchée hors de la pile)
     const c=e.target.closest('.pcard');
-    if(!c || c.dataset.k!=='0' || flying || e.button>0 || e.target.closest('[data-again]')) return;
+    if(!c || c.dataset.k!=='0' || flying || e.button>0 || e.target.closest('[data-again], .bbtn')) return;
     gest={c, id:e.pointerId, x0:e.clientX, y0:e.clientY, dx:0, moving:false, fail:c.dataset.key[0]==='f',
       track:[{x:e.clientX, t:e.timeStamp}]}; });
   $('pile').addEventListener('pointermove', e=>{ if(!gest || e.pointerId!==gest.id) return;
@@ -1659,11 +1883,14 @@ let swiped=false, dropSwipe=()=>{};
     const quick=Math.abs(g0.dx)>SWIPE_QUICK_PX && Math.abs(speed)>SWIPE_QUICK_SPEED && Math.sign(speed)===Math.sign(g0.dx);
     if(!((far || quick) && sortTop(g0.dx>0 ? 'keep' : 'discard'))) place(g0.c, 0); };
   $('pile').addEventListener('pointerup', end); $('pile').addEventListener('pointercancel', end); })();
-// Garder ou Jeter depuis la visionneuse ouverte sur la pile : elle passe à l'image suivante, ou se ferme
-function sortFromViewer(action){ const it=vList[vIndex]; if(!it || !it.pile || sortBusy()) return;
+// Garder ou Jeter depuis la visionneuse ouverte sur la pile : elle passe à l'image suivante, ou se ferme ; pendant
+// « Sortir » (exiting), ni tant que l'image d'avant est à l'écran (beforeHeld), rien : l'image reste affichée, sans tri
+// (comme sortTop)
+function sortFromViewer(action){ const it=vList[vIndex]; if(!it || !it.pile || flying || sortHeld || exiting() || beforeHeld) return;
+  if(!posed($('vImg'))) return;                    // image pas encore affichée : rien (posed, plus haut)
   const list=vList.filter(x=>pileTag(x)!==pileTag(it)), at=Math.min(vIndex, list.length-1);
   // image suivante affichée, ou visionneuse fermée entre-temps (l'image attendue n'y arrivera plus)
-  if(list.length){ openViewer(at, list); holdSort(()=>vIndex<0 || !!$('vImg').getAttribute('src')); }
+  if(list.length) openViewer(at, list);           // (l'image suivante attend d'être vue : openViewer, holdSort)
   else closeViewer();
   if(action==='keep') keepItem(it); else discardItem(it); }
 // fin d'une génération de la page (ou d'un lot, une fois plus rien d'actif dans le lot), quand la page affichée n'est pas
@@ -1765,7 +1992,8 @@ function sizeReveal(){ const c=$('revealCanvas'), r=c.getBoundingClientRect(), d
   const w=Math.round(r.width*dpr), h=Math.round(r.height*dpr);
   if(c.width===w && c.height===h) return false;
   c.width=w; c.height=h; return true; }
-function clearReveal(){ clearInterval(reveal.timer); reveal=blankReveal();
+function clearReveal(){ clearInterval(reveal.timer); if(reveal.img) clearImage(reveal.img);   // l'aperçu lâché : vidé
+  reveal=blankReveal();
   const c=$('revealCanvas'); c.width=c.height=0; }
 function startReveal(key){ clearReveal(); reveal.key=key; reveal.rgb=[cssRgb('--void'), cssRgb('--accent')];
   sizeReveal(); drawNoise();
@@ -1796,9 +2024,15 @@ function drawMosaic(){ const im=reveal.img, c=$('revealCanvas'); if(!im || !c.wi
 // nouvel aperçu d'une génération de la page : décodé à part (preload), puis dessiné s'il est toujours celui attendu
 function revealPreview(p){ const v=p.j.preview_version; if(v===reveal.pv || p.private && leavingPrivate) return; reveal.pv=v;
   const url='/api/job/'+p.j.id+'/preview?v='+v, key=reveal.key, frac=p.j.total ? (p.j.step||0)/p.j.total : 0, e=preload(url);
-  e.p.then(im=>{ if(ready.get(url)===e) ready.delete(url);   // servi une fois : il ne reste pas parmi les images prêtes
-    if(!im || reveal.key!==key || reveal.pv!==v || (p.private && !inPrivate())) return;
-    clearInterval(reveal.timer); reveal.img=im; reveal.frac=frac; drawMosaic(); }); }
+  // servi une fois : il quitte ready tout de suite, sans être vidé (rien ne l'évince pendant son chargement, la
+  // mosaïque l'attend ; encore en route, secretLoads le couvre à la sortie de l'espace)
+  if(ready.get(url)===e) ready.delete(url);
+  e.p.then(im=>{
+    // pas montré (illisible, dépassé par un plus récent, espace quitté) : vidé comme toute image préchargée retirée
+    // de ready (unready)
+    if(!im || reveal.key!==key || reveal.pv!==v || (p.private && !inPrivate())) return unready(e);
+    const old=reveal.img; clearInterval(reveal.timer); reveal.img=im; reveal.frac=frac; drawMosaic();
+    if(old && old!==im) clearImage(old); }); }     // l'aperçu d'avant, lâché : vidé
 // icônes de la nature d'une demande (cartes de la file) ; annulation et « Passer en tête » partout dans l'espace
 // de la génération
 const QICON = {
@@ -1880,7 +2114,7 @@ function renderQueue(){ if(exiting()) return;      // « Sortir » en attente : 
   // (vignettes d'entrée en data URL), et rien de l'espace quitté ne reste dans la liste cachée ; ouverte, redessinées
   // seulement quand elles changent
   const html = openedSheet===$('fileSheet') ? cards.map(c=>queueCard(c, own)).join('') : '';
-  if(html!==queueHtml){ queueHtml=html; $('queueList').innerHTML=html; } }
+  if(html!==queueHtml){ queueHtml=html; clearImages($('queueList')); $('queueList').innerHTML=html; } }
 let queueHtml='';                                  // cartes de la file affichées (renderQueue)
 $('queueList').addEventListener('click', async ev=>{
   const t=ev.target.closest('[data-toggle]');
@@ -1943,6 +2177,7 @@ function drop(p, quiet){
   if(!quiet) renderPile(); else renderRunCard(); }
 function inputThumb(kind){ return kind==='t2i' ? null : inputImages[0].dataUrl; }
 $('go').onclick=async()=>{                         // toujours actif : la demande rejoint la file avec les réglages du moment
+  if(exiting()) return;                            // (sauf pendant « Sortir » : rien ne part, comme « Relancer »)
   let body; try{ body=buildRequest(); }catch(e){ toast(e.message, 'err'); return; }
   const kind=inputKind(), thumb=inputThumb(kind), priv=inPrivate();   // pris avant l'envoi : l'espace peut changer pendant l'attente
   const sent={ text:$('prompt').value, images:inputImages.slice() };   // saisie qui part (voir emptyInput)
@@ -1957,7 +2192,9 @@ $('go').onclick=async()=>{                         // toujours actif : la demand
 };
 // envoie une demande (Révéler, Relancer) partie de l'espace priv ; acceptée, ses générations sont suivies avec la
 // demande (req) et ce que infoOf(k) dit de la k-ième, accepted() est appelée, puis le haut du Labo
-async function launch(body, priv, infoOf, accepted){
+// « Sortir » demandé pendant l'attente d'avant l'envoi (confirmation d'une génération longue, lecture des images
+// d'entrée) : une demande privée ne part pas vers une session qui se ferme (seul point d'envoi)
+async function launch(body, priv, infoOf, accepted){ if(priv && leavingPrivate) return;
   let r, j; try{ r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=await r.json(); }
   catch(e){ toast('Serveur injoignable', 'err'); return; }
   if(!r.ok){ toast('Erreur : '+(j.error||('HTTP '+r.status)), 'err'); return; }
@@ -1992,7 +2229,9 @@ async function againFrom(it){
     ref_images:images }); }
 // un seul « Relancer » à la fois : un double appui sur une carte, qui reste à l'écran, ne relance pas deux fois
 let relaunching=false;
-async function again(go){ if(relaunching) return; relaunching=true; try{ await go(); } finally{ relaunching=false; } }
+// rien pendant « Sortir » (exiting) : aucune demande privée vers une session qui se ferme (décision du porteur,
+// groupe F du 28/10/2026)
+async function again(go){ if(relaunching || exiting()) return; relaunching=true; try{ await go(); } finally{ relaunching=false; } }
 async function relaunch(req){
   const priv=inPrivate(), body={...req, seed:-1}, camp=body.campaign;
   if(priv) body.private=true; else delete body.private;
@@ -2177,22 +2416,26 @@ function renderGallery(){ if(exiting()) return;    // « Sortir » en attente : 
   const grid=$('histGrid'), key=histItems.map(it=>it.name+'@'+it.time).join('|');
   $('histCount').textContent = histItems.length ? histItems.length+' image'+(histItems.length>1?'s':'') : '';
   if(key===histShown && grid.childElementCount) return;   // mêmes tirages : vignettes gardées, rien ne clignote
-  histShown=key; grid.innerHTML='';
+  histShown=key; clearImages(grid); grid.innerHTML='';
   if(!histItems.length){ grid.innerHTML='<div class="hempty"><img src="/logo.svg" alt=""><p>Aucun tirage pour l\'instant</p><button class="btn" onclick="goTab(\'labo\')">Aller au Labo</button></div>'; return; }
   const inLot={};                                  // images de chaque lot encore dans la galerie
   histItems.forEach(it=>{ if(it.lot) inLot[it.lot.id]=(inLot[it.lot.id]||0)+1; });
   histItems.forEach((it, i)=>{ const b=document.createElement('button'); b.dataset.name=it.name; b.setAttribute('aria-label', it.prompt||it.name);
     const im=document.createElement('img'); im.loading='lazy'; im.decoding='async'; im.alt='';
     // coupure passagère : une seconde tentative, sauf pour une vignette privée pendant ou après la sortie de l'espace
+    // (ni pour une vignette retirée de la grille entre-temps : elle a été vidée)
     im.onerror=()=>{ if(!im.dataset.retry){ im.dataset.retry=1; setTimeout(()=>{ const u=thumbOf(it);
-      if(!(secretUrl(u) && (exiting() || !inPrivate()))) im.src=u+'&retry=1'; }, 700); } };
+      if(im.isConnected && !(secretUrl(u) && (exiting() || !inPrivate()))) im.src=u+'&retry=1'; }, 700); } };
     im.src=thumbOf(it); b.appendChild(im);
     if(it.mode && it.mode!=='t2i'){ const sp=document.createElement('span'); sp.textContent=MODE_LABELS[it.mode]||it.mode; b.appendChild(sp); }
     // repère des images d'un lot (rang sur la taille du lot), tant qu'il en reste au moins deux dans la galerie
     if(it.lot && inLot[it.lot.id]>1){ const lb=document.createElement('b'); lb.className='lotb'; lb.textContent=`${it.lot.rank}/${it.lot.size}`; b.appendChild(lb); }
     b.onclick=()=>openViewer(i, histItems); grid.appendChild(b); });
 }
+// l'image de la visionneuse et si elle est vue (visionneuse fermée : rien à attendre), pour holdSort
+const viewerView = () => vIndex<0 ? {key:'', shown:true} : {key:$('vImg').want, shown:posed($('vImg')) && onScreen($('vImg'))};
 function openViewer(i, list=vList){ if(exiting()) return;   // « Sortir » en attente : rien de privé n'est posé
+  if(beforeHeld && beforeHeld!==$('vBefore')) dropBefore();   // (Avant de la carte tenu : la visionneuse la couvre)
   const it=list[i]; if(!it) return; clearTimeout(vEmpty); vList=list; vIndex=i; resetZoom();
   const v=$('viewer'), img=$('vImg');
   // la miniature en attendant l'image ; une fois l'image là, sa première image d'entrée est chargée en avance
@@ -2201,6 +2444,10 @@ function openViewer(i, list=vList){ if(exiting()) return;   // « Sortir » en a
   // voisines : leurs miniatures, et l'image complète de celle vers qui l'on avance (mémoire et données du téléphone)
   const n=list.length; [list[(i+1)%n], list[(i+n-1)%n]].forEach(x=>{ if(x!==it) preload(thumbOf(x)); });
   const next=list[(i+vStep+n)%n]; if(next!==it) preload(srcOf(next));
+  aimBefore($('vBefore'), it, img);              // bouton Avant de la nouvelle image (son entrée : chargée ci-dessus)
+  // image de la pile : Garder et Jeter attendent qu'elle soit vue SORT_GAP ms, à l'ouverture, après un pas (← →) ou un
+  // tri (décision du porteur, « Toute image vue 0,3 s », 28/10/2026) ; visionneuse fermée : rien à attendre
+  if(it.pile) holdSort(viewerView);
   img.alt=it.prompt||it.name; $('vCount').textContent=`${i+1} / ${list.length}`;
   const date=new Date(it.time*1000).toLocaleString('fr-FR', {dateStyle:'short', timeStyle:'short'});
   $('vChips').innerHTML=[date, MODE_LABELS[it.mode]||it.mode, it.width?it.width+'×'+it.height:'', it.steps?it.steps+' étapes':'', it.model?it.model.toUpperCase():'', it.seconds?fmt(it.seconds):'',
@@ -2215,25 +2462,61 @@ function openViewer(i, list=vList){ if(exiting()) return;   // « Sortir » en a
   syncThemeColor();
 }
 let vEmpty=null, ivEmpty=null;                     // vidage prévu après le fondu (annulé si la vue se rouvre)
-function closeViewer(){ resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor();
+function closeViewer(){ dropBefore($('vBefore')); resetZoom(); $('viewer').classList.remove('on'); document.body.style.overflow=''; vIndex=-1; syncThemeColor();
   clearTimeout(vEmpty); vEmpty=setTimeout(emptyViewer, FADE_MS); }   // après le fondu de fermeture
 // visionneuse fermée : plus rien de l'image vue dans la page cachée (image, prompt, réglages, rang, lot, lien)
 function emptyViewer(){ clearTimeout(vEmpty); vList=[]; clearImage($('vImg')); clearImage($('vBg'));   // fond compris
-  $('vImg').alt=$('vCount').textContent=$('vLotOpen').textContent=''; $('vChips').innerHTML=$('vInputs').innerHTML='';
+  aimBefore($('vBefore'), null, $('vImg'));        // image avant comprise
+  $('vImg').alt=$('vCount').textContent=$('vLotOpen').textContent=''; clearImages($('vInputs'));
+  $('vChips').innerHTML=$('vInputs').innerHTML='';
   $('vInputs').hidden=$('vLot').hidden=$('vSort').hidden=true; dropLink($('vDl')); }
 function stepViewer(d){ if(vIndex<0 || !vList.length) return; vStep=d; openViewer((vIndex+d+vList.length)%vList.length); }
+// Raccourcis du PC (la visionneuse garde les siens, ci-dessous) : sur la pile du Labo, → garde et ← jette l'image du
+// dessus par le même chemin que ✓ et ✕ (sortTop : bandeau Annuler, un Jeter suivant valide le précédent, verrou
+// court de la carte suivante, topHeld), Z ou Ctrl/⌘ + Z annule le Jeter en attente ; Ctrl/⌘ + Entrée dans le prompt : « Révéler ».
+// Règle (suppression) : « Aucune touche ne supprime un tirage ; au clavier, Jeter passe toujours par le bandeau Annuler,
+// comme au doigt ; une touche maintenue ou répétée ne jette jamais plus d'une image avant que la suivante soit
+// affichée. » Une touche répétée par le système ne trie donc rien, pas même Entrée sur ✓, ✕ ou Garder et Jeter de la
+// visionneuse qui ont le focus (décision du porteur, groupe C du 28/10/2026). Rien pendant une saisie (champ, curseur
+// du pinceau), avec une feuille, la visionneuse (sauf Espace) ou les images d'entrée ouvertes, ni sur une carte d'échec ; les
+// flèches seulement sans modificateur (⌘ + ← et Alt + ← : page précédente du navigateur). Espace tenue : le bouton
+// Avant de la visionneuse, sinon de la carte du dessus (image comparable, sinon rien), relâchée (keyup) ou fenêtre
+// quittée (blur) : l'image produite ; là, Espace ne fait pas défiler la page et n'active aucun bouton qui a le focus
+const FORM_FIELDS='input, textarea, select';     // (boutons de tri : marqués data-sort dans le HTML)
+// carte du dessus du Labo affichée (pas masquée par Dessiner au téléphone), sinon null
+const shownTop = () => { const c=mode==='labo' && $('pile').querySelector('[data-k="0"]');
+  return c && c.getClientRects().length ? c : null; };
+addEventListener('keydown', e=>{
+  if(e.repeat && e.key==='Enter' && e.target.closest?.('[data-sort]')){ e.preventDefault(); return; }
+  if(e.defaultPrevented || e.isComposing) return;
+  const cmd=e.ctrlKey || e.metaKey;
+  if(e.target===$('prompt') && cmd && e.key==='Enter' && !openedSheet && vIndex<0){   // (une feuille par-dessus
+    e.preventDefault(); if(!e.repeat) $('go').click(); return; }                        // le champ : rien)
+  if(e.target.closest?.(FORM_FIELDS) || openedSheet || ivIndex>=0) return;
+  if(e.key===' '){ const top=vIndex<0 && shownTop(); if(vIndex<0 && !top) return;
+    e.preventDefault(); const fr=top ? top.querySelector('.bfr') : $('vBefore');   // (carte d'échec : aucun)
+    if(fr && !e.repeat && fr.holder==null){ holdBefore(fr); if(beforeHeld===fr) fr.holder='key'; }   // (un appui
+    return; }                                       // en cours, souris ou doigt, reste à celui qui l'a commencé)
+  if(mode!=='labo' || vIndex>=0) return;
+  if(e.key.toLowerCase()==='z' && !e.altKey && !e.shiftKey){ if(discarding){ e.preventDefault(); undoDiscard(); } return; }
+  if(!['ArrowLeft', 'ArrowRight'].includes(e.key) || cmd || e.altKey || e.shiftKey) return;
+  const top=shownTop() && topEntry(); if(!top || top.fail) return;
+  e.preventDefault();
+  if(!e.repeat) sortTop(e.key==='ArrowRight' ? 'keep' : 'discard'); });
+addEventListener('keyup', e=>{ if(e.key===' ' && beforeHeld && beforeHeld.holder==='key'){ e.preventDefault(); dropBefore(); } });
 addEventListener('keydown', e=>{ if(vIndex<0 || openedSheet || e.defaultPrevented) return;
   if(ivIndex>=0){ if(e.key==='Escape') closeInputs(); else if(e.key==='ArrowLeft') showInput(ivIndex-1); else if(e.key==='ArrowRight') showInput(ivIndex+1); return; }
   if(e.key==='Escape') closeViewer(); else if(e.key==='ArrowLeft') stepViewer(-1); else if(e.key==='ArrowRight') stepViewer(1); });
 // visionneuse et images d'entrée : pincer pour zoomer (l'image passe au-dessus de tout et revient à sa taille dès qu'on
 // relâche les doigts) ; sur ordinateur, molette pour zoomer et glisser pour déplacer, un clic pour revenir ; sans zoom,
 // glisser à gauche ou à droite : image voisine (step) ; vers le bas : fermer (close) ; un appui : masquer les
-// commandes. Renvoie la remise à la taille initiale.
-function zoomable(st, img, v, step, close){
+// commandes. twin : autre image qui reçoit la même transformation (l'image avant). Renvoie la remise à la taille initiale.
+function zoomable(st, img, v, step, close, twin){
   const pts=new Map(), MAX=6;
   let z={s:1, x:0, y:0}, one=null, pinch=null, unzoom=null;
   const center=()=>{ const r=st.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2}; };
-  function apply(){ img.style.transform = z.s>1 ? `translate(${z.x}px, ${z.y}px) scale(${z.s})` : ''; clearTimeout(unzoom);
+  const tf=t=>{ img.style.transform=t; if(twin) twin.style.transform=t; };
+  function apply(){ tf(z.s>1 ? `translate(${z.x}px, ${z.y}px) scale(${z.s})` : ''); clearTimeout(unzoom);
     if(z.s>1) v.classList.add('zoomed'); else unzoom=setTimeout(()=>{ if(z.s<=1) v.classList.remove('zoomed'); }, 400); }   // reste au-dessus pendant le retour (0,35 s)
   function zoomAt(s2, px, py, from=z){ const c=center(), k=s2/from.s;   // le point (px, py) de l'écran reste sous les doigts
     z={s:s2, x:(px-c.x)-((px-c.x)-from.x)*k, y:(py-c.y)-((py-c.y)-from.y)*k}; if(s2<=1.01) z={s:1, x:0, y:0}; apply(); }
@@ -2243,7 +2526,7 @@ function zoomable(st, img, v, step, close){
   const mid=()=>{ const [a,b]=[...pts.values()]; return {x:(a.x+b.x)/2, y:(a.y+b.y)/2, d:Math.hypot(a.x-b.x, a.y-b.y)}; };
   st.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return;
     pts.set(e.pointerId, {x:e.clientX, y:e.clientY}); st.setPointerCapture(e.pointerId); st.classList.add('drag');
-    if(pts.size===2){ one=null; v.style.opacity=''; if(z.s<=1) img.style.transform=''; pinch={...mid(), from:{...z}}; }
+    if(pts.size===2){ one=null; v.style.opacity=''; if(z.s<=1) tf(''); pinch={...mid(), from:{...z}}; }
     else if(pts.size===1) one={x0:e.clientX, y0:e.clientY, from:{...z}, dx:0, dy:0}; });
   st.addEventListener('pointermove', e=>{ if(!pts.has(e.pointerId)) return; pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
     if(pinch && pts.size>=2){ const m=mid(); zoomAt(Math.min(MAX, Math.max(1, pinch.from.s*m.d/pinch.d)), pinch.x, pinch.y, pinch.from);
@@ -2251,7 +2534,7 @@ function zoomable(st, img, v, step, close){
     if(!one) return; one.dx=e.clientX-one.x0; one.dy=e.clientY-one.y0;
     if(z.s>1){ z.x=one.from.x+one.dx; z.y=one.from.y+one.dy; apply(); return; }     // doigt restant après un pincement, ou souris
     const {dx, dy}=one;
-    img.style.transform = Math.abs(dx)>Math.abs(dy) ? `translateX(${dx}px) rotate(${dx/40}deg)` : `translateY(${Math.max(0,dy)}px) scale(${1-Math.max(0,dy)/1600})`;
+    tf(Math.abs(dx)>Math.abs(dy) ? `translateX(${dx}px) rotate(${dx/40}deg)` : `translateY(${Math.max(0,dy)}px) scale(${1-Math.max(0,dy)/1600})`);
     v.style.opacity = dy>0 && Math.abs(dy)>Math.abs(dx) ? Math.max(.35, 1-dy/500) : ''; });
   const end=e=>{ if(!pts.delete(e.pointerId)) return;
     if(pinch && pts.size===1){ const [q]=[...pts.values()]; pinch=null; one={x0:q.x, y0:q.y, from:{...z}, dx:0, dy:0, pinched:true}; return; }
@@ -2260,16 +2543,18 @@ function zoomable(st, img, v, step, close){
     if(e.pointerType!=='mouse' && (z.s>1 || (was && was.pinched))) return reset();     // doigts relâchés : taille initiale
     st.classList.remove('drag'); if(!was) return;
     const {dx, dy}=was;
-    if(Math.abs(dx)<6 && Math.abs(dy)<6){ if(z.s>1) reset(); else { img.style.transform=''; v.classList.toggle('immersive'); } return; }
+    if(Math.abs(dx)<6 && Math.abs(dy)<6){ if(z.s>1) reset(); else { tf(''); v.classList.toggle('immersive'); } return; }
     if(z.s>1) return;
-    img.style.transform='';
+    tf('');
     if(Math.abs(dx)>70 && Math.abs(dx)>Math.abs(dy)) step(dx<0 ? 1 : -1);
     else if(dy>110) close(); };
   st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
   let wheelEnd=null;
   st.addEventListener('wheel', e=>{ e.preventDefault(); st.classList.add('drag'); clearTimeout(wheelEnd); wheelEnd=setTimeout(()=>st.classList.remove('drag'), 150); zoomAt(Math.min(MAX, Math.max(1, z.s*Math.exp(-e.deltaY*0.002))), e.clientX, e.clientY); }, {passive:false});
   return reset; }
-const resetZoom=zoomable($('vStage'), $('vImg'), $('viewer'), stepViewer, closeViewer);
+const resetZoom=zoomable($('vStage'), $('vImg'), $('viewer'), stepViewer, closeViewer, $('vBeforeImg'));
+armBefore($('vBefore')); $('vImg').addEventListener('load', ()=>placeBefore($('vBefore')));
+[$('vImg'), $('vStage'), $('pile')].forEach(el=>beforeSizes.observe(el));
 async function dataUrlOf(name, url){
   const r=await fetch(url || resultUrl(name)); if(!r.ok) throw new Error('HTTP '+r.status);   // (pas le corps de l'erreur)
   return await readFile(await r.blob()); }
@@ -2288,7 +2573,8 @@ async function drawFrom(name, read, {list, priv}=noteInput()){
   // sélecteur était ouvert) qui a des images n'est pas remplacée
   const replace = async n => !n || list===inputImages && await ask('Dessiner sur cette image ?',
     `Remplacer ${n>1 ? 'les '+n+' images' : 'l\'image'} de la saisie par celle-ci ?`, 'Remplacer');
-  const n=list.length; if(!await replace(n)) return;
+  // « Sortir » appuyé pendant la question : l'image privée n'est pas lue (aucune demande vers une session qui se ferme)
+  const n=list.length; if(!await replace(n) || priv && leavingPrivate) return;
   let entry; try{ entry=await toEntry(name, await read(), priv); }
   catch(e){ if(priv===inPrivate()) toast('Image illisible', 'err'); return; }
   if(list.length>n && !await replace(list.length)) return;   // images ajoutées pendant la lecture : redemandé
@@ -2321,7 +2607,7 @@ async function resumeFrom(it){
   const files=resumeImages(it), {list, priv}=noteInput(), mask=it.mode==='mask'; closeViewer();
   const filled = () => !!($('prompt').value.trim() || list.length), replace = () => ask('Reprendre cette image ?',
     'Le texte et les images de la saisie seront remplacés par les siens.', 'Remplacer');
-  if(filled() && !await replace()) return;
+  if(filled() && !await replace() || priv && leavingPrivate) return;   // (« Sortir » pendant la question : comme drawFrom)
   // saisie acceptée : redemandé si elle change pendant la lecture (une image retirée puis une autre ajoutée comprises)
   const text=$('prompt').value, was=list.slice();
   let entries; try{ entries=await Promise.all(files.map(async f=>toEntry(f.name,
@@ -2362,19 +2648,24 @@ async function shareImage(url, name){
 async function copyImage(url){
   try{ await navigator.clipboard.write([new ClipboardItem({'image/png': fetch(url).then(r=>r.blob()).then(b=>new Blob([b], {type:'image/png'}))})]); toast('Image copiée'); }
   catch(e){ toast('Copie impossible : '+e.message, 'err'); } }
-function viewerShare(){ const it=vList[vIndex]; if(it) shareImage(srcOf(it), it.name); }
-function viewerCopy(){ const it=vList[vIndex]; if(it) copyImage(srcOf(it)); }
+// actions de la visionneuse et de ses images d'entrée : rien pendant « Sortir » (exiting), la visionneuse reste ouverte,
+// sans message (décision du porteur, groupe F du 28/10/2026) ; aucune requête privée vers une session qui se ferme
+function viewerShare(){ const it=vList[vIndex]; if(it && !exiting()) shareImage(srcOf(it), it.name); }
+function viewerCopy(){ const it=vList[vIndex]; if(it && !exiting()) copyImage(srcOf(it)); }
+['vDl', 'ivDl'].forEach(k=>$(k).addEventListener('click', e=>{ if(exiting()) e.preventDefault(); }));   // (téléchargements)
 // ------------------------------------------------------------ images d'entrée d'une image de la galerie
 let ivIndex=-1, ivOwner=null;
 const inputUrl = (it, f, extra='') => (it.private ? '/api/private/input?id='+it.id : '/api/input?name='+encodeURIComponent(it.name))+'&file='+encodeURIComponent(f)+extra;
 const inputLabel = (it, f) => f==='init.png' ? "Image d'origine" : it.mode==='mask' ? 'Zone peinte' : it.mode==='annot' ? 'Annotation' : 'Référence '+f.replace(/\D/g, '');
 function renderInputsButton(it){
-  const b=$('vInputs'), list=it.inputs||[]; b.hidden=!list.length; if(!list.length) return;
+  const b=$('vInputs'), list=it.inputs||[]; clearImages(b); b.hidden=!list.length;   // (miniatures de l'image d'avant)
+  if(!list.length){ b.innerHTML=''; return; }
   b.innerHTML=`<span class="v-in-thumbs">${list.slice(0,3).map(f=>`<img src="${inputUrl(it, f, '&thumb=1&t='+it.time)}" alt="">`).join('')}</span>`
     + `<span>${list.length>1 ? list.length+" images d'entrée" : "Image d'entrée"}</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>`; }
-function openInputs(i){ const it=vList[vIndex]; if(!it || !(it.inputs||[]).length) return; clearTimeout(ivEmpty); ivOwner=it; showInput(i);
+function openInputs(i){ const it=vList[vIndex]; if(!it || !(it.inputs||[]).length || exiting()) return; clearTimeout(ivEmpty); ivOwner=it; showInput(i);
   $('iv').classList.remove('immersive'); $('iv').classList.add('on'); syncThemeColor(); }
-function showInput(i){ if(!ivOwner) return;       // fermée (boutons et gestes pendant le fondu de fermeture)
+function showInput(i){ if(!ivOwner || exiting()) return;   // fermée (boutons et gestes pendant le fondu de fermeture) ;
+                                                   // « Sortir » : l'image d'entrée affichée et son libellé ne bougent pas
   const it=ivOwner, n=it.inputs.length; ivIndex=(i+n)%n; const f=it.inputs[ivIndex], thumb=g=>inputUrl(it, g, '&thumb=1&t='+it.time);
   resetInputZoom();
   showImage($('ivImg'), inputUrl(it, f), {thumb:thumb(f), fit:true});   // miniature : celle du bouton de la visionneuse, déjà là
@@ -2387,14 +2678,17 @@ function closeInputs(){ resetInputZoom(); $('iv').classList.remove('on'); ivInde
 function emptyInputs(){ clearTimeout(ivEmpty); clearImage($('ivImg'));
   $('ivImg').alt=$('ivLabel').textContent=$('ivCount').textContent=''; dropLink($('ivDl')); }
 async function inputAction(kind){             // repartir de cette image d'entrée : Éditer (référence) ou Dessiner
-  if(!ivOwner || ivIndex<0) return;               // second appui pendant le fondu de fermeture
+  if(!ivOwner || ivIndex<0 || exiting()) return;  // second appui pendant le fondu de fermeture ; « Sortir »
   if(kind==='edit' && refuseWhileDrawing()) return;   // refusé avant de fermer : l'image reste à l'écran
   const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f;
   closeInputs(); closeViewer();
   return kind==='mask' ? drawFrom(name, ()=>dataUrlOf(name, url)) : useAsEditInput(name, url); }
 const resetInputZoom=zoomable($('ivStage'), $('ivImg'), $('iv'), d=>showInput(ivIndex+d), closeInputs);   // comme la visionneuse
 async function viewerAction(kind){
-  const it=vList[vIndex]; if(!it) return;
+  const it=vList[vIndex]; if(!it || exiting()) return;
+  // « Supprimer » ne fait rien tant que l'image d'avant est tenue (beforeHeld), comme Garder et Jeter : l'image
+  // supprimée doit être à l'écran ; relâcher suffit (décision du porteur, retour du groupe F, 29/10/2026)
+  if(kind==='delete' && beforeHeld) return;
   if(kind==='edit' && refuseWhileDrawing()) return;   // refusé avant de fermer : l'image reste à l'écran
   if(kind==='edit' || kind==='mask'){ closeViewer(); return kind==='edit' ? useAsEditInput(it.name, srcOf(it)) : useAsMaskInput(it.name, srcOf(it)); }
   if(kind==='resume') return resumeFrom(it);
@@ -2405,6 +2699,7 @@ async function viewerAction(kind){
 // Vrai si l'image n'est plus là.
 async function deleteItem(it){
   if(!await ask('Supprimer cette image ?', (it.private ? 'Cette image privée' : it.name)+' sera supprimée définitivement du Mac.', 'Supprimer', true)) return false;
+  if(it.private && (leavingPrivate || !inPrivate())) return false;   // « Sortir » appuyé pendant la confirmation
   const r=it.private ? await postJson('/api/private/delete', {id:it.id}) : await postJson('/api/delete', {name:it.name});
   if(!r.ok){ toast('Suppression impossible : '+((await r.json()).error||r.status), 'err'); return false; }
   log('supprimé : '+it.name, !!it.private); toast('Image supprimée');
@@ -2425,14 +2720,16 @@ function openLot(){                               // « Voir le lot » : ses ima
   const items=lotMembers(vList[vIndex]); if(!items.length) return; const n=items.length, s=n>1 ? 's' : '';
   $('lotTitle').textContent = isCampaignLot(items[0].lot, items[0].mode) ? `Campagne de ${n} photo${s}` : `Lot de ${n} image${s}`;
   const g=$('lotSheetGrid');                       // chaque vignette à la forme de son image (une campagne en mélange plusieurs)
+  clearImages(g);
   g.innerHTML=items.map((x, i)=>`<button data-k="${i}" style="--ar:${x.width && x.height ? x.width/x.height : 1}" aria-label="Ouvrir l'image ${x.lot.rank}"><img src="${thumbOf(x)}" alt=""><b>${x.lot.rank}/${x.lot.size}</b></button>`).join('');
   g.onclick=e=>{ const b=e.target.closest('[data-k]'); if(!b) return; closeSheet(); openViewer(+b.dataset.k, items); };
   openSheet('lotSheet'); }
 async function downloadLot(){                     // « Tout télécharger » : un téléchargement par image, l'un après l'autre (pas d'archive)
-  const items=lotMembers(vList[vIndex]);
-  for(const x of items){ const a=document.createElement('a'); a.href=dlOf(x); a.download=x.name;
-    document.body.appendChild(a); a.click(); a.remove(); await sleep(400); }   // un temps entre deux : le navigateur les accepte tous
-  if(items.length) toast(items.length+' téléchargements lancés'); }
+  if(exiting()) return; const items=lotMembers(vList[vIndex]); let n=0;
+  for(const x of items){ if(x.private && (leavingPrivate || !inPrivate())) break;   // « Sortir » entre-temps
+    const a=document.createElement('a'); a.href=dlOf(x); a.download=x.name;
+    document.body.appendChild(a); a.click(); a.remove(); n++; await sleep(400); }   // un temps entre deux : le navigateur les accepte tous
+  if(n && !exiting() && !(items[0].private && !inPrivate())) toast(n+' téléchargements lancés'); }
 function forgetResult(name){                      // image supprimée : elle quitte le Labo
   const p=pageJobs.find(q=>q.result && q.result.name===name);
   if(p) drop(p); }
@@ -2468,7 +2765,7 @@ function changedSpace(inside){
   // (confirmation de suppression comprise : elle montre le titre du prompt)
   if([$('promptSheet'), $('promptEditSheet'), $('askSheet'), $('fileSheet')].includes(openedSheet)){ closeSheet(); $('askText').textContent=''; }
   if(openedSheet===$('lotSheet')) closeSheet();      // « Voir le lot » : images de l'espace quitté
-  $('lotSheetGrid').innerHTML=''; $('lotSheetGrid').onclick=null;
+  clearImages($('lotSheetGrid')); $('lotSheetGrid').innerHTML=''; $('lotSheetGrid').onclick=null;
   prompts={saved:[], types:prompts.types}; editingPrompt=null; $('peTitle').value=$('peText').value=''; renderPrompts();
   if(ivIndex>=0 && !!ivOwner.private!==inside) closeInputs();
   if(vIndex>=0 && vList.some(x=>!!x.private!==inside)) closeViewer();
@@ -2477,15 +2774,18 @@ function changedSpace(inside){
     if(ivIndex<0) emptyInputs(); if(vIndex<0) emptyViewer(); }   // vues fermées : vidées sans attendre le fondu
   if(!inside){ for(let k=pageJobs.length-1; k>=0; k--) if(pageJobs[k].private) pageJobs.splice(k, 1);
     // file privée reçue avant la sortie : elle ne s'affiche pas en attendant /api/status (carte, pastille, feuille)
-    queueState=queueState.filter(e=>e.kind!=='private'); queueHtml=''; $('queueList').innerHTML='';
+    queueState=queueState.filter(e=>e.kind!=='private'); queueHtml=''; clearImages($('queueList')); $('queueList').innerHTML='';
     openLots.clear(); lotCancels.clear();          // identifiants de lots (privés compris) des cartes de la file
     if(!hiding) resumeOwn(queueState); }
   // pile : celle de l'espace où l'on arrive ; un Jeter privé qui attend son bandeau est abandonné (l'espace est fermé
   // pour cet appareil : l'image reste dans la pile privée)
   if(!inside && discarding && discarding.priv){ clearTimeout(discarding.timer); discarding=null; hideUndo(); }
   if(!inside) [...sorting].forEach(t=>{ if(t[0]==='p') sorting.delete(t); });   // (leur réponse sera ignorée)
+  if(!inside){ landFlight(); releaseSort(); }       // carte en partance (fermeture par le Mac) : rien ne part, et le
+                                                   // verrou de la pile quittée ne retient pas celle de l'espace public
   pileItems=[]; pileRead=false; pileShown=''; labIdle=null; renderRunCard(); renderPile(); if(!hiding) loadPile();
-  histItems=[]; histRev=null; histAsk=null; histShown=''; $('histGrid').innerHTML=''; $('histCount').textContent='';
+  histItems=[]; histRev=null; histAsk=null; histShown=''; clearImages($('histGrid')); $('histGrid').innerHTML='';
+  $('histCount').textContent='';
   if(mode==='tirages' && !hiding) loadHistory();
   syncThemeColor(); }
 // Saisie propre à chaque espace (texte, images d'entrée, dessin : actif ou non, masque ou annotation, tracé) :
@@ -2566,11 +2866,16 @@ async function privUnlock(){ if(!$('puCode').value) return;
 let leavingPrivate=false;
 function exiting(){ return inPrivate() && leavingPrivate; }   // dans l'espace, « Sortir » en attente du Mac
 async function privLock(){ if(leavingPrivate) return;   // second appui pendant l'attente : rien de plus
-  erasePrivate=true; leavingPrivate=true;
   // Jeter privé en attente : abandonné dès l'appui, pas à la réponse du Mac (son bandeau pourrait finir entre-temps) ;
   // l'image reste dans la pile privée, même si la sortie échoue (le doute garde l'image, décision du 24/10/2026).
-  // Avant abortPrivateLoads : la pile redessinée par l'abandon n'a plus de chargement privé qui survive à la sortie
+  // Annulé comme par « Annuler », avant que les images privées soient refusées : la carte revient sur la pile avec son
+  // image, depuis la mémoire de la page (rare : elle n'y est plus, carte vide jusqu'à la réponse ; décision du
+  // porteur, groupe F du 28/10/2026). Avant abortPrivateLoads : rien de privé ne reste en route après la sortie
   if(discarding && discarding.priv) undoDiscard();
+  erasePrivate=true; leavingPrivate=true;
+  reaimBefore();                                   // bouton Avant d'une image privée masqué, appui relâché
+  landFlight();                                    // carte en partance : revenue sur la pile, sans tri
+  releaseSort();                                   // (rien ne se trie pendant la sortie : exiting)
   abortPrivateLoads();
   // vignettes privées des Tirages pas encore chargées (chargement différé : un défilement les demanderait)
   document.querySelectorAll('#histGrid img').forEach(i=>{
@@ -2578,7 +2883,11 @@ async function privLock(){ if(leavingPrivate) return;   // second appui pendant 
   const r=await postJson('/api/private/lock', {}).catch(()=>null), ok=await lockAccepted(r); leavingPrivate=false;
   // page fermée pendant l'attente (pagehide) : déjà sortie et effacée, rien n'est redessiné ni annoncé
   if(!inPrivate()){ if(ok) liftRelock(); return; }
-  if(!ok){ erasePrivate=false; pileShown=''; histShown=''; reveal.pv=0; renderPile(); loadPile(); renderGallery();
+  // (pileTop oublié : la carte du dessus, dont l'image a pu être abandonnée, reprend le verrou court ; l'image de la
+  // pile ouverte en grand de même : releaseSort a levé leurs verrous à l'appui)
+  if(!ok){ erasePrivate=false; pileShown=''; pileTop=''; histShown=''; reveal.pv=0; renderPile(); loadPile(); renderGallery();
+    if(vIndex>=0 && vList[vIndex]?.pile) holdSort(viewerView);
+    reaimBefore();                                 // (bouton Avant de la visionneuse ; la pile, redessinée, a le sien)
     // images de la pile et aperçu redemandés, pile relue (une lecture arrivée pendant la sortie n'a pas été dessinée ;
     // la visionneuse, elle, attend l'image suivante)
     return toast('Sortie impossible : '+(r ? 'erreur '+r.status : 'Mac injoignable'), 'err'); }

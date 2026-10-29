@@ -20,7 +20,11 @@ dernière ligne telle quelle (« Ran N tests … », totaux de l'interface), jam
 de l'outil qui lance la commande. Le contrôle complet avec --ui prend quelques minutes (banc et interface en même
 temps). Une vérification d'interface nouvelle devient un test de tests/ui/ (pilote driver.mjs), une vérification
 ponctuelle passe par la sonde (tests/ui/probe.mjs), jamais par un script jetable ; une vue plus grande que le
-téléphone cache des débordements : regarder aussi les captures (page.screenshot, tests/ui/planche.mjs).
+téléphone cache des débordements : regarder aussi les captures (page.screenshot, tests/ui/planche.mjs). Le pilote
+ouvre la vue du téléphone (chrome.phonePage), d'un PC à la souris ou d'une tablette tactile en hauteur et en largeur
+(chrome.newPage(PC | TABLET | TABLET_WIDE), page.setView sans rechargement), appuie, maintient, répète et relâche
+une touche avec modificateurs (page.press, keyDown, keyUp) et maintient un appui sur un élément (page.hold puis
+page.release) ; la planche capture chaque vue au téléphone, à la tablette en hauteur et en largeur et au PC.
 
 « Suivi » veut dire ici suivi par git, ou nouveau et pas encore ajouté (fichier non suivi que .gitignore n'exclut pas) :
 un fichier créé passe les contrôles avant son premier commit.
@@ -78,7 +82,7 @@ SENSITIVE = ("localStorage", "incognito", "inPrivate", "privState", "asideInput"
              "private/", "/api/discard", "/api/delete", "discardItem", "commitDiscard", "sortTop", "deleteItem",
              "delete_output", "delete_extras", "remove_private_item")
 # images de l'interface que seul showImage remplit (sinon l'image d'avant reste à l'écran jusqu'au chargement)
-IMAGE_IDS = ("vImg", "vBg", "ivImg", "paintImg")
+IMAGE_IDS = ("vImg", "vBg", "ivImg", "paintImg", "vBeforeImg")
 IMAGE_SRC_RE = re.compile(r"\$\(\s*['\"](" + "|".join(IMAGE_IDS) + r")['\"]\s*\)\.src\s*=(?!=)")
 # notes non suivies du dossier principal, reliées dans chaque worktree par --link-venv (et chaque fichier de
 # docs/agents/, sauf la carte du code, qui est suivie)

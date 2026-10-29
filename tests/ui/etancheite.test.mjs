@@ -17,7 +17,7 @@
 //   venv/bin/python tests/check.py --quick --ui tests/ui/etancheite.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, waitUntil } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, elapse } from './driver.mjs';
 
 let bench, chrome, page, kept;                     // kept : images privées que le premier test laisse
 let navigated = false;                             // nouveau document chargé (Page.frameNavigated)
@@ -66,6 +66,7 @@ async function privateTour() {
   assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE0pile' }`), 202);
   await page.waitFor(`pileItems.length === 1 && (img => img && img.complete && img.naturalWidth > 0)
     ($('pile').querySelector('[data-k="0"] img'))`, { what: 'image privée dans la pile', timeout: 30000 });
+  await page.topShown();                           // (vue 0,3 s : ✕ la jette plus bas, sous la visionneuse)
   await page.click('#pile [data-k="0"] [data-open]');
   await page.waitFor(`$('vImg').complete && $('vImg').naturalWidth > 0`, { what: 'image de la pile en grand' });
   await page.eval(`closeViewer()`);
@@ -114,16 +115,44 @@ async function privateTour() {
   return [...new Set([...markers, ...WORDS, '/api/private/', 'prive_', thumb.slice(-120, -40)])];
 }
 
-// marqueurs trouvés dans la page (aside : la saisie privée mise de côté, asideInput, compte)
-const scan = (markers, aside) => page.leaks(markers, { skip: aside ? [] : ['asideInput'] });
+// marqueurs trouvés dans la page (aside : la saisie privée mise de côté, asideInput, compte ; imgsSeen, les images
+// que retient watchImages, ci-dessous, ne compte pas : sans lui, celles qui ne sont plus nommées seraient libérées)
+const scan = (markers, aside) => page.leaks(markers, { skip: aside ? ['imgsSeen'] : ['asideInput', 'imgsSeen'] });
+// toute image de la page retenue dans imgsSeen à partir de l'appel, dès qu'elle est insérée (notée aussi dans
+// imgsShown) ou reçoit une adresse : attachée, détachée par un contenu remplacé (que page.leaks ne voit plus : plus
+// rien ne la nomme), ou jamais attachée (Image() de ready) ; l'espion n'est posé qu'une fois par page
+const watchImages = () => page.eval(`(() => { window.imgsSeen = new Set(); window.imgsShown = new WeakSet();
+  const note = n => { if (n.nodeType !== 1) return; const all = n.tagName === 'IMG' ? [n] : n.querySelectorAll('img');
+    all.forEach(i => { imgsSeen.add(i); imgsShown.add(i); }); };
+  document.querySelectorAll('img').forEach(note);
+  if (window.imgsWatched) return; window.imgsWatched = true;
+  const d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+  Object.defineProperty(HTMLImageElement.prototype, 'src', { configurable: true, get: d.get,
+    set(v) { imgsSeen.add(this); d.set.call(this, v); } });
+  new MutationObserver(rs => rs.forEach(r => r.addedNodes.forEach(n => note(n))))
+    .observe(document.documentElement, { childList: true, subtree: true }); })()`);
+// adresses privées que ces images gardent encore : routes privées, aperçus /api/job/, et data URL d'une image passée
+// à l'écran (vignettes de la saisie et de la file) : toute génération et toute saisie de ces tests est privée ; all
+// faux : seulement les images retirées de l'écran (détachées, ni prêtes dans ready), les seules qui ne doivent plus en
+// avoir tant que l'espace reste ouvert (début de l'adresse seulement)
+const privateLeft = all => page.eval(`(() => { const held = new Set([...ready.values()].map(e => e.el));
+  return [...imgsSeen].filter(i => ${all} || !i.isConnected && !held.has(i))
+    .filter(i => (s => /\\/api\\/(private|job)\\//.test(s) || s.startsWith('data:') && imgsShown.has(i))(
+      i.getAttribute('src') || '')).map(i => i.getAttribute('src').slice(0, 60)); })()`);
 
 test('« Sortir » : plus rien de l\'espace privé dans la page', async () => {
   await enter();
+  await watchImages();
   const markers = await privateTour();
   kept = await page.eval(`histItems.length`);
+  // images chargées en avance évincées de ready par d'autres (publiques) : elles quittent aussi leur adresse
+  await page.eval(`for (let i = 0; i < READY_MAX + 2; i++) preload('/logo.svg?e=' + i)`);
+  await page.waitFor(`secretLoads.size === 0`, { what: 'chargements privés réglés' });
+  assert.deepEqual(await privateLeft(false), [], 'image retirée de l\'écran qui garde une adresse privée');
   await page.click('#privExit', { force: true });  // visionneuse et feuille du lot ouvertes exprès : pas au doigt
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.deepEqual(await scan(markers, true), [], 'données privées restées dans la page');
+  assert.deepEqual(await privateLeft(true), [], 'image (détachée comprise) qui garde une adresse privée');
   assert.equal(await page.eval(`$('undoBar').hidden`), true, 'bandeau du Jeter privé resté');
   page.assertNoErrors();
 });
@@ -151,9 +180,12 @@ test('« Sortir » pendant la révélation d\'une génération privée : son can
   await enter();
   await page.tab('labo');
   await page.eval(`$('previewChk').checked = true; opt.steps = 'high'; saveOpt(); refreshChoices()`);
+  await watchImages();
   await page.typePrompt('SLOW=0.4 zqE10revelee');
   await page.click('#go');
-  await page.waitFor(`shown && shown.private && !!reveal.img`, { what: 'aperçu privé en mosaïque', timeout: 30000 });
+  // (deux aperçus au moins : le premier remplacé par le second sur la mosaïque)
+  await page.waitFor(`shown && shown.private && !!reveal.img && reveal.pv >= 2`,
+    { what: 'aperçus privés en mosaïque', timeout: 30000 });
   assert.ok((await page.canvasInk('#revealCanvas')).ink > 0, 'mosaïque dessinée');
   // /api/status retenu : une réponse demandée dans l'espace (qui le dit encore ouvert) n'arrive qu'après « Sortir »,
   // et les suivantes pas avant la fin des vérifications : la page ne montre que ce qu'elle sait de l'espace public
@@ -162,6 +194,8 @@ test('« Sortir » pendant la révélation d\'une génération privée : son can
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
   assert.deepEqual(await page.canvasInk('#revealCanvas'), { width: 0, height: 0, ink: 0 }, 'aperçu privé resté');
+  // l'aperçu lâché par la mosaïque (remplacé, ou à la sortie) ne garde pas son adresse, même détaché
+  assert.deepEqual(await privateLeft(true), [], 'aperçu privé (détaché compris) qui garde son adresse');
   assert.deepEqual(await page.eval(`[reveal.img, $('runCard').hidden, $('queueChip').hidden, queueState.length]`),
     [null, true, true, 0], 'génération ou file privée à l\'écran');
   assert.deepEqual(await scan(['zqE10revelee'], true), [], 'données privées restées dans la page');
@@ -172,6 +206,53 @@ test('« Sortir » pendant la révélation d\'une génération privée : son can
   await bench.idle();
   page.assertNoErrors();
 });
+
+// le Mac fait échouer les requêtes retenues r (holdRequests) : chargement constaté en échec par la page
+const failAll = async rs => { for (const { requestId } of rs) await page.send('Fetch.failRequest',
+  { requestId, errorReason: 'Failed' }).catch(() => {}); };
+
+test('espace privé : image évincée pendant son chargement, image illisible, vignette en échec retirée : vidées',
+  async () => {
+    await enter();
+    await page.tab('tirages');
+    await page.waitFor(`histItems.length >= 2 && histItems.every(it => it.private)`, { what: 'galerie privée' });
+    await watchImages();
+    const [a, b] = await page.eval(`histItems.slice(0, 2).map(it => it.id)`);
+    const h = await page.holdRequests(['*/api/private/image*'], () => true);   // images complètes retenues
+    try {
+      // a chargée en avance, puis évincée de ready par d'autres (publiques) pendant son chargement ; b ensuite,
+      // illisible
+      await page.eval(`preload(srcOf(histItems[0]))`);
+      await waitUntil(() => h.held.some(r => r.url.includes(a)), { what: 'image a demandée' });
+      await page.eval(`for (let i = 0; i < READY_MAX + 2; i++) preload('/logo.svg?f=' + i);
+        preload(srcOf(histItems[1]))`);
+      await waitUntil(() => h.held.some(r => r.url.includes(b)), { what: 'image b demandée' });
+      await h.free(u => u.includes(a));
+      await failAll(h.take(u => u.includes(b)));
+      await page.waitFor(`secretLoads.size === 0`, { what: 'chargements privés réglés' });
+      assert.deepEqual(await privateLeft(false), [], 'image évincée ou illisible qui garde son adresse');
+    } finally {
+      await h.release();
+    }
+    // vignette des Tirages en échec, puis la grille redessinée avant sa seconde tentative (0,7 s plus tard)
+    const t = await page.holdRequests(['*/api/private/thumb*'], () => true);
+    try {
+      await page.eval(`histShown = ''; renderGallery()`);
+      await waitUntil(() => t.held.length > 0, { what: 'vignette demandée' });
+      await failAll(t.take());
+      await page.waitFor(`[...$('histGrid').querySelectorAll('img')].some(i => i.dataset.retry)`,
+        { what: 'seconde tentative prévue' });
+      await page.eval(`histShown = ''; renderGallery()`);   // les vignettes en échec retirées de la grille
+      await elapse(900);
+      assert.deepEqual(await privateLeft(false), [], 'vignette retirée qui reprend son adresse');
+    } finally {
+      await t.release();
+    }
+    await page.click('#privExit');
+    await page.waitFor(`!inPrivate()`, { what: 'sorti' });
+    page.errors.splice(0, page.errors.length, ...page.errors.filter(e => !/ERR_FAILED|ERR_ABORTED/.test(e)));
+    page.assertNoErrors();
+  });
 
 // page restaurée depuis la mémoire du navigateur (« Retour », bfcache) : Chrome sans écran ne la rejoue pas de façon
 // fiable, l'événement pageshow (persisted) est simulé ; le verrouillage de la fermeture (pagehide) n'a pas eu lieu,

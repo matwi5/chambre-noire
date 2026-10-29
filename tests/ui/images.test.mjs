@@ -218,6 +218,8 @@ test('pile : une image jetée depuis la visionneuse, son lien de téléchargemen
   await page.eval(`openViewer(0, pileView())`);
   await page.waitFor(`$('vDl').getAttribute('download') === ${JSON.stringify(name)}`,
     { what: 'lien de la visionneuse' });
+  await page.imageShown('#vImg');                  // (Jeter ignore une image pas encore affichée)
+  await page.waitFor(`!sortHeld`, { what: 'image vue 0,3 s' });   // (ni vue depuis moins de 0,3 s)
   await page.eval(`sortFromViewer('discard')`);
   await page.eval(`closeViewer()`);
   await page.waitFor(`!discarding && !pileItems.some(it => it.name === ${JSON.stringify(name)})`,
@@ -227,10 +229,15 @@ test('pile : une image jetée depuis la visionneuse, son lien de téléchargemen
   page.assertNoErrors();
 });
 
-// une édition dont la référence fait w×h, puis ses images d'entrée ouvertes en retenant l'image complète (jamais
-// demandée : rien dans les images de la page) : renvoie [taille de la miniature, taille de l'image complète], hors
-// animation d'ouverture ; during() : appelé pendant que la miniature est seule à l'écran
+// une édition dont la référence fait w×h, puis ses images d'entrée ouvertes en retenant l'image complète (retenue
+// dès sa première demande : jamais arrivée dans les images de la page) : renvoie [taille de la miniature, taille de
+// l'image complète], hors animation d'ouverture ; during() : appelé pendant que la miniature est seule à l'écran
 async function inputSizes(prompt, w, h, during) {
+  // (retenue dès la demande : la carte du dessus de la pile charge en avance l'image d'entrée de son bouton Avant)
+  const held = [], hold = p => held.push(p.requestId);
+  page.on('Fetch.requestPaused', hold);
+  await page.send('Fetch.enable',
+    { patterns: [{ urlPattern: '*/api/input?*file=ref_1.png', requestStage: 'Request' }] });
   assert.equal(await page.eval(`postJson('/api/generate', { mode: 'edit', prompt: ${JSON.stringify(prompt)},
     width: 512, height: 512, steps: 2, cfg: 1, seed: -1, preview: false, ref_images: [(() => {
       const c = document.createElement('canvas'); c.width = ${w}; c.height = ${h}; const x = c.getContext('2d');
@@ -243,10 +250,6 @@ async function inputSizes(prompt, w, h, during) {
   await page.tab('tirages');
   const index = `histItems.findIndex(it => it.prompt === ${JSON.stringify(prompt)})`;
   await page.waitFor(`${index} >= 0`, { what: 'image dans la galerie' });
-  const held = [], hold = p => held.push(p.requestId);
-  page.on('Fetch.requestPaused', hold);
-  await page.send('Fetch.enable',
-    { patterns: [{ urlPattern: '*/api/input?*file=ref_1.png', requestStage: 'Request' }] });
   await page.eval(`openViewer(${index}, histItems); openInputs(0)`);
   await page.waitFor(`$('ivImg').src.includes('thumb=1') && $('ivImg').complete && $('ivImg').naturalWidth > 0`,
     { what: 'miniature affichée' });
@@ -271,9 +274,9 @@ test('images d\'entrée : la miniature a la taille de l\'image complète (grande
   const [smallThumb, small] = await inputSizes('zq9 petite', 200, 150);   // plus petite : jamais agrandie
   assert.ok(near(smallThumb, small), `petite photo : miniature ${smallThumb} au lieu de ${small}`);
   // téléphone tourné pendant que la miniature attend son image : elle garde sa forme (4/3)
-  const turned = await inputSizes('zq9 tournée', 1200, 900, () => page.send('Emulation.setDeviceMetricsOverride',
-    { ...PHONE, width: PHONE.height, height: PHONE.width }));
-  await page.send('Emulation.setDeviceMetricsOverride', PHONE);
+  const turned = await inputSizes('zq9 tournée', 1200, 900,
+    () => page.setView({ ...PHONE, width: PHONE.height, height: PHONE.width }));
+  await page.setView(PHONE);
   const [t] = turned;
   assert.ok(Math.abs(t[0] / t[1] - 4 / 3) < 0.03, `miniature déformée après rotation : ${t}`);
   assert.ok(near(...turned), `après rotation : miniature ${turned[0]} au lieu de ${turned[1]}`);

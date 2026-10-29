@@ -401,7 +401,7 @@ test('Variantes : proposées avec des images et en Dessiner hors campagne, la de
   await page.waitFor(`fetch('/api/status').then(r => r.json()).then(s => !s.busy && !s.queued)`,
     { what: 'file du banc vide', timeout: 60000 });
   await fresh();
-  await watchToasts();
+  await page.watchToasts();
   await page.setFiles('#inFiles', photos(1));
   await page.waitFor(`inputImages.length === 1`, { what: 'une image' });
   assert.equal(await countShown(), true, 'rangée des images avec une image d\'entrée');
@@ -623,10 +623,6 @@ test('espaces : fermée par le Mac, la saisie privée attend le retour dans la p
   page.assertNoErrors();
 });
 
-// messages affichés depuis l'appel (chaque texte posé dans #toastBox, même remplacé aussitôt par un autre)
-const watchToasts = () => page.eval(`(() => { window.seenToasts = []; window.toastWatch?.disconnect();
-  window.toastWatch = new MutationObserver(() => seenToasts.push($('toastBox').textContent));
-  toastWatch.observe($('toastBox'), { childList: true, characterData: true, subtree: true }); })()`);
 const CLOSED = 'Espace privé fermé : retour dans l\'espace public';
 
 test('espaces : fermé sans « Sortir », le champ perd le curseur et un message dit le retour dans l\'espace public', async () => {
@@ -634,7 +630,7 @@ test('espaces : fermé sans « Sortir », le champ perd le curseur et un message
   await enterPrivate();
   await page.eval(`$('prompt').focus()`);
   assert.equal(await page.eval(`document.activeElement === $('prompt')`), true);
-  await watchToasts();
+  await page.watchToasts();
   await closedByMac();                             // 15 minutes sans requête privée
   assert.equal(await page.eval(`document.activeElement === $('prompt')`), false, 'le champ a perdu le curseur');
   assert.deepEqual(await page.eval(`seenToasts`), [CLOSED]);
@@ -642,7 +638,7 @@ test('espaces : fermé sans « Sortir », le champ perd le curseur et un message
 
   await enterPrivate();                            // espace supprimé depuis le Mac pendant qu'on tape
   await page.eval(`$('prompt').focus()`);
-  await watchToasts();
+  await page.watchToasts();
   assert.equal(await post('/api/private/reset', { confirm: 'SUPPRIMER' }), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`!inPrivate()`, { what: 'hors de l\'espace privé' });
@@ -651,7 +647,7 @@ test('espaces : fermé sans « Sortir », le champ perd le curseur et un message
 
   await enterPrivate();                            // « Sortir » : la sortie est demandée, pas de message de fermeture
   await page.eval(`$('prompt').focus()`);
-  await watchToasts();
+  await page.watchToasts();
   await page.click('#privExit');
   await page.waitFor(`!inPrivate() && seenToasts.length > 0`, { what: 'sorti de l\'espace privé' });
   assert.deepEqual(await page.eval(`seenToasts`), ['Sorti de l\'espace privé']);

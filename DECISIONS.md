@@ -4,6 +4,325 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-10-27 · Interface pour PC et tablette ; bouton Avant pour comparer une édition à son image d'entrée
+
+- **Contexte** : grilling de deux demandes du porteur : « Actuellement l'app est optimisé pour mobile. Je veux que tu
+  l'optimises en plus pour pc et tablette. » et « Je veux que, quand on appui longtemps sur une image généré en mode
+  edit avec une seul image en input, l'image d'origine s'affiche a la place avec les exacte dimension, ca permet de
+  faire une comparaison avant/après hyper rapide et fluide. » Questions posées avec une réponse recommandée ; un
+  « oui » accepte la recommandation.
+- **Décision** (porteur, 27/10/2026). Premier tour, réponse « 1. mac, pc window et tablette andoid / oui pou le
+  reste » :
+  - Q1 « Appareils visés : sur quels appareils comptes-tu t'en servir ? (a) le Mac dans un navigateur (fenêtre large)
+    et un iPad, à tenir dans les deux orientations ; (b) le Mac seulement ; (c) un autre appareil : PC Windows,
+    tablette Android ou taille d'écran précise, à me dire. » → « mac, pc window et tablette andoid ».
+  - Q2 « Le Labo en grand écran : sur un écran large (à partir d'environ 1024 px, soit un iPad en paysage ou un PC),
+    on passe à deux colonnes : à gauche, la pile et la carte en cours, avec une image bien plus grande ; à droite, le
+    champ de création, toujours déplié (on ne le replie plus sur grand écran). Sur tablette en portrait (entre 700 et
+    1023 px), on garde une seule colonne, élargie à environ 760 px. » → oui : « Oui, deux colonnes à partir de
+    1024 px, une colonne élargie entre les deux. »
+  - Q3 « Les onglets en grand écran : la barre flottante du bas (Labo, Tirages) monte dans la barre du haut, à côté
+    du nom, à partir de 1024 px. Sur tablette en portrait, elle reste en bas. » → oui : « Oui, dans la barre du haut
+    à partir de 1024 px. »
+  - Q4 « La visionneuse en grand écran : à partir de 1024 px, l'image occupe tout l'espace à gauche. Le panneau
+    d'infos et d'actions (prompt, Garder/Jeter, Éditer, Relancer…) passe en colonne à droite, au lieu d'être sous
+    l'image. » → oui : « Oui, panneau à droite à partir de 1024 px. »
+  - Q5 « Raccourcis clavier (PC) : un petit jeu de raccourcis : dans la visionneuse, ← et → pour l'image précédente
+    ou suivante, Échap pour fermer ; dans la pile, → pour Garder et ← pour Jeter (le bandeau Annuler reste) ;
+    Ctrl/⌘ + Entrée pour Révéler depuis le champ. Aucun raccourci ne marche pendant la saisie de texte, sauf Ctrl/⌘ +
+    Entrée. » → oui : « Oui, ce jeu-là, sans plus. »
+  - Q6 « Grille des Tirages : sur grand écran, des vignettes plus grandes (environ 220 px au lieu de 150) et des
+    marges plus larges. » → oui : « Oui, environ 220 px à partir de 1024 px. »
+  - Q7 « Où marche l'appui long : dans la visionneuse, pour une image de la pile ou des Tirages ; sur la carte du
+    dessus de la pile, dans le Labo. Ce ne serait pas le cas sur les petites vignettes de la grille des Tirages, trop
+    petites pour comparer. » → oui : « Oui : visionneuse et carte du dessus de la pile. » (l'appui long est ensuite
+    remplacé par le bouton Avant, Q13 et Q20).
+  - Q8 « Quelles générations : toute image produite par une édition qui avait exactement une image d'entrée. Cela
+    inclut chaque image d'un lot de variantes sur une photo, et chaque image d'une campagne, chacune comparée à sa
+    propre photo. » → oui : « Oui, variantes et campagnes comprises. »
+  - Q9 « Le geste : l'image d'origine apparaît après environ 250 ms d'appui immobile, d'un coup, sans fondu ; elle
+    reste tant qu'on maintient le doigt ; au relâché, l'image générée revient instantanément ; une petite étiquette
+    « Avant » s'affiche pendant l'appui. (…) Sur PC, maintenir le clic de la souris fait la même chose. » → oui
+    (délai et seuils remplacés par Q21).
+  - Q10 « Format différent : si la sortie a presque le même rapport largeur/hauteur que l'entrée (écart d'arrondi de
+    quelques pixels), l'entrée est étirée exactement dans le cadre de l'image générée : la superposition est
+    parfaite. Si le rapport est vraiment différent (par exemple une sortie en 1:1 depuis une photo 16:9), l'entrée
+    s'affiche entière, sans déformation, centrée dans le même cadre. » → oui : « Oui : étirée quand l'écart est
+    minime, entière et centrée sinon. »
+  - Q11 « Avec le zoom : dans la visionneuse, si l'image est zoomée, l'image d'origine apparaît avec le même zoom et
+    le même cadrage, pour comparer un détail. » → oui : « Oui, même zoom et même cadrage. »
+  - Q12 « Menu de l'appui long sur iPhone : (…) On le désactive, seulement sur les images comparables. » → oui, puis
+    sans objet (bouton Avant, Q13).
+- **Deuxième tour**, réponse « Q13. Ajouter un bouton avec un appui long qui affiche le avant quand on reste appuyé,
+  on ne fait plus l'appuien long sur l'image mais sur tel. Faire comme les app d'edit photo. / Oui pour le reste » :
+  - Q13 « Menu de l'appui long sur Android et Windows : (…) On le bloque de la même façon, sur les images comparables
+    et seulement pour un appui au doigt. » → remplacée par la réponse citée : un bouton à maintenir, comme les
+    applications de retouche, et plus d'appui long sur l'image.
+  - Q14 « Ajouter des images sur PC : (…) On permet donc de déposer une ou plusieurs images n'importe où sur la
+    colonne du champ, avec un cadre en surbrillance pendant le survol. » → oui : « Oui, dépôt sur toute la colonne du
+    champ, avec surbrillance. »
+  - Q15 « Savoir qu'une image est comparable : (…) une petite marque discrète « ⇆ Avant » dans le coin des images
+    comparables » → devenue le bouton Avant (Q20).
+  - Q16 « Dessin avec masque : on le compare à la photo non peinte (init.png), qui a déjà la taille exacte de la
+    sortie : la superposition est parfaite. La référence peinte est ignorée pour la comparaison. » → oui : « Oui,
+    comparaison avec la photo non peinte. »
+  - Q17 « Dessin avec annotation : la photo d'origine non peinte n'est pas gardée. Trois choix : (a) pas de
+    comparaison pour une annotation ; (b) comparer avec la photo peinte en rouge, celle que le modèle a reçue ;
+    (c) garder désormais aussi la photo non peinte (…) » → oui : « (a) : pas de comparaison pour une annotation. »
+  - Q18 « Espace privé (confidentialité) : la comparaison marche aussi pour les images privées. Elle suit exactement
+    les règles des images d'entrée privées d'aujourd'hui : l'image privée est seulement chargée en mémoire de la page,
+    rien n'est écrit sur le disque ni dans les journaux ; elle est abandonnée et effacée de l'écran à « Sortir », à la
+    fermeture de la page et au retour par « Retour » ; un test d'étanchéité vérifie qu'aucune image « avant » privée
+    ne reste affichée ou en mémoire après « Sortir ». La réserve du sous-agent (image privée déjà décodée peut-être
+    pas marquée comme abandonnée) serait vérifiée pendant ce travail et corrigée si elle se confirme. » → oui : « Oui,
+    comparaison dans l'espace privé avec ces règles, et la réserve vérifiée au passage. »
+  - Q19 « Préchargement : dès qu'une image comparable est affichée (carte du dessus de la pile, image courante de la
+    visionneuse), sa photo d'entrée complète se charge en avance. Si l'appui arrive avant la fin du chargement, la
+    miniature de l'entrée s'affiche dans le cadre, puis l'image complète la remplace. » → oui : « Oui, ce
+    préchargement-là. »
+- **Troisième tour**, réponse « ok » :
+  - Q20 « Où placer le bouton : visionneuse : en bas à droite de l'image, posé dessus en surimpression, à portée de
+    pouce. Il suit l'image quand elle est zoomée ou en mode immersif ; carte du dessus de la pile : même bouton, en
+    bas à droite de l'image de la carte. Le toucher n'ouvre pas la visionneuse et ne lance pas de balayage. Il
+    n'apparaît que sur les images comparables : édition à une seule photo, variantes ou campagne, Dessin avec
+    masque. » → oui : « Oui, en bas à droite de l'image, dans la visionneuse et sur la carte du dessus. »
+  - Q21 « Comportement du bouton : l'image d'origine apparaît dès l'appui, sans délai (le bouton ne sert qu'à ça) ;
+    elle reste tant qu'on maintient le doigt ; au relâché, l'image générée revient, même si le doigt a glissé hors du
+    bouton ; l'étiquette « Avant » s'affiche sur l'image pendant l'appui ; un second doigt peut pincer pour zoomer
+    pendant l'appui (dans la visionneuse). » → oui : « Oui, ce comportement-là. »
+  - Q22 « Au clavier (PC) : maintenir la touche Espace fait la même chose que le bouton (visionneuse ouverte, ou carte
+    du dessus de la pile), sauf pendant une saisie de texte. » → oui : « Oui, Espace maintenue. »
+- **Zones sensibles**, réponse « ok » :
+  - Q23 « Jeter au clavier : (a) ← jette avec le même bandeau Annuler de 5 s qu'au doigt. Ctrl/⌘ + Z (ou la touche Z)
+    annule tant que le bandeau est là. Aucun raccourci pour « Supprimer » un tirage ; (b) pas de raccourci pour
+    Jeter, seulement → pour Garder ; (c) ← jette après une confirmation. » → oui : « (a) : même filet que le geste du
+    doigt, une annulation au clavier, et jamais « Supprimer » au clavier. »
+  - Q24 « Règle à ne jamais enfreindre (suppression) : « Aucune touche ne supprime un tirage, et aucune image de la
+    pile n'est jetée au clavier sans le bandeau Annuler de 5 s. Une touche maintenue ou répétée ne jette jamais plus
+    d'une image avant que la suivante soit affichée. » » → oui : « Oui, cette phrase. »
+- **Spec** (`/to-spec`, 27/10/2026), réponses par boutons :
+  - « Points de test : aucun changement côté serveur (les images d'entrée sont déjà servies), donc tout se teste par
+    le pilote d'interface existant (Chrome sans écran). On lui ajoute seulement deux choses : des vues à la taille
+    d'un PC (1280×800, souris) et d'une tablette Android (800×1280 et 1280×800, tactile), et l'appui et le relâché de
+    touches du clavier (Espace maintenue, flèches). Ça te va ? » → « Oui (Recommandé) ».
+  - « Zoom au doigt : dans la visionneuse, le zoom au pincement revient à la taille normale dès qu'on relâche les
+    doigts (comportement actuel). Sur téléphone et tablette, on ne peut donc pas « être zoomé » puis appuyer sur
+    Avant. Que faire ? » → « Pincer en tenant Avant (Recommandé) » : « On garde le zoom actuel : en tenant Avant
+    d'un doigt, on peut pincer avec deux autres, et la photo d'entrée zoome pareil. Sur PC, molette et glisser
+    marchent normalement avec Espace ou le bouton. » (précise Q11 et Q21).
+  - « Rendu visuel de la version PC et tablette : maquettes à valider avant de coder, ou directement dans
+    l'application avec une planche avant/après montrée à la fin de chaque ticket visuel ? » → « Directement
+    (Recommandé) ».
+  - « Jeter au clavier (suppression) : aujourd'hui, au doigt, un nouveau Jeter valide tout de suite le Jeter
+    précédent, dont l'image est alors supprimée avant la fin de ses 5 s. Au clavier, ← ← ferait pareil. La règle
+    acceptée disait « aucune image jetée au clavier sans le bandeau Annuler de 5 s », ce qui ne colle pas à la
+    lettre. Que retenir ? » → « Comme au doigt (Recommandé) » : « ← se comporte comme le balayage : le bandeau
+    s'affiche, un Jeter suivant valide le précédent. Règle reformulée : « Aucune touche ne supprime un tirage ; au
+    clavier, Jeter passe toujours par le bandeau Annuler, comme au doigt ; une touche maintenue ou répétée ne jette
+    jamais plus d'une image avant que la suivante soit affichée. » » (remplace la phrase de Q24).
+- **Groupe A** (27/10/2026) : planche finale validée (« Je valide ») ; correctif `page.close` du pilote reclassé
+  antérieur au lot (« Ca me va ») ; groupe « durcissement » des constats antérieurs après les groupes B et C (« le
+  faire apres »).
+- **Groupe B, visuel du bouton Avant** (27/10/2026), réponse par bouton : « Le bouton Avant est un nouveau visuel :
+  une icône et un libellé courts, aux couleurs de la lumière inactinique (le rouge-orangé de l'app). Comment veux-tu
+  valider son apparence ? » → « Planche au retour (Recommandé) » : « La session dessine 2 ou 3 variantes côte à côte
+  sur une planche, intègre celle qu'elle juge la meilleure de façon facile à changer, et tu choisis au retour du
+  groupe. Le groupe n'est pas bloqué. »
+- **Groupe B, espace privé** (27/10/2026, réponses par boutons dans la session du groupe) :
+  - « Réserve du cadrage (une image privée déjà décodée n'a pas de drapeau « gone ») : si le test montre qu'une image
+    avant privée peut revenir après « Sortir », la fermeture de la page ou « Retour », comment la corriger ? » →
+    « Marquer tout à l'oubli (Recommandé) » : « Dans forgetPrivateImages, marquer « gone » toute entrée privée de
+    ready (pas seulement celles encore en chargement), avant de la retirer : une image qui l'attendait, même détachée
+    de la page, ne reçoit plus rien. Correctif limité à l'oubli. Si le test ne confirme pas la réserve, rien n'est
+    changé. » Issue : ni les tests ni la revue de sécurité ne confirment la réserve ; l'oubli n'est pas modifié.
+  - « Pendant « Sortir » en attente de la réponse du Mac, que fait le bouton Avant d'une image privée encore affichée
+    (carte du dessus ou visionneuse) ? » → « Masqué (Recommandé) » : « Le bouton disparaît dès l'appui sur « Sortir » ;
+    l'image d'entrée privée n'est plus demandée. S'il y a refus de la sortie, il revient avec le nouveau dessin de la
+    pile ou de la visionneuse. »
+- **Visuel du bouton Avant** (28/10/2026), réponse par bouton : « Quel visuel pour le bouton Avant ? » (planche du
+  groupe B : a plaque, icône et « Avant » ; b carré, icône seule ; c tampon pixel « Avant ») → « Garder a
+  (plaque) » : « Je garde le visuel a (plaque, icône et « Avant ») : retire les variantes b et c du CSS. »
+- **Groupe C, touche répétée sur ✓ et ✕** (28/10/2026), réponse par bouton : « Jeter au clavier par un bouton qui a
+  le focus : après un clic sur ✕ (ou sur Jeter dans la visionneuse), le bouton garde le focus. Entrée maintenue le
+  réactive à chaque répétition du système : une image jetée, puis la suivante dès qu'elle est affichée, et ainsi de
+  suite (la pile se vide en passant par le bandeau, chaque Jeter validant le précédent). Espace sur ce bouton fait de
+  même au relâché. C'est le comportement d'avant le lot, que la spec ne traite pas. Que faire ? » → « Bloquer la
+  répétition (Recommandé) » : « Comme pour ←, une touche répétée par le système (repeat) n'active jamais ✓, ✕, ni
+  Garder et Jeter de la visionneuse : Entrée maintenue ne jette qu'une image. Un appui volontaire d'Entrée sur ✕ marche
+  toujours. Espace, sur la pile et dans la visionneuse, ne réactive jamais un bouton (ticket 2, preventDefault). »
+- **Groupe C, flèches seules et carte visible** (28/10/2026), réponse par bouton : « J'ai restreint quand ← et →
+  trient, au-delà de la spec : (1) seulement appuyées seules, sans Ctrl, ⌘, Alt ni Maj (⌘ + ← et Alt + ← sont la page
+  précédente du navigateur : sinon elles jetteraient ET quitteraient la page) ; (2) rien quand le focus est dans
+  n'importe quel champ (curseur de taille du pinceau compris, où ← → changent la valeur), pas seulement les champs de
+  texte ; (3) rien si la carte du dessus n'est pas affichée (pile masquée pendant Dessiner sous 1024 px). Je garde ces
+  trois restrictions ? » → « Garder les trois (Recommandé) » : « Les flèches ne trient que seules, hors de tout champ,
+  et seulement une carte visible : on ne jette jamais une image qu'on ne voit pas ni en voulant faire autre chose. »
+- **Groupe C, Espace sur un bouton qui a le focus** (28/10/2026), réponse par bouton : « Le choix laissé par le groupe
+  C : Espace n'active plus aucun bouton qui a le focus (Annuler et Révéler compris). On le garde ? » → « Garder
+  (Recommandé) » : « Espace ne sert qu'à comparer avec l'image d'avant ; Annuler et Révéler restent accessibles par
+  Entrée, Z ou un clic. »
+- **Groupe « durcissement »** (28/10/2026), réponses par bouton :
+  - « Le découpage du durcissement (6 tickets, groupes D puis E) te va ? » → « Oui, tel quel (Recommandé) » : « Je
+    crée les 6 tickets dans Asana sous la tâche mère, avec leurs blocages, puis je les mets au tableau de bord en deux
+    groupes. »
+  - « Pour E3, que faire d'une carte dont l'image n'est pas encore à l'écran ? » → « Aucun tri tant qu'elle n'est pas
+    affichée (Recommandé) » : « Ni ✓, ni ✕, ni ← → ne la trient tant que son image n'est pas posée. Les 3 s ne servent
+    plus qu'aux cartes d'échec. Invariant : aucun geste ne jette une image qui n'est pas affichée. »
+  - « Pour E2, pendant « Sortir », une carte privée : » → « Ne bouge pas (Recommandé) » : « ✓, ✕ et les flèches ne
+    font rien sur une carte privée pendant « Sortir » : elle reste à l'écran jusqu'à la fin de la sortie, sans tri.
+    Invariant : aucune image privée n'est triée ni ne quitte l'écran sans tri. »
+- **Groupe D, vignette non chargée et `page.close` dans l'espace privé** (28/10/2026), réponses par bouton dans la
+  session du groupe :
+  - « Ticket « Pilote : fermer l'onglet, pile.test.mjs indépendant » (zone confidentialité). Le test « pendant
+    « Sortir » » de pile.test.mjs suppose une vignette privée des Tirages pas encore chargée. J'ai vérifié pourquoi il
+    échoue seul : sa prémisse ne tenait que parce que la page de test était en arrière-plan (onglets laissés ouverts) ;
+    au premier plan, Chrome sert la vignette depuis son cache (même adresse que la grille vient d'afficher), elle est
+    donc déjà « chargée ». Comment le test doit-il préparer lui-même sa vignette non chargée ? » → « Adresse jamais
+    servie (Recommandé) » : « Le test crée son propre tirage privé, puis pose une vignette différée (loading=lazy,
+    Tirages cachés) sur la même route privée /api/private/thumb, avec un paramètre en plus (&zq=lazy) que la page n'a
+    jamais chargé. La garde vérifiée (« Sortir » retire l'adresse des vignettes privées pas encore chargées) et les
+    deux contrôles d'étanchéité (aucune requête privée, aucune adresse privée posée pendant la sortie) restent
+    identiques. Essayé : passe seul. Je ferai aussi la preuve rouge (garde neutralisée → le test échoue). » Écartées :
+    « Requête retenue », « Cache coupé ».
+  - « Ticket 1 (pilote, zone confidentialité), constat de la passe « bogues » : maintenant que page.close ferme
+    vraiment l'onglet, la page fermée fait son « pagehide » ; si elle voit l'espace privé ouvert (même cookie que la
+    page principale), elle verrouille l'espace sur le Mac. C'est le vrai comportement d'un onglet fermé, et aucun test
+    actuel ne ferme une page dans l'espace. Mais un futur test pourrait le faire sans attendre l'espace au repos
+    (requêtes privées en route → 403 sous charge), ce que la règle mécanique « privateIdle avant de fermer l'espace »
+    ne repère pas. Que faire ? » → « Attente dans page.close (Recommandé) » : « page.close attend lui-même l'espace
+    privé au repos (page.privateIdle) avant de fermer un onglet qui est dans l'espace ; la fermeture verrouille
+    toujours l'espace, comme un vrai onglet fermé, mais jamais avec une requête privée en route. Commentaire du pilote
+    à jour. » Écartées : « Documenter seulement », « Règle mécanique ».
+- **Groupe E, durcissement de la pile** (28/10/2026), réponses par bouton dans la session du groupe :
+  - « E3 (ne jamais jeter une image non affichée) : une carte de la pile dont seule la miniature (320 px) est posée,
+    l'image complète encore en chargement, compte-t-elle comme « affichée » (✓, ✕, ← → et balayage la trient) ? » →
+    « Oui, miniature = affichée (Recommandé) » : « C'est ce que l'œil voit déjà sur la carte, et ce que le verrou entre
+    deux tris mesure aujourd'hui. Seule une carte sans rien d'affiché (ni miniature ni image) ne se trie pas. »
+  - « E3 : une image de la pile que le navigateur n'arrive pas à lire (fichier abîmé, ou effacé par un autre
+    appareil : la carte montre son texte mais une image vide/cassée) peut-elle être triée ? » → « Oui, une fois
+    l'échec constaté (Recommandé) » : « Quand le chargement est fini et a échoué, la carte (texte, réglages) devient
+    triable : ✓, ✕ (toujours avec le bandeau Annuler de 5 s). Sinon une image abîmée bloquerait la pile pour toujours.
+    Une image encore en chargement, elle, ne se trie jamais. »
+  - « E2 (carte privée immobile pendant « Sortir ») : quels gestes bloquer pendant l'attente de la réponse du Mac ? »
+    → « Tout tri, visionneuse comprise (Recommandé) » : « ✓, ✕, ← →, balayage (la carte revient en place) et
+    Garder/Jeter de la visionneuse ne font rien sur une image privée : la visionneuse ne passe pas non plus à l'image
+    suivante. Une carte d'échec privée reste aussi immobile (rien ne bouge pendant Sortir). »
+  - « E2 : une carte privée déjà en train de partir (envol de 0,2 s lancé par ✓ ou ✕) quand on appuie sur
+    « Sortir » : aujourd'hui elle quitte l'écran sans être triée. Que faire ? » → « Elle revient sur la pile
+    (Recommandé) » : « L'envol s'annule : la carte reprend sa place avec son image, sans tri, et y reste jusqu'à la fin
+    de la sortie. Respecte l'invariant « aucune image privée ne quitte l'écran sans tri ». »
+  - « E3, image illisible : la passe « bogues » note qu'une coupure réseau passagère (Tailscale qui décroche une
+    seconde) ressemble, pour la page, à une image abîmée. Aujourd'hui la carte fait déjà deux essais (chargement à
+    part, puis l'image elle-même) ; si les deux échouent, elle devient triable alors que l'image est peut-être saine.
+    Que faire ? » → « Garder tel quel (Recommandé) » : « Deux essais suffisent : après leur échec, la carte (texte,
+    réglages) se trie, Jeter passe toujours par le bandeau Annuler de 5 s. Rien de plus à coder. »
+- **Second groupe « durcissement »** (28/10/2026), réponses par bouton :
+  - « Le découpage (6 tickets, groupes F et G) te va ? » → « Oui, tel quel (Recommandé) » : « Je crée les 6 tickets
+    dans Asana sous la tâche mère, avec leurs blocages, et je les mets au tableau de bord en deux groupes. »
+  - « F3 : pendant que l'image d'avant est affichée (Avant tenu ou Espace), que font ✓, ✕, ← →, le balayage et
+    Garder/Jeter de la visionneuse ? » → « Rien (Recommandé) » : « Aucun tri tant que l'image d'avant est à l'écran ;
+    il suffit de relâcher pour trier. Invariant : aucun geste ne jette une image qui n'est pas affichée. »
+  - « F4 : une carte du dessus remplacée sans tri (nouvelle image, tri sur un autre appareil) : » → « Verrou court
+    (Recommandé) » : « Comme entre deux tris : 300 ms après l'affichage de la nouvelle carte, pendant lesquelles ✓, ✕
+    et ← → ne font rien. Un ✕ visé sur l'ancienne ne jette pas la nouvelle. »
+  - « Dans quel ordre faire les deux groupes ? » → « F puis G (Recommandé) » : « D'abord les défauts visibles (F3
+    contredit ton invariant), puis le ménage des tests. »
+- **Groupe F, Relancer et Révéler pendant « Sortir »** (28/10/2026), réponse par bouton, question posée par la session
+  du groupe : « Groupe F, ticket F2 : pendant « Sortir » (réponse du Mac attendue), que font « Relancer » de la
+  visionneuse ouverte sur une image privée et « Révéler » sur une demande privée ? (la session n'a trouvé aucune garde
+  sur « Révéler », à confirmer par un test) » → « Rien (Recommandé) » : « Comme la carte d'échec : « Relancer » de la
+  visionneuse ne fait rien (elle reste ouverte, sans message), et « Révéler » ne part pas si le test confirme qu'il
+  partait (la saisie reste telle quelle, effacée ensuite par la sortie). Aucune demande privée vers une session qui se
+  ferme. »
+- **Groupe F, aperçus privés détachés** (28/10/2026), réponse par bouton, question posée par la session du groupe :
+  « Groupe F, ticket F1 : on vide aussi les aperçus d'une génération privée (/api/job/<id>/preview) qui restent en
+  mémoire de la page, détachés, après « Sortir » ? Rien n'en est visible à l'écran : un aperçu arrivé trop tard, et
+  celui que montrait la mosaïque de la carte en cours. » → « Oui, étendre F1 (Recommandé) » : « Ces deux cas sont vidés
+  aussi (l'aperçu non montré passe par le même outil que les autres images préchargées, et clearReveal vide l'image
+  qu'il lâche) ; le test d'étanchéité vérifie aussi les adresses /api/job/ d'une génération privée. Même défaut, même
+  outil, risque faible. »
+- **Groupe F, passe « bogues » de F2** (28/10/2026), réponses par bouton, questions posées par la session du groupe :
+  - « F2, Q1 : un Jeter privé attend la fin de son bandeau quand on appuie sur « Sortir ». Il est abandonné (l'image
+    reste sur le Mac). Pendant l'attente de la réponse du Mac, que devient la carte ? » → « Elle revient tout de suite
+    (Recommandé) » : « Le Jeter est annulé juste avant que les images privées soient refusées ; la carte revient sur
+    la pile avec son image (depuis la mémoire de la page ; dans le cas rare où elle n'y est plus, carte vide jusqu'à la
+    réponse). Comme « Annuler » : l'œil voit que rien n'a été jeté. »
+  - « F2, Q2 : pendant « Sortir », la visionneuse peut rester ouverte sur une image privée ; Éditer, Dessiner,
+    Reprendre et Supprimer y envoient encore des requêtes privées (Supprimer, confirmé, peut supprimer l'image). Que
+    faire ? » → « Dans F2 : tout bloqué (Recommandé) » : « Toutes les actions de la visionneuse ne font rien pendant
+    « Sortir », comme Relancer (elle reste ouverte, sans message), et Supprimer revérifie « Sortir » après sa
+    confirmation. »
+  - « F2, Q3 : une génération privée en échec dont la réponse arrive pendant « Sortir » redessine la pile, et les
+    cartes restent vides jusqu'à la réponse du Mac. Que faire ? » → « Dans F2 : aucun redessin (Recommandé) » : « La
+    pile n'est plus redessinée du tout pendant « Sortir » ; elle l'est au refus ou à la sortie, comme aujourd'hui.
+    Couvre ce cas et tout autre chemin du même genre. »
+- **Groupe F, image d'avant pendant l'envol** (28/10/2026), réponse par bouton, question posée par la session du
+  groupe : « F3 : on appuie sur ← ou ✕ alors que l'image produite est visible, puis on tient Avant (ou Espace) pendant
+  l'envol de 0,22 s : la carte qui s'envole montre l'image d'avant, et c'est l'image produite qui est jetée (bandeau
+  Annuler de 5 s). La règle « aucun geste ne jette une image qui n'est pas affichée » vaut-elle au moment du geste ou
+  jusqu'au départ de la carte ? » → « Au moment du geste (Recommandé) » : « On ne change rien : l'image produite était
+  à l'écran quand on a appuyé sur ←, et le bandeau Annuler reste là. Le geste visait une image vue, et le cas tient en
+  0,22 s. »
+- **Groupe F, portée du verrou court** (28/10/2026), réponse par bouton, question posée par la session du groupe :
+  « F4 : le verrou court (0,3 s après l'affichage) s'applique à toute carte qui arrive sur le dessus sans tri sur cet
+  appareil, donc aussi l'image remise par « Annuler », une carte d'échec qui arrive en tête et la première carte vue à
+  l'ouverture ou au changement d'espace (la pile seulement, pas la visionneuse). On garde cette portée ? » → « Toute
+  carte (Recommandé) » : « Toute carte qui arrive sur le dessus doit être vue 0,3 s avant qu'un geste la trie, quelle
+  que soit la raison de son arrivée. Sans exception à retenir ; seul coût : un ✕ ignoré dans les 0,3 s qui suivent
+  Annuler. »
+- **Groupe F, verrou court et page en arrière-plan** (28/10/2026), réponse par bouton, question posée par la session
+  du groupe : « F4 : quand l'application est en arrière-plan (autre appli, téléphone verrouillé, autre onglet), les
+  0,3 s du verrou s'écoulent quand même : un ✕ tapé dans les 0,3 s qui suivent le retour peut jeter une image arrivée
+  entre-temps, jamais vue. La règle (page cachée) fait échouer des tests tant que le pilote laisse parfois la page de
+  test « cachée ». Que faire ? » → « Plus tard (Recommandé) » : « F4 part sans cette règle ; la limite et le travail
+  sur le pilote vont au compte rendu, pour un durcissement (le groupe G touche déjà le pilote). Il faut un ✕ dans les
+  0,3 s qui suivent le retour dans l'appli. »
+- **Groupe F, verrou court dans la visionneuse** (28/10/2026), réponse par bouton, question posée par la session du
+  groupe : « F4 : dans la visionneuse, une image de la pile qu'on vient d'ouvrir en grand, ou vers laquelle on vient
+  de passer par ← →, n'a pas le verrou de 0,3 s (seule l'image qui suit un tri l'a). Exemple : ✕ sur la pile, on
+  ouvre aussitôt la carte suivante en grand, puis Jeter : elle part après moins de 0,3 s à l'écran. Que faire ? » →
+  « Toute image vue 0,3 s (Recommandé) » : « Toute image de la pile montrée dans la visionneuse (ouverture, passage
+  par ← →, après un tri) doit y être vue 0,3 s avant que Garder ou Jeter la trie. Seul coût : Garder ou Jeter ignoré
+  dans les 0,3 s qui suivent l'ouverture ou un pas. »
+- **Retour du groupe F** (29/10/2026), réponses par bouton :
+  - « C3 (revue de sécurité du groupe F, code du groupe B) : dans la visionneuse des Tirages, « Supprimer » marche
+    pendant que l'image d'avant est tenue (Espace ou un doigt sur Avant) ; après confirmation, l'image est supprimée
+    sans être à l'écran (pour une image privée, la confirmation ne la nomme pas). Que faire ? » → « Refuser pendant
+    l'appui (Recommandé) » : « « Supprimer » ne fait rien tant que l'image d'avant est tenue, comme Garder et Jeter
+    (F3). Relâcher suffit. »
+  - « La session propose d'ajouter au CLAUDE.md, piège « Interface », deux règles du groupe F : pendant « Sortir »
+    (exiting()), rien ne bouge (toute action le vérifie, launch refuse une demande privée, la pile n'est pas
+    redessinée) ; aucune image de la pile ne se trie avant d'avoir été vue 0,3 s (topHeld, sortHeld, onScreen). On
+    l'ajoute ? » → « Oui, l'ajouter (Recommandé) » : « Ce sont deux invariants que toute future modification de
+    l'interface doit respecter ; je l'ajoute à la puce « Interface » des pièges. »
+- **Groupe G, verrou et page en arrière-plan** (29/10/2026), réponse par bouton : « Pendant F4, tu as renvoyé à plus
+  tard la règle « le verrou de 0,3 s ne compte pas quand la page est en arrière-plan », faute d'un pilote fiable (des
+  pages de test restent « cachées » dans Chrome sans écran). Le groupe G touche déjà le pilote. On l'y ajoute ? » →
+  « Oui, ticket G3 (Recommandé) » : « Un 3e ticket, sensible (suppression) : rendre le premier plan fiable dans le
+  pilote (ouverture de chaque page, cause dans clavier.test.mjs), puis le verrou ne compte que page visible. Invariant
+  d'E3. Je crée le ticket dans Asana avant de lancer. »
+- **Groupe G, carte déjà vue au retour dans l'appli** (29/10/2026), réponse par bouton, question posée par la session
+  du groupe : « G3 : une carte du dessus (ou l'image de la visionneuse) déjà vue 0,3 s avant que la page passe en
+  arrière-plan, au retour, se trie-t-elle tout de suite ? » → « Oui, tout de suite (Recommandé) » : « Seule une image
+  pas encore vue 0,3 s page visible attend ; celle qu'on avait déjà vue n'a pas changé, c'est la même carte à l'écran
+  au retour. Le ticket ne demande que ça. »
+- **Retour du groupe G** (29/10/2026), réponses par bouton :
+  - « G3 : le verrou court repart de zéro aussi après un relevé manqué de plus de 0,3 s (appli gelée par iOS ou
+    Android, retour par le cache du navigateur, ou page visible dont le fil a été bloqué plus de 0,3 s). Déjà codé et
+    testé. On garde ? » → « Garder (Recommandé) » : « Le temps où personne n'a pu regarder ne compte jamais. Coût : un
+    ✕ de plus ignoré après un gel. Test « page gelée » de pile.test.mjs. »
+  - « Le bandeau Annuler d'un Jeter (5 s) continue de s'écouler page cachée : un ✕ tapé juste avant de verrouiller le
+    téléphone part sans que le bandeau ait été visible au retour (l'image était à l'écran au geste : l'invariant
+    tient). Que faire ? » → « Piste de durcissement (Recommandé) » : « Noté pour un prochain durcissement (le bandeau
+    ne s'écoulerait que page visible), rien dans ce parcours. »
+  - « La session propose de préciser la règle du verrou dans le piège « Interface » du CLAUDE.md : « vue 0,3 s page
+    visible (onScreen exige !document.hidden ; afterSeen repart de zéro au visibilitychange et après un relevé
+    manqué) ; une image déjà vue avant que la page passe en arrière-plan se trie dès le retour ». On remplace ? » →
+    « Oui, remplacer (Recommandé) » : « La règle du CLAUDE.md suit le code de G3. »
+- **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
+  photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
+  le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
+
 ## 2026-10-26 · Aperçu disparu : 204 au lieu de 404 ; textes des pistes de la rétro acceptés
 
 - **Contexte** : compte rendu de la session des pistes de la rétro (R1 à R22) ; une piste en attente (R3, cause du

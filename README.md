@@ -262,11 +262,17 @@ raccourci `Chambre noire.command` entre alors dans l'interface déjà lancée pa
 
 ## Utilisation
 
-L'interface a deux onglets aux icônes en pixels, dans la barre du bas : **Labo** (en haut, la pile des images à trier et
+L'interface a deux onglets aux icônes en pixels, dans la barre du bas (dans la barre du haut, centrés, à partir de
+1024 px de large) : **Labo** (en haut, la pile des images à trier et
 la génération en cours, la file d'attente dans une feuille ; en bas, le champ de création, replié quand la pile a des
 images : texte → image, édition avec des images d'entrée, ou dessin guidé sur une image) et **Tirages** (les images
-gardées) ; elle s'ouvre sur le Labo. Sur un grand écran, le Labo est une colonne centrée et les Tirages prennent toute
-la largeur. Sur un écran tactile, glisser le doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le
+gardées) ; elle s'ouvre sur le Labo. Sur une tablette en hauteur (de 700 à 1023 px de large), le Labo est une seule
+colonne élargie (environ 760 px). À partir de 1024 px (PC, tablette en largeur), il passe en deux colonnes : à gauche,
+la pile et la génération en cours, l'image de la carte du dessus à la hauteur de l'écran ; à droite, le champ de
+création, toujours déplié. Les Tirages prennent toute la largeur, et la visionneuse met son panneau en colonne à
+droite de l'image à partir de 1024 px. La disposition suit la largeur de la fenêtre, pas
+l'appareil : une fenêtre redimensionnée passe de l'une à l'autre sans recharger ni perdre la saisie. Sur un écran
+tactile, glisser le doigt vers la gauche ou la droite passe à l'onglet voisin (sauf sur le
 champ de création déplié, sur la carte en cours et sur la pile, dont les cartes se balaient). Elle s'adapte au téléphone
 comme à l'ordinateur, toujours sombre, même quand le système est en mode clair :
 lumière inactinique de chambre noire (noir chaud, halo rouge de la lampe, grain léger, textes couleur papier, accent
@@ -353,10 +359,26 @@ une fois lâchée au-delà du tiers de sa largeur ou après un geste vif ; en de
 l'image n'est effacée du Mac (image, vignette, images d'entrée, dossier de travail, ligne du journal) qu'à la fin du
 bandeau. Fermer ou recharger la page pendant ce temps la laisse dans la pile ; jeter une autre image envoie tout de
 suite l'effacement de la précédente (un seul bandeau à la fois). Après un tri, ✓, ✕ et les boutons de la visionneuse
-ignorent un nouvel appui tant que l'image suivante n'est pas affichée (0,3 s au moins) : un double appui ne trie jamais
-une image qu'on n'a pas vue. Dans l'espace privé, un Jeter en attente est abandonné dès l'appui sur « Sortir » : l'image
-reste dans la pile privée, même si la sortie échoue. Si un
-autre appareil a déjà trié l'image, Garder (**✓** ou
+ignorent un nouvel appui tant que l'image suivante n'est pas affichée depuis 0,3 s : un double appui ne trie jamais
+une image qu'on n'a pas vue. De même, une carte arrivée sur le dessus sans tri sur cet appareil (nouvelle image, tri
+fait sur un autre appareil, image remise par Annuler) ne se trie par ✓, ✕, les flèches ou le balayage que 0,3 s après
+qu'on a pu la voir (application au premier plan, Labo affiché, sans visionneuse, panneau ni Dessiner par-dessus) : un ✕
+visé sur l'ancienne ne jette pas la nouvelle, même arrivée pendant que la visionneuse la couvrait ou que l'application
+était en arrière-plan (autre application, téléphone verrouillé, autre onglet : les 0,3 s ne comptent qu'au retour ;
+une carte déjà vue avant de partir se trie tout de suite). Dans la visionneuse, toute image de la pile attend de même
+0,3 s après son affichage avant que Garder ou Jeter la trie : à l'ouverture, après un pas (← →) ou un tri. Plus
+généralement, aucun geste (bouton, touche, balayage, visionneuse) ne trie une image
+dont ni la miniature ni l'image n'est encore à l'écran ; une image que le navigateur n'arrive pas à lire se trie une
+fois son chargement fini en échec, pour ne pas bloquer la pile. Dans l'espace privé, un Jeter en attente est abandonné
+dès l'appui sur « Sortir » : l'image
+reste dans la pile privée, même si la sortie échoue, et revient tout de suite sur la pile avec son image, comme avec
+**Annuler**. Tant que le Mac n'a pas répondu à « Sortir », rien ne bouge : ✓, ✕, les flèches, le balayage (la carte
+revient), **Relancer** (carte d'échec) et **Révéler** ne font rien, ni aucune action de la visionneuse restée ouverte
+(Garder, Jeter, **Éditer**, **Dessiner**, **Reprendre**, **Relancer**, **Supprimer** confirmé pendant l'attente,
+Partager,
+Copier, Télécharger) ; une carte qui partait revient sur la pile, et la pile n'est pas redessinée (ses images privées
+ne sont plus demandées). Une carte qui partait quand le Mac ferme l'espace de lui-même ne part pas non plus. Si un autre
+appareil a déjà trié l'image, Garder (**✓** ou
 balayage à droite) dit « Déjà triée » et la carte s'en va (un Jeter n'a rien à effacer). Un appui sur l'image l'ouvre en
 grand dans la visionneuse, qui parcourt la pile :
 **Garder** et **Jeter** y remplacent **Supprimer**, puis elle passe à l'image suivante ; **Télécharger**, **Partager**,
@@ -372,6 +394,20 @@ ouvert) ; rien pour une génération annulée. Partager et
 Copier ne sont proposés que là où le navigateur les permet : sur l'ordinateur lui-même, ou sur le téléphone par
 l'adresse HTTPS de Tailscale (pas par l'adresse `http://` du Wi-Fi).
 
+Au clavier (PC) : **→** garde et **←** jette l'image du dessus de la pile, exactement comme ✓ et ✕ (même bandeau
+Annuler, un Jeter suivant envoie le précédent, même attente de l'image suivante affichée) ; **Z** ou **Ctrl/⌘ + Z**
+annule le Jeter tant que le bandeau est là. Dans le champ, **Ctrl/⌘ + Entrée** revient à appuyer sur **Révéler**. La
+visionneuse garde ← et → pour l'image précédente ou suivante, et Échap pour se fermer (Garder et Jeter y restent sur
+leurs boutons). **Espace** maintenue compare avec la photo d'origine (bouton **Avant**, plus bas). Aucun raccourci
+ne réagit pendant qu'on tape un texte (sauf Ctrl/⌘ + Entrée dans le champ), quand un
+panneau ou la visionneuse est ouvert (Ctrl/⌘ + Entrée compris ; dans la visionneuse, Espace compare toujours), ni sur
+une carte d'échec ; sur la pile, les flèches
+ne servent qu'appuyées seules (⌘ + ← et Alt + ← restent la page précédente du navigateur). Règle : aucune touche ne
+supprime un tirage ; au clavier, Jeter
+passe toujours par le bandeau Annuler, comme au doigt ; une touche maintenue ou répétée ne jette jamais plus d'une
+image avant que la suivante soit affichée (une touche répétée par le système ne trie rien, pas même Entrée sur ✓, ✕
+ou Garder et Jeter de la visionneuse quand ils ont le focus).
+
 ### Créer une image (Labo)
 
 Sous la pile et la génération en cours, le Labo a un seul champ de texte et une seule liste d'**images d'entrée**.
@@ -380,14 +416,18 @@ Sans image d'entrée, la génération part du texte : écrire la description, aj
 **édition** (voir plus bas). L'exemple affiché dans le champ vide suit la saisie : décrire l'image sans image
 d'entrée, dire quoi changer avec des images.
 
-Le champ de création est en bas du Labo. Quand la pile a des images ou qu'une génération est en cours, il est replié
+Le champ de création est en bas du Labo (à droite à partir de 1024 px de large, où il reste toujours déplié : ce qui
+suit vaut en dessous). Quand la pile a des images ou qu'une génération est en cours, il est replié
 en une ligne « Décrire une image… » (avec le nombre d'images d'entrée), tenue au-dessus de la barre d'onglets, sans
 jamais cacher ✓ et ✕ ; un toucher la déplie, et une image glissée dessus (sur ordinateur) la déplie et rejoint les
 images d'entrée. Il se déplie de lui-même quand il n'y a plus rien à trier ni en cours ; tant qu'on n'y a pas touché,
 il se replie de lui-même dès que le Labo a de nouveau quelque chose (une carte revenue par « Annuler », une image d'un
 autre appareil). Une fois touché, il ne se replie qu'après **Révéler**, en glissant sa poignée vers le bas (ou en la
 touchant) ou en touchant la pile (la visionneuse s'ouvre aussi si l'on a touché l'image) ; replier ne perd rien de la
-saisie. Pendant le dessin, il prend toute la hauteur du Labo et la pile s'efface.
+saisie. Pendant le dessin, il prend toute la hauteur du Labo et la pile s'efface (à partir de 1024 px, il garde sa
+colonne et la pile reste à gauche). À partir de 1024 px, une ou plusieurs images déposées n'importe où sur la colonne
+du champ rejoignent les images d'entrée ; le champ est encadré pendant le survol. Un fichier lâché ailleurs (sur la
+pile, par exemple) est ignoré : la page reste sur l'interface au lieu de l'ouvrir.
 
 Pour obtenir plusieurs propositions du même prompt, choisir 2, 3 ou 4 **Images** dans les Réglages (la case Images de
 la grille le rappelle sous le texte ; le choix est retenu). Une seule demande lance alors un **lot de variantes** : une
@@ -452,7 +492,8 @@ le modèle à redessiner l'original.
 ### Tirages
 
 L'onglet **Tirages** montre toutes les images de `outputs\`, la plus récente d'abord : trois colonnes sur le
-téléphone, davantage sur un grand écran. Il se met à jour seul, sans bouton Rafraîchir : une image gardée ou un tirage
+téléphone, davantage sur un grand écran (vignettes d'environ 220 px à partir de 1024 px de large). Il se met à jour
+seul, sans bouton Rafraîchir : une image gardée ou un tirage
 supprimé, ici ou sur un autre appareil, y apparaît ou en disparaît à la vérification suivante de l'état du Mac (toutes
 les 2 à 5 secondes). Vide, il montre le logo, « Aucun tirage pour l'instant » et un bouton **Aller au Labo**. Un appui
 sur une miniature l'ouvre en plein écran avec ses réglages (date, usage, taille, étapes, modèle, durée, et la graine
@@ -460,7 +501,8 @@ quand elle est connue). Glisser sur le côté passe à l'image voisine (flèches
 le bas ferme, un appui sur l'image masque les commandes. Pour zoomer (jusqu'à ×6), pincer l'image : elle passe
 au-dessus de tout, peut couvrir tout l'écran, suit les doigts, et revient à sa taille dès qu'on les relâche. Sur
 ordinateur, la molette zoome, glisser déplace l'image et un clic la remet à sa taille. En haut à droite :
-**Partager**, **Copier** et **Télécharger** ; en bas : **Éditer** (ajoute l'image aux images d'entrée du Labo),
+**Partager**, **Copier** et **Télécharger** ; en bas (à droite de l'image, en colonne qui défile si elle est longue, à
+partir de 1024 px) : **Éditer** (ajoute l'image aux images d'entrée du Labo),
 **Dessiner**, **Reprendre**, **Relancer** et **Supprimer** (définitif, après confirmation : images d'entrée, dossier
 de travail et ligne du journal des générations compris). Le champ de création n'est pas sur les Tirages.
 
@@ -501,6 +543,26 @@ gauche ou à droite pour passer de l'une à l'autre, vers le bas pour fermer. Ch
 par **Éditer** (images d'entrée du Labo) ou **Dessiner** pour repartir d'elle. Les images d'entrée sont conservées
 depuis le 13/10/2026 ; pour les images plus anciennes, elles ont été récupérées tant que leur dossier de travail
 existait encore (les 20 derniers).
+
+Pour comparer une édition à sa photo, le bouton **Avant**, en bas à droite de l'image, dans la visionneuse et sur la
+carte du dessus de la pile : tant qu'on le maintient (au doigt ou à la souris), l'image d'entrée remplace l'image
+produite dans exactement le même cadre, d'un coup, avec l'étiquette « Avant » ; l'image produite revient au relâché,
+même si le doigt a glissé hors du bouton, quand la fenêtre perd le focus ou quand on passe à une autre image. Il
+n'apparaît que sur une image comparable : une édition à une seule image d'entrée (chaque image d'un lot de variantes
+sur une photo, et chaque image d'une campagne avec sa propre photo, comprises) ou un dessin avec masque, comparé à la
+photo non peinte ; ni sur une génération sans image d'entrée, ni sur une édition à plusieurs images d'entrée, ni sur
+une annotation (seule la photo peinte en rouge est gardée). La photo est étirée dans le cadre quand les formes ne
+diffèrent que d'un arrondi (2 % au plus, comme au format « Image »), sinon montrée entière et centrée (une sortie en
+1:1 depuis une photo en 16:9). Dans la visionneuse, elle suit le zoom : molette et glisser sur ordinateur, ou pincer
+avec deux autres doigts pendant qu'un doigt tient Avant. Elle est chargée en avance dès que l'image est affichée ;
+sinon sa miniature vient d'abord. Sur ordinateur, maintenir **Espace** fait la même chose que maintenir le bouton,
+dans la visionneuse ou sur la carte du dessus de la pile (rien sur une image non comparable, pendant qu'on tape un
+texte ou avec un panneau ouvert) ; là, Espace ne fait pas défiler la page et n'active aucun bouton qui a le focus
+(Entrée, oui). Le bouton de la carte ne trie rien et n'ouvre pas la visionneuse. Tant que l'image d'avant est à
+l'écran (bouton ou Espace tenus), rien ne trie l'image produite, qu'on ne voit pas : ✓, ✕, ← →, le balayage (la carte
+revient), Garder ou Jeter de la visionneuse et **Supprimer** (visionneuse des Tirages) ne font rien ; il suffit de
+relâcher pour trier ou supprimer. Le bouton
+Avant marche aussi dans l'espace privé (voir « Espace privé »).
 
 ### Prompts enregistrés
 
@@ -588,6 +650,11 @@ images sont enregistrées. Pour la confidentialité, passez par l'espace privé.
   Tirages.
 - Les **Tirages** de l'espace privé ne montrent que les images privées, avec la même visionneuse : télécharger,
   partager, copier, images d'entrée, Éditer, Dessiner, Reprendre, Supprimer. En sortant, elles quittent l'écran.
+- Le bouton **Avant** marche sur les images privées comparables, comme dans l'espace public : la photo d'origine est
+  lue déchiffrée par la session privée et gardée seulement en mémoire de la page, jamais écrite sur le disque, dans
+  les journaux ni dans le navigateur. Il disparaît dès l'appui sur « Sortir » (il revient si la sortie échoue), et la
+  photo quitte la page avec les autres images privées, chargées en avance comprises, à la sortie, à la fermeture de
+  la page et au retour par « Retour ».
 - **Chaque espace a sa propre saisie** : texte, images d'entrée, dessin (actif ou non, masque ou annotation) et son
   tracé. En
   entrant dans l'espace privé, la saisie publique est mise de côté et la saisie privée revient (vide
@@ -1099,19 +1166,28 @@ confirmée, « Déjà terminée » pour une génération finie pendant la questi
 génération d'un autre appareil sans aperçu ou cachée, « +N en attente », rien qui dépasse à la largeur du téléphone), la
 pile (ordre, cartes de lot, ✓ et ✕, balayage au doigt et à la souris, bandeau Annuler et rien d'envoyé avant sa fin ni
 au rechargement, deux Jeter de suite, un second ✓ pendant le départ d'une carte, « Sortir » pendant le chargement d'une
-image privée, « Déjà triée », visionneuse, carte d'échec, pile privée, message « Image prête »), Garder et Jeter par nom
+image privée, rien de trié ni relancé pendant « Sortir », la carte qui partait revenue et la pile qui garde ses images,
+aucun tri d'une image pas encore affichée ni dans les 0,3 s qui suivent son affichage, carte arrivée d'ailleurs
+ou pendant que la page était cachée comprise, carte masquée par Dessiner jamais triée, image illisible triable, « Déjà
+triée », visionneuse, carte d'échec, pile privée, message « Image prête »), Garder et Jeter par nom
 après une relecture de la pile, la saisie (unique, dans le Labo, Dessiner, collage, campagne à partir de 2 images,
 plusieurs photos d'un coup, vidage après « Révéler », saisie propre à chaque espace), le champ de création (replié avec
 une pile, déplié pile vide, replié après « Révéler », par sa poignée ou un toucher sur la pile sans rien perdre de la
 saisie, déplié d'office puis replié quand la carte revient, touché il reste déplié, pas replié par la fin d'un balayage,
-replié dès le premier toucher après un balayage au doigt, image glissée sur la ligne, ✓ et ✕ jamais sous la ligne,
+replié dès le premier toucher après un balayage au doigt, image glissée sur la ligne, fichier lâché hors des zones
+de dépôt ignoré, ✓ et ✕ jamais sous la ligne,
 dessin en pleine hauteur, grille de réglages qui ouvre le panneau, rien qui dépasse), l'en-tête (lampe d'état et ses
 couleurs, son panneau avec « Ouvrir depuis le téléphone » sur l'ordinateur seulement et la ligne « Espace privé »,
 « Sortir », rien qui dépasse), le toucher d'une notification (service worker et page), la file cloisonnée par espace,
 les prompts enregistrés privés, la reprise d'une génération, le suivi d'une génération privée devenue inconnue (sans
 faux « Échec »), le brouillon unique (reprise des anciens, aucun brouillon privé dans le navigateur, ancien réglage
-incognito signalé une fois puis oublié) et le pilote lui-même (recherche de données restées dans la page, fichiers
-écrits par le banc, délais).
+incognito signalé une fois puis oublié), les raccourcis clavier du PC (→ et ← sur la pile, Z et Ctrl/⌘ + Z, touche
+tenue ou répétée qui ne jette qu'une image, carte d'échec, rien pendant une saisie, une feuille ou la visionneuse,
+aucune touche qui supprime un tirage, Ctrl/⌘ + Entrée dans le champ), le bouton Avant (images comparables, appui tenu
+et relâché, cadre, zoom, espace privé, aucun tri tant qu'il est tenu) et Espace maintenue (sans défilement ni bouton
+activé) et le pilote lui-même
+(recherche de données restées dans la page, fichiers écrits par le banc, délais, fermeture d'un onglet, qui attend
+d'abord l'espace privé au repos).
 
 Tests de bout en bout, interface lancée :
 

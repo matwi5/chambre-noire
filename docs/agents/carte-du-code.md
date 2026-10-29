@@ -147,6 +147,7 @@ dernier bloc, après le HTML.
 - **CSS** : sections « jetons » (lumière inactinique ; `html.priv` : lumière verte), « fond », « surfaces mates »
   (classe `mat`), « barre du haut », « barre d'onglets », « panneaux du bas », « compositeur » (champ replié, grille des
   réglages `setgrid`), « panneau Réglages », « images d'entrée (Labo) et Dessiner », « visionneuse plein écran »,
+  « bouton Avant » (cadre `.bfr`, bouton `.bbtn`),
   « carte en cours » (`runcard`, classe `behind` derrière une pile non vide), « pile du Labo » (cartes `pcard`,
   bandeau Annuler `undo`), « liste de la file (feuille de la file du Labo) » (cartes de la file), « prompts
   enregistrés », « espace privé », « messages et confirmations »,
@@ -163,9 +164,13 @@ dernier bloc, après le HTML.
   `#mask_mode`, interrupteur Campagne `#campSwitch`, champ unique `#prompt`, grille des réglages `#setGrid` (une case
   `data-set` par réglage, qui ouvre `#setSheet`), Prompts `#promptsBtn`, bouton « Révéler » `#go` (`#goLabel`,
   estimation `#goEta`) ; classe `drawing` quand le dessin est actif : le champ prend toute la hauteur, la pile
-  s'efface), `#pane-tirages` (Tirages, grille `#histGrid`) ; barre d'onglets `#tabbar` (icônes en pixels ;
-  onglet Labo : nombre `#runCount`, anneau `#runRing`) ; visionneuse `#viewer` (`#vSort` : Garder et Jeter une image de
-  la pile) ; bandeau Annuler `#undoBar` ; images d'entrée `#iv` ; feuilles `.sheet` : `#askSheet`, `#setSheet`,
+  s'efface, sauf à partir de 1024 px ; classe `dropping` pendant le survol d'un fichier), `#pane-tirages` (Tirages,
+  grille `#histGrid`) ; barre d'onglets `#tabbar` (icônes en pixels ;
+  onglet Labo : nombre `#runCount`, anneau `#runRing` ; en bas, dans la barre du haut à partir de 1024 px) ; visionneuse
+  `#viewer` (`#vSort` : Garder et Jeter une image de la pile ; cadre du bouton Avant `#vBefore` et son image
+  `#vBeforeImg`, sur l'image `#vImg` ; à partir de 1024 px, une grille : image à gauche,
+  panneau `.v-panel` en colonne à droite) ; bandeau Annuler `#undoBar` ; images d'entrée `#iv` ; feuilles `.sheet` :
+  `#askSheet`, `#setSheet`,
   `#engineSheet` (feuille de la lampe : état `#engineFacts`, « Ouvrir depuis le téléphone » `#phone` sur le Mac
   seulement, ligne « Espace privé » au cadenas `#privEntry`, journal `#log`), `#lotSheet`, la file `#fileSheet`
   (`#queueNote`, `#queueList`), `#promptSheet`, `#promptEditSheet` et
@@ -186,12 +191,18 @@ dernier bloc, après le HTML.
     version servie comprise : `fmtVersion`, `staleServer`) ; sur un 401 (code d'accès redemandé), `reauth` recharge
     une fois la page sur `/?reauth`, la page du code (`reauthing`, et l'adresse empêchent une boucle ; `dropReauth`
     retire `?reauth` par `history.replaceState` au premier état lu, pour qu'un 401 plus tard recharge de nouveau).
-  - « champ de création replié ou déplié » : `setComposer`, `openComposer`, `foldComposer`, `followLabIdle` (appelé
-    par `renderRunCard` : déplié d'office quand le Labo n'a plus rien à trier ni en cours ; replié quand il a de
+  - « champ de création replié ou déplié » : la règle du téléphone ci-dessous tient l'état voulu (`composerOpen`) ;
+    `applyComposer` le montre, sauf à partir de 1024 px (`WIDE`, deux colonnes) où le champ reste toujours déplié, et
+    le reprend quand la fenêtre repasse sous 1024 px. `setComposer`, `openComposer`, `foldComposer`, `followLabIdle`
+    (appelé par `renderRunCard` : déplié d'office quand le Labo n'a plus rien à trier ni en cours ; replié quand il a de
     nouveau quelque chose si on n'y a pas touché depuis, `autoOpen` ; `labIdle`, remis à `null` par `changedSpace`),
     `foldGesture` (poignée), toucher sur la pile (`.pilezone`, image comprise, hors ✓, ✕ et autres boutons), dépôt
-    d'une image sur le champ replié (`dragover`, `drop`) ; replié aussi après « Révéler » ; `showLabo('composer')` le
-    déplie. Hauteur de l'image de pile `--pimg-h` : ✓ et ✕ restent au-dessus de la ligne repliée.
+    d'une image sur le champ, replié compris (`dragover`, `drop` ; surbrillance `dropping`, dessinée à partir de
+    1024 px, où le champ est toute la colonne de droite ; un fichier lâché ailleurs est ignoré par les écouteurs
+    `dragover` et `drop` de la fenêtre, pour que le navigateur ne l'ouvre pas à la place de l'interface) ; replié aussi
+    après « Révéler » ; `showLabo('composer')` le déplie. Hauteur de l'image de pile `--pimg-h` : ✓ et ✕ restent
+    au-dessus de la ligne repliée ; à partir de 1024 px, la hauteur de la colonne de gauche (`--col-h`), section CSS
+    « grand écran ».
   - « images », « dessin » : `toEntry`, `addInputFiles` (choix, dépôt et collage, écouteur `paste` du Labo),
     `refuseWhileDrawing` (ajout refusé pendant le dessin, saisie affichée ou mise de côté), `noteInput` (saisie visée
     par un ajout, notée avant toute attente), `renderInputs` (images d'entrée de la saisie, `inputImages`, puis
@@ -210,14 +221,28 @@ dernier bloc, après le HTML.
     décodée à part (image du dessin, lue par `toEntry`), posée tout de suite sans passer par `ready` ; `fit`, `dims` :
     miniature des visionneuses à la taille de l'image complète, par `fitThumb`, en unités de la scène `cqw`, `cqh`),
     `preload` et `ready` (les 10 dernières images décodées : miniatures des voisines de la visionneuse, image complète
-    de la suivante dans le sens du parcours `vStep`, première image d'entrée),
-    `clearImage`, `abortPrivateLoads` (chargements privés en route abandonnés, aussi avant la fermeture de la session
+    de la suivante dans le sens du parcours `vStep`, première image d'entrée ; `refused` : adresse refusée, entrée
+    `gone`, pendant « Sortir » et, pour une adresse `/api/private/`, hors de l'espace privé ; `unready` : entrée
+    retirée de `ready`, évincée, illisible ou oubliée, son image vidée, à son arrivée si elle chargeait encore ; un
+    aperçu de la carte en cours quitte `ready` dès sa demande, voir `revealPreview`),
+    `clearImage`, `clearImages` (images d'un contenu vidées avant qu'il soit remplacé ou vidé : pile, Tirages, « Voir
+    le lot », file, miniatures d'entrée de la visionneuse et de la saisie ; une image détachée ne garde pas son adresse
+    privée jusqu'au ramasse-miettes), `abortPrivateLoads` (chargements privés en route abandonnés, aussi avant la
+    fermeture de la session
     par « Sortir », et ceux d'une génération finie avec un préfixe d'adresse : `secretLoads`, même évincés de `ready`,
     marqués `gone` : une image qui en attendait un, même détachée, ne reçoit rien), `forgetPrivateImages` (sortie de
     l'espace privé : images privées et aperçus affichés, attendus ou chargés en avance, chargements en cours
     abandonnés, et tout lien vers une route privée avec son nom `prive_…`). Ne
     jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
     de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
+  - « bouton Avant » : `beforeFile` (règle de l'image comparable, seule source : `edit` à une image d'entrée, `mask` →
+    `init.png`), `beforeShown` (bouton montré, image privée comprise, masqué sur une image privée pendant « Sortir » :
+    `leavingPrivate`), `reaimBefore` (cadres revisés : « Sortir » demandé ou refusé, dans `privLock`), `aimBefore`
+    (cadre visé sur une image : visionneuse dans `openViewer`,
+    carte du dessus dans `renderPile`, son entrée chargée en avance), `placeBefore` (cadre posé sur le contenu affiché
+    de l'image produite, étirée ou entière selon `BEFORE_STRETCH`), `holdBefore` et `dropBefore` (appui et relâché,
+    `beforeHeld`, `blur` de la fenêtre ; aussi Espace tenue, raccourcis du PC plus bas), `armBefore` (bouton
+    `BEFORE_KNOBS`, Pointer Events), `beforeSizes` (cadres recalés quand une taille change).
   - « générations de la page, carte en cours et file » : `pageJobs` (générations lancées par cette page), `ownIds` et
     `saveOwn` (`localStorage` `qwen-own`), `isActive`, `isCampaignLot`, `lotOf`, `progress` (étape, phase, temps
     restant d'une génération de la page), `pageItem` (image d'une génération finie de la page : vrai mode et images
@@ -232,7 +257,10 @@ dernier bloc, après le HTML.
     (génération révélée, couleurs des carrés lues par `cssRgb`, dernier aperçu ; `blankReveal`), `startReveal` et
     `drawNoise` (carrés au hasard avant le premier aperçu,
     allégés en `html.lite`, immobiles en `prefers-reduced-motion`), `revealPreview` (aperçu décodé par `preload`,
-    servi une fois) et `drawMosaic` (blocs de `REVEAL_COARSE` à `REVEAL_FINE` px selon step / total, sans lissage),
+    servi une fois : retiré de `ready` dès sa demande, rien ne l'évince ; pas montré, il passe par `unready`, et
+    l'aperçu que la mosaïque lâche, remplacé ou à
+    `clearReveal`, est vidé) et `drawMosaic` (blocs de `REVEAL_COARSE` à `REVEAL_FINE` px selon step / total, sans
+    lissage),
     `sizeReveal`, `redrawReveal`, `clearReveal`, `lite` (canevas vidé : fin, changement de génération, sortie de
     l'espace par `forgetPrivateImages`) ; `notifyDone` (message « Image prête »,
     « Lot prêt » hors du Labo, `toast(…, go)`), `renderQueue` (file de l'espace en cartes, feuille ouverte seulement :
@@ -257,19 +285,36 @@ dernier bloc, après le HTML.
     `pileRead` : l'état vide n'est montré qu'une fois la pile lue ; oublie les générations finies de la page dont
     l'image a quitté la pile, sauf pendant leur lot), `pileView` et `pileSize` (sans les images dont le tri est en
     cours, `sorting`, avec leur génération de la page `pageOf`), `pileFails` (échecs de la page, en tête),
-    `renderPile` (carte du dessus et deux devinées dessous : `pileCard`, `failCard`, chacune marquée par `pileTag` ;
-    état vide, compte, pastille de l'onglet ; redessinée seulement si elle change, `pileShown`), `topEntry` (ce que
-    montre la carte du dessus, retrouvé par son nom), `sortTop` (✓, ✕ et balayage ; `flyOut`, un départ à la fois :
-    `flying`, vrai jusqu'au tri, même si la pile est redessinée entre-temps ; puis `holdSort` : `sortHeld` jusqu'à
-    l'image suivante affichée, `SORT_GAP` ms au moins, aussi pour la visionneuse), `pileSwipe` (balayage de
+    `renderPile` (rien pendant « Sortir », `exiting()` ; carte du dessus et deux devinées dessous : `pileCard`,
+    `failCard`, chacune marquée par `pileTag` ;
+    état vide, compte, pastille de l'onglet ; redessinée seulement si elle change, `pileShown`, les images des cartes
+    retirées vidées par `clearImages`), `topEntry` (ce que montre la carte du dessus, retrouvé par son nom), `posed`
+    (image de la pile triable : miniature ou image à l'écran, ou chargement fini en échec ; jamais pendant le
+    chargement), `sortTop` (✓, ✕ et balayage ; rien pendant « Sortir », `exiting()`, ni tant que l'image d'avant est à
+    l'écran, `beforeHeld`, ni sur une carte masquée, `shownTop`, ni sur une image pas `posed` ;
+    `flyOut`, un départ à la fois : `flying`, vrai jusqu'au tri ou au retour de la carte, même si la pile est
+    redessinée entre-temps, `flight` le départ en cours, que `landFlight` annule à l'appui sur « Sortir » et à la sortie
+    de l'espace (`changedSpace`) ; verrou de tri qui suit ce que l'œil voit : toute carte arrivée sur
+    le dessus (tri d'ici, nouvelle image, tri ailleurs, Annuler, carte d'échec : `pileTop` change dans `renderPile`)
+    attend d'être vue `SORT_GAP` ms, `holdTop`, `topHeld` (pile seulement, `sortBusy`) ; dans la visionneuse, toute
+    image de la pile de même (ouverture, pas, tri : `openViewer`), `holdSort`, `sortHeld` ; l'attente commune,
+    `afterSeen`, suit ce que
+    montre la vue (`topView` : Labo sans visionneuse ni feuille, carte pas masquée, image posée ; ou l'image
+    de la visionneuse ; toutes deux par `onScreen`, faux aussi page cachée, `document.hidden`) et repart de zéro quand
+    elle change, que la page passe en arrière-plan ou en revient (`visibilitychange`), ou après un relevé manqué (page
+    gelée) ; `releaseSort` les lève à l'appui sur « Sortir » et à la
+    sortie de l'espace), `pileSwipe`
+    (balayage de
     la carte du dessus par Pointer Events, doigt et souris : seuil au tiers de la largeur ou geste vif ; `swiped` :
     la fin d'un balayage n'ouvre pas la visionneuse, oublié au prochain appui dans la zone de la pile),
     `sendSort` (envoi de Garder ou Jeter, « Déjà triée » sur un 404 de Garder), `keepItem`, `discardItem` (Jeter :
     bandeau `#undoBar`, `discarding`), `commitDiscard` (à la fin du bandeau, `DISCARD_MS`, ou au Jeter suivant ;
-    abandonné si l'espace où il a commencé est fermé ou en train de l'être, `leavingPrivate` ; `privLock` abandonne
-    un Jeter privé en attente dès l'appui sur « Sortir »), `undoDiscard`, `sortFromViewer` (Garder et Jeter de la
-    visionneuse, puis l'image suivante). Garder et Jeter visent une image par `pileKey` (nom, identifiant d'une
-    privée), jamais par l'objet affiché.
+    abandonné si l'espace où il a commencé est fermé ou en train de l'être, `leavingPrivate` ; `privLock` annule
+    un Jeter privé en attente dès l'appui sur « Sortir », avant que les images privées soient refusées : la carte
+    revient avec son image), `undoDiscard`, `sortFromViewer` (Garder et Jeter de la
+    visionneuse, puis l'image suivante ; rien pendant « Sortir », ni tant que l'image d'avant est à l'écran,
+    `beforeHeld`, ni sur une image pas `posed`). Garder et Jeter visent
+    une image par `pileKey` (nom, identifiant d'une privée), jamais par l'objet affiché.
   - « notifications » : `pushSubscribe`, `askNotifications`.
   - « prompts enregistrés » : `promptsApi` (routes de l'espace affiché), `prompts`, `openPrompts` (ouverte par le
     bouton, filtre `promptUsage` sur la catégorie de la saisie, `inputKind`), `renderPrompts`, `usePrompt`,
@@ -281,7 +326,15 @@ dernier bloc, après le HTML.
     `renderGallery` (redessinée seulement si les tirages changent, `histShown` ; état vide avec le logo et « Aller au
     Labo »), `openViewer`, `stepViewer`,
     `closeViewer` et `emptyViewer` (contenu vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace
-    privé), gestes : `zoomable` (pincer, molette, glisser ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les
+    privé), raccourcis du PC (écouteur `keydown` juste avant celui de la visionneuse : → et ← sur la pile par
+    `sortTop`, Z et Ctrl/⌘ + Z par `undoDiscard`, Ctrl/⌘ + Entrée dans `#prompt` par `#go` ; rien pendant une saisie,
+    une feuille, la visionneuse (sauf Espace) ou les images d'entrée, ni sur une carte d'échec ; une touche répétée ne
+    trie rien, Entrée répétée sur un bouton marqué `data-sort` comprise ; carte du dessus affichée : `shownTop` ; Espace
+    tenue :
+    `holdBefore` du cadre de la visionneuse ou de la carte du dessus, `holder` à `'key'` (pas sur un appui du pointeur
+    en cours), et `keyup` par `dropBefore`,
+    sans défilement ni bouton activé ; champs : `FORM_FIELDS`), gestes : `zoomable` (pincer, molette, glisser ; son
+    image avant reçoit la même transformation, `twin` ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les
     images d'entrée).
   - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;
@@ -289,11 +342,14 @@ dernier bloc, après le HTML.
     d'entrée selon le mode, `RESUME_FILES` : demande gardée `req`, sinon galerie), `canResume` (bouton `#vResume`),
     `settingsFor` (format, résolution et étapes qui redonnent l'image) ; « Relancer » (visionneuse `#vAgain`, carte
     d'échec `data-again`) : `keptRequest` (demande gardée : l'image seule), `againFrom` (reconstruite de
-    l'image sinon), `canAgain`, `relaunch` (graine et espace du moment ; estimation), puis `launch` (envoi commun avec
+    l'image sinon), `canAgain`, `relaunch` (graine et espace du moment ; estimation), puis `launch` (envoi commun, rien
+    d'une demande privée pendant « Sortir », avec
     « Révéler » : suivi, `accepted` (vidage de la saisie de « Révéler », champ replié), message, haut du Labo), `again`
-    (un geste à la fois) ;
-    actions de la visionneuse : `viewerAction`, `removeFromViewer`, `lotMembers`, `deleteItem` (« Supprimer » un
-    tirage), `forgetResult`.
+    (un geste à la fois ; rien pendant « Sortir », `exiting()`, comme « Révéler » `#go`) ;
+    actions de la visionneuse : `viewerAction` (comme `inputAction`, `viewerShare`, `viewerCopy`, `downloadLot` et les
+    liens `#vDl`, `#ivDl` : rien pendant « Sortir » ; « Supprimer » : rien non plus tant que l'image d'avant est
+    tenue, `beforeHeld`), `removeFromViewer`, `lotMembers`, `deleteItem` (« Supprimer » un
+    tirage ; « Sortir » revérifié après la confirmation), `forgetResult`.
   - « espace privé » : `privState`, `inPrivate()`, `applyPrivate`, `changedSpace` ; saisie propre à chaque espace :
     `asideInput` (saisie de l'autre espace, en mémoire de la page), `erasePrivate` (« Sortir » demandé), `readInput`,
     `putInput`, `swapInput`, `emptyInput` (vidage après « Révéler », dans l'espace d'où la demande est partie) ; un
@@ -304,7 +360,8 @@ dernier bloc, après le HTML.
     de `/api/status` demandée avant ; `leavingPrivate` (`exiting()` : dans l'espace, sortie en attente) : aucune image
     privée ni aperçu demandés ou posés, quel que soit le chemin qui redessine (`preload` les refuse : entrée `gone` ;
     `renderQueue`, `renderGallery`, `openLot`, `openViewer` ne redessinent rien, la seconde tentative d'une vignette
-    privée des Tirages est abandonnée, aussi après la sortie), aucune pile ni Tirages privés lus ou dessinés
+    privée des Tirages est abandonnée, aussi après la sortie, comme celle de toute vignette retirée de la grille
+    entre-temps), aucune pile ni Tirages privés lus ou dessinés
     (`loadPile`, `loadHistory`), même partis avant l'appui, ni pile redessinée à la réponse d'un tri (`sendSort`),
     aucune génération privée de la page interrogée (`pollJobs`) ni suivie ou adoptée, même par un suivi parti avant
     l'appui (`followQueue`, `adopted`), ni Jeter privé envoyé pendant la fermeture), `privChangeCode`, `privReset` ;
@@ -489,15 +546,25 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
 
 `tests/bench.py` (banc : `start`, `call`, `generate`, `wait_job`, `wait_idle`, `wait_until`, `capture_push`),
 `tests/fake_sdcli.py` (faux moteur), `tests/test_*.py`, `tests/check.py` (tous les contrôles), `tests/ui/`
-(`driver.mjs`, `serve.py`, tests `*.test.mjs`). Commandes dans `CLAUDE.md`.
+(`driver.mjs`, `serve.py`, tests `*.test.mjs`). Commandes dans `CLAUDE.md`. Vues du pilote : `PHONE` (celle de
+`phonePage`), `PC` (souris), `TABLET` et `TABLET_WIDE` (tactile), ouvertes par `newPage` et changées sans
+rechargement par `setView` (`applyView`) ; clavier par `keyDown`, `keyUp` et `press`, appui maintenu par `hold`.
+Chaque page s'ouvre au premier plan (`Page.bringToFront`) : dans une page cachée derrière un autre onglet, le verrou
+court d'une carte ou d'une image pas encore vue ne compte pas (`onScreen`) ; `topShown`, `made`, `viewPile` et
+`keepPile` la font passer devant, et `page.close` chaque page de l'espace privé avant de l'attendre au repos. Les
+touches n'envoient pas de `nativeVirtualKeyCode` : Chrome sur Mac y lit
+un code du Mac, et une flèche laissée passer par la page ouvrait l'onglet de l'aide par-dessus la page de test.
+`page.privateIdle` suit les images en route par le domaine Network (`imageLoads`) ; `page.send` refuse
+`Network.disable`.
 
 Recettes visuelles (pas de script jetable) :
 
 - Planche avant/après d'un ticket visuel : `PLANCHE_AVANT=<commit> node tests/ui/probe.mjs --script
-  tests/ui/planche.mjs` dessine en une image les vues de `VIEWS` (Labo, pile, Tirages, visionneuse, espace privé), une
-  rangée par version ; la rangée « avant » est jouée par la sonde de ce commit dans un worktree temporaire (supprimé à
-  la fin). `PLANCHE_SORTIE` choisit le fichier, `PLANCHE_VUES` les vues. Chaque capture attend la fin des transitions
-  (`SETTLED`).
+  tests/ui/planche.mjs` dessine en une image les vues de `VIEWS` (Labo, pile, Tirages, visionneuse, espace privé) aux
+  tailles de `SIZES` (téléphone, tablette en hauteur et en largeur, PC ; la page redimensionnée sans rechargement), une
+  rangée par taille et par version ; la rangée « avant » est jouée par la sonde de ce commit dans un worktree
+  temporaire (supprimé à la fin). `PLANCHE_SORTIE` choisit le fichier, `PLANCHE_VUES` les vues, `PLANCHE_TAILLES` les
+  tailles. Chaque capture attend la fin des transitions (`SETTLED`).
 - PNG d'une icône depuis son SVG : `node tests/ui/probe.mjs --svg tools/ui/logo.svg --size 512 --shot
   /tmp/icone.png`. Piège de Chrome sans écran : sa fenêtre est plus haute que la zone affichée, une capture sans coupe
   sort plus haute que demandé ; la sonde fixe la vue à la taille voulue (densité 1, fond transparent) et coupe la

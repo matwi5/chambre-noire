@@ -215,7 +215,8 @@ class PrivateTrackingTest(bench.PrivateFilesCheck, bench.BenchCase):
         return [{}, {"remote": True}, {"wifi": True, "private": self.session}, {"remote": True, "private": closed}]
 
     def test_following_a_private_generation_needs_the_private_space(self):
-        job = self.launch(preview=True, steps=12)
+        # retenue à l'étape 2, l'aperçu de l'étape 1 vu : en cours à l'annulation, quelle que soit la charge
+        job = self.launch("HOLD=zq9-suivie@2 zq9 tracked", preview=True, preview_interval=1, steps=12)
         jid = job["id"]
         wait_job(jid, ("running",), check=lambda j: j.get("preview_version"), private=self.session)
         for who in self.outsiders():
