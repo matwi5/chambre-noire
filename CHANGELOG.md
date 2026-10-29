@@ -3,6 +3,35 @@
 Les versions suivent [SemVer](https://semver.org/lang/fr/) ; tant que l'application est en 0.x, une version mineure
 peut changer un comportement existant.
 
+## 0.7.0 · 2026-10-29
+
+### Ajouté
+
+- **PC et tablette** : à partir de 1024 px de large, le Labo passe en deux colonnes (pile à gauche, champ de création
+  à droite), les onglets montent dans la barre du haut, la visionneuse prend toute la largeur et les Tirages ont de
+  grandes vignettes.
+- **Bouton Avant** : sur une édition faite à partir d'une seule image, le maintenir (doigt ou souris) montre l'image
+  d'entrée à la place de l'image produite, dans la visionneuse et sur la carte du dessus de la pile ; aussi dans
+  l'espace privé.
+- **Clavier sur ordinateur** : → garde, ← jette (avec le bandeau Annuler), Z ou Ctrl/⌘ + Z annule, Ctrl/⌘ + Entrée
+  révèle depuis le champ, Espace tenue montre l'image d'avant. Aucune touche ne supprime un tirage.
+
+### Modifié
+
+- **Une image de la pile ne se trie qu'une fois vue** : elle doit être affichée 0,3 s, page visible, avant que ✓, ✕,
+  les flèches, le balayage ou Garder et Jeter de la visionneuse la trient ; rien ne se trie, ni ne se supprime,
+  pendant que l'image d'avant est tenue. Une touche maintenue ne trie qu'une fois.
+- **Pendant « Sortir »**, rien ne bouge : aucun tri, aucune action de la visionneuse, ni Relancer ni Révéler ; un
+  Jeter privé en attente revient sur la pile avec son image, une carte en train de partir revient.
+- Un fichier lâché hors de la zone de dépôt est ignoré au lieu d'être ouvert par le navigateur.
+
+### Corrigé
+
+- Une image privée retirée de l'écran (pile, Tirages, « Voir le lot », file, miniatures, aperçus) ne garde plus son
+  adresse dans la page, et aucune image privée n'est plus chargée hors de l'espace privé.
+- Tests d'interface plus fiables : pages de test gardées au premier plan, touches du clavier lues correctement par
+  Chrome sur Mac, attentes de durée fixe remplacées par des attentes de condition.
+
 ## 0.6.1 · 2026-10-26
 
 ### Ajouté
