@@ -301,6 +301,11 @@ les messages de commit.
   « Oui, ticket G3 (Recommandé) » : « Un 3e ticket, sensible (suppression) : rendre le premier plan fiable dans le
   pilote (ouverture de chaque page, cause dans clavier.test.mjs), puis le verrou ne compte que page visible. Invariant
   d'E3. Je crée le ticket dans Asana avant de lancer. »
+- **Groupe G, carte déjà vue au retour dans l'appli** (29/10/2026), réponse par bouton, question posée par la session
+  du groupe : « G3 : une carte du dessus (ou l'image de la visionneuse) déjà vue 0,3 s avant que la page passe en
+  arrière-plan, au retour, se trie-t-elle tout de suite ? » → « Oui, tout de suite (Recommandé) » : « Seule une image
+  pas encore vue 0,3 s page visible attend ; celle qu'on avait déjà vue n'a pas changé, c'est la même carte à l'écran
+  au retour. Le ticket ne demande que ça. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
