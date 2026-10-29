@@ -319,6 +319,25 @@ les messages de commit.
     visible (onScreen exige !document.hidden ; afterSeen repart de zéro au visibilitychange et après un relevé
     manqué) ; une image déjà vue avant que la page passe en arrière-plan se trie dès le retour ». On remplace ? » →
     « Oui, remplacer (Recommandé) » : « La règle du CLAUDE.md suit le code de G3. »
+
+## 2026-10-29 · Pistes de la rétro du parcours « Responsive design et preview image »
+
+Le porteur confie les pistes r1 à r18 (tableau de bord, rétro du parcours) à une session liée. Réponses par bouton,
+avant son lancement :
+
+- « r5 : comment vérifier qu'un commit d'un ticket sensible cite sa preuve rouge ? » → « Avis de check.py
+  (Recommandé) » : « mutate.py garde ses preuves dans un journal ; l'avis « zone sensible » de check.py liste les
+  gardes touchées sans preuve. Rien ne bloque le commit : la revue et la session le voient. »
+- « r7 : le hook de longueur des lignes peut couvrir aussi les écritures par Bash. Il tournerait après chaque
+  commande Bash (moins d'une seconde), et le --fix recouperait seul la prose trop longue (.md, commentaires).
+  Jusqu'où ? » → « Bash + recoupe auto (Recommandé) » : « Hook aussi sur Bash ; la prose (.md, commentaires,
+  docstrings) trop longue est recoupée seule, le code reste signalé comme aujourd'hui. »
+- « r15 : quels appareils viser dans BRIEF.md ? » → « Mac, PC Windows, tablette Android, iPhone (Recommandé) » :
+  « Les trois que tu as donnés au cadrage (« mac, pc windows et tablette android »), plus l'iPhone sur lequel tu
+  essaies l'app. »
+- « r3 : le contrôle complet saute le banc quand aucun .py n'a changé depuis le dernier banc vert. On en fait le
+  comportement par défaut ? » → « Par défaut (Recommandé) » : « check.py retient le dernier banc vert par empreinte
+  des .py ; --force le relance quand même. La CI garde le banc complet à chaque fois. »
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
