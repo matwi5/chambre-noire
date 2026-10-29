@@ -88,7 +88,7 @@ test('champ : déplié d\'office quand la pile se vide', async () => {
 test('champ : déplié d\'office sans y toucher, replié quand la carte revient ; touché, il reste déplié', async () => {
   await fresh();
   await page.made('zqC3 un pont');
-  await page.click('#pileNo');                     // la dernière carte part, bandeau Annuler : rien à trier
+  await page.sort('discard', { ready: false });   // la dernière carte part, bandeau Annuler : rien à trier
   await page.waitFor(`!${FOLDED}`, { what: 'déplié d\'office' });
   await page.click('#undoBtn');
   await page.waitFor(FOLDED, { what: 'replié quand la carte revient' });
@@ -126,7 +126,7 @@ async function tap(selector) {
 }
 
 test('champ : après un balayage au doigt, le premier toucher sur la pile le replie', async () => {
-  await page.made('zqC3 encore');                  // (replié après « Révéler »)
+  await page.made('zqC6 encore');                  // (replié après « Révéler »)
   await page.click('#composerLine');
   await page.eval(`scrollTo({ top: 0, behavior: 'instant' })`);
   const size = await page.eval(`pileSize()`);

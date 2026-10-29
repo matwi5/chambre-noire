@@ -12,6 +12,9 @@ sur Internet en dehors du téléchargement initial du moteur et du modèle. L'ap
   application).
 - Toute personne qui récupère le dépôt public et suit le README (Windows ou Mac). Profil visé : à confirmer.
 
+**Appareils visés** (l'interface doit y marcher) : Mac, PC Windows, tablette Android, iPhone (décision du porteur du
+29/10/2026).
+
 ## Périmètre
 
 - Trois usages, une sortie PNG, depuis le Labo : texte → image (sans image d'entrée) ; édition à partir

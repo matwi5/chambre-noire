@@ -4,7 +4,7 @@
 //   venv/bin/python tests/check.py --no-bench --ui tests/ui/avant.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startBench, launchChrome, waitUntil, elapse, PC, PHONE, TABLET } from './driver.mjs';
+import { startBench, launchChrome, waitUntil, elapse, PC, PHONE, TABLET, VIEWER_PRESS } from './driver.mjs';
 
 let bench, chrome, page;
 
@@ -175,7 +175,7 @@ test('cadre : le contenu affiché de l\'image produite, étirée au format « Im
         await page.closeViewer();
         if (prompt === 'zd carre') {                       // « zd image », arrivée après, gardée : « zd carre » dessus
           await page.topShown();                           // (vue 0,3 s une fois la visionneuse effacée)
-          await page.click('#pileYes');
+          await page.sort('keep', { ready: false });
           await page.waitFor(`pileView().length === 1 && pileView()[0].prompt === 'zd carre'`,
             { what: 'zd carre dessus' });
         }
@@ -346,7 +346,7 @@ test('PC : Espace sans effet sur une image non comparable, pendant une saisie, a
     assert.deepEqual(await page.eval(`[beforeHeld, pileView()[0].prompt, !discarding, !flying]`),
       [null, 'zt texte', true, true]);
     await page.topShown();                          // (carte arrivée : verrou court de 0,3 s)
-    await page.click('#pileYes');                   // zt une dessus
+    await page.sort('keep', { ready: false });                   // zt une dessus
     await page.waitFor(`pileView().length === 1 && !document.querySelector('#pile .bfr').hidden`,
       { what: 'zt une dessus, bouton Avant' });
     await page.eval(`$('prompt').focus()`);
@@ -550,8 +550,10 @@ test('PC : Espace tenue sur la carte du dessus, ni ✓, ni ✕, ni ← →, ni b
       const calm = { top: 'zt dessus', discarding: false, flying: false, sorting: 0, out: false };
       await page.keyDown(' ');
       await beforeOn('#pile .bfr', 'Espace tenue');
-      for (const [what, act] of [['✓', () => page.click('#pileYes')], ['✕', () => page.click('#pileNo')],
-        ['→', () => page.press('ArrowRight')], ['←', () => page.press('ArrowLeft')],
+      for (const [what, act] of [['✓', () => page.sort('keep', { ready: false })],
+        ['✕', () => page.sort('discard', { ready: false })],
+        ['→', () => page.sort('keep', { by: 'key', ready: false })],
+        ['←', () => page.sort('discard', { by: 'key', ready: false })],
         ['balayage', () => page.swipe('#pile .pimg', -260, 0, { mouse: true })]]) {
         await act();
         await elapse(400);                         // (au-delà de l'envol d'une carte, 0,22 s)
@@ -560,7 +562,7 @@ test('PC : Espace tenue sur la carte du dessus, ni ✓, ni ✕, ni ← →, ni b
       await page.keyUp(' ');
       assert.deepEqual(await off('#pile .bfr'), OFF, 'Espace relâchée');
       await page.topShown();
-      await page.press('ArrowLeft');
+      await page.sort('discard', { by: 'key', ready: false });
       await page.waitFor(`!!discarding && pileView()[0]?.prompt === 'zt dessous'`, { what: 'jetée une fois relâchée' });
       await page.click('#undoBtn');
     } finally { await page.setView(PHONE); }
@@ -572,10 +574,10 @@ test('carte du dessus : Avant tenu au doigt, ✓ et ✕ ne trient pas ; relâch�
   const calm = { top: 'zu dessus', discarding: false, flying: false, sorting: 0, out: false };
   await page.hold('#pile [data-k="0"] .bbtn');
   await beforeOn('#pile .bfr', 'Avant tenu');
-  for (const sel of ['#pileYes', '#pileNo']) {     // (un clic, comme d'un second doigt)
-    await page.click(sel);
+  for (const [action, label] of [['keep', '✓'], ['discard', '✕']]) {   // (un clic, comme d'un second doigt)
+    await page.sort(action, { ready: false });
     await elapse(400);
-    assert.deepEqual(await unsorted(), calm, `${sel} avec l'image d'avant à l'écran`);
+    assert.deepEqual(await unsorted(), calm, `${label} avec l'image d'avant à l'écran`);
   }
   // la visionneuse ouverte pendant l'appui la couvre : elle montre l'image produite, Jeter y trie
   await page.click('#pile [data-k="0"] [data-open]');
@@ -585,7 +587,7 @@ test('carte du dessus : Avant tenu au doigt, ✓ et ✕ ne trient pas ; relâch�
   await page.closeViewer();
   assert.deepEqual(await off('#pile .bfr'), OFF, 'relâché');
   await page.topShown();
-  await page.click('#pileNo');
+  await page.sort('discard', { ready: false });
   await page.waitFor(`!!discarding && pileView()[0]?.prompt === 'zu dessous'`, { what: 'jetée une fois relâché' });
   await page.click('#undoBtn');
   page.assertNoErrors();
@@ -601,11 +603,11 @@ test('visionneuse : Avant tenu (doigt) ou Espace tenue (PC), Garder et Jeter ne 
         if (pc) { await page.eval(`document.activeElement?.blur()`); await page.keyDown(' '); }
         else await page.hold(BUTTON);
         await beforeOn('#vBefore', 'image d\'avant dans la visionneuse');
-        for (const k of [1, 0]) {                  // Garder, puis Jeter
-          await page.eval(`$('vSort').querySelectorAll('.btn')[${k}].click()`);
+        for (const [action, label] of [['keep', 'Garder'], ['discard', 'Jeter']]) {
+          await page.eval(VIEWER_PRESS[action]);
           await elapse(400);
           assert.deepEqual(await page.eval(`[vList[vIndex]?.prompt, vList.length, !!discarding, sorting.size]`),
-            ['zv dessus', 2, false, 0], `${k ? 'Garder' : 'Jeter'} avec l'image d'avant (${pc ? 'Espace' : 'doigt'})`);
+            ['zv dessus', 2, false, 0], `${label} avec l'image d'avant (${pc ? 'Espace' : 'doigt'})`);
         }
         if (pc) await page.keyUp(' '); else await page.release();
         assert.deepEqual(await off('#vBefore'), OFF, 'relâché');
@@ -613,7 +615,7 @@ test('visionneuse : Avant tenu (doigt) ou Espace tenue (PC), Garder et Jeter ne 
       } finally { if (pc) await page.setView(PHONE); }
     }
     await openOn('zv dessus');
-    await page.eval(`$('vSort').querySelectorAll('.btn')[0].click()`);   // Jeter, une fois relâché
+    await page.eval(VIEWER_PRESS.discard);           // Jeter, une fois relâché
     await page.waitFor(`!!discarding && vList.length === 1`, { what: 'jetée depuis la visionneuse' });
     await page.closeViewer();
     await page.click('#undoBtn');
@@ -623,7 +625,7 @@ test('visionneuse : Avant tenu (doigt) ou Espace tenue (PC), Garder et Jeter ne 
 test('Tirages : Avant tenu (souris, doigt) ou Espace tenue, « Supprimer » ne fait rien ; relâché, il demande',
   async () => {
     await twoComparable('zw');
-    await page.click('#pileYes');                  // « zw dessus » dans les Tirages
+    await page.sort('keep', { ready: false });                  // « zw dessus » dans les Tirages
     await page.waitFor(`pileView().length === 1`, { what: 'zw dessus gardée' });
     await page.tab('tirages');
     await page.waitFor(`histItems.some(it => it.prompt === 'zw dessus')`, { what: 'zw dessus dans les Tirages' });

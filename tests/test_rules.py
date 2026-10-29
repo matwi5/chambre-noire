@@ -134,6 +134,28 @@ class MapTest(unittest.TestCase):
         index = rules.code_index("tools/ui/index.html", check.read("tools/ui/index.html"))
         self.assertIn("showImage", [name for _, name in index])
 
+    def test_show_finds_every_name_of_a_declaration_and_the_driver_helpers(self):
+        """--show trouve le second nom d'un « const a = …, b = … » (privThumb) et les aides du pilote et du banc."""
+        src = "const a = x => f(x, 1), b = (y) => { return y; }, c = [1, 2];\nconst d = 1;\n"
+        self.assertEqual([n for _, n in rules.code_index("x.html", src)], ["a", "b", "c", "d"])
+        self.assertEqual(rules.function_spans("x.html", src, "b"), [(1, 1)])
+        mjs = "export const TOP = `x`;\nexport async function waitUntil(c) {\n}\n  return {\n    async keepPile() {\n" \
+              "      if (x) {\n      }\n    },\n  };\n"
+        self.assertEqual([n for _, n in rules.code_index("d.mjs", mjs)], ["TOP", "waitUntil", "keepPile"])
+        self.assertEqual(rules.function_spans("d.mjs", mjs, "keepPile"), [(5, 8)])
+        # paramètres déstructurés, sur plusieurs lignes, défaut en gabarit : le corps, pas la seule signature
+        params = "    async sort(a, { b = 1 } = {}) {\n      x();\n    },\nfunction f(x, {y}={},\n  z = `x ${y}`) {\n" \
+                 "  return 1;\n}\nconst g = (u, { v } = {}) => {\n  w();\n};\n"
+        self.assertEqual(rules.function_spans("d.mjs", params, "sort"), [(1, 3)])
+        self.assertEqual(rules.function_spans("d.mjs", params, "f"), [(4, 7)])
+        self.assertEqual(rules.function_spans("d.mjs", params, "g"), [(8, 10)])
+        for name, where in (("privThumb", "tools/ui/index.html"), ("keepPile", "tests/ui/driver.mjs"),
+                            ("wait_job", "tests/bench.py")):
+            r = subprocess.run([sys.executable, os.path.join(HERE, "check.py"), "--show", name], capture_output=True,
+                               text=True, env=dict(os.environ, QWEN_CHECK_REEXEC="1"))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertTrue(r.stdout.startswith(where + ":"), r.stdout[:200])
+
 
 class InterfaceRulesTest(unittest.TestCase):
     """Règles de tools/ui/index.html : couleurs hors des jetons, @keyframes sans animation, adresse privée posée hors
@@ -230,6 +252,114 @@ class TestFileRulesTest(unittest.TestCase):
                     "await fetch(`${bench.url}/api/private/create`, { method: 'POST' });",       # 6 : refusée
                     "await page.waitFor(`zqCalls.includes('/api/private/unlock')`);")             # lecture : permise
         self.assertEqual([k for k, _ in rules.private_entry_by_hand(src)], [1, 2, 5, 6])
+
+    def test_a_sort_goes_through_the_driver(self):
+        src = lines("await page.click('#pileYes');",                                     # 1 : refusée
+                    "await page.eval(`$('pileNo').click(); $('pileNo').click()`);",      # 2 : refusée
+                    "await page.click('#vSort .btn.secondary');",                        # 3 : refusée
+                    "await page.eval(`sortFromViewer('discard')`);",                    # 4 : refusée
+                    "await page.press('ArrowLeft');",                                     # 5 : refusée
+                    "await page.waitFor(`!sortBusy() && !sortHeld`);",                   # 6 : refusée
+                    "assert.equal(await page.eval(`topHeld`), true);",                    # 7 : refusée
+                    "await page.sort('discard', { by: 'key', ready: false });",
+                    "await page.eval(`${PRESS.discard}; ${VIEWER_PRESS.keep}`);",
+                    "await page.waitFor(`${SORT_IDLE} && ${VIEWER_SEEN}`);",
+                    "assert.equal((await page.sortState()).topHeld, true);",
+                    "await page.eval(`$('pileNo').focus()`);",                            # focus : permis
+                    "// ✕ puis sortHeld levé : un commentaire n'est pas un tri",
+                    "await page.keyDown(ARROWS.discard, { repeat: true });",
+                    "await page.press('ArrowLeft');   // règle levée : touches du pilote lui-même")
+        found = rules.raw_sorts(src)
+        self.assertEqual([k for k, _ in found], [1, 2, 3, 4, 5, 6, 7])
+        other = lines("await page.tryClick('#pileNo');",                                     # 1
+                      "await page.eval(`document.querySelector('#vSort .btn').click()`);",  # 2
+                      "await page.eval(`document.getElementById('pileYes').click()`);",     # 3
+                      "await page.press(`ArrowLeft`);",                                      # 4
+                      "await page.eval(`dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))`);",  # 5
+                      "$('pileNo').click(); await new Promise(r => setTimeout(r, 300));   // règle levée : envol",  # 6
+                      "assert.deepEqual(await page.sortState(), { flying: false, topHeld: false });",
+                      "const { topHeld } = await page.sortState();",
+                      "for (const sel of ['#pileYes', '#pileNo']) await page.click(sel);")   # 9 : par une variable
+        self.assertEqual([k for k, _ in rules.raw_sorts(other)], [1, 2, 3, 4, 5, 6, 9],
+                         "toutes les écritures d'un tri ; une levée d'une autre règle ne vaut pas pour le tri")
+        self.assertIn("page.sort(action", found[0][1])
+        self.assertIn("page.stepViewer", found[4][1])
+        self.assertIn("SORT_IDLE", found[5][1])
+
+    def test_a_page_opened_by_a_test_is_closed_in_a_finally_with_await(self):
+        src = lines("before(async () => {",
+                    "  page = await chrome.phonePage();",                                 # before : permise
+                    "});",
+                    "test('a', async () => {",
+                    "  const other = await chrome.phonePage();",                          # 5 : refusée
+                    "  await other.goto(url);",
+                    "  await other.close();",
+                    "});",
+                    "test('b', async () => {",
+                    "  const pc = await chrome.newPage(PC);",
+                    "  try {",
+                    "    await pc.goto(url);",
+                    "  } finally {",
+                    "    pc.close();",                                                    # 14 : sans await
+                    "  }",
+                    "});",
+                    "async function second() {",
+                    "  const p = await alone.phonePage();",                               # rendue : permise
+                    "  return p;",
+                    "}",
+                    "test('c', async () => {",
+                    "  const p = await alone.phonePage();",
+                    "  try { await p.goto(url); } finally { await alone.close(); }",       # son Chrome fermé
+                    "});")
+        self.assertEqual([k for k, _ in rules.unclosed_pages(src)], [5])
+        self.assertEqual([k for k, _ in rules.unawaited_close(src)], [14])
+        late = lines("test('d', async () => {",
+                     "  const p = await chrome.phonePage();",                                 # 2 : fermée après
+                     "  try { await x(); } finally { await y(); }",
+                     "  await waitUntil(async () => { return p.eval('1'); });",
+                     "  await p.close();",
+                     "});")
+        self.assertEqual([k for k, _ in rules.unclosed_pages(late)], [2],
+                         "fermée après le finally, pas dedans ; « return p.eval » ne rend pas la page")
+
+    def test_a_driver_helper_is_not_redefined_in_a_test_file(self):
+        names = rules.driver_names("\n".join([
+            "export const TOP = `x`;", "export async function waitUntil(cond) {", "}",
+            "  return {", "    async inPile(prompt) { return 1; },", "    if (x) {", "  };"]))
+        self.assertEqual(names, {"TOP", "waitUntil", "inPile"})
+        src = lines("const TOP = `y`;",                                                   # 1 : refusée
+                    "async function inPile(p) {", "}",                                    # 2 : refusée
+                    "const cards = () => 1;",
+                    "  const TOP = 2;")                                                   # pas de premier niveau
+        self.assertEqual([k for k, _ in rules.driver_redefined(src, names)], [1, 2])
+
+    def test_a_prompt_prefix_belongs_to_one_test(self):
+        src = lines("test('a', async () => {",
+                    "  await page.made('zp1 premier');",
+                    "});",
+                    "test('b', async () => {",
+                    "  await page.made('zp2 autre');",
+                    "});",
+                    "test('c', async () => {",
+                    "  await page.made('zp1 repris');",                                    # 8 : refusée
+                    "  await page.generate('HOLD=zp2 zp2 encore');",                     # suite de b : permise
+                    "});",
+                    "test('d', async () => {",
+                    "  await page.made('zp1 suite');",                                     # suite de c : permise
+                    "  assert.ok(await bench.kept('zp2 autre'));",                        # lecture : permise
+                    "});")
+        self.assertEqual([k for k, _ in rules.prefix_reuse(src)], [8])
+        forms = lines("test('a', async () => {",
+                      "  await page.launch('SLOW=1 zqC4 un pont');",
+                      "  await page.postGenerate(`{ prompt: 'zqE4file' }`);",
+                      "});",
+                      "test('b', async () => {", "});",
+                      "test.skip('c', async () => {",
+                      "  await page.made('zqC4 repris');",                                    # 8 : refusée
+                      "  await postAs(`{ prompt: 'zqE4autre' }`);",                           # 9 : refusée
+                      "  await page.made('zen jardin');",                                     # pas un préfixe
+                      "});")
+        self.assertEqual([k for k, _ in rules.prefix_reuse(forms)], [8, 9])
 
 
 class ServerRulesTest(unittest.TestCase):

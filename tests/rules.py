@@ -419,6 +419,169 @@ def private_entry_by_hand(lines, added=None):
             if (added is None or k in added) and ENTRY_RE.search(line) and not waived(lines, k)]
 
 
+# tri brut dans un test : clic sur ✓ ✕ ou un bouton de la visionneuse ([data-sort], #vSort), appel de sortTop ou
+# sortFromViewer ; flèche ← → envoyée à la main ; verrou de tri lu (le pilote seul les nomme : driver.mjs)
+SORT_TARGET = r"""(?:#pileYes|#pileNo|#vSort|data-sort)"""
+RAW_SORT_RE = re.compile(rf"""(?:click|tryClick)\(\s*['"`][^'"`]*{SORT_TARGET}"""
+                         rf"""|querySelector(?:All)?\(\s*['"`][^'"`]*{SORT_TARGET}[^;]*\.click\("""
+                         r"""|(?:\$|getElementById)\(\s*['"`](?:pileYes|pileNo|vSort)['"`]\s*\)[^;]*\.click\("""
+                         r"""|\bsort(?:Top|FromViewer)\(|['"`]#pile(?:Yes|No)['"`]""")   # (ou par une variable)
+RAW_ARROW_RE = re.compile(r"""['"`]Arrow(?:Left|Right)['"`]""")   # page.press, keyDown, un KeyboardEvent…
+# verrou lu : pas une propriété (.sortHeld de LOCKS ou de page.sortState()), ni une clé d'objet (sortHeld: false)
+LOCK_READ_RE = re.compile(r"(?<![.\w$])(?:sortHeld|sortBusy|topHeld)\b(?!\s*:)")
+TRAILING_COMMENT_RE = re.compile(r"\s//\s.*$")
+# une levée de r4 nomme le tri dans sa raison (une levée d'une autre règle sur la même ligne ne vaut pas pour elle)
+SORT_WAIVER_RE = re.compile(r"règle levée :.*\b(?:tri|trie|appui|flèche|touche|verrou|pilote)", re.I)
+
+
+def raw_sorts(lines, added=None):
+    """Tri d'un test d'interface qui ne passe pas par le pilote : un changement du moment où une image se trie
+    faisait tomber des dizaines de tests, retrouvés à la revue (E3, F4). [(ligne, raison)] ; commentaires exceptés."""
+    bad = []
+    for k, line in enumerate(lines, 1):
+        if (added is not None and k not in added) or line.lstrip().startswith("//"):
+            continue
+        if SORT_WAIVER_RE.search(line) or (k > 1 and lines[k - 2].strip().startswith(WAIVER)
+                                            and SORT_WAIVER_RE.search(lines[k - 2])):
+            continue
+        code = TRAILING_COMMENT_RE.sub("", line)
+        if re.search(r"\{[^}]*\}\s*=\s*await\s+\w+\.sortState\(\)", code):   # const { topHeld } = …
+            code = LOCK_READ_RE.sub("", code)
+        if RAW_SORT_RE.search(code):
+            bad.append((k, "tri par un clic ou un appel brut (✓, ✕, [data-sort], sortTop, sortFromViewer) : "
+                           "page.sort(action, { by, ready }) du pilote, ou PRESS et VIEWER_PRESS dans la page (aussi "
+                           "keepPile, topShown, made, viewPile)"))
+        if RAW_ARROW_RE.search(code):
+            bad.append((k, "flèche ← → envoyée sans aide : page.sort(action, { by: 'key' }), ou page.stepViewer(±1) "
+                           "dans une visionneuse"))
+        if LOCK_READ_RE.search(code):
+            bad.append((k, "verrou de tri lu hors du pilote : SORT_IDLE, VIEWER_SEEN, LOCKS ou page.sortState() "
+                           "(driver.mjs)"))
+    return bad
+
+
+# page ouverte par un test (« const p = await chrome.newPage(PC) ») : son nom, et le Chrome qui l'a ouverte
+OPEN_PAGE_RE = re.compile(rf"\b({IDENT})\s*=\s*await\s+({IDENT})\.(?:phonePage|newPage)\(")
+TOP_BLOCK_RE = re.compile(r"^(?:(test|before|after|beforeEach|afterEach|describe)\(|(?:async\s+)?function\b|const\b)")
+
+
+def _top_block(lines, k):
+    """(première, dernière ligne, genre) de l'instruction de premier niveau qui contient la ligne k : genre « test »,
+    « before »…, « function » ou « const » ; None hors de toute instruction."""
+    start = next((j for j in range(k, 0, -1) if lines[j - 1][:1] not in ("", " ", "\t", "}", ")")), None)
+    if start is None:
+        return None
+    m = TOP_BLOCK_RE.match(lines[start - 1])
+    end = next((j for j in range(start + 1, len(lines) + 1) if lines[j - 1][:1] not in ("", " ", "\t", "}", ")")),
+               len(lines) + 1) - 1
+    return start, end, (m.group(1) or m.group(0).split()[-1].rstrip("(")) if m else "autre"
+
+
+def unclosed_pages(lines, added=None):
+    """Page ouverte dans un test (phonePage, newPage) sans fermeture (page.close, ou le Chrome qui l'a ouverte) dans
+    un finally : un test qui échoue la laisse ouverte, avec son espace privé et ses requêtes (groupe D). Les pages de
+    before() (fermées par after()) et celles qu'une aide rend (return) sont laissées. [(ligne, raison)]."""
+    bad = []
+    for k, line in enumerate(lines, 1):
+        m = OPEN_PAGE_RE.search(line)
+        if not m or (added is not None and k not in added) or waived(lines, k):
+            continue
+        block = _top_block(lines, k)
+        if not block or block[2] in ("before", "after", "beforeEach", "afterEach"):
+            continue
+        name, chrome = m.groups()
+        body = "\n".join(lines[k:block[1]])
+        if re.search(rf"\breturn\s+{name}\s*(?:[;)}}\n]|$)", body):    # aide qui rend la page : à l'appelant
+            continue
+        closing = rf"\b(?:{name}|{chrome})\??\.close\(\)"
+        if not any(re.search(closing, body[f.end():matching(body, f.end() - 1, "{", "}") or len(body)])
+                   for f in re.finditer(r"\bfinally\s*\{", body)):
+            bad.append((k, f"page « {name} » ouverte sans fermeture dans un finally (await {name}.close()) : un "
+                           "échec la laisse ouverte"))
+    return bad
+
+
+def unawaited_close(lines, added=None):
+    """Fermeture d'une page (nom donné par phonePage ou newPage dans le fichier) sans await : le test suivant démarre
+    pendant qu'elle se ferme (pagehide, verrouillage de l'espace) (groupe D). [(ligne, raison)]."""
+    names = {m.group(1) for line in lines for m in OPEN_PAGE_RE.finditer(line)}
+    bad = []
+    for k, line in enumerate(lines, 1):
+        if (added is not None and k not in added) or line.lstrip().startswith("//") or waived(lines, k):
+            continue
+        for m in re.finditer(rf"(?<![\w$.])({IDENT})\??\.close\(\)", line):
+            if m.group(1) in names and not re.search(r"\bawait\s+\(?[^;]*$", line[:m.start()]):
+                bad.append((k, f"« {m.group(1)}.close() » sans await : la page n'est pas encore fermée à la suite"))
+    return bad
+
+
+DRIVER_EXPORT_RE = re.compile(rf"^export\s+(?:async\s+)?(?:function\s*\*?|const|let)\s+({IDENT})")
+DRIVER_METHOD_RE = re.compile(rf"^ {{4}}(?:async\s+)?({IDENT})\s*\([^)]*\)\s*\{{")
+TEST_DECL_RE = re.compile(rf"^(?:async\s+)?function\s*\*?\s*({IDENT})\s*\(|^(?:const|let|var)\s+({IDENT})\s*=")
+
+
+def driver_names(text):
+    """Aides du pilote (texte de driver.mjs) : ses exports et les méthodes des objets qu'il rend (page, bench,
+    chrome)."""
+    names = set()
+    for line in text.splitlines():
+        m = DRIVER_EXPORT_RE.match(line) or DRIVER_METHOD_RE.match(line)
+        if m and m.group(1) not in ("if", "for", "while", "switch", "catch", "function"):
+            names.add(m.group(1))
+    return names
+
+
+def driver_redefined(lines, names, added=None):
+    """Aide du pilote (driver_names) redéfinie au premier niveau d'un fichier de test, sur le fichier entier : une
+    copie ne suit plus le pilote quand il change (settled, TOP, inPile recopiés). [(ligne, raison)]."""
+    bad = []
+    for k, line in enumerate(lines, 1):
+        m = TEST_DECL_RE.match(line)
+        name = m and (m.group(1) or m.group(2))
+        if name in names and (added is None or k in added) and not waived(lines, k):
+            bad.append((k, f"« {name} » redéfinit une aide du pilote : l'importer de driver.mjs, ou la changer là"))
+    return bad
+
+
+# préfixe d'un prompt de test : z, une lettre minuscule, jusqu'à deux autres lettres, puis des chiffres, collé ou non
+# à la suite (« zp25 secrete », « HOLD=champ zqC4 … », « zqE4file », « zq5public ») ; sans chiffre, z et une ou deux
+# lettres suivis d'une espace ou de la fin de la chaîne (« zt dessus »). Créer une image : un appel dont le nom
+# contient made, generate, launch, typePrompt, post (postJson, page.postGenerate, une aide du fichier) ou ask ; son
+# test est le bloc test( (test.skip, test.only…) de premier niveau qui le contient
+PREFIX_RE = re.compile(r"""(?<![\w$])(z[a-z][A-Za-z]{0,2}\d+|z[a-z]{1,2}(?=[\s'"`]))(?!\d)""")
+MAKES_RE = re.compile(r"\b\w*(?:made|[Gg]enerate|[Ll]aunch|typePrompt|[Pp]ost|ask)\w*\(")
+
+
+def prefix_reuse(lines, added=None):
+    """Préfixe de prompt de test repris par un autre test du même fichier pour créer une image (made, generate,
+    launch, typePrompt) : une image d'un test répondrait à l'attente d'un autre. Une suite voulue reste permise : le
+    test qui reprend le préfixe suit tout de suite un test qui le nomme (la pile d'un test est celle du suivant).
+    [(ligne, raison)]."""
+    tests, owner, mentions, makes = [], None, {}, []
+    for k, line in enumerate(lines, 1):
+        if re.match(r"test(?:\.\w+)?\(", line):
+            owner = k
+            tests.append(k)
+        elif line[:1] not in ("", " ", "\t", "}", ")"):
+            owner = None
+        if owner is None:
+            continue
+        for p in PREFIX_RE.findall(line):
+            mentions.setdefault(p, []).append(owner)
+            if MAKES_RE.search(line):
+                makes.append((k, p, owner))
+    bad = []
+    for k, p, owner in makes:
+        before = [t for t in mentions[p] if t < owner]
+        if not before or (added is not None and k not in added) or waived(lines, k):
+            continue
+        previous = tests[tests.index(owner) - 1]
+        if before[-1] != previous:
+            bad.append((k, f"préfixe « {p} » déjà employé par le test de la ligne {before[0]} : un préfixe par "
+                           "test (ou la suite immédiate du test qui le nomme)"))
+    return bad
+
+
 # ------------------------------------------------------------ serveur (tools/launch.py) et code Python
 
 def _calls(node, name):
@@ -619,22 +782,89 @@ def function_spans(path, text, name):
         if found != name:
             continue
         line = lines[k - 1]
-        brace = line.find("{")
-        end = _js_block_end(text, offsets[k - 1] + brace) if brace >= 0 else None
+        at = next((pos for n, pos in _js_decls(line) if n == name), None)   # second nom d'un const a = …, b = …
+        if at is None:
+            at = line.find(name)
+        brace = _body_brace(text, offsets[k - 1] + max(at, 0))
+        end = _js_block_end(text, brace) if brace is not None else None
         spans.append((k, text.count("\n", 0, end) + 1 if end is not None else k))
     return spans
 
 
+def _body_brace(text, start):
+    """Position de l'accolade qui ouvre le corps de la déclaration nommée en start : la première hors des
+    parenthèses des paramètres (une déstructuration { a } = {} y reste), des chaînes, des gabarits `…${…}…` et des
+    commentaires ; None si la déclaration finit avant (« ; », ou fin de ligne hors des parenthèses)."""
+    depth, i, n = 0, start, len(text)
+    while i < n:
+        c = text[i]
+        if c in "'\"`":
+            i += 1
+            while i < n and text[i] != c and not (c != "`" and text[i] == "\n"):
+                i += 2 if text[i] == "\\" else 1
+        elif text.startswith("//", i):
+            i = text.find("\n", i)
+            if i < 0:
+                return None
+            if depth == 0:
+                return None
+        elif c in "([":
+            depth += 1
+        elif c in ")]":
+            depth -= 1
+        elif c == "{" and depth == 0:
+            return i
+        elif c in ";\n" and depth == 0:
+            return None
+        i += 1
+    return None
+
+
+JS_KEYWORDS = {"if", "for", "while", "switch", "catch", "function", "return", "with"}
+
+
+def _js_decls(line):
+    """Noms déclarés par une ligne const, let ou var de premier niveau, avec leur position : le premier, puis chaque
+    « , nom = » hors des parenthèses, crochets, accolades et chaînes (« const a = …, b = … »)."""
+    m = re.match(rf"^(?:export\s+)?(?:const|let|var)\s+({IDENT})\s*=", line)
+    if not m:
+        return []
+    out, depth, quote, i = [(m.group(1), m.start(1))], 0, "", m.end()
+    while i < len(line):
+        c = line[i]
+        if quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = ""
+        elif c in "'\"`":
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            n = re.match(rf"\s*({IDENT})\s*=(?![=>])", line[i + 1:])
+            if n:
+                out.append((n.group(1), i + 1 + n.start(1)))
+        i += 1
+    return out
+
+
 def code_index(path, text):
-    """Fonctions, classes et constantes de premier niveau d'un fichier Python ou des blocs <script> d'un HTML :
-    [(ligne, nom)]."""
+    """Fonctions, classes et constantes de premier niveau d'un fichier Python, des blocs <script> d'un HTML ou d'un
+    module JavaScript (export compris ; chaque nom d'un « const a = …, b = … ») ; dans un .mjs, aussi les méthodes des
+    objets qu'il rend (page, bench du pilote, en retrait de quatre espaces) : [(ligne, nom)]."""
     if path.endswith(".py"):
         pattern = re.compile(r"^(?:\s*(?:async\s+)?def\s+(\w+)|class\s+(\w+)|([A-Z][A-Z0-9_]+)\s*(?::[^=]+)?=)")
-    else:
-        pattern = re.compile(rf"^(?:\s*(?:async\s+)?function\s*\*?\s*({IDENT})|(?:const|let|var)\s+({IDENT})\s*=)")
+        return [(k, next(g for g in m.groups() if g)) for k, line in enumerate(text.splitlines(), 1)
+                if (m := pattern.match(line))]
+    function = re.compile(rf"^(?:export\s+)?\s*(?:async\s+)?function\s*\*?\s*({IDENT})")
+    method = re.compile(rf"^ {{4}}(?:async\s+)?({IDENT})\s*\([^)]*\)\s*\{{")
     out = []
     for k, line in enumerate(text.splitlines(), 1):
-        m = pattern.match(line)
-        if m:
-            out.append((k, next(g for g in m.groups() if g)))
+        m = function.match(line) or (path.endswith(".mjs") and method.match(line))
+        if m and m.group(1) not in JS_KEYWORDS:
+            out.append((k, m.group(1)))
+        out += [(k, name) for name, _ in _js_decls(line)]
     return out

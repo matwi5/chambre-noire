@@ -52,6 +52,16 @@
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
 //   await page.topPrompt()                       // prompt de la carte du dessus de la pile ; TOP : la même
 //                                                // expression, pour une attente (`${TOP} === 'x'`)
+//   await page.sort('keep', { by, ready })       // tri, seule voie permise dans un test (tests/rules.py) : by
+//                                                // 'button' (✓ ✕), 'key' (→ ←), 'viewer' (Garder, Jeter de la
+//                                                // visionneuse) ; ready (défaut) : l'image triable d'abord ;
+//                                                // ready: false : tout de suite (un tri qui doit être ignoré)
+//   await page.sortState()                       // verrous { flying, topHeld, sortHeld, busy } ; dans une
+//                                                // expression : SORT_IDLE, VIEWER_SEEN, LOCKS, PRESS, VIEWER_PRESS
+//   await page.stepViewer(1)                     // → dans une visionneuse (-1 : ←), sans tri ; ARROWS : les flèches
+//   await page.postGenerate(`{ prompt: 'x' }`)   // demande envoyée telle quelle par la page : son code HTTP
+//   await page.pileCards()                       // prompts des cartes dessinées de la pile, du dessus au dessous
+//   await page.emptyPile(bench)                  // Mac et page au repos, puis la pile gardée (repartir de rien)
 //   await page.watchToasts(); …; seenToasts      // messages affichés par la page à partir de l'appel
 //   await page.topShown()                        // image du dessus affichée (posed), pile au repos : ✓, ✕, les
 //                                                // flèches et le balayage la trient (sauf l'image d'avant tenue)
@@ -110,6 +120,31 @@ const pause = ms => new Promise(r => setTimeout(r, ms));
 // prompt de la carte du dessus de la pile affichée (expression évaluée dans la page ; undefined sans carte) : lu par
 // page.topPrompt, et mis tel quel dans une attente (page.waitFor(`${TOP} === 'x'`))
 export const TOP = `$('pile').querySelector('[data-k="0"] .pprompt')?.textContent`;
+// Tri et verrous de tri, nommés ici seulement (tests/rules.py refuse dans un test un clic sur ✓, ✕ ou un bouton
+// [data-sort], une flèche ← → et la lecture de sortHeld, sortBusy ou topHeld) : quand l'interface change le moment où
+// une image se trie, seul le pilote change. Expressions évaluées dans la page, à mettre telles quelles dans une
+// attente ou une évaluation (`${SORT_IDLE} && …`), comme TOP :
+// SORT_IDLE : pile au repos, ni envol ni verrou court (sortBusy) ; VIEWER_SEEN : image de la visionneuse vue 0,3 s
+// (sortHeld levé) ; LOCKS : état des verrous ({ flying, topHeld, sortHeld, busy }, page.sortState) ; PRESS et
+// VIEWER_PRESS : appui sur ✓ ✕ de la pile, sur Garder et Jeter de la visionneuse, dans la page (au moment voulu par
+// le test, sans attendre : un double appui, un appui pendant un envol)
+export const SORT_IDLE = `!sortBusy()`;
+export const VIEWER_SEEN = `!sortHeld`;
+export const LOCKS = `({ flying, topHeld, sortHeld, busy: sortBusy() })`;
+const SORT_BUTTONS = { keep: '#pileYes', discard: '#pileNo' };
+const VIEWER_BUTTONS = { keep: '#vSort [data-sort]:not(.secondary)', discard: '#vSort [data-sort].secondary' };
+export const PRESS = { keep: `$('pileYes').click()`, discard: `$('pileNo').click()` };
+// touches qui trient la pile (→ garde, ← jette), pour une touche tenue ou répétée (page.keyDown, keyUp)
+export const ARROWS = { keep: 'ArrowRight', discard: 'ArrowLeft' };
+export const VIEWER_PRESS = Object.fromEntries(Object.entries(VIEWER_BUTTONS)
+  .map(([k, sel]) => [k, `document.querySelector(${JSON.stringify(sel)}).click()`]));
+// carte du dessus triable par ✓ ✕, les flèches ou le balayage (ce que sortTop exige) : vue 0,3 s, rien en cours, ni
+// « Sortir », ni l'image d'avant tenue, ni masquée par Dessiner ; son image posée (une carte d'échec n'en a pas)
+const TOP_SORTABLE = `(c => !!c && !sortBusy() && !exiting() && !beforeHeld && !!shownTop()
+  && (!c.querySelector('.pimg img') || posed(c.querySelector('.pimg img'))))($('pile').querySelector('[data-k="0"]'))`;
+// image de la visionneuse triable par Garder et Jeter (ce que sortFromViewer exige) : une image de la pile, vue 0,3 s,
+// sans envol ni « Sortir » ni image d'avant tenue
+const VIEWER_SORTABLE = `!!vList[vIndex]?.pile && !flying && !sortHeld && !exiting() && !beforeHeld`;
 // délai voulu d'un test (un minuteur de l'interface à dépasser : « rien n'est parti au bout de 5 s ») : la seule
 // attente fixe permise dans un test (tests/rules.py refuse un setTimeout nu) ; toute autre attente suit une condition
 export const elapse = ms => pause(ms);
@@ -150,14 +185,34 @@ function within(promise, ms, what) {
 }
 
 // attend que cond() (synchrone ou promesse) soit vraie, interrogée toutes les 50 ms ; échoue après timeout ms
+// (délai dépassé : le message ajoute l'état de chaque page ouverte, page.state)
 export async function waitUntil(cond, { timeout = WAIT, what = 'la condition' } = {}) {
   const end = Date.now() + timeout;
   for (;;) {
     if (await cond()) return;
-    if (Date.now() > end) throw new Error(`${what} : toujours fausse après ${timeout / 1000} s`);
+    if (Date.now() > end) throw new Error(`${what} : toujours fausse après ${timeout / 1000} s${await states()}`);
     await pause(50);
   }
 }
+
+// état des pages ouvertes (page.state), une ligne chacune, pour un message de délai dépassé
+async function states() {
+  const lines = await Promise.all([...livePages].map(p => p.state().catch(e => `état illisible (${e.message})`)));
+  return lines.map(l => `\n  ${l}`).join('');
+}
+
+// ce que montre une page, lu par page.state (une variable absente de la page vaut undefined, sans erreur)
+const STATE = `(() => { const g = n => { try { return eval(n); } catch { return undefined; } };
+  return { visibility: document.visibilityState, focus: document.hasFocus(), url: location.pathname,
+    mode: g('mode'), topHeld: g('topHeld'), sortHeld: g('sortHeld'), flying: g('flying'),
+    sortBusy: g('typeof sortBusy === "function" ? sortBusy() : undefined') }; })()`;
+// nom lisible d'un élément de la page (source d'une fonction évaluée dans la page) : #id, ou balise et classes, et
+// l'élément nommé qui le contient
+const NAME_OF = `e => { if (!e) return 'rien (hors de l\\'écran)';
+  const name = x => x.id ? '#' + x.id : x.tagName.toLowerCase() + (typeof x.className === 'string'
+    && x.className.trim() ? '.' + x.className.trim().split(/\\s+/).join('.') : '');
+  const holder = e.id ? null : e.parentElement?.closest('[id]');
+  return name(e) + (holder ? ' (dans #' + holder.id + ')' : ''); }`;
 
 // fichiers sous dir (liens non suivis) : { chemin : taille et date de modification }
 function files(dir, out = {}) {
@@ -293,7 +348,8 @@ export async function launchChrome() {
     // premier plan (les autres pages de ce Chrome, cachées derrière elle, le reprennent à sa fermeture : page.close)
     async newPage(view) {
       const target = await (await devtools('new?about:blank')).json();
-      const page = await connect(target.webSocketDebuggerUrl, { closeTab: () => closeTab(target.id), siblings: pages });
+      const page = await connect(target.webSocketDebuggerUrl, { closeTab: () => closeTab(target.id), siblings: pages,
+        tabs: async () => (await (await devtools('list')).json()).filter(t => t.type === 'page').map(t => t.url) });
       pages.push(page);
       await page.send('Page.bringToFront');
       await applyView(page, view);
@@ -361,7 +417,7 @@ const COUNT_PRIVATE = `(() => { if (window.__privFetch) return; const f = window
 
 // une page : commandes du protocole, évaluation de JavaScript, attente d'une condition, erreurs de la console ;
 // closeTab ferme son onglet dans Chrome, siblings : les pages du même Chrome (page.close)
-async function connect(wsUrl, { closeTab, siblings }) {
+async function connect(wsUrl, { closeTab, siblings, tabs = async () => [] }) {
   const ws = new WebSocket(wsUrl);
   await new Promise((resolve, reject) => { ws.addEventListener('open', resolve, { once: true }); ws.addEventListener('error', reject, { once: true }); });
   let id = 0;
@@ -414,8 +470,13 @@ async function connect(wsUrl, { closeTab, siblings }) {
         await frames(); const n = el.getBoundingClientRect();
         if (n.top === r.top && n.left === r.left) break;
         r = n; }
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+      const x = r.left + r.width / 2, y = r.top + r.height / 2, top = document.elementFromPoint(x, y);
+      return { x, y, off: top === el || el.contains(top) ? null : (${NAME_OF})(top) }; })()`);
     if (!c) throw new Error(`élément absent : ${selector}`);
+    // le point d'appui doit être dans la cible : sinon le geste part sur un autre élément (une tuile d'ajout, une
+    // feuille) et le test échoue loin de là, sans dire pourquoi
+    if (c.off) throw new Error(`geste à côté de ${selector} : le point (${Math.round(c.x)}, ${Math.round(c.y)}) `
+      + `tombe sur ${c.off}`);
     const x = k => c.x + dx * k, y = k => c.y + dy * k;
     const input = mouse
       ? { down: 'mousePressed', move: 'mouseMoved', up: 'mouseReleased',
@@ -440,7 +501,9 @@ async function connect(wsUrl, { closeTab, siblings }) {
     // (une promesse jamais tenue, comme une confirmation qui attend sa réponse, ne bloque pas le test)
     async eval(expression, { timeout = EVAL_TIMEOUT } = {}) {
       const r = await within(send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true,
-        userGesture: true }), timeout, `dans la page : ${expression}`);
+        userGesture: true }), timeout, `dans la page : ${expression}`).catch(async e => {
+        e.message += `\n  ${await page.state()}`;     // (délai dépassé : ce que montre la page)
+        throw e; });
       if (r.exceptionDetails) throw new Error(`dans la page : ${r.exceptionDetails.exception?.description || r.exceptionDetails.text}\n  ${expression}`);
       return r.result.value;
     },
@@ -513,6 +576,21 @@ async function connect(wsUrl, { closeTab, siblings }) {
         // requêtes lues après la réponse : Chrome envoie avant elle les événements des requêtes déjà parties
         return page.eval(`!${JSON.stringify([...imageLoads.values()])}.some(secretUrl)`);
       }, { what: 'espace privé au repos' });
+    },
+    // état de la page en une ligne, ajouté au message d'un délai dépassé (waitFor, waitUntil, eval) : page visible ou
+    // cachée (visibilityState), focus (hasFocus), adresse, onglet affiché (mode), verrous de tri (topHeld, sortHeld,
+    // sortBusy, flying) et adresses des onglets Chrome de type page (un onglet de Chrome passé devant la cache). Les
+    // deux relevés en même temps, en 2 s au plus : au-delà, « la page ne répond plus » (onglets illisibles : « ? »)
+    async state() {
+      const [urls, r] = await Promise.all([within(tabs(), 2000, 'onglets').catch(() => ['?']),
+        within(send('Runtime.evaluate', { expression: STATE, returnByValue: true }), 2000, 'état').catch(() => null)]);
+      if (!r || r.exceptionDetails) {
+        return `état : la page ne répond plus (aucune réponse en 2 s) ; onglets Chrome : ${urls.join(', ')}`;
+      }
+      const v = r.result.value;
+      const locks = ['topHeld', 'sortHeld', 'sortBusy', 'flying'].map(k => `${k} ${v[k]}`).join(', ');
+      return `état : page ${v.visibility === 'visible' ? 'visible' : 'cachée'}, focus ${v.focus ? 'oui' : 'non'}, `
+        + `${v.url}, onglet ${v.mode}, ${locks} ; onglets Chrome : ${urls.join(', ')}`;
     },
     // autre vue (PHONE, PC, TABLET, TABLET_WIDE) sans recharger la page, comme une fenêtre redimensionnée
     setView(view) { return applyView(page, view); },
@@ -592,6 +670,38 @@ async function connect(wsUrl, { closeTab, siblings }) {
     },
     // prompt de la carte du dessus de la pile affichée (undefined sans carte)
     topPrompt() { return page.eval(TOP); },
+    // tri comme au doigt ou au clavier, par la seule aide qui le fait (tests/rules.py) : action 'keep' ou 'discard' ;
+    // by : 'button' (✓ ✕ de la pile, par défaut), 'key' (→ garde, ← jette, avec modifiers comme page.press),
+    // 'viewer' (Garder, Jeter de la visionneuse). ready (par défaut) : d'abord attendre que l'image se trie (pile :
+    // TOP_SORTABLE ; visionneuse : VIEWER_SORTABLE, ce que sortTop et sortFromViewer exigent), au premier plan ; ready:
+    // false : envoyé tout de suite, quand le test veut un tri ignoré ou a attendu lui-même l'état voulu. force :
+    // appui sans le contrôle « sous le doigt » de page.click (élément recouvert exprès : le dire en commentaire)
+    async sort(action, { by = 'button', ready = true, modifiers = [], force = false } = {}) {
+      if (!SORT_BUTTONS[action] || !['button', 'key', 'viewer'].includes(by)) {
+        throw new Error(`page.sort : tri inconnu (${action}, ${by})`);
+      }
+      if (ready) {
+        await send('Page.bringToFront');             // (page cachée : rien n'est vu)
+        await page.waitFor(by === 'viewer' ? VIEWER_SORTABLE : TOP_SORTABLE,
+          { what: by === 'viewer' ? 'image de la visionneuse triable' : 'carte du dessus triable' });
+      }
+      if (by === 'key') return page.press(ARROWS[action], { modifiers });
+      return page.click(by === 'viewer' ? VIEWER_BUTTONS[action] : SORT_BUTTONS[action], { force });
+    },
+    // état des verrous de tri de la page (LOCKS) : { flying, topHeld, sortHeld, busy }
+    sortState() { return page.eval(LOCKS); },
+    // → (step 1) ou ← (step -1) dans une visionneuse ouverte : image suivante ou précédente (ni tri ni attente)
+    stepViewer(step) { return page.press(step > 0 ? 'ArrowRight' : 'ArrowLeft'); },
+    // prompts des cartes dessinées de la pile affichée, du dessus vers le dessous
+    pileCards() {
+      return page.eval(`[...$('pile').querySelectorAll('.pcard')].map(c => c.querySelector('.pprompt').textContent)`);
+    },
+    // pile affichée vidée pour repartir de rien : le Mac et la page au repos (bench.idle), puis ses images gardées
+    // (keepPile)
+    async emptyPile(bench) {
+      await bench.idle({ page });
+      await page.keepPile();
+    },
     // messages (toasts) affichés par la page à partir de l'appel, notés dans seenToasts (texte de chacun) ; un nouvel
     // appel repart d'une liste vide
     watchToasts() {
@@ -767,6 +877,13 @@ async function connect(wsUrl, { closeTab, siblings }) {
         ...${JSON.stringify(extra)} }).then(async r => ({ status: r.status, body: await r.json() }))`);
       if (r.status !== 202) throw new Error(`génération « ${prompt} » refusée : ${r.status} ${JSON.stringify(r.body)}`);
       return r.body;
+    },
+    // demande de génération envoyée telle quelle par la page (postJson('/api/generate')) : body, source d'un objet
+    // évalué dans la page, dont les champs remplacent ceux par défaut (512×512, 8 étapes, sans aperçu ni image
+    // d'entrée) ; rend le code HTTP de la réponse, sans échouer (page.launch, lui, exige 202)
+    postGenerate(body) {
+      return page.eval(`postJson('/api/generate', { width: 512, height: 512, steps: 8, cfg: 1, seed: -1, preview: false,
+        ref_images: [], ...${body} }).then(r => r.status)`);
     },
     // marqueurs (mots de prompts, identifiants, réglages) restés dans la page : texte et attributs du document (caché
     // compris, scripts exceptés), valeurs des champs, localStorage et sessionStorage, et tout l'état global de la page

@@ -113,5 +113,17 @@ class RewrapTest(unittest.TestCase):
         self.assertEqual(rewrap.rewrap(new)[0], new)          # une deuxième passe ne change plus rien
 
 
+class DocstringIndentTest(unittest.TestCase):
+    def test_a_recut_docstring_line_keeps_its_own_indent(self):
+        """Une ligne en retrait dans une docstring de module (la suite d'un point numéroté) garde ce retrait : le hook
+        qui recoupe seul la prose la remettait au bord gauche."""
+        text = '"""Module.\n\n1. point\n   ' + " ".join(["mot"] * 40) + '\n"""\nx = 1\n'
+        new, cuts, left = rewrap.rewrap_code("m.py", text, None)
+        self.assertEqual((cuts, left), (1, []))
+        body = new.split("\n")[3:-3]
+        self.assertGreater(len(body), 1)
+        self.assertTrue(all(line.startswith("   mot") for line in body), body)
+
+
 if __name__ == "__main__":
     unittest.main()

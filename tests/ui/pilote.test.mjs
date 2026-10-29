@@ -107,6 +107,7 @@ test('page.close dans l\'espace privé : chaque page de l\'espace attendue au re
     await page.eval(`void loadPile()`);
     await waitUntil(() => held.held.length > 0, { what: 'lecture privée en route' });
     let closed = false;
+    // règle levée : fermeture suivie sans l'attendre (elle doit attendre la requête privée), attendue au finally
     closing = other.close().then(() => { closed = true; });
     await elapse(500);
     assert.equal(closed, false, 'onglet fermé (espace reverrouillé) avec une requête privée en route');
@@ -134,6 +135,7 @@ test('page.close dans l\'espace privé : une requête privée partie avant tout 
       await other.eval(`void fetch('/api/private/history')`);
       await waitUntil(() => held.held.length > 0, { what: 'lecture privée de l\'autre page en route' });
       let closed = false;
+      // règle levée : fermeture suivie sans l'attendre (elle doit attendre la requête privée), attendue au finally
       closing = other.close().then(() => { closed = true; });
       await elapse(500);
       assert.equal(closed, false, 'onglet fermé (espace reverrouillé) avec sa propre requête privée en route');
@@ -253,7 +255,7 @@ test('page.keyDown, keyUp, press : touche maintenue, répétée, relâchée, ave
     await p.keyDown(' ', { repeat: true });
     await p.keyDown(' ', { repeat: true });
     await p.keyUp(' ');
-    await p.press('ArrowLeft');
+    await p.press('ArrowLeft');   // règle levée : touches du pilote lui-même
     await p.press('z', { modifiers: ['ctrl'] });
     await p.press('Enter', { modifiers: ['meta'] });
     await p.press('Escape');
@@ -266,8 +268,8 @@ test('page.keyDown, keyUp, press : touche maintenue, répétée, relâchée, ave
       'keyup Meta MetaLeft false ',
       'keydown Escape Escape false ', 'keyup Escape Escape false ']);
     // aucune touche, laissée passer par la page, n'a ouvert d'onglet de Chrome par-dessus elle
-    await p.press('ArrowLeft');
-    await p.press('ArrowRight');
+    await p.press('ArrowLeft');   // règle levée : touches du pilote lui-même
+    await p.press('ArrowRight');   // règle levée : touches du pilote lui-même
     await p.eval(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
     assert.deepEqual((await p.send('Target.getTargets')).targetInfos
       .filter(t => t.type === 'page' && t.url.startsWith('chrome:'))
@@ -303,6 +305,41 @@ test('délais : page.eval et bench.idle échouent au lieu d\'attendre sans fin',
   await assert.rejects(bench.idle({ timeout: 300 }), /Mac au repos/);
   bench.release('pilote');
   await bench.idle();
+  page.assertNoErrors();
+});
+
+test('délais : le message dit l\'état de la page, cachée ou qui ne répond plus', async () => {
+  await assert.rejects(page.eval('new Promise(() => {})', { timeout: 300 }),
+    // règle levée : le pilote lui-même, sa ligne d'état nomme les verrous
+    e => /état : page visible, focus \w+, \/, onglet labo, topHeld \w+, sortHeld \w+, sortBusy \w+, flying \w+ ; /
+      .test(e.message) && /onglets Chrome : http/.test(e.message), 'état de la page, onglets');
+  const other = await chrome.phonePage();                // passe devant : la page du test est cachée
+  try {
+    await assert.rejects(page.waitFor('false', { timeout: 300 }), /état : page cachée/);
+    await other.goto(bench.url + '/');
+    await other.ready();
+    // une page dont le fil est bloqué 4 s (au-delà des 2 s du relevé d'état) : elle ne répond plus
+    const busy = other.eval(`(() => { const t = Date.now(); while (Date.now() - t < 4000); })()`, { timeout: 10000 });
+    assert.match(await other.state(), /état : la page ne répond plus \(aucune réponse en 2 s\) ; onglets Chrome : /);
+    await busy;
+  } finally {
+    await other.close();
+  }
+  page.assertNoErrors();
+});
+
+test('geste : un point d\'appui hors de sa cible lève une erreur qui nomme l\'élément touché', async () => {
+  // un voile posé sur l'en-tête : un doigt sur la lampe tomberait sur lui
+  await page.eval(`(() => { const v = document.createElement('div'); v.id = 'zpVoile';
+    v.style.cssText = 'position:fixed;inset:0;z-index:9999'; document.body.append(v); })()`);
+  try {
+    await assert.rejects(page.hold('#lamp'), /geste à côté de #lamp : le point \(\d+, \d+\) tombe sur #zpVoile/);
+    await assert.rejects(page.swipe('#lamp', 50), /tombe sur #zpVoile/);
+  } finally {
+    await page.eval(`$('zpVoile').remove()`);
+  }
+  await page.hold('#lamp');                               // sans voile : le geste part
+  await page.release();
   page.assertNoErrors();
 });
 

@@ -65,6 +65,14 @@ _À éviter_ : enregistrer, valider
 Retirer une image de la pile et la supprimer de l'ordinateur (balayage vers la gauche).
 _À éviter_ : supprimer (réservé à un tirage), rejeter
 
+**Vue** (une image de la pile) :
+Une image de la pile, arrivée sur le dessus ou dans la visionneuse (ouverture, pas, tri), est vue une fois restée
+0,3 s d'affilée posée (sa miniature ou son image affichée), à l'écran, sans rien par-dessus (ni visionneuse, ni
+feuille, ni voile), la page visible ; avant, ni Garder ni Jeter ne la trient ; vue, elle le reste (un retour
+d'arrière-plan ne la reverrouille pas). L'interface le décide par `afterSeen` (avec `topView` pour la carte du dessus,
+`viewerView` dans la visionneuse) ; la règle complète est dans le README, « Utilisation » (la pile).
+_À éviter_ : affichée, chargée (une image chargée peut ne pas être vue)
+
 **Avant** :
 Le bouton que l'on maintient sur une image issue d'une édition à une seule image d'entrée pour voir cette image
 d'entrée à sa place, dans le même cadre ; relâcher ramène l'image produite.
