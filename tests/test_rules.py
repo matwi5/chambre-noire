@@ -134,6 +134,22 @@ class MapTest(unittest.TestCase):
         index = rules.code_index("tools/ui/index.html", check.read("tools/ui/index.html"))
         self.assertIn("showImage", [name for _, name in index])
 
+    def test_show_finds_every_name_of_a_declaration_and_the_driver_helpers(self):
+        """--show trouve le second nom d'un « const a = …, b = … » (privThumb) et les aides du pilote et du banc."""
+        src = "const a = x => f(x, 1), b = (y) => { return y; }, c = [1, 2];\nconst d = 1;\n"
+        self.assertEqual([n for _, n in rules.code_index("x.html", src)], ["a", "b", "c", "d"])
+        self.assertEqual(rules.function_spans("x.html", src, "b"), [(1, 1)])
+        mjs = "export const TOP = `x`;\nexport async function waitUntil(c) {\n}\n  return {\n    async keepPile() {\n" \
+              "      if (x) {\n      }\n    },\n  };\n"
+        self.assertEqual([n for _, n in rules.code_index("d.mjs", mjs)], ["TOP", "waitUntil", "keepPile"])
+        self.assertEqual(rules.function_spans("d.mjs", mjs, "keepPile"), [(5, 8)])
+        for name, where in (("privThumb", "tools/ui/index.html"), ("keepPile", "tests/ui/driver.mjs"),
+                            ("wait_job", "tests/bench.py")):
+            r = subprocess.run([sys.executable, os.path.join(HERE, "check.py"), "--show", name], capture_output=True,
+                               text=True, env=dict(os.environ, QWEN_CHECK_REEXEC="1"))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertTrue(r.stdout.startswith(where + ":"), r.stdout[:200])
+
 
 class InterfaceRulesTest(unittest.TestCase):
     """Règles de tools/ui/index.html : couleurs hors des jetons, @keyframes sans animation, adresse privée posée hors

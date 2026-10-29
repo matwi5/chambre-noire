@@ -114,7 +114,8 @@ IMAGE_SRC_RE = re.compile(r"\$\(\s*['\"](" + "|".join(IMAGE_IDS) + r")['\"]\s*\)
 NOTES = ("CLAUDE.md", "ETAT_DU_PROJET.md", "travail", "docs/specs")
 AGENT_NOTES, CODE_MAP = "docs/agents", "carte-du-code.md"
 HOOKS = ".githooks"                                  # hooks versionnés (core.hooksPath), posés par --link-venv
-MAPPED = ("tools/launch.py", "tools/ui/index.html")  # fichiers que la carte du code décrit (--map en donne l'index)
+# fichiers que --map, --show indexent : ceux que la carte du code décrit, le pilote des tests d'interface et le banc
+MAPPED = ("tools/launch.py", "tools/ui/index.html", "tests/ui/driver.mjs", "tests/bench.py")
 UI_TESTS = "tests/ui/*.test.mjs"
 DRIVER = "tests/ui/driver.mjs"                      # pilote des tests d'interface (ses aides)
 USES_PLACES = ("tools", "tests", "README.md", f"{AGENT_NOTES}/{CODE_MAP}")   # où --uses cherche
@@ -646,7 +647,7 @@ def check_rules(base):
 
 def print_index(pattern):
     """Index des fonctions, classes et constantes de MAPPED (fichier:ligne nom), filtré par pattern (sous-chaîne)."""
-    for f in MAPPED:
+    for f in (m for m in MAPPED if os.path.exists(os.path.join(ROOT, m))):
         for k, name in rules.code_index(f, read(f)):
             if pattern.lower() in name.lower():
                 print(f"{f}:{k} {name}")
@@ -669,7 +670,7 @@ def print_body(name):
     """Corps de chaque fonction ou classe name de MAPPED (là où --map la situe) : « fichier:ligne » puis ses lignes.
     1 si elle est introuvable."""
     found = False
-    for f in MAPPED:
+    for f in (m for m in MAPPED if os.path.exists(os.path.join(ROOT, m))):
         text = read(f)
         lines = text.splitlines()
         for start, end in rules.function_spans(f, text, name):
@@ -1371,9 +1372,11 @@ def parse_args(argv=None):
     ap.add_argument("--link-venv", action="store_true",
                     help="worktree : liens vers venv et les notes du dossier principal ; hook avant commit")
     ap.add_argument("--map", nargs="?", const="", metavar="NOM",
-                    help="index fonction → ligne de launch.py et index.html (les noms qui contiennent NOM)")
+                    help="index fonction → ligne de launch.py, index.html, du pilote driver.mjs et du banc bench.py "
+                    "(les noms qui contiennent NOM)")
     ap.add_argument("--uses", metavar="MOT", help="usages de MOT dans tools/, tests/, le README et la carte du code")
-    ap.add_argument("--show", metavar="NOM", help="corps de la fonction NOM de launch.py ou index.html")
+    ap.add_argument("--show", metavar="NOM", help="corps de la fonction NOM de launch.py, index.html, driver.mjs ou "
+                    "bench.py (aide du pilote comprise : page.keepPile → --show keepPile)")
     return ap.parse_args(argv)
 
 

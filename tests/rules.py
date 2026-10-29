@@ -782,22 +782,58 @@ def function_spans(path, text, name):
         if found != name:
             continue
         line = lines[k - 1]
-        brace = line.find("{")
+        at = next((pos for n, pos in _js_decls(line) if n == name), 0)   # second nom d'un const a = …, b = …
+        brace = line.find("{", at)
         end = _js_block_end(text, offsets[k - 1] + brace) if brace >= 0 else None
         spans.append((k, text.count("\n", 0, end) + 1 if end is not None else k))
     return spans
 
 
+JS_KEYWORDS = {"if", "for", "while", "switch", "catch", "function", "return", "with"}
+
+
+def _js_decls(line):
+    """Noms déclarés par une ligne const, let ou var de premier niveau, avec leur position : le premier, puis chaque
+    « , nom = » hors des parenthèses, crochets, accolades et chaînes (« const a = …, b = … »)."""
+    m = re.match(rf"^(?:export\s+)?(?:const|let|var)\s+({IDENT})\s*=", line)
+    if not m:
+        return []
+    out, depth, quote, i = [(m.group(1), m.start(1))], 0, "", m.end()
+    while i < len(line):
+        c = line[i]
+        if quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = ""
+        elif c in "'\"`":
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            n = re.match(rf"\s*({IDENT})\s*=(?![=>])", line[i + 1:])
+            if n:
+                out.append((n.group(1), i + 1 + n.start(1)))
+        i += 1
+    return out
+
+
 def code_index(path, text):
-    """Fonctions, classes et constantes de premier niveau d'un fichier Python ou des blocs <script> d'un HTML :
-    [(ligne, nom)]."""
+    """Fonctions, classes et constantes de premier niveau d'un fichier Python, des blocs <script> d'un HTML ou d'un
+    module JavaScript (export compris ; chaque nom d'un « const a = …, b = … ») ; dans un .mjs, aussi les méthodes des
+    objets qu'il rend (page, bench du pilote, en retrait de quatre espaces) : [(ligne, nom)]."""
     if path.endswith(".py"):
         pattern = re.compile(r"^(?:\s*(?:async\s+)?def\s+(\w+)|class\s+(\w+)|([A-Z][A-Z0-9_]+)\s*(?::[^=]+)?=)")
-    else:
-        pattern = re.compile(rf"^(?:\s*(?:async\s+)?function\s*\*?\s*({IDENT})|(?:const|let|var)\s+({IDENT})\s*=)")
+        return [(k, next(g for g in m.groups() if g)) for k, line in enumerate(text.splitlines(), 1)
+                if (m := pattern.match(line))]
+    function = re.compile(rf"^(?:export\s+)?\s*(?:async\s+)?function\s*\*?\s*({IDENT})")
+    method = re.compile(rf"^ {{4}}(?:async\s+)?({IDENT})\s*\([^)]*\)\s*\{{")
     out = []
     for k, line in enumerate(text.splitlines(), 1):
-        m = pattern.match(line)
-        if m:
-            out.append((k, next(g for g in m.groups() if g)))
+        m = function.match(line) or (path.endswith(".mjs") and method.match(line))
+        if m and m.group(1) not in JS_KEYWORDS:
+            out.append((k, m.group(1)))
+        out += [(k, name) for name, _ in _js_decls(line)]
     return out

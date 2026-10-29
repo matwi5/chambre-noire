@@ -1137,7 +1137,8 @@ GitHub, la même commande, complète, tourne sur chaque pull request vers `main`
 
 Il vérifie aussi, sur les lignes ajoutées, les règles de `CODING_STANDARDS.md` devenues mécaniques (`tests/rules.py`),
 et que chaque nom cité par la carte du code existe encore ; `--map <nom>` imprime la ligne des fonctions de
-`tools/launch.py` et `tools/ui/index.html` dont le nom le contient, `--show <nom>` le corps d'une de ces fonctions et
+`tools/launch.py`, `tools/ui/index.html`, du pilote des tests d'interface (`tests/ui/driver.mjs`) et du banc
+(`tests/bench.py`) dont le nom le contient, `--show <nom>` le corps d'une de ces fonctions et
 `--uses <mot>` les usages d'un nom dans `tools/`, `tests/`, ce README et la carte du code. Les contrôles
 rapides (compilation, JavaScript, longueur des lignes, règles) passent d'abord : si l'un échoue, le banc et
 l'interface ne sont pas lancés. La dernière ligne de la sortie nomme chaque faute (`fichier:ligne`, test du banc,

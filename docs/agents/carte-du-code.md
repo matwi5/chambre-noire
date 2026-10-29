@@ -8,10 +8,22 @@ cité ici entre accents graves n'existe plus dans le code : un renommage met la 
 L'API locale (routes, champs, codes d'erreur) est décrite dans le README, « Fonctionnement technique » ; les formats
 et les raisons dans `DECISIONS.md`.
 
-Sommaire : `tools/launch.py` (le serveur) ; `tools/ui/index.html` (l'interface) ; Mécanismes ; Pièges de
-l'interface ; Copies entre Python et JavaScript ; Tests. Pour lire sans `grep` : `check.py --map <nom>` situe une
-fonction, `check.py --show <nom>` imprime son corps, `check.py --uses <mot>` liste ses usages dans `tools/`,
-`tests/`, le README et cette carte.
+Sommaire : lire la section voulue, pas tout le fichier ; pour une fonction, `check.py --map <nom>` la situe (dans
+`tools/launch.py`, `tools/ui/index.html`, le pilote `tests/ui/driver.mjs` et le banc `tests/bench.py`),
+`check.py --show <nom>` imprime son corps, `check.py --uses <mot>` liste ses usages dans `tools/`, `tests/`, le
+README et cette carte.
+
+- **`tools/launch.py`** (le serveur) : constantes et moteur ; accès ; notifications ; prompts enregistrés ; espace
+  privé ; galerie, pile et journal ; état ; préparer et lancer une génération ; file ; demandes ; HTTP ; démarrage.
+- **`tools/ui/index.html`** (l'interface) : CSS ; HTML ; JavaScript, section par section (valeurs fixes, onglets et
+  statut, champ de création, images et dessin, requête, affichage des images, bouton Avant, générations de la page
+  et file, pile du Labo, notifications, prompts enregistrés, galerie et visionneuse, partager, images d'entrée,
+  espace privé…).
+- **Mécanismes** : une génération ; fichiers ; lots ; notifications ; prompts enregistrés ; interface et serveur ;
+  contrôle d'accès ; espace privé ; génération privée ; estimation des durées.
+- **Pièges de l'interface** : brouillon et mémoire de la page ; visionneuse et images affichées ; saisie par espace.
+- **Copies entre Python et JavaScript** : constantes et formules recopiées, avec leurs deux emplacements.
+- **Tests** : banc, pilote, sonde, planche et leurs recettes.
 
 ```text
 navigateur ──HTTP──▶ tools/launch.py ──lance une fois par génération──▶ sdcpp/<moteur>/sd-cli ──▶ PNG
