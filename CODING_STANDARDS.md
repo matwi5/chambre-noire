@@ -19,6 +19,11 @@ les tests viennent de bugs passés à travers les revues par ticket.
   sur tout le dépôt suivi (README, docstrings et commentaires, carte du code, et textes de l'interface :
   `tools/ui/index.html`, `LOGIN_PAGE` de `tools/launch.py`, page hors ligne de `tools/ui/sw.js`), et la reprendre dans
   le même commit. Un ancien libellé était resté dans l'interface après un renommage.
+- **Une description ou un commentaire que le diff rend faux est un constat Important**, pas Mineur : il trompe la
+  session suivante (la carte du code et des commentaires CSS devenus faux ont été livrés, classés Mineurs).
+- **Une règle de comportement est décrite à un seul endroit, et les autres y renvoient** : les raccourcis clavier,
+  décrits à trois endroits, ont divergé ; le README, la carte du code ou un commentaire nomment l'endroit qui fait foi
+  au lieu de recopier la règle.
 
 ## Données et disque
 
@@ -46,6 +51,12 @@ les tests viennent de bugs passés à travers les revues par ticket.
   15/10/2026). `changedSpace` ferme toute feuille qui montre une donnée de l'espace quitté. Une garde (plafond,
   dessin, confirmation) se refait à l'arrivée sur la liste notée, et une question au porteur ne porte que sur la
   saisie affichée.
+- **Une action qui attend revérifie après l'attente qu'elle a encore le droit d'agir** : après un `await` (une
+  confirmation, un `fetch`, la lecture d'un fichier), elle relit `exiting()` (« Sortir » en cours) et `beforeHeld`
+  (image d'avant tenue) avant d'envoyer quoi que ce soit ; vérifiés seulement avant l'attente, ils laissaient partir
+  une requête privée pendant « Sortir » (chaque passe « bogues » du groupe F en a retrouvé une).
+- **Une hauteur réservée en CSS nomme ce qu'elle réserve** (un commentaire : l'élément et son cas le plus haut), et
+  son test mesure ce cas le plus chargé : une hauteur en pixels réservée pour une carte a été corrigée trois fois.
 - **Un élément montré ou caché par `hidden` dont le CSS fixe `display` a sa règle `[hidden]{display:none}`** : sinon
   le `display` du CSS l'emporte et l'élément reste visible.
 - **Une génération suivie se rapproche de la file par son identifiant, jamais par son rang** : la page interroge
@@ -75,6 +86,9 @@ les tests viennent de bugs passés à travers les revues par ticket.
   modifie l'arbre. L'échec doit venir de l'assertion qui porte le titre du test : `mutate.py` nomme chaque test en
   échec et le premier message de son assertion (une erreur de la page ou une autre assertion ne prouve rien), et
   garde la preuve dans son journal, où l'avis « zone sensible » de `check.py` cherche les fonctions touchées.
+- **Un gestionnaire global ou d'un ancêtre qui reprend une action des gestionnaires locaux fait relire les tests
+  voisins qui lisent cette action** : un écouteur global de touches a rendu deux tests infalsifiables (l'action
+  passait par lui, que le test ne visait pas), sans que la revue du ticket le voie.
 - **Une assertion « rien ne change » attend d'abord la fin de l'action qui pourrait changer quelque chose** (réponse
   reçue, Mac au repos : `bench.idle()`) : vérifiée trop tôt, elle passe avant que le changement arrive.
 - **Un fichier de test se termine par `if __name__ == "__main__": unittest.main()`**, pour se lancer seul.
