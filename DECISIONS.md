@@ -338,6 +338,9 @@ avant son lancement :
 - « r3 : le contrôle complet saute le banc quand aucun .py n'a changé depuis le dernier banc vert. On en fait le
   comportement par défaut ? » → « Par défaut (Recommandé) » : « check.py retient le dernier banc vert par empreinte
   des .py ; --force le relance quand même. La CI garde le banc complet à chaque fois. »
+- Revues de la session des pistes : « Il faudra que la session lie de retro fasse les revus comme pour les groupes »
+  (porteur, 29/10/2026) : revue de chaque lot (Standards et Spec, passe « bogues » s'il est sensible), revue de la
+  session entière et jugement de la revue de sécurité, comme une session de groupe.
 - **Écarté** : l'appui long sur l'image elle-même (et donc le blocage du menu natif de l'appui long) ; garder la
   photo non peinte d'une annotation ; une marque « ⇆ Avant » distincte du bouton ; un zoom au doigt qui reste après
   le relâché ; des maquettes avant de coder ; un délai de 5 s propre à chaque image jetée.
