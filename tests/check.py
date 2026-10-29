@@ -51,10 +51,10 @@ un fichier créé passe les contrôles avant son premier commit.
 5. lance le banc (unittest discover -s tests), recopie telles quelles sa ligne « Ran N tests … » et son verdict, et
    affiche sa durée ; seuls tests/test_public_repo.py et les modules qui lisent un fichier autre qu'un .py
    (bench_readers : l'interface, la carte du code, le README…) tournent quand les .py (suivis et nouveaux, tests
-   compris) sont ceux du dernier banc entier vert (empreinte, à côté du journal ; la ligne « Ran N tests » de ce banc
-   est citée avec sa date ; décision du 29/10/2026), ou avec --quick et aucun .py changé depuis le dernier commit
-   (ticket_base : non suivis compris ; hors git, le banc tourne) ; jamais en CI (CI, GITHUB_ACTIONS : le banc entier,
-   toujours), et --force le relance ;
+   compris) et les réglages tools/*.json sont ceux du dernier banc entier vert (empreinte, à côté du journal ; la ligne
+   « Ran N tests » de ce banc est citée avec sa date ; décision du 29/10/2026), ou avec --quick et aucun .py changé
+   depuis le dernier commit (ticket_base : non suivis compris ; hors git, le banc tourne) ; jamais en CI (CI,
+   GITHUB_ACTIONS : le banc entier, toujours), et --force le relance ;
 6. avec --ui : les tests d'interface tests/ui/*.test.mjs, ou les seuls fichiers donnés (pilote Chrome, voir
    tests/ui/driver.mjs), UI_JOBS fichiers à la fois (3 par défaut, QWEN_UI_JOBS), chacun avec sa durée, en même
    temps que le banc : chacun son Chrome, et son serveur sur un port libre, depuis son propre dossier temporaire
@@ -562,7 +562,13 @@ def hook_lines(stdin):
     found = long_lines(base, paths=paths) if paths else []
     if not found:
         return 0
-    messages = [] if data.get("agent_id") else [m for m in recut(found) if " : 0 ligne(s) recoupée(s)" not in m]
+    # ni un sous-agent (il ne réécrit pas les fichiers d'un autre), ni une commande git qui écrit l'arbre (fusion,
+    # changement de branche, remise : la recoupe ne suivrait pas l'index) : la faute est seulement signalée
+    command = str(data.get("tool_input", {}).get("command", ""))
+    by_git = re.search(r"\bgit\s+(?:-C\s+\S+\s+)?"
+                       r"(?:merge|checkout|switch|stash|rebase|cherry-pick|reset|restore|pull|am)\b", command)
+    messages = [] if data.get("agent_id") or by_git else [m for m in recut(found)
+                                                          if " : 0 ligne(s) recoupée(s)" not in m]
     left = long_lines(base, paths=paths)
     if messages:
         print("Lignes de plus de {} caractères recoupées par le hook (fichier à relire avant de l'éditer) :"
@@ -795,6 +801,12 @@ RED = {"ui": {}, "bench": {}}
 CAPPED_FILES = set()                                 # fichiers d'interface arrêtés au plafond (pas rejoués)
 
 
+def fault_module(fault):
+    """Module du banc d'une faute (« test_x.Classe.test_y ») ; un module qui ne s'importe pas
+    (« unittest.loader._FailedTest.test_x ») : test_x."""
+    return fault.rsplit(".", 1)[-1] if fault.startswith("unittest.loader._FailedTest.") else fault.split(".")[0]
+
+
 def bench_fault(m):
     """Identifiant complet d'un test du banc en échec (BENCH_FAULT_RE) : « test_x.Classe.test_y »."""
     name, where = m.group(1), m.group(2)
@@ -938,6 +950,8 @@ def run_ui(files, name=None, wait=None, jobs=None, repeat=1):
             shown.append(out)
             RED["ui"].setdefault(file, [])
             RED["ui"][file] = list(dict.fromkeys(RED["ui"][file] + failed_titles(out)))
+            if capped:                                # tests jamais atteints après l'arrêt : le fichier entier
+                RED["ui"][file] = []
         failed = counts.get("fail", 0) + counts.get("cancelled", 0)
         todo = f", {counts['todo']} à faire" if counts.get("todo") else ""      # test « todo » : compté, sans échec
         cap_note = f", arrêté au plafond de {capped.group(1)} échecs" if capped else ""
@@ -1048,7 +1062,9 @@ def tree_state():
 
     def digest(keep):
         return hashlib.sha256("\n".join(e for e in entries if keep(e.split("\t", 1)[-1])).encode()).hexdigest()
-    return {"tree": tree, "py": digest(lambda p: p.endswith(".py")), "code": digest(lambda p: not p.endswith(".md"))}
+    # (les .py, et les réglages que le banc lit à travers launch.py et bench.py : tools/*.json)
+    bench_input = lambda p: p.endswith(".py") or re.fullmatch(r"tools/[^/]+\.json", p)
+    return {"tree": tree, "py": digest(bench_input), "code": digest(lambda p: not p.endswith(".md"))}
 
 
 def run_options(args):
@@ -1163,7 +1179,7 @@ def replay(failed, args):
     instable est à comprendre), mais le rejeu du fichier seul, ou --failed, suffit à le revoir. Renvoie {faute :
     verdict}."""
     files = [f for f in failed.get("Interface", []) if f.endswith(".test.mjs") and f not in CAPPED_FILES]
-    modules = list(dict.fromkeys(f.split(".")[0] for f in failed.get("Banc", []) if f != "banc"))
+    modules = list(dict.fromkeys(fault_module(f) for f in failed.get("Banc", []) if f != "banc"))
     if args.repeat > 1 or not files + modules:
         return {}
     if len(files) + len(modules) > REPLAY_MAX:
@@ -1179,10 +1195,16 @@ def replay(failed, args):
         ok, lines, _ = run_bench(f"{module}.py")
         verdicts[module] = "intermittent : vert seul" if ok else "reproductible"
         print(f"Rejeu seul : {module}.py : {verdicts[module]} ({lines[-3].split(' : ', 1)[-1]})")
-    for name, key in (("Interface", lambda f: f), ("Banc", lambda f: f.split(".")[0])):
+    for name, key in (("Interface", lambda f: f), ("Banc", fault_module)):
         if name in failed:
             failed[name] = [f"{f} ({verdicts[key(f)]})" if key(f) in verdicts else f for f in failed[name]]
     return verdicts
+
+
+def intended_red():
+    """Vrai pour un contrôle dont un rouge est souvent le but : --at (QWEN_CHECK_AT), une preuve de tests/mutate.py
+    (QWEN_MUTATING) ou un contrôle lancé par un test avec son propre journal (QWEN_CHECK_JOURNAL)."""
+    return any(os.environ.get(k) for k in ("QWEN_CHECK_AT", "QWEN_MUTATING", "QWEN_CHECK_JOURNAL"))
 
 
 def failure_log_path():
@@ -1248,8 +1270,11 @@ def run_checks(args, state=None, green=None):
         print(f"Banc et interface : pas relancés : seuls des .md ont changé depuis le contrôle vert du "
               f"{source['when']} (mêmes options ; --force les relance) ; seuls tournent le test du dépôt public et "
               "les tests qui lisent d'autres fichiers que des .py")
+        RED["ui"].clear(), RED["bench"].clear(), CAPPED_FILES.clear()
         ok, lines, faults = run_bench(modules=bench_readers())
         print("\n".join(lines))
+        write_red()
+        sensitive_notice(ticket_base())              # (comme « déjà vert » : l'avis n'est jamais sauté)
         if not ok:
             return {"Banc": faults}, []
         return failed, [l for l in lines if CITED_RE.match(l)] + cited_from(source)
@@ -1299,8 +1324,9 @@ def run_checks(args, state=None, green=None):
                 if ran:
                     write_json(bench_record(journal_path()), {"py": state["py"], "ran": ran,
                                                               "when": time.strftime("%d/%m/%Y %H:%M")})
-    if (failed.get("Interface") or failed.get("Banc")) and not os.environ.get("QWEN_CHECK_AT"):
-        # (sous --at, un rouge est souvent le but : ni rejeu, ni journal persistant des échecs)
+    if (failed.get("Interface") or failed.get("Banc")) and not intended_red():
+        # (--at, preuve de mutate.py, contrôle lancé par un test : un rouge est souvent le but ; ni rejeu, ni journal
+        # persistant des échecs)
         print(f"Charge à la fin : {load_line(load_info())}")
         verdicts = replay(failed, args)
         log_failures(info, verdicts)
@@ -1403,6 +1429,13 @@ def run_failed(args):
         if not ok:
             failed.setdefault("Banc", []).extend(faults)
     for f, titles in red.get("ui", {}).items():
+        # un titre qui n'est plus un test du fichier (renommé, ou le fichier lui-même, tombé au chargement) : node le
+        # compterait réussi sans rien lancer ; alors le fichier entier
+        try:
+            known = set(ui_titles([f]))
+        except OSError:                               # fichier retiré
+            known = set()
+        titles = titles if titles and all(t in known for t in titles) else []
         name = "^(?:" + "|".join(re.escape(t) for t in titles) + ")$" if titles else None
         ok, lines, faults = run_ui([f], name, jobs=1)
         print("\n".join(lines))

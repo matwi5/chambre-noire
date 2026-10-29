@@ -383,11 +383,19 @@ class ReplayTest(StaticsMocked):
         failed, _, _, _ = self.run_checks(*self.UI, ui=[(RED_OUT, 1), (RED_OUT, 1)])
         self.assertEqual(failed, {"Interface": ["tests/ui/a.test.mjs (reproductible)"]})
         with mock.patch.object(check, "run_ui_file", return_value=(GREEN_OUT, 0)) as run_file, \
+                mock.patch.object(check, "ui_titles", return_value=["un vert", "un rouge"]), \
                 contextlib.redirect_stdout(io.StringIO()) as out:
             failed, _ = check.run_failed(check.parse_args(["--failed"]))
         self.assertEqual(failed, {}, out.getvalue())
         self.assertEqual(run_file.call_args.args[0], "tests/ui/a.test.mjs")
         self.assertIn("--test-name-pattern=^(?:un\\ rouge)$", run_file.call_args.args[1])
+        # un titre qui n'est plus un test du fichier (renommé, ou le fichier tombé au chargement) : le fichier entier
+        self.run_checks(*self.UI, ui=[(RED_OUT, 1), (RED_OUT, 1)])
+        with mock.patch.object(check, "run_ui_file", return_value=(GREEN_OUT, 0)) as run_file, \
+                mock.patch.object(check, "ui_titles", return_value=["un vert", "rouge renommé"]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            check.run_failed(check.parse_args(["--failed"]))
+        self.assertFalse(any(a.startswith("--test-name-pattern") for a in run_file.call_args.args[1]))
         with contextlib.redirect_stdout(io.StringIO()) as out:
             check.run_failed(check.parse_args(["--failed"]))
         self.assertIn("rien à rejouer", out.getvalue(), "tout est revenu vert : plus rien de rouge")
@@ -511,6 +519,7 @@ class FailCapTest(unittest.TestCase):
         self.assertIn("fichier arrêté après 3 échecs", text)
         self.assertNotIn("rouge 4", text, "arrêté au troisième")
         self.assertIn(f"Interface : {path} : 5 tests, 3 en échec, arrêté au plafond de 3 échecs", text)
+        self.assertEqual(check.RED["ui"][path], [], "plafonné : --failed le rejoue entier")
 
 
 class NoticeBaseTest(RepoCase):

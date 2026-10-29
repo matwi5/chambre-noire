@@ -62,6 +62,8 @@ def failures(out):
     [(test, message)]."""
     found = []
     for m in UNITTEST_RE.finditer(out):
+        if m.group(2).startswith("unittest.loader._FailedTest"):   # module qui ne s'importe plus : pas un test
+            continue
         lines = [l.strip() for l in m.group(3).splitlines() if l.strip()]
         message = next((l for l in lines if re.match(r"\w*(?:Error|Exception)\b", l)), lines[-1] if lines else "")
         found.append((m.group(2), message))
@@ -74,9 +76,12 @@ def failures(out):
             summary.setdefault(m.group(1), next((l.strip() for l in lines[k + 1:] if l.strip()), ""))
     for line in head.splitlines():                     # l'arbre : aussi un fichier arrêté avant son résumé
         m = NODE_FAIL_RE.match(line)
+        if m and m.group(1).endswith((".mjs", ".js")):   # fichier tombé au chargement : pas un test
+            continue
         if m and not line.lstrip().startswith("✖ failing tests"):
             found.append((m.group(1), summary.get(m.group(1), "(message dans le journal : fichier arrêté avant)")))
-    found += [(t, msg) for t, msg in summary.items() if not any(t == f for f, _ in found)]
+    found += [(t, msg) for t, msg in summary.items()
+              if not t.endswith((".mjs", ".js")) and not any(t == f for f, _ in found)]
     return list(dict.fromkeys(found))
 
 
@@ -134,7 +139,7 @@ def main(argv=None):
     try:
         write_whole(args.file, mutated)
         proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                encoding="utf-8", errors="replace")
+                                encoding="utf-8", errors="replace", env=dict(os.environ, QWEN_MUTATING="1"))
         for line in proc.stdout:                       # la sortie passe telle quelle, et reste lue pour la fin
             sys.stdout.write(line)
             out.append(line)

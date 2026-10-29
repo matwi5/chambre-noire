@@ -98,6 +98,9 @@ class MutateTest(unittest.TestCase):
                "AssertionError: 1 != 2\n\n" + "=" * 70 + "\nFAIL: test_cas (test_y.C.test_cas) (cookie='x')\n"
                + "-" * 70 + "\nAssertionError: 403 != 200\n\n" + "-" * 70 + "\nRan 2 tests\n")
         capped = "✔ vert (1ms)\n✖ rouge un (2ms)\n✖ rouge deux (3ms)\nfichier arrêté après 2 échecs\n"
+        broken = ("ERROR: test_x (unittest.loader._FailedTest.test_x)\n" + "-" * 70 + "\nImportError: x\n\n"
+                  "✖ tests/ui/x.test.mjs (25ms)\n")
+        self.assertEqual(mutate.failures(broken), [], "un import ou un fichier tombés ne sont pas des tests")
         failed = mutate.failures(doc + capped)
         self.assertEqual([t for t, _ in failed], ["test_y.C.test_doc", "test_y.C.test_cas", "rouge un", "rouge deux"])
         self.assertEqual(failed[0][1], "AssertionError: 1 != 2", "docstring de test sautée")
