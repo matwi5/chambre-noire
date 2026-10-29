@@ -52,6 +52,8 @@
 //   await page.keepPile()                        // toutes les images de la pile affichée gardées par ✓ (Tirages)
 //   await page.topPrompt()                       // prompt de la carte du dessus de la pile ; TOP : la même
 //                                                // expression, pour une attente (`${TOP} === 'x'`)
+//   await page.pileCards()                       // prompts des cartes dessinées de la pile, du dessus au dessous
+//   await page.emptyPile(bench)                  // Mac et page au repos, puis la pile gardée (repartir de rien)
 //   await page.watchToasts(); …; seenToasts      // messages affichés par la page à partir de l'appel
 //   await page.topShown()                        // image du dessus affichée (posed), pile au repos : ✓, ✕, les
 //                                                // flèches et le balayage la trient (sauf l'image d'avant tenue)
@@ -592,6 +594,16 @@ async function connect(wsUrl, { closeTab, siblings }) {
     },
     // prompt de la carte du dessus de la pile affichée (undefined sans carte)
     topPrompt() { return page.eval(TOP); },
+    // prompts des cartes dessinées de la pile affichée, du dessus vers le dessous
+    pileCards() {
+      return page.eval(`[...$('pile').querySelectorAll('.pcard')].map(c => c.querySelector('.pprompt').textContent)`);
+    },
+    // pile affichée vidée pour repartir de rien : le Mac et la page au repos (bench.idle), puis ses images gardées
+    // (keepPile)
+    async emptyPile(bench) {
+      await bench.idle({ page });
+      await page.keepPile();
+    },
     // messages (toasts) affichés par la page à partir de l'appel, notés dans seenToasts (texte de chacun) ; un nouvel
     // appel repart d'une liste vide
     watchToasts() {
