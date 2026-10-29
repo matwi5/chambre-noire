@@ -1125,13 +1125,13 @@ Tous les contrôles en une commande : `venv/bin/python tests/check.py` compile l
 du JavaScript de l'interface avec Node.js (`node --check`), refuse une ligne ajoutée de plus de 120 caractères
 depuis la séparation d'avec `origin/main`, lance le banc et affiche son résultat (`--no-bench` pour le sauter ;
 `--quick` le saute si aucun fichier Python n'a changé depuis le dernier commit). Hors de la CI, le banc entier n'est
-pas relancé quand les fichiers Python sont ceux du dernier banc vert (seuls tournent le test du dépôt public et les
-tests qui lisent d'autres fichiers, comme l'interface ou le README, et le résultat de ce banc est cité avec sa
-date ; `--force` le relance), et quand seuls des fichiers Markdown ont changé depuis le dernier contrôle vert aux
-mêmes options, ni le reste du banc ni l'interface ne repassent. Il échoue aussi si un fichier
-du dépôt contient un repère propre à une machine (chemin de dossier personnel, adresse IP privée, nom Tailscale) : le
-dépôt est public. Un avis, sans échec, signale un changement de code pas encore commité qui touche l'espace privé ou
-la suppression d'images, et nomme la fonction (ou la route) de chaque ligne touchée. Sur
+pas relancé quand les fichiers Python et les réglages `tools/*.json` sont ceux du dernier banc vert (seuls tournent
+le test du dépôt public et les tests qui lisent d'autres fichiers, comme l'interface ou le README, et le résultat de
+ce banc est cité avec sa date ; `--force` le relance), et quand seuls des fichiers Markdown ont changé depuis le
+dernier contrôle vert aux mêmes options, ni le reste du banc ni l'interface ne repassent. Il échoue aussi si un
+fichier du dépôt contient un repère propre à une machine (chemin de dossier personnel, adresse IP privée, nom
+Tailscale) : le dépôt est public. Un avis, sans échec, signale un changement de code pas encore commité qui touche
+l'espace privé ou la suppression d'images, et nomme la fonction (ou la route) de chaque ligne touchée. Sur
 GitHub, la même commande, complète, tourne sur chaque pull request vers `main` et chaque envoi sur `dev`
 (`.github/workflows/checks.yml`, sur macOS).
 
@@ -1160,8 +1160,9 @@ commentaire seul sur sa ligne, docstring Python), en gardant retrait, puces et c
 reste du paragraphe, et nomme celles qui restent à recouper à la main ; `python3 tests/rewrap.py <fichier>.md` fait
 de même pour un fichier Markdown (toutes ses lignes trop longues avec `--all`). Dans Claude Code, le hook du dépôt
 (`.claude/settings.json`) lance `check.py --hook` après chaque écriture d'un fichier (Edit, Write), qu'il juge seul,
-et après chaque commande (script, heredoc), où il juge les fichiers qu'elle a écrits : il recoupe
-seul la prose trop longue (Markdown, commentaires, docstrings) et montre tout de suite le code trop long.
+et après chaque commande réussie (script, heredoc), où il juge les fichiers qu'elle a écrits : il recoupe seul la
+prose trop longue (Markdown, commentaires, docstrings) et montre tout de suite le code trop long ; après une commande
+git qui écrit l'arbre (fusion, changement de branche, remise), il signale sans recouper.
 
 Tests de l'interface, sur Mac avec Google Chrome et Node.js : `venv/bin/python tests/check.py --ui` (en même temps que
 le banc), ou `--ui tests/ui/<fichier>.test.mjs` pour un seul fichier, et `--name <motif>` pour les seuls tests dont le
