@@ -14,9 +14,9 @@
 // balayage de la carte du dessus au doigt et à la souris (seuil, geste vif, tampons, échec qui ne part qu'à gauche,
 // pile redessinée sous le doigt, clic qui ouvre la visionneuse) ; après un tri, ✓, ✕ et la visionneuse ignorent un
 // double appui jusqu'à l'image suivante affichée depuis 0,3 s, comme une carte arrivée sur le dessus sans tri d'ici ;
-// carte masquée par Dessiner jamais triée ; aucun geste ne trie une image pas encore affichée,
-// même 3 s plus tard, et une image illisible se trie une fois son chargement en échec,
-// pas pendant.
+// ces 0,3 s ne comptent que page visible (carte ou image de la visionneuse arrivée page cachée, page gelée ; une carte
+// déjà vue avant se trie dès le retour) ; carte masquée par Dessiner jamais triée ; aucun geste ne trie une image pas
+// encore affichée, même 3 s plus tard, et une image illisible se trie une fois son chargement en échec, pas pendant.
 //   venv/bin/python tests/check.py --quick --ui tests/ui/pile.test.mjs
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
