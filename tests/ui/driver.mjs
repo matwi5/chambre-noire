@@ -374,7 +374,17 @@ async function connect(wsUrl, { closeTab, siblings }) {
   on('Log.entryAdded', p => {
     if (p.entry.level === 'error')
       record(`${p.entry.source} : ${p.entry.text}${p.entry.url ? ` (${p.entry.url})` : ''}`); });
-  await Promise.all([send('Runtime.enable'), send('Log.enable'), send('Page.enable')]);
+  // images demandées, ni reçues ni en échec, vues par Chrome : identifiant de la requête → chemin de l'adresse
+  // (privateIdle). Une image différée hors de l'écran n'y est pas : sa requête ne part jamais. Un nouveau document
+  // les oublie (celles de l'ancien sont abandonnées) ; le suivi reste actif toute la vie de la page (page.send refuse
+  // Network.disable)
+  const imageLoads = new Map();
+  on('Network.requestWillBeSent', p => {
+    if (p.type === 'Image' && /^https?:/.test(p.request.url))
+      imageLoads.set(p.requestId, new URL(p.request.url).pathname); });
+  for (const end of ['Network.loadingFinished', 'Network.loadingFailed']) on(end, p => imageLoads.delete(p.requestId));
+  on('Page.frameNavigated', p => { if (!p.frame.parentId) imageLoads.clear(); });
+  await Promise.all([send('Runtime.enable'), send('Log.enable'), send('Page.enable'), send('Network.enable')]);
   // requêtes privées comptées dès le chargement de chaque document (privateIdle, page.close)
   await send('Page.addScriptToEvaluateOnNewDocument', { source: COUNT_PRIVATE });
 
@@ -408,7 +418,12 @@ async function connect(wsUrl, { closeTab, siblings }) {
   }
   let holding = null, holdHook = false;              // requêtes retenues en cours (page.holdRequests), écouteur posé
   const page = {
-    send, on, errors,
+    on, errors,
+    // commande du protocole ; Network.disable refusé : il couperait le suivi des images (privateIdle)
+    send(method, params) {
+      if (method === 'Network.disable') return Promise.reject(new Error('Network.disable : suivi du pilote coupé'));
+      return send(method, params);
+    },
     // évalue une expression dans la page (promesse attendue) et renvoie sa valeur (JSON) ; échoue après timeout ms
     // (une promesse jamais tenue, comme une confirmation qui attend sa réponse, ne bloque pas le test)
     async eval(expression, { timeout = EVAL_TIMEOUT } = {}) {
@@ -468,14 +483,21 @@ async function connect(wsUrl, { closeTab, siblings }) {
     // du document ; sur un document déjà chargé avant la connexion, à partir de l'appel
     countPrivate() { return page.eval(COUNT_PRIVATE); },
     // espace privé au repos : pile privée lue, aucune requête privée en route (comptées dès le chargement du
-    // document), aucune image privée en chargement (une vignette différée hors de l'écran n'est jamais chargée : elle
-    // fait échouer l'attente). À attendre avant de fermer l'espace sans « Sortir »
-    // (le Mac, une fermeture de la page) : une requête servie après la fermeture répondrait 403, ce que la page ne peut
-    // pas savoir
+    // document), aucune image de l'espace (secretUrl) en cours de décodage (secretLoads), ni demandée et pas encore
+    // reçue, attachée ou non (requêtes vues par Chrome), ni sur le point de l'être : image de la page pas encore
+    // chargée, sauf une image différée hors de l'écran (ou page cachée), qui ne demande jamais la sienne et ne retient
+    // donc pas l'attente. À attendre avant de fermer l'espace sans « Sortir » (le Mac, une fermeture de la page) :
+    // une requête servie après la fermeture répondrait 403, ce que la page ne peut pas savoir
     async privateIdle() {
       await page.countPrivate();
-      await page.waitFor(`!__privInflight && pileRead && !secretLoads.size && ![...document.querySelectorAll('img')]
-        .some(i => secretUrl(i.getAttribute('src')) && !i.complete)`, { what: 'espace privé au repos' });
+      await waitUntil(async () => {
+        if (!await page.eval(`!__privInflight && pileRead && !secretLoads.size
+          && ![...document.querySelectorAll('img')].some(i => secretUrl(i.getAttribute('src')) && !i.complete
+            && (i.loading !== 'lazy' || !document.hidden && (r => r.width && r.bottom > 0 && r.top < innerHeight
+              && r.right > 0 && r.left < innerWidth)(i.getBoundingClientRect())))`)) return false;
+        // requêtes lues après la réponse : Chrome envoie avant elle les événements des requêtes déjà parties
+        return page.eval(`!${JSON.stringify([...imageLoads.values()])}.some(secretUrl)`);
+      }, { what: 'espace privé au repos' });
     },
     // autre vue (PHONE, PC, TABLET, TABLET_WIDE) sans recharger la page, comme une fenêtre redimensionnée
     setView(view) { return applyView(page, view); },

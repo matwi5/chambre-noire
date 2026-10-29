@@ -767,6 +767,10 @@ test('espace privé : pendant « Sortir », ni Tirages, ni file, ni « Voir le l
     await waitUntil(() => x.locking(), { what: 'sortie demandée' });
     assert.equal(await page.eval(`zqLockCalls`), 1, 'second verrouillage envoyé par un second appui');
     assert.equal(await page.eval(`$('zqLazy').hasAttribute('src')`), false, 'vignette différée encore à charger');
+    // la vignette différée appelée à l'écran (chargement immédiat) avant que les Tirages ne soient redessinés : une
+    // adresse restée lui ferait demander son image, notée dans x.after ; sans adresse, elle est aussitôt complète
+    await page.eval(`$('zqLazy').loading = 'eager'`);
+    await page.waitFor(`$('zqLazy').complete`, { what: 'vignette différée chargée, ou sans adresse' });
     // vignette des Tirages en échec : sa seconde tentative (minuteur de 0,7 s, joué tout de suite ici)
     await page.eval(`(() => { const t = window.setTimeout; window.setTimeout = f => { f(); return 0; };
       try { const im = $('histGrid').querySelector('img'); delete im.dataset.retry; im.onerror(); }

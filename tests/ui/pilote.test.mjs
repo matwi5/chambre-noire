@@ -145,6 +145,39 @@ test('page.close dans l\'espace privé : une requête privée partie avant tout 
     page.assertNoErrors();
   });
 
+test('page.privateIdle : une vignette privée différée jamais chargée ne la retient pas, une image privée en route si',
+  async () => {
+    await page.enterPrivate('code-du-pilote');
+    await page.made('zp3 secrete');
+    const thumb = await page.eval(`thumbOf(pileItems.find(it => it.private))`);
+    // vignette différée dans un bloc caché (comme les Tirages quand on est au Labo) : sa requête ne part jamais
+    await page.eval(`(() => { const d = document.createElement('div'); d.id = 'zpLazy'; d.hidden = true;
+      const im = document.createElement('img'); im.loading = 'lazy'; im.src = ${JSON.stringify(thumb + '&zp=lazy')};
+      d.append(im); document.body.append(d); })()`);
+    assert.equal(await page.eval(`$('zpLazy').firstChild.complete`), false, 'vignette pas chargée (prémisse)');
+    await page.privateIdle();
+    assert.equal(await page.eval(`$('zpLazy').firstChild.complete`), false, 'vignette différée chargée quand même');
+    // une image privée dont la requête est partie (retenue avant le Mac) : attendue jusqu'à sa réponse
+    const held = await page.holdRequests(['*/api/private/thumb*'], p => p.request.url.includes('zp=held'));
+    let idle = false, waiting = null;
+    try {
+      // (image détachée, comme celles que la page charge à part : seule sa requête la montre)
+      await page.eval(`(() => { window.zpHeld = new Image(); zpHeld.src = ${JSON.stringify(thumb + '&zp=held')}; })()`);
+      await waitUntil(() => held.held.length > 0, { what: 'image privée en route' });
+      waiting = page.privateIdle().then(() => { idle = true; });
+      await elapse(500);
+      assert.equal(idle, false, 'espace dit au repos avec une image privée en route');
+    } finally {
+      await held.release();
+    }
+    await waiting;
+    await page.eval(`$('zpLazy').remove(); window.zpHeld = null`);
+    await page.keepPile();
+    await page.click('#privExit');
+    await page.waitFor(`!inPrivate()`, { what: 'page sortie de l\'espace' });
+    page.assertNoErrors();
+  });
+
 // ce que la page voit de sa vue : largeur, pointeur principal, survol et tactile
 const SEEN = `({ width: innerWidth, height: innerHeight, coarse: matchMedia('(pointer: coarse)').matches,
   hover: matchMedia('(hover: hover)').matches, touch: navigator.maxTouchPoints > 0 })`;

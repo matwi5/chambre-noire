@@ -469,12 +469,12 @@ test('image avant privée en chargement pendant « Sortir » : rien n\'arrive ap
   await page.freshLabo(bench);
   await page.enterPrivate(PCODE);
   // l'image d'entrée privée complète retenue avant le Mac dès sa première demande (sa miniature passe) ; ses
-  // demandes suivies par le réseau du navigateur jusqu'à leur issue (finie, ou abandonnée par la page)
+  // demandes suivies par le réseau du navigateur jusqu'à leur issue (finie, ou abandonnée par la page ; le pilote
+  // suit le réseau de chaque page dès son ouverture)
   const FULL = /\/api\/private\/input\?.*&file=ref_1\.png$/, sent = new Set(), ended = new Set();
   page.on('Network.requestWillBeSent', p => { if (FULL.test(p.request.url)) sent.add(p.requestId); });
   page.on('Network.loadingFinished', p => ended.add(p.requestId));
   page.on('Network.loadingFailed', p => ended.add(p.requestId));
-  await page.send('Network.enable');
   const held = await page.holdRequests(['*/api/private/input*&file=ref_1.png'], () => true);
   assert.equal(await ask(`mode: 'edit', prompt: 'zl privee', private: true, ref_images: [${plain('#6030a0')}]`), 202);
   await bench.idle();
@@ -491,7 +491,6 @@ test('image avant privée en chargement pendant « Sortir » : rien n\'arrive ap
   // chaque demande de l'image complète arrivée à son issue, puis le temps de la décoder et de la poser
   const waiting = () => [...sent].filter(id => !ended.has(id));
   await waitUntil(() => sent.size > 0 && !waiting().length, { what: 'image complète arrivée' });
-  await page.send('Network.disable');
   await page.eval(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
   await page.release();
   assert.deepEqual(await page.eval(PRIVATE_LEFT), NOTHING_LEFT, 'image privée arrivée après la sortie');
