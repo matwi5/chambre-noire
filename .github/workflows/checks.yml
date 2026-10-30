@@ -35,5 +35,6 @@ jobs:
           node-version: "24"
       - name: Dépendances Python
         run: python -m pip install -r requirements.txt
+      # banc entier à chaque fois : check.py ne saute le banc sur des .py déjà verts qu'en local (CI, GITHUB_ACTIONS)
       - name: Contrôles (tests/check.py)
         run: python tests/check.py

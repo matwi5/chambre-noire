@@ -42,19 +42,16 @@ const post = (url, body) => page.eval(`postJson(${JSON.stringify(url)}, ${JSON.s
 const ref = `(() => { const c = document.createElement('canvas'); c.width = c.height = 256;
   const x = c.getContext('2d'); x.fillStyle = '#a03070'; x.fillRect(0, 0, 256, 256);
   return c.toDataURL('image/png'); })()`;
-const generate = extra => page.eval(`postJson('/api/generate', { width: 512, height: 512, steps: 2, cfg: 1, seed: -1,
-  preview: false, ref_images: [], private: true, ...${extra} }).then(r => r.status)`);
+const postPrivate = extra => page.postGenerate(`{ steps: 2, private: true, ...${extra} }`);
 // mots des prompts privés : chacun n'apparaît que dans l'espace privé
 const WORDS = ['zqE0pile', 'zqE1edition', 'zqE2lot', 'zqE3resultat', 'zqE4file', 'zqE5titre', 'zqE5texte',
   'zqE6saisie', 'zqE7supprimee', 'zqE8vignette', 'zqE9saisie'];
 
-const enter = () => page.enterPrivate(CODE);
-
 // parcours privé : tout ce qui affiche une donnée privée est ouvert au moins une fois ; renvoie les marqueurs
 async function privateTour() {
-  assert.equal(await generate(`{ mode: 'edit', prompt: 'zqE1edition', ref_images: [${ref}] }`), 202);
-  assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE2lot', count: 2 }`), 202);
-  assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE7supprimee' }`), 202);
+  assert.equal(await postPrivate(`{ mode: 'edit', prompt: 'zqE1edition', ref_images: [${ref}] }`), 202);
+  assert.equal(await postPrivate(`{ mode: 't2i', prompt: 'zqE2lot', count: 2 }`), 202);
+  assert.equal(await postPrivate(`{ mode: 't2i', prompt: 'zqE7supprimee' }`), 202);
   await bench.idle();
   // une génération de la page jusqu'à la pile du Labo ; toutes gardées par ✓ (Tirages privés), sauf une dernière,
   // ouverte en grand puis laissée dans la pile ; puis une autre gardée en file
@@ -63,14 +60,14 @@ async function privateTour() {
   await page.waitFor(`pileItems.length === 5 && (img => img && img.complete && img.naturalWidth > 0)
     ($('pile').querySelector('[data-k="0"] img'))`, { what: 'images privées dans la pile', timeout: 30000 });
   assert.equal(await page.keepPile(), 5);
-  assert.equal(await generate(`{ mode: 't2i', prompt: 'zqE0pile' }`), 202);
+  assert.equal(await postPrivate(`{ mode: 't2i', prompt: 'zqE0pile' }`), 202);
   await page.waitFor(`pileItems.length === 1 && (img => img && img.complete && img.naturalWidth > 0)
     ($('pile').querySelector('[data-k="0"] img'))`, { what: 'image privée dans la pile', timeout: 30000 });
   await page.topShown();                           // (vue 0,3 s : ✕ la jette plus bas, sous la visionneuse)
   await page.click('#pile [data-k="0"] [data-open]');
   await page.waitFor(`$('vImg').complete && $('vImg').naturalWidth > 0`, { what: 'image de la pile en grand' });
   await page.eval(`closeViewer()`);
-  assert.equal(await generate(`{ mode: 't2i', prompt: 'HOLD=etanche zqE4file' }`), 202);
+  assert.equal(await postPrivate(`{ mode: 't2i', prompt: 'HOLD=etanche zqE4file' }`), 202);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`pageJobs.some(p => p.private && p.adopted)`, { what: 'génération privée suivie en file' });
   // une édition de la page en file derrière elle : sa carte porte la vignette de son image d'entrée (data:)
@@ -110,7 +107,7 @@ async function privateTour() {
   await page.waitFor(`openedSheet === $('lotSheet')`, { what: 'feuille du lot privé' });
   await page.tab('labo', { force: true });         // (visionneuse et feuille du lot ouvertes : pas au doigt)
   // un Jeter privé qui attend la fin de son bandeau à la sortie (sous la visionneuse : pas au doigt)
-  await page.click('#pileNo', { force: true });
+  await page.sort('discard', { ready: false, force: true });
   await page.waitFor(`!!discarding && !$('undoBar').hidden`, { what: 'Jeter privé en attente' });
   return [...new Set([...markers, ...WORDS, '/api/private/', 'prive_', thumb.slice(-120, -40)])];
 }
@@ -141,7 +138,7 @@ const privateLeft = all => page.eval(`(() => { const held = new Set([...ready.va
       i.getAttribute('src') || '')).map(i => i.getAttribute('src').slice(0, 60)); })()`);
 
 test('« Sortir » : plus rien de l\'espace privé dans la page', async () => {
-  await enter();
+  await page.enterPrivate(CODE);
   await watchImages();
   const markers = await privateTour();
   kept = await page.eval(`histItems.length`);
@@ -158,7 +155,7 @@ test('« Sortir » : plus rien de l\'espace privé dans la page', async () => {
 });
 
 test('fermeture par le Mac : plus rien de l\'espace privé dans la page (hors saisie mise de côté)', async () => {
-  await enter();
+  await page.enterPrivate(CODE);
   await page.tab('tirages');
   await page.waitFor(`histItems.length === ${kept} && histItems.every(it => it.private)`, { what: 'galerie privée' });
   const markers = [...new Set([...await page.eval(`histItems.map(it => it.id)`), ...WORDS, '/api/private/', 'prive_'])];
@@ -177,7 +174,7 @@ test('fermeture par le Mac : plus rien de l\'espace privé dans la page (hors sa
 });
 
 test('« Sortir » pendant la révélation d\'une génération privée : son canevas est vidé', async () => {
-  await enter();
+  await page.enterPrivate(CODE);
   await page.tab('labo');
   await page.eval(`$('previewChk').checked = true; opt.steps = 'high'; saveOpt(); refreshChoices()`);
   await watchImages();
@@ -213,7 +210,7 @@ const failAll = async rs => { for (const { requestId } of rs) await page.send('F
 
 test('espace privé : image évincée pendant son chargement, image illisible, vignette en échec retirée : vidées',
   async () => {
-    await enter();
+    await page.enterPrivate(CODE);
     await page.tab('tirages');
     await page.waitFor(`histItems.length >= 2 && histItems.every(it => it.private)`, { what: 'galerie privée' });
     await watchImages();
@@ -260,9 +257,9 @@ test('espace privé : image évincée pendant son chargement, image illisible, v
 const restored = `dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))`;
 // espace ouvert, une image privée dans la pile affichée et une saisie privée ; renvoie les marqueurs privés
 async function privateScreen(word) {
-  await enter();
+  await page.enterPrivate(CODE);
   await page.tab('labo');
-  assert.equal(await generate(`{ mode: 't2i', prompt: '${word}pile' }`), 202);
+  assert.equal(await postPrivate(`{ mode: 't2i', prompt: '${word}pile' }`), 202);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`pileItems.some(it => it.prompt === '${word}pile') && (img => img && img.complete
     && img.naturalWidth > 0)($('pile').querySelector('[data-k="0"] img'))`, { what: 'image privée dans la pile',
@@ -321,7 +318,7 @@ test('« Retour », Mac injoignable au reverrouillage : la page ne rentre pas da
 });
 
 test('« Retour » vers une page fermée hors de l\'espace : la saisie privée mise de côté est oubliée', async () => {
-  await enter();
+  await page.enterPrivate(CODE);
   await page.typePrompt('zqE13aside');
   // fermeture par le Mac (15 minutes) : la saisie privée reste en mémoire de la page pour le retour dans l'espace
   assert.equal(await post('/api/private/lock', {}), 200);
@@ -456,7 +453,7 @@ test('mémoire de l\'onglet refusée par le navigateur : la page se charge et fo
     await page.goto(bench.url + '/');
     await page.ready();
     assert.equal(await page.eval(`relock`), false);
-    await enter();
+    await page.enterPrivate(CODE);
     await page.eval(`dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))`);
     await page.eval(restored);
     await page.waitFor(`!relock`, { what: 'reverrouillage accepté' });
@@ -537,7 +534,7 @@ test('rechargement avec marque, premier reverrouillage perdu : les générations
     await page.waitFor(`$('lamp').classList.contains('ok') && !relock`, { what: 'page prête' });
     await page.generate('HOLD=zqE18 zqE18 publique en cours');
     const own = await page.eval(`pageJobs.at(-1).id`);
-    await enter();
+    await page.enterPrivate(CODE);
     // le verrouillage de la fermeture se perd, puis le premier reverrouillage de la page rechargée aussi
     await page.eval(`(() => { const f = window.fetch;
       window.fetch = (u, ...a) => String(u) === '/api/private/lock' ? Promise.reject(new TypeError('coupé'))
@@ -581,7 +578,7 @@ test('marque posée dès l\'entrée : onglet tué sans pagehide puis rechargé, 
   + '« Sortir » et par la fermeture du Mac', async () => {
   await page.goto(bench.url + '/');
   await page.waitFor(`$('lamp').classList.contains('ok') && !relock`, { what: 'page prête, hors de l\'espace' });
-  await enter();
+  await page.enterPrivate(CODE);
   assert.equal(await page.eval(MARK), '1', 'marque posée à l\'entrée');
   // l'onglet est tué en arrière-plan : ni pagehide ni verrouillage (écouteur de la page court-circuité)
   await page.eval(`addEventListener('pagehide', e => e.stopImmediatePropagation(), true)`);
@@ -603,12 +600,12 @@ test('marque posée dès l\'entrée : onglet tué sans pagehide puis rechargé, 
   await page.waitFor(`!relock`, { what: 'reverrouillage accepté' });
   assert.deepEqual([await macUnlocked(), await page.eval(MARK)], [false, null]);
   // « Sortir » accepté : marque levée
-  await enter();
+  await page.enterPrivate(CODE);
   await page.click('#privExit');
   await page.waitFor(`!inPrivate()`, { what: 'sorti' });
   assert.equal(await page.eval(MARK), null, 'marque restée après « Sortir »');
   // fermeture par le Mac (15 minutes sans requête privée : l'espace est au repos) : levée à l'état lu
-  await enter();
+  await page.enterPrivate(CODE);
   await page.privateIdle();
   assert.equal(await post('/api/private/lock', {}), 200);
   await page.eval(`refreshStatus()`);
@@ -633,7 +630,7 @@ const answerLock = async (h, reply) => {
 
 test('reverrouillage : un refus clair du Mac vaut verrouillé (onglet débloqué) ; une panne sans réponse claire non',
   async () => {
-    await enter();
+    await page.enterPrivate(CODE);
     // verrouillages retenus tant que hold ; sinon (fermeture réelle sur le Mac, faite par le test) ils passent
     let hold = true;
     const h = await page.holdRequests(['*/api/private/lock'], () => hold);
@@ -653,7 +650,7 @@ test('reverrouillage : un refus clair du Mac vaut verrouillé (onglet débloqué
       await page.waitFor(`!relock && $('lamp').classList.contains('ok')`, { what: 'onglet débloqué, état lu' });
       assert.equal(await page.eval(MARK), null);
       // « Sortir » refusé de même par le Mac : la sortie est appliquée
-      await enter();
+      await page.enterPrivate(CODE);
       await page.privateIdle();
       await page.click('#privExit');
       await waitUntil(() => h.held.length > 0, { what: 'sortie demandée' });
@@ -737,7 +734,7 @@ test('page fermée puis revenue avant la réponse du code : entrée refusée, à
 
 test('« Sortir » en attente quand la page se ferme : rien n\'est redessiné ni annoncé à la réponse du Mac',
   async () => {
-  await enter();
+  await page.enterPrivate(CODE);
   await page.privateIdle();
   await watchFetch();
   const h = await page.holdRequests(['*/api/private/lock'], () => true);
@@ -761,7 +758,7 @@ test('« Sortir » en attente quand la page se ferme : rien n\'est redessiné ni
 
 test('code d\'accès redemandé dans l\'espace privé : « Sortir » ferme quand même la session, puis la page du code',
   async () => {
-  await enter();
+  await page.enterPrivate(CODE);
   await page.privateIdle();
   // cookie d'accès seul effacé : le verrouillage passe sans lui (il ne ferme que la session de cette page)
   await page.send('Network.deleteCookies', { name: 'qwen_access', url: bench.url });
@@ -793,7 +790,7 @@ async function macSessionOf() {
 
 test('verrouillage refusé par un 401 (serveur d\'avant) : ne vaut pas verrouillé, reverrouillé après le code',
   async () => {
-  await enter();
+  await page.enterPrivate(CODE);
   await page.privateIdle();
   const unlocked = await macSessionOf();
   await page.send('Network.deleteCookies', { name: 'qwen_access', url: bench.url });
@@ -820,7 +817,7 @@ test('verrouillage refusé par un 401 (serveur d\'avant) : ne vaut pas verrouill
 });
 
 test('page du code chargée avec la marque : elle ferme la session du Mac sans attendre le code', async () => {
-  await enter();
+  await page.enterPrivate(CODE);
   await page.privateIdle();
   const unlocked = await macSessionOf();
   await page.send('Network.deleteCookies', { name: 'qwen_access', url: bench.url });

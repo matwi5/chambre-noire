@@ -11,12 +11,19 @@ les tests viennent de bugs passés à travers les revues par ticket.
   `tools/ui/index.html`, tableaux Markdown et blocs de code : une ligne plus longue se lit mal dans un diff et sur un
   écran étroit. Vérifiée par `tests/check.py` sur les seules lignes ajoutées depuis la base (`git merge-base HEAD
   origin/main`) : les lignes existantes ne sont reprises que quand on les touche. `check.py --lines` (moins d'une
-  seconde), le hook avant commit et celui de Claude Code après chaque écriture (`check.py --hook`) la vérifient
-  seule ; `check.py --lines --fix` recoupe les seules lignes fautives (Markdown, commentaires, docstrings).
+  seconde) et le hook avant commit la vérifient seule ; celui de Claude Code (`check.py --hook`), après chaque
+  écriture par Edit ou Write et après chaque commande Bash (les fichiers qu'elle a écrits), recoupe seul la prose trop
+  longue et signale le code ; `check.py --lines --fix` recoupe les seules lignes fautives (Markdown, commentaires,
+  docstrings).
 - **Un comportement qui change change partout où il est décrit** : chercher son ancienne formulation par `git grep`
   sur tout le dépôt suivi (README, docstrings et commentaires, carte du code, et textes de l'interface :
   `tools/ui/index.html`, `LOGIN_PAGE` de `tools/launch.py`, page hors ligne de `tools/ui/sw.js`), et la reprendre dans
   le même commit. Un ancien libellé était resté dans l'interface après un renommage.
+- **Une description ou un commentaire que le diff rend faux est un constat Important**, pas Mineur : il trompe la
+  session suivante (la carte du code et des commentaires CSS devenus faux ont été livrés, classés Mineurs).
+- **Une règle de comportement est décrite à un seul endroit, et les autres y renvoient** : les raccourcis clavier,
+  décrits à trois endroits, ont divergé ; le README, la carte du code ou un commentaire nomment l'endroit qui fait foi
+  au lieu de recopier la règle.
 
 ## Données et disque
 
@@ -39,11 +46,19 @@ les tests viennent de bugs passés à travers les revues par ticket.
   Python et JavaScript »), avec les deux emplacements : sinon l'un change sans l'autre et rien ne casse visiblement.
 - **Une action asynchrone de l'interface liée à un espace note ce qu'elle vise avant sa première attente** (`await`,
   `fetch`, lecture d'un fichier) : l'espace (`inPrivate()`), la liste, l'onglet ou la route ; après l'attente, elle
-  écrit dans ce qu'elle a noté, ou abandonne si l'espace a changé, sans relire l'état global. Sinon une image privée
+  écrit dans ce qu'elle a noté, ou abandonne si l'espace a changé, sans relire l'état global pour sa cible (ses
+  gardes, elles, se relisent : règle suivante). Sinon une image privée
   tombe dans la saisie publique, une confirmation montre un titre privé dans l'espace public (groupes A et C du
   15/10/2026). `changedSpace` ferme toute feuille qui montre une donnée de l'espace quitté. Une garde (plafond,
   dessin, confirmation) se refait à l'arrivée sur la liste notée, et une question au porteur ne porte que sur la
   saisie affichée.
+- **Une action qui attend revérifie après l'attente qu'elle a encore le droit d'agir** : après un `await` (une
+  confirmation, un `fetch`, la lecture d'un fichier), elle relit ses gardes, `exiting()` (« Sortir » en cours, la
+  règle de `CLAUDE.md`, « Interface ») et `beforeHeld` (image d'avant tenue), avant d'envoyer quoi que ce soit ;
+  vérifiées seulement avant l'attente, elles laissaient partir une requête privée pendant « Sortir » (chaque passe
+  « bogues » du groupe F en a retrouvé une). La cible, elle, reste celle notée avant l'attente (règle précédente).
+- **Une hauteur réservée en CSS nomme ce qu'elle réserve** (un commentaire : l'élément et son cas le plus haut), et
+  son test mesure ce cas le plus chargé : une hauteur en pixels réservée pour une carte a été corrigée trois fois.
 - **Un élément montré ou caché par `hidden` dont le CSS fixe `display` a sa règle `[hidden]{display:none}`** : sinon
   le `display` du CSS l'emporte et l'élément reste visible.
 - **Une génération suivie se rapproche de la file par son identifiant, jamais par son rang** : la page interroge
@@ -68,8 +83,14 @@ les tests viennent de bugs passés à travers les revues par ticket.
   d'interface ne sont apparus que dans Chrome, banc au vert.
 - **Le test d'une garde d'une zone sensible (espace privé, suppression) est prouvé rouge** sur le code
   sans la branche qu'il protège (retirée le temps de l'essai), puis vert ; le message du commit le dit. L'essai passe
-  par `tests/mutate.py <fichier> --old <texte> --new <texte> -- <commande>`, qui rend toujours le fichier (échec,
-  interruption), pas par un script jetable qui modifie l'arbre.
+  par `tests/mutate.py <fichier> --old <texte> --new <texte> -- <commande>` (plusieurs paires `--old`/`--new` pour
+  une garde en plusieurs endroits), qui rend toujours le fichier (échec, interruption), pas par un script jetable qui
+  modifie l'arbre. L'échec doit venir de l'assertion qui porte le titre du test : `mutate.py` nomme chaque test en
+  échec et le premier message de son assertion (une erreur de la page ou une autre assertion ne prouve rien), et
+  garde la preuve dans son journal, où l'avis « zone sensible » de `check.py` cherche les fonctions touchées.
+- **Un gestionnaire global ou d'un ancêtre qui reprend une action des gestionnaires locaux fait relire les tests
+  voisins qui lisent cette action** : un écouteur global de touches a rendu deux tests infalsifiables (l'action
+  passait par lui, que le test ne visait pas), sans que la revue du ticket le voie.
 - **Une assertion « rien ne change » attend d'abord la fin de l'action qui pourrait changer quelque chose** (réponse
   reçue, Mac au repos : `bench.idle()`) : vérifiée trop tôt, elle passe avant que le changement arrive.
 - **Un fichier de test se termine par `if __name__ == "__main__": unittest.main()`**, pour se lancer seul.
@@ -104,6 +125,19 @@ relire, un échec dit la ligne et la raison.
   n'attend pas le repos lui-même) juste après `await page.privateIdle()` (ligne de code précédente) ; on y entre par
   `page.enterPrivate(code)`, pas par `/api/private/create` ou `/unlock`. Un cas voulu porte `// règle levée : <raison>`
   sur sa ligne ou celle d'avant.
+- Tests d'interface, sur le fichier entier (même levée) : un tri passe par le pilote, qui seul sait quand une image se
+  trie (E3 puis F4 en ont changé le moment, et des dizaines de tests ont cassé en trois vagues) : ni clic sur
+  `#pileYes`, `#pileNo` ou un bouton de `#vSort` (`click`, `tryClick`, `querySelector(…).click()`) ni appel de
+  `sortTop` ou `sortFromViewer`, mais `page.sort(action, { by, ready })` (ou `PRESS`, `VIEWER_PRESS` dans la page) ;
+  aucune flèche ← → écrite en clair (`page.sort(…, { by: 'key' })`, `page.stepViewer(±1)`, `ARROWS`) ; ni lecture de
+  `sortHeld`, `sortBusy` ou `topHeld` (`SORT_IDLE`, `VIEWER_SEEN`, `LOCKS`, `page.sortState()`). Une levée de cette
+  règle nomme le tri dans sa raison (tri, appui, flèche, touche, verrou) : celle d'une autre règle sur la même ligne ne
+  vaut pas pour elle. Une page ouverte dans un test (`phonePage`, `newPage`) se ferme dans le bloc `finally` (elle, ou
+  le Chrome qui l'a ouverte), et chaque `.close()` d'une page est attendu (`await`) ; aucune aide du pilote (export,
+  méthode de `page`, `bench`, `chrome`) n'est redéfinie au premier niveau d'un fichier de test ; un préfixe de prompt
+  de test (`zp25`, `zqC4`, `zqE4file` : `z`, une à trois lettres, des chiffres ; ou `z` et une ou deux lettres seules,
+  `zt`) ne crée d'images (`made`, `generate`, `launch`, `typePrompt`, un appel `post…` ou `ask…`) que dans un test, ou
+  dans le test qui suit tout de suite un test qui le nomme (une suite voulue).
 - Sur des fichiers entiers, avant le banc : aucun `print` de `tools/launch.py` ne dépend de `secret(…)` ; chaque route
   `/api/…` du serveur est dans sa docstring ; un bloc `with PRIVATE_LOCK:` qui appelle quelque chose passe par
   `finish_rekey()` (sauf `store_private` et la suppression de tout l'espace) ; un import interne (`from bench import

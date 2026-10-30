@@ -8,6 +8,14 @@
 //   node tests/ui/probe.mjs --script /tmp/verif.mjs                 // export default async (page, bench) => valeur
 //   node tests/ui/probe.mjs --script tests/ui/planche.mjs           // planche de captures (voir planche.mjs)
 //   node tests/ui/probe.mjs --svg tools/ui/logo.svg --size 512 --shot /tmp/icone.png   // SVG rendu à 512×512 px
+//   node tests/ui/probe.mjs --measure '#pile,#composer' [--width 1280]   # boîtes, défilement, visibilité
+//   node tests/ui/probe.mjs --dump                                         # état de la page (page.state du pilote)
+//
+// --measure sel1,sel2 : pour chaque sélecteur, chaque élément trouvé (rectangle à l'écran, scrollHeight et
+// clientHeight, visible : présent, avec une boîte, ni masqué ni display:none, ni visibility:hidden ni opacité nulle
+// sur lui ou un ancêtre, au moins en partie dans la fenêtre), sans script jetable ;
+// --dump : la ligne d'état que le pilote ajoute à un délai dépassé (page visible, focus, onglets, onglet affiché,
+// verrous de tri). Les deux se combinent avec --eval ou --script (évalués d'abord), ou s'emploient seuls.
 //
 // --width N : largeur de la vue (367 par défaut, celle du téléphone) ; --shot fichier.png : capture après
 // l'évaluation. --svg : sans banc, le SVG est dessiné seul à --size px de côté (densité 1, fond transparent), et la
@@ -21,11 +29,32 @@ import { startBench, launchChrome, PHONE } from './driver.mjs';
 
 const { values: opt } = parseArgs({ options: {
   eval: { type: 'string' }, script: { type: 'string' }, width: { type: 'string' }, shot: { type: 'string' },
-  private: { type: 'boolean', default: false }, svg: { type: 'string' }, size: { type: 'string' } } });
-if ([opt.eval, opt.script, opt.svg].filter(Boolean).length !== 1 || (opt.svg && !(opt.shot && opt.size))) {
+  private: { type: 'boolean', default: false }, svg: { type: 'string' }, size: { type: 'string' },
+  measure: { type: 'string' }, dump: { type: 'boolean', default: false } } });
+const given = [opt.eval, opt.script, opt.svg].filter(Boolean).length;
+if (given > 1 || (!given && !opt.measure && !opt.dump) || (opt.svg && !(opt.shot && opt.size))) {
   console.error('sonde : donner --eval <expression>, --script <fichier.mjs> ou --svg <fichier.svg> --size N '
-    + '--shot <fichier.png> (un seul des trois)');
+    + '--shot <fichier.png> (un seul des trois), et ou --measure <sélecteurs>, --dump');
   process.exit(2);
+}
+
+// boîtes des éléments de chaque sélecteur (séparés par des virgules hors parenthèses : '#a,.b:not(.c, .d)' en donne
+// deux) : rectangle, défilement, visibilité
+function measure(page, selectors) {
+  const list = [];
+  let depth = 0, cur = '';
+  for (const c of selectors) {
+    depth += c === '(' ? 1 : c === ')' ? -1 : 0;
+    if (c === ',' && !depth) { list.push(cur.trim()); cur = ''; } else cur += c;
+  }
+  if (cur.trim()) list.push(cur.trim());
+  return page.eval(`Object.fromEntries(${JSON.stringify(list)}.map(sel => [sel,
+    [...document.querySelectorAll(sel)].map(el => { const r = el.getBoundingClientRect();
+      const shown = !el.hidden && el.getClientRects().length > 0 && el.checkVisibility({ visibilityProperty: true,
+        opacityProperty: true });                  // (visionneuse, feuilles : visibility ; voile : opacité)
+      return { id: el.id || undefined, rect: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width),
+        height: Math.round(r.height) }, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight,
+        visible: shown && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth }; })]))`);
 }
 
 // SVG rendu seul à size × size px : vue à la taille exacte, densité 1, fond transparent, capture coupée à la taille
@@ -55,9 +84,13 @@ try {
     await page.goto(bench.url + '/');
     await page.ready();
     if (opt.private) await page.enterPrivate('code-de-la-sonde');
-    const result = opt.eval ? await page.eval(opt.eval)
-      : await (await import(pathToFileURL(path.resolve(opt.script)).href)).default(page, bench);
-    console.log(JSON.stringify(result, null, 2) ?? 'undefined');
+    if (opt.eval || opt.script) {
+      const result = opt.eval ? await page.eval(opt.eval)
+        : await (await import(pathToFileURL(path.resolve(opt.script)).href)).default(page, bench);
+      console.log(JSON.stringify(result, null, 2) ?? 'undefined');
+    }
+    if (opt.measure) console.log(JSON.stringify(await measure(page, opt.measure), null, 2));
+    if (opt.dump) console.log(await page.state());
     if (opt.shot) await page.screenshot(opt.shot);
     if (page.errors.length) console.error(`erreurs dans la console :\n  ${page.errors.join('\n  ')}`);
   }

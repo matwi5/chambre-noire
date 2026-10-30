@@ -1,10 +1,13 @@
 """tests/mutate.py : la preuve rouge d'une garde sans script jetable. La mutation est appliquée le temps de la commande,
 puis le fichier est toujours rendu tel quel : commande en échec, commande réussie (la mutation n'est pas vue),
 commande interrompue (SIGTERM, SIGINT) ; un texte introuvable ou ambigu ne lance rien."""
-import os, signal, subprocess, sys, tempfile, time, unittest
+import json, os, signal, subprocess, sys, tempfile, time, unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MUTATE = os.path.join(HERE, "mutate.py")
+sys.path.insert(0, HERE)
+import mutate  # noqa: E402
 ORIGINAL = "def garde(x):\n    if x is None:\n        return False\n    return True\n"
 
 
@@ -13,6 +16,10 @@ class MutateTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(prefix="qwen-mutate-test-")
         self.addCleanup(self.tmp.cleanup)
         self.path = os.path.join(self.tmp.name, "garde.py")
+        # le journal des preuves du test, pas celui du dossier de travail (l'avis « zone sensible » le lit)
+        p = mock.patch.dict(os.environ, QWEN_MUTATE_JOURNAL=os.path.join(self.tmp.name, "preuves.jsonl"))
+        p.start()
+        self.addCleanup(p.stop)
         with open(self.path, "w", encoding="utf-8") as f:
             f.write(ORIGINAL)
 
@@ -59,6 +66,54 @@ class MutateTest(unittest.TestCase):
                 self.assertIn("interrompue", out + err)
                 self.assertEqual(self.text(), ORIGINAL)
                 os.remove(started)
+
+    def test_several_pairs_the_failing_test_and_the_proof_journal(self):
+        """Plusieurs paires --old/--new d'un coup ; la sortie nomme le test en échec et le premier message de son
+        assertion (unittest, node --test) ; la preuve va au journal, avec la fonction de chaque texte muté."""
+        journal = os.path.join(self.tmp.name, "preuves.jsonl")
+        report = os.path.join(self.tmp.name, "sortie.txt")
+        with open(report, "w", encoding="utf-8") as f:
+            f.write("FAIL: test_garde (test_x.GardeTest.test_garde)\n" + "-" * 70 + "\nTraceback (most recent call "
+                    "last):\n  File \"t.py\", line 3\nAssertionError: False is not true : la garde laisse passer\n\n"
+                    + "-" * 70 + "\nRan 1 test in 0.001s\n\nFAILED (failures=1)\n"
+                    "✖ failing tests:\n\ntest at x.test.mjs:4:1\n✖ rien ne part pendant « Sortir » (12.5ms)\n"
+                    "  AssertionError [ERR_ASSERTION]: requête privée partie\n")
+        both = f"import sys; t = open({self.path!r}).read(); print(open({report!r}).read()); " \
+               "sys.exit(0 if 'if x is None' in t and 'return True' in t else 1)"
+        r = subprocess.run([sys.executable, MUTATE, self.path, "--old", "if x is None:", "--new", "if False:",
+                            "--old", "return True", "--new", "return 1", "--", sys.executable, "-c", both],
+                           capture_output=True, text=True, timeout=60,
+                           env=dict(os.environ, QWEN_MUTATE_JOURNAL=journal))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.text(), ORIGINAL)
+        self.assertIn("mutate : en échec : test_x.GardeTest.test_garde : AssertionError: False is not true : la garde "
+                      "laisse passer", r.stdout)
+        self.assertIn("mutate : en échec : rien ne part pendant « Sortir » : AssertionError [ERR_ASSERTION]: requête "
+                      "privée partie", r.stdout)
+        with open(journal, encoding="utf-8") as f:
+            rows = [json.loads(line) for line in f]
+        self.assertEqual([row["fonction"] for row in rows], ["garde", "garde"])
+        self.assertEqual(rows[0]["tests"], ["test_x.GardeTest.test_garde", "rien ne part pendant « Sortir »"])
+        doc = ("FAIL: test_doc (test_y.C.test_doc)\nLa garde refuse.\n" + "-" * 70 + "\nTraceback:\n"
+               "AssertionError: 1 != 2\n\n" + "=" * 70 + "\nFAIL: test_cas (test_y.C.test_cas) (cookie='x')\n"
+               + "-" * 70 + "\nAssertionError: 403 != 200\n\n" + "-" * 70 + "\nRan 2 tests\n")
+        capped = "✔ vert (1ms)\n✖ rouge un (2ms)\n✖ rouge deux (3ms)\nfichier arrêté après 2 échecs\n"
+        broken = ("ERROR: test_x (unittest.loader._FailedTest.test_x)\n" + "-" * 70 + "\nImportError: x\n\n"
+                  "✖ tests/ui/x.test.mjs (25ms)\n")
+        self.assertEqual(mutate.failures(broken), [], "un import ou un fichier tombés ne sont pas des tests")
+        failed = mutate.failures(doc + capped)
+        self.assertEqual([t for t, _ in failed], ["test_y.C.test_doc", "test_y.C.test_cas", "rouge un", "rouge deux"])
+        self.assertEqual(failed[0][1], "AssertionError: 1 != 2", "docstring de test sautée")
+        empty = subprocess.run([sys.executable, MUTATE, self.path, "--old", "if x is None:", "--new", "if False:",
+                                "--", sys.executable, "-c", "import sys; sys.exit('erreur hors test')"],
+                               capture_output=True, text=True, timeout=60, env=dict(os.environ,
+                                                                                  QWEN_MUTATE_JOURNAL=journal + "2"))
+        self.assertIn("preuve non notée", empty.stdout)
+        self.assertFalse(os.path.exists(journal + "2"), "un échec hors d'un test n'est pas une preuve")
+        r = subprocess.run([sys.executable, MUTATE, self.path, "--old", "a", "--old", "b", "--new", "c", "--",
+                            sys.executable, "-c", "pass"], capture_output=True, text=True, timeout=60)   # incomplètes
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("2 --old pour 1 --new", r.stderr)
 
     def test_a_missing_or_ambiguous_text_runs_nothing(self):
         flag = os.path.join(self.tmp.name, "lancee")

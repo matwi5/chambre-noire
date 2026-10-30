@@ -2119,7 +2119,7 @@ let queueHtml='';                                  // cartes de la file affiché
 $('queueList').addEventListener('click', async ev=>{
   const t=ev.target.closest('[data-toggle]');
   if(t){ const k=t.dataset.toggle; if(openLots.has(k)) openLots.delete(k); else openLots.add(k); return renderQueue(); }
-  const b=ev.target.closest('[data-post]'); if(!b) return;
+  const b=ev.target.closest('[data-post]'); if(!b || exiting()) return;   // (« Sortir » en attente : rien ne part)
   b.disabled=true; log(b.dataset.kind==='first' ? 'passage en tête demandé' : 'annulation demandée');
   // 404 ou 409 (la file a pu avancer) : la file rafraîchie suffit, sans message
   await postJson(b.dataset.post, {}).catch(()=>{}); queueHtml=''; refreshStatus(); });   // bouton réactivé
@@ -2318,12 +2318,13 @@ const PEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-w
 const BIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="m6.5 7 1 12.5h9l1-12.5"/></svg>';
 let prompts={saved:[], types:[]}, promptUsage='all', editingPrompt=null;
 // fromButton : ouverte par le bouton Prompts, la feuille se filtre sur la catégorie de la saisie ; rouverte après un
-// enregistrement, une copie ou une suppression, elle garde le filtre choisi
-async function openPrompts(fromButton){ if(fromButton) promptUsage=inputKind();
+// enregistrement, une copie ou une suppression, elle garde le filtre choisi. Pendant « Sortir » (exiting), rien des
+// prompts ne s'ouvre ni ne part, et une liste privée arrivée pendant l'attente n'est pas montrée (comme les Tirages)
+async function openPrompts(fromButton){ if(exiting()) return; if(fromButton) promptUsage=inputKind();
   openSheet('promptSheet'); renderPrompts(); const priv=inPrivate();
   try{ const r=await fetch(promptsApi()), j=await r.json(); if(!r.ok) throw new Error(j.error);
-    if(priv===inPrivate()){ prompts=j; renderPrompts(); } }   // espace changé pendant l'attente : la liste de l'autre n'est pas montrée
-  catch(e){ if(priv===inPrivate()) toast('Prompts indisponibles : '+e.message, 'err'); } }
+    if(priv===inPrivate() && !exiting()){ prompts=j; renderPrompts(); } }   // espace changé pendant l'attente : la liste de l'autre n'est pas montrée
+  catch(e){ if(priv===inPrivate() && !exiting()) toast('Prompts indisponibles : '+e.message, 'err'); } }
 function renderPrompts(){
   $('promptFilter').innerHTML=[['all', 'Tous'], ...Object.entries(USAGE_LABELS)].map(([k, l])=>{ const on=k===promptUsage;
     return `<button class="opt${on?' on':''}" data-k="${k}" aria-pressed="${on}"><b>${l}</b></button>`; }).join('');
@@ -2336,7 +2337,7 @@ function renderPrompts(){
   $('typeList').innerHTML=types.map(p=>row(p, `<button class="btn secondary small" data-dup aria-label="Dupliquer « ${esc(p.title)} »">Dupliquer</button>`)).join(''); }
 // le texte remplace celui du champ, sans toucher aux images ni au dessin ; le premier passage entre crochets (« [couleur] ») est sélectionné pour
 // être remplacé en tapant
-function usePrompt(p, saved){ const t=$('prompt'); closeSheet();
+function usePrompt(p, saved){ if(exiting()) return; const t=$('prompt'); closeSheet();
   t.value=p.text; t.dispatchEvent(new Event('input')); t.focus();
   const m=/\[[^\]]*\]/.exec(p.text); if(m) t.setSelectionRange(m.index, m.index+m[0].length); else t.setSelectionRange(p.text.length, p.text.length);
   if(saved) postJson(promptsApi('/used'), {id:p.id}).catch(()=>{}); }
@@ -2345,7 +2346,8 @@ function newPrompt(){ const text=$('prompt').value.trim();
   editPrompt({title:'', text, usage:inputKind()}); }   // catégorie : la nature de la demande que prépare la saisie
 function editPrompt(p){ editingPrompt=p; $('promptEditTitle').textContent=p.id ? 'Modifier le prompt' : 'Enregistrer le prompt';
   $('peTitle').value=p.title; $('peText').value=p.text; openSheet('promptEditSheet'); $('peTitle').focus(); }
-async function savePrompt(){ const p=editingPrompt, body={title:$('peTitle').value.trim(), text:$('peText').value.trim()};
+async function savePrompt(){ if(exiting()) return;
+  const p=editingPrompt, body={title:$('peTitle').value.trim(), text:$('peText').value.trim()};
   if(!body.title) return toast('Donnez un titre au prompt', 'err');
   if(!body.text) return toast('Le texte est vide', 'err');
   if(p.id) body.id=p.id; else body.usage=p.usage;
@@ -2357,7 +2359,9 @@ async function savePrompt(){ const p=editingPrompt, body={title:$('peTitle').val
   catch(e){ if(priv===inPrivate()) toast('Enregistrement impossible : '+e.message, 'err'); }
   finally{ $('peSave').disabled=false; } }
 async function deletePrompt(p){ const priv=inPrivate(), url=promptsApi('/delete');   // route notée avant l'attente
+  if(exiting()) return;
   if(!await ask('Supprimer ce prompt ?', p.title, 'Supprimer', true)) return priv===inPrivate() && openPrompts();
+  if(priv!==inPrivate() || exiting()) return;      // « Sortir » ou autre espace pendant la question : rien ne part
   try{ const r=await postJson(url, {id:p.id}); if(!r.ok) throw new Error((await r.json()).error);
     if(priv===inPrivate()) toast('Prompt supprimé'); }
   catch(e){ if(priv===inPrivate()) toast('Suppression impossible : '+e.message, 'err'); }
@@ -2370,7 +2374,7 @@ $('promptList').addEventListener('click', ev=>{ const row=ev.target.closest('.pr
 $('typeList').addEventListener('click', ev=>{ const row=ev.target.closest('.prow'), p=row && prompts.types.find(x=>x.id===row.dataset.id); if(!p) return;
   if(ev.target.closest('[data-dup]')) return duplicatePrompt(p, ev.target.closest('[data-dup]'));
   usePrompt(p, false); });
-async function duplicatePrompt(p, b){ b.disabled=true; const priv=inPrivate();
+async function duplicatePrompt(p, b){ if(exiting()) return; b.disabled=true; const priv=inPrivate();
   try{ const r=await postJson(promptsApi(), {title:p.title, text:p.text, usage:p.usage}), j=await r.json(); if(!r.ok) throw new Error(j.error);
     if(priv!==inPrivate()) return;
     toast('Copié dans vos prompts'); await openPrompts(); $('promptSheet').scrollTo({top:0, behavior:'smooth'}); }

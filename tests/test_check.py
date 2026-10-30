@@ -3,7 +3,7 @@ git, est contrôlé comme un fichier suivi ; une adresse donnée à la main à u
 trop longue est refusée par --lines, par le hook avant commit et par le contrôle complet, qui s'arrête alors avant le
 banc ; --link-venv relie les notes du dossier principal dans un worktree ; les fichiers d'interface tournent sur
 plusieurs Chrome à la fois ; l'avis « zone sensible » ne regarde que le travail de la branche en cours."""
-import contextlib, io, json, os, shutil, subprocess, sys, tempfile, threading, unittest
+import contextlib, io, json, os, shutil, stat, subprocess, sys, tempfile, threading, time, unittest
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -144,11 +144,69 @@ class LinesTest(RepoCase):
         r = hook(os.path.join(self.root, "a.py"))
         self.assertEqual(r.returncode, 2, r.stderr)           # code 2 : Claude Code montre stderr
         self.assertIn("a.py:2 (121 caractères)", r.stderr)
-        self.assertIn("--lines --fix", r.stderr)
+        self.assertIn("à recouper à la main", r.stderr)
         r = hook(os.path.join(self.root, "b.md"))             # autre fichier, sans faute : rien
         self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
         r = hook(os.path.join(self.tmp.name, "hors-du-depot.py"))
         self.assertEqual((r.returncode, r.stderr), (0, ""))
+
+    def test_after_a_bash_command_the_hook_recuts_prose_and_names_long_code(self):
+        """Une écriture par Bash (heredoc, script : pas de file_path) : le hook juge les fichiers changés depuis le
+        dernier commit, recoupe seul la prose trop longue et signale le code trop long."""
+        self.install_check()
+        hook = lambda: subprocess.run([sys.executable, os.path.join(self.root, "tests", "check.py"), "--hook"],
+                                      input=json.dumps({"tool_name": "Bash", "cwd": self.root,
+                                                        "tool_input": {"command": "cat > notes.md <<'EOF' …"}}),
+                                      capture_output=True, text=True, cwd=self.tmp.name)
+        r = hook()
+        self.assertEqual((r.returncode, r.stderr), (0, ""), "rien de changé : rien")
+        prose = " ".join(["mot"] * 40)                    # 159 caractères, coupables entre les mots
+        self.write("notes.md", "Titre\n\n" + prose + "\n")
+        self.write("code.py", "x = '" + "y" * 130 + "'\n")
+        r = hook()
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("notes.md : 1 ligne(s) recoupée(s)", r.stderr)
+        self.assertIn("à relire avant de l'éditer", r.stderr)
+        self.assertIn("code.py:1 (136 caractères)", r.stderr)
+        with open(os.path.join(self.root, "notes.md"), encoding="utf-8") as f:
+            text = f.read()
+        self.assertEqual(text.split(), ("Titre\n\n" + prose).split(), "rien de perdu")
+        lines = text.splitlines()
+        self.assertGreater(len(lines), 3, "la ligne est coupée")
+        self.assertTrue(all(len(line) <= check.LINE_MAX for line in lines))
+        self.write("code.py", "x = 1\n")
+        r = hook()
+        self.assertEqual((r.returncode, r.stderr), (0, ""), "tout recoupé ou corrigé : plus rien")
+
+    def test_after_a_bash_command_only_the_files_it_wrote_are_judged(self):
+        """Avant la commande, le hook PreToolUse note l'instant : un fichier changé plus tôt (un autre agent, une
+        écriture d'avant) n'est ni jugé ni recoupé ; un sous-agent (agent_id) signale sans recouper."""
+        self.install_check()
+        prose = " ".join(["mot"] * 40)
+
+        def hook(event, **extra):
+            data = {"hook_event_name": event, "tool_name": "Bash", "tool_use_id": "outil-1", "cwd": self.root,
+                    "tool_input": {"command": "…"}, **extra}
+            return subprocess.run([sys.executable, os.path.join(self.root, "tests", "check.py"), "--hook"],
+                                  input=json.dumps(data), capture_output=True, text=True, cwd=self.tmp.name)
+        self.write("avant.md", prose + "\n")
+        past = os.path.getmtime(os.path.join(self.root, "avant.md")) - 30
+        os.utime(os.path.join(self.root, "avant.md"), (past, past))   # écrit avant la commande
+        self.assertEqual(hook("PreToolUse").returncode, 0)
+        self.write("pendant.md", prose + "\n")
+        r = hook("PostToolUse")
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("pendant.md : 1 ligne(s) recoupée(s)", r.stderr)
+        self.assertNotIn("avant.md", r.stderr)
+        with open(os.path.join(self.root, "avant.md"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), prose + "\n", "un fichier d'avant la commande n'est pas réécrit")
+        self.assertEqual(hook("PreToolUse").returncode, 0)
+        self.write("agent.md", prose + "\n")
+        r = hook("PostToolUse", agent_id="relecteur")
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("agent.md:1 (159 caractères)", r.stderr)
+        with open(os.path.join(self.root, "agent.md"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), prose + "\n", "un sous-agent ne recoupe rien")
 
     def test_the_hook_refuses_a_commit_that_adds_a_long_line(self):
         self.install_check()
@@ -208,7 +266,8 @@ class UiNameTest(unittest.TestCase):
         args = check.parse_args(["--ui", "tests/ui/smoke.test.mjs", "--name", "Révéler"])   # vise un test : lancé
         with mock.patch.object(check, "run_ui", return_value=(True, [], [])) as ui, \
                 mock.patch.object(check, "run_bench", return_value=(True, [], [])), \
-                mock.patch.object(check, "sensitive_notice"), contextlib.redirect_stdout(io.StringIO()):
+                mock.patch.object(check, "sensitive_notice"), mock.patch.object(check, "write_red"), \
+                contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(check.run_checks(args)[0], {})
         ui.assert_called_once()
 
@@ -261,14 +320,332 @@ class UiRepeatTest(unittest.TestCase):
         self.assertIn("Interface : a.test.mjs : 3 tests, 0 en échec, 1 à faire", "\n".join(lines))
 
 
+RED_OUT = "✔ un vert (1.2ms)\n✖ un rouge (2.5ms)\nℹ tests 2\nℹ pass 1\nℹ fail 1"
+GREEN_OUT = "✔ un vert (1.2ms)\n✔ un rouge (2.5ms)\nℹ tests 2\nℹ pass 2\nℹ fail 0"
+BENCH_OK = (True, ["Banc : Ran 3 tests in 0.1s", "Banc : OK", "Banc : durée 1 s"], [])
+STATE = {"tree": "arbre", "py": "py-1", "code": "code-1"}
+
+
+class StaticsMocked(RepoCase):
+    """Contrôles statiques remplacés (verts), journal et journal des échecs dans le dossier temporaire du test, hors
+    de la CI (où rien ne se saute)."""
+    def setUp(self):
+        super().setUp()
+        self.journal = os.path.join(self.tmp.name, "journal.log")
+        for target, value in (("journal_path", self.journal), ("in_ci", False), ("reexec_in_venv", None),
+                              ("failure_log_path", os.path.join(self.tmp.name, "echecs.jsonl")),
+                              ("sensitive_notice", None)):
+            p = mock.patch.object(check, target, return_value=value)
+            p.start()
+            self.addCleanup(p.stop)
+        self.statics = {}
+        for name in ("check_python", "check_js", "check_line_length", "check_rules"):
+            p = mock.patch.object(check, name, return_value=[])
+            self.statics[name] = p.start()
+            self.addCleanup(p.stop)
+
+    def run_checks(self, *argv, state=STATE, ui=(), bench=(BENCH_OK,)):
+        """run_checks avec argv ; ui : sorties (texte, code) de run_ui_file dans l'ordre, bench : retours de
+        run_bench ; (fautes, sortie, appels de run_bench, drapeaux de chaque run_ui_file)."""
+        outputs, flags = iter(ui), []
+
+        def fake_file(f, given, env):
+            flags.append(given)
+            return next(outputs)
+        with mock.patch.object(check, "run_ui_file", fake_file), \
+                mock.patch.object(check, "run_bench", side_effect=list(bench)) as run_bench, \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            failed, _ = check.run_checks(check.parse_args(list(argv)), state)
+        return failed, out.getvalue(), run_bench.call_args_list, flags
+
+
+class ReplayTest(StaticsMocked):
+    """Un fichier d'interface ou un module du banc en échec est rejoué seul, une fois : « intermittent : vert seul » ou
+    « reproductible » dans la dernière ligne ; le journal dit la charge, et chaque test rouge va au journal des
+    échecs ; --failed rejoue les seuls tests rouges du dernier passage."""
+    UI = ("--no-bench", "--ui", "tests/ui/a.test.mjs")
+
+    def setUp(self):
+        super().setUp()
+        for name in ("tests/ui/a.test.mjs", "tests/ui/smoke.test.mjs", "tests/test_rewrap.py"):   # (dépôt du test)
+            self.write(name, "")
+
+    def test_a_red_file_green_alone_is_intermittent(self):
+        failed, out, _, flags = self.run_checks(*self.UI, ui=[(RED_OUT, 1), (GREEN_OUT, 0)])
+        self.assertEqual(failed, {"Interface": ["tests/ui/a.test.mjs (intermittent : vert seul)"]})
+        self.assertEqual(len(flags), 2, "rejoué une fois")
+        self.assertIn("Rejeu seul : tests/ui/a.test.mjs : intermittent : vert seul", out)
+        self.assertIn("Charge au départ : charge moyenne ", out)
+        self.assertIn("Chrome sans écran hors de ce contrôle ; QWEN_UI_JOBS", out)
+        self.assertIn("intermittent : vert seul", check.summary(failed))
+        with open(os.path.join(self.tmp.name, "echecs.jsonl"), encoding="utf-8") as f:
+            row = json.loads(f.read().splitlines()[-1])
+        self.assertEqual((row["fichier"], row["test"], row["rejeu"]),
+                         ("tests/ui/a.test.mjs", "un rouge", "intermittent : vert seul"))
+        self.assertIn("load", row)
+
+    def test_a_red_file_red_alone_is_reproducible_and_failed_replays_its_tests(self):
+        failed, _, _, _ = self.run_checks(*self.UI, ui=[(RED_OUT, 1), (RED_OUT, 1)])
+        self.assertEqual(failed, {"Interface": ["tests/ui/a.test.mjs (reproductible)"]})
+        with mock.patch.object(check, "run_ui_file", return_value=(GREEN_OUT, 0)) as run_file, \
+                mock.patch.object(check, "ui_titles", return_value=["un vert", "un rouge"]), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            failed, _ = check.run_failed(check.parse_args(["--failed"]))
+        self.assertEqual(failed, {}, out.getvalue())
+        self.assertEqual(run_file.call_args.args[0], "tests/ui/a.test.mjs")
+        self.assertIn("--test-name-pattern=^(?:un\\ rouge)$", run_file.call_args.args[1])
+        # un titre qui n'est plus un test du fichier (renommé, ou le fichier tombé au chargement) : le fichier entier
+        self.run_checks(*self.UI, ui=[(RED_OUT, 1), (RED_OUT, 1)])
+        with mock.patch.object(check, "run_ui_file", return_value=(GREEN_OUT, 0)) as run_file, \
+                mock.patch.object(check, "ui_titles", return_value=["un vert", "rouge renommé"]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            check.run_failed(check.parse_args(["--failed"]))
+        self.assertFalse(any(a.startswith("--test-name-pattern") for a in run_file.call_args.args[1]))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            check.run_failed(check.parse_args(["--failed"]))
+        self.assertIn("rien à rejouer", out.getvalue(), "tout est revenu vert : plus rien de rouge")
+
+    def test_a_red_bench_module_is_replayed_alone(self):
+        red = (False, ["FAIL: test_y (test_x.C.test_y)", "Banc : Ran 3 tests in 0.1s", "Banc : FAILED (failures=1)",
+                       "Banc : durée 1 s"], ["test_x.C.test_y"])
+        ok = (True, ["Banc (test_x.py) : Ran 1 test in 0.1s", "Banc (test_x.py) : OK", "Banc (test_x.py) : durée 1 s"],
+              [])
+        failed, out, calls, _ = self.run_checks("--force", bench=[red, ok])
+        self.assertEqual(calls[1].args, ("test_x.py",))
+        self.assertEqual(failed, {"Banc": ["test_x.C.test_y (intermittent : vert seul)"]})
+        self.assertIn("Rejeu seul : test_x.py : intermittent : vert seul (Ran 1 test in 0.1s)", out)
+
+    def test_failed_replays_only_test_files_of_the_repository(self):
+        """La liste des rouges vient d'un fichier du dossier temporaire : --failed n'y rejoue que des fichiers de
+        tests/ui et des modules du banc qui existent ; une autre entrée est ignorée et dite (revue de sécurité, C1)."""
+        check.write_json(check.red_record(self.journal), {"when": "29/10/2026 14:00",
+            "ui": {"/tmp/ailleurs.mjs": [], "--import=x": [], "tests/ui/../../ailleurs.test.mjs": [],
+                   "tests/ui/smoke.test.mjs": ["un rouge"]},
+            "bench": {"../ailleurs": None, "test_zz_absent": None, "test_rewrap": ["test_x"]}})
+        with mock.patch.object(check, "run_ui_file", return_value=(GREEN_OUT, 0)) as run_file, \
+                mock.patch.object(check, "run_bench", return_value=BENCH_OK) as run_bench, \
+                mock.patch.object(check, "ui_titles", return_value=["un rouge"]), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            check.run_failed(check.parse_args(["--failed"]))
+        self.assertEqual([c.args[0] for c in run_file.call_args_list], ["tests/ui/smoke.test.mjs"])
+        self.assertEqual([c.args for c in run_bench.call_args_list], [("test_rewrap.py", ["test_x"])])
+        for entry in ("/tmp/ailleurs.mjs", "--import=x", "tests/ui/../../ailleurs.test.mjs", "../ailleurs",
+                      "test_zz_absent"):
+            self.assertIn(f"ignoré : {entry}", out.getvalue())
+        # un fichier nommé autrement (« ./tests/ui/… », tapé ainsi à --ui) se rejoue sous son nom du dépôt ; une liste
+        # dont rien ne se rejoue n'est pas un succès
+        check.write_json(check.red_record(self.journal), {"when": "29/10/2026 14:00",
+                                                          "ui": {"./tests/ui/smoke.test.mjs": ["un rouge"]}})
+        with mock.patch.object(check, "run_ui_file", return_value=(GREEN_OUT, 0)) as run_file, \
+                mock.patch.object(check, "ui_titles", return_value=["un rouge"]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            failed, _ = check.run_failed(check.parse_args(["--failed"]))
+        self.assertEqual(([c.args[0] for c in run_file.call_args_list], failed), (["tests/ui/smoke.test.mjs"], {}))
+        check.write_json(check.red_record(self.journal), {"when": "29/10/2026 14:00", "ui": {"/tmp/x.mjs": []}})
+        with contextlib.redirect_stdout(io.StringIO()):
+            failed, _ = check.run_failed(check.parse_args(["--failed"]))
+        self.assertTrue(failed, "rien rejoué : pas « OK »")
+
+    def test_many_red_files_are_not_replayed(self):
+        files = [f"tests/ui/{c}.test.mjs" for c in "abcd"]
+        failed, out, _, flags = self.run_checks("--no-bench", "--ui", *files, ui=[(RED_OUT, 1)] * 4)
+        self.assertEqual(len(flags), 4, "aucun rejeu")
+        self.assertEqual(failed["Interface"], files)
+        self.assertIn("pas de rejeu (4 fichiers ou modules en échec", out)
+
+
+class BenchSkipTest(StaticsMocked):
+    """Le banc entier est sauté quand les .py sont ceux du dernier banc vert (décision du 29/10/2026) : seul le test
+    du dépôt public tourne, et la ligne « Ran N tests » de ce banc est citée ; --force et la CI le relancent ; seuls
+    des .md changés depuis le dernier contrôle vert : ni banc ni interface."""
+    def test_the_bench_runs_again_only_on_other_py_files(self):
+        _, _, calls, _ = self.run_checks()
+        self.assertEqual(calls[0].args, (), "premier banc : entier")
+        _, out, calls, _ = self.run_checks()
+        self.assertEqual(calls[0].args, (), out)
+        self.assertEqual(calls[0].kwargs["modules"][0], "test_public_repo.py", out)
+        self.assertIn("mêmes .py que le banc vert du ", out)
+        with mock.patch.object(check, "run_bench", return_value=BENCH_OK), \
+                contextlib.redirect_stdout(io.StringIO()):
+            _, cited = check.run_checks(check.parse_args([]), STATE)
+        self.assertTrue(any(c.endswith(", mêmes .py) : Ran 3 tests in 0.1s") for c in cited), cited)
+        self.assertEqual(self.run_checks(state=dict(STATE, py="py-2"))[2][0].args, (), "autres .py : entier")
+        self.assertEqual(self.run_checks("--force", state=dict(STATE, py="py-2"))[2][0].args, (), "--force")
+        with mock.patch.object(check, "in_ci", return_value=True):
+            self.assertEqual(self.run_checks(state=dict(STATE, py="py-2"))[2][0].args, (), "en CI : entier")
+        red = (False, ["Banc : Ran 3 tests in 0.1s", "Banc : FAILED (failures=1)", "Banc : durée 1 s"], ["banc"])
+        self.run_checks("--force", state=dict(STATE, py="py-3"), bench=[red])
+        self.assertEqual(self.run_checks(state=dict(STATE, py="py-3"))[2][0].args, (), "un banc rouge ne compte pas")
+
+    def test_markdown_only_changes_run_lines_and_rules_only(self):
+        self.write("a.py", "x = 1\n")
+        self.write("notes.md", "Notes.\n")
+        sh(self.root, "git", "add", ".")
+        sh(self.root, "git", *GIT_USER, "commit", "-q", "-m", "code")
+
+        def main(*argv):
+            with mock.patch.object(check, "run_bench", side_effect=[BENCH_OK, BENCH_OK]) as run_bench, \
+                    contextlib.redirect_stdout(io.StringIO()) as out:
+                code = check.main(list(argv))
+            return code, out.getvalue(), run_bench.call_args_list
+        self.assertEqual(main()[0], 0)
+        self.statics["check_python"].reset_mock()
+        self.write("notes.md", "Notes changées.\n")
+        code, out, calls = main()
+        self.assertEqual(code, 0, out)
+        self.assertIn("seuls des .md ont changé depuis le contrôle vert du ", out)
+        self.assertEqual([c.kwargs["modules"][0] for c in calls], ["test_public_repo.py"])
+        self.statics["check_python"].assert_not_called()
+        self.statics["check_rules"].assert_called()
+        last = out.strip().splitlines()[-1]
+        self.assertIn("Banc (vert du ", last, "lignes du contrôle vert citées, datées")
+        self.assertIn(") : Ran 3 tests in 0.1s", last)
+        self.write("notes.md", "Notes changées deux fois.\n")   # un second .md seul : rien ne s'accumule
+        _, out, _ = main()
+        last = out.strip().splitlines()[-1]
+        self.assertEqual(last.count("Ran 3 tests in 0.1s"), 2, last)   # le banc réduit du passage, le vert d'origine
+        self.assertEqual(last.count("(vert du "), 2, last)                # Ran et OK du seul vert d'origine
+        self.write("a.py", "x = 2\n")                        # du code changé : tout repasse
+        _, out, calls = main()
+        self.assertNotIn("seuls des .md", out)
+        self.statics["check_python"].assert_called()
+
+
+@unittest.skipIf(os.name == "nt", "propriétaire et droits POSIX ; sous Windows, %TEMP% est déjà propre au compte")
+class PrivateTmpTest(unittest.TestCase):
+    """Les fichiers de check.py, mutate.py et du hook (journaux, verts, rouges, banc, échecs, preuves, marqueurs)
+    vivent dans un dossier privé qwen-<uid> du dossier temporaire, en 0700, créé s'il manque ; un dossier existant
+    qui n'est pas à l'utilisateur, pas en 0700, ou un lien, est refusé : un autre compte pourrait sinon forger ces
+    fichiers ou faire écrire au travers (revue de sécurité, C2 ; décision du 29/10/2026)."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="qwen-check-test-")
+        self.addCleanup(self.tmp.cleanup)
+        p = mock.patch.object(check.tempfile, "gettempdir", return_value=self.tmp.name)
+        p.start()
+        self.addCleanup(p.stop)
+        self.private = os.path.join(self.tmp.name, f"qwen-{os.getuid()}")
+        for name in ("QWEN_CHECK_JOURNAL", "QWEN_MUTATE_JOURNAL"):
+            p = mock.patch.dict(os.environ)
+            p.start()
+            self.addCleanup(p.stop)
+            os.environ.pop(name, None)
+
+    def test_every_file_goes_to_the_private_folder(self):
+        sys.path.insert(0, HERE)
+        import mutate                                    # noqa: E402
+        paths = [check.journal_path(), check.failure_log_path(), check.hook_mark({"tool_use_id": "x"}),
+                 mutate.proofs_path(), check.red_record(check.journal_path())]
+        self.assertEqual(len(paths), 5)
+        self.assertTrue(all(os.path.dirname(p) == self.private for p in paths), paths)
+        self.assertEqual(stat.S_IMODE(os.lstat(self.private).st_mode), 0o700)
+
+    def test_an_unsafe_folder_is_refused(self):
+        os.mkdir(self.private, 0o755)
+        os.chmod(self.private, 0o755)
+        with self.assertRaisesRegex(check.UnsafeTmp, "0700"):
+            check.private_tmp()
+        os.rmdir(self.private)
+        os.symlink(self.tmp.name, self.private)           # un lien posé par un autre
+        with self.assertRaisesRegex(check.UnsafeTmp, "lien"):
+            check.private_tmp()
+        os.remove(self.private)
+        os.mkdir(self.private, 0o700)
+        with mock.patch.object(check.os, "getuid", return_value=os.getuid() + 1), \
+                self.assertRaisesRegex(check.UnsafeTmp, "propriétaire"):
+            check.private_tmp(uid=os.getuid() + 1)
+        with mock.patch.object(check, "private_tmp", side_effect=check.UnsafeTmp("dossier refusé")), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(check.main(["--failed"]), 2)
+        self.assertIn("dossier refusé", err.getvalue())
+        # le hook, lui, ne bloque jamais une commande Bash pour un dossier refusé (PreToolUse en code 2 la refuserait)
+        pre = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "x", "cwd": HERE,
+                          "tool_input": {"command": "true"}})
+        post = pre.replace("PreToolUse", "PostToolUse")
+        with mock.patch.object(check, "private_tmp", side_effect=check.UnsafeTmp("dossier refusé")):
+            self.assertEqual(check.hook_lines(pre), 0)
+            self.assertIn(check.hook_lines(post), (0, 2))   # (2 : des lignes longues de l'arbre, jamais le refus)
+
+
+class AtTest(unittest.TestCase):
+    """--at rejoue des tests d'interface sur un autre commit : il lui faut des fichiers (--ui) et un commit qui existe ;
+    sinon rien n'est lancé ni laissé (code 2)."""
+    def test_at_needs_files_and_a_commit(self):
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(check.main(["--at", "HEAD"]), 2)
+            self.assertEqual(check.main(["--at", "pas-un-commit-zz", "--ui", "tests/ui/smoke.test.mjs"]), 2)
+        self.assertIn("donner les fichiers d'interface", err.getvalue())
+        self.assertIn("worktree de « pas-un-commit-zz » impossible", err.getvalue())
+        before = check.git("worktree", "list")
+        with contextlib.redirect_stderr(io.StringIO()):
+            check.main(["--at", "pas-un-commit-zz", "--ui", "tests/ui/smoke.test.mjs"])
+        self.assertEqual(check.git("worktree", "list"), before, "aucun worktree laissé")
+
+
+class BenchReadersTest(unittest.TestCase):
+    """Banc sauté : tournent quand même le test du dépôt public et les modules qui lisent d'autres fichiers que des
+    .py (l'interface, la carte du code, le README), lus dans leur source."""
+    def test_modules_that_read_other_files_still_run(self):
+        readers = check.bench_readers()
+        self.assertEqual(readers[0], "test_public_repo.py")
+        for name in ("test_palette.py", "test_rules.py", "test_rewrap.py"):   # index.html, la carte, le README
+            self.assertIn(name, readers)
+        self.assertNotIn("test_queue.py", readers)
+
+
+class FailCapTest(unittest.TestCase):
+    """Un fichier d'interface s'arrête à UI_FAIL_CAP tests en échec : la cascade d'un changement de sens ne coûte plus
+    30 s par test ; sa ligne le dit, avec ce qui a tourné."""
+    def test_a_file_stops_at_the_cap(self):
+        with tempfile.TemporaryDirectory(prefix="qwen-check-test-") as tmp:
+            path = os.path.join(tmp, "cascade.test.mjs")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("import { test } from 'node:test';\nimport assert from 'node:assert/strict';\n"
+                        "test('vert 1', () => {});\ntest('vert 2', () => {});\n"
+                        + "".join(f"test('rouge {k}', () => assert.equal({k}, 0));\n" for k in range(1, 9)))
+            with mock.patch.object(check, "UI_FAIL_CAP", 3):
+                ok, lines, faults = check.run_ui([path], jobs=1)
+        self.assertFalse(ok)
+        self.assertEqual(faults, [path])
+        text = "\n".join(lines)
+        self.assertIn("fichier arrêté après 3 échecs", text)
+        self.assertNotIn("rouge 4", text, "arrêté au troisième")
+        self.assertIn(f"Interface : {path} : 5 tests, 3 en échec, arrêté au plafond de 3 échecs", text)
+        self.assertEqual(check.RED["ui"][check.canonical(path)], [], "plafonné : --failed le rejoue entier")
+
+
 class NoticeBaseTest(RepoCase):
     """L'avis « zone sensible » compte depuis le dernier commit (le ticket en cours, arbre de travail et fichiers
     nouveaux compris ; décision du 25/10/2026), quelle que soit la branche : un ticket n'hérite plus des mots des
     tickets d'avant. Il compte aussi la suppression de données et nomme la fonction (ou la route) de chaque ligne."""
+    def setUp(self):
+        super().setUp()
+        self.proofs = os.path.join(self.tmp.name, "preuves.jsonl")      # journal de tests/mutate.py du test
+        p = mock.patch.dict(os.environ, QWEN_MUTATE_JOURNAL=self.proofs)
+        p.start()
+        self.addCleanup(p.stop)
+
     def notice(self):
         with contextlib.redirect_stdout(io.StringIO()) as out:
             check.sensitive_notice(check.ticket_base())
         return out.getvalue()
+
+    def test_a_sensitive_function_without_a_red_proof_is_named(self):
+        """L'avis liste les fonctions sensibles touchées sans preuve rouge au journal de mutate.py depuis le dernier
+        commit (décision du 29/10/2026 : un avis, rien ne bloque)."""
+        self.write("tools/launch.py", "def purge(name):\n    return 1\n\n\ndef autre():\n    return 2\n")
+        self.commit("serveur")
+        self.write("tools/launch.py", "def purge(name):\n    delete_output(name)\n    return 1\n\n\n"
+                                      "def autre():\n    secret(None)\n    return 2\n")
+        notice = self.notice()
+        self.assertIn("sans preuve rouge de tests/mutate.py depuis le dernier commit (tools/launch.py : purge, autre)",
+                      notice)
+        with open(self.proofs, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"t": time.time() + 5, "fichier": "tools/launch.py", "fonction": "purge",
+                                "tests": ["test_x.C.test_purge"]}) + "\n")
+            f.write(json.dumps({"t": time.time() + 5, "fichier": "tools/launch.py", "fonction": "autre",
+                                "tests": []}) + "\n")   # sans test en échec : pas une preuve
+            f.write(json.dumps({"t": 0, "fichier": "tools/launch.py", "fonction": "autre"}) + "\n")   # trop vieille
+        self.assertIn("(tools/launch.py : autre)", self.notice())
 
     def commit(self, message):
         sh(self.root, "git", "add", ".")
@@ -331,10 +708,11 @@ class QuickTest(RepoCase):
                 mock.patch.object(check, "check_line_length", return_value=[]), \
                 mock.patch.object(check, "check_rules", return_value=[]), \
                 mock.patch.object(check, "run_bench", return_value=(True, [], [])) as bench, \
-                mock.patch.object(check, "sensitive_notice"), contextlib.redirect_stdout(io.StringIO()):
+                mock.patch.object(check, "sensitive_notice"), mock.patch.object(check, "write_red"), \
+                contextlib.redirect_stdout(io.StringIO()):
             check.run_checks(args)
         bench.assert_called_once()
-        return bench.call_args.args[0] if bench.call_args.args else None
+        return (bench.call_args.kwargs.get("modules") or [None])[0]
 
     def test_quick_compares_to_the_last_commit(self):
         sh(self.root, "git", "checkout", "-q", "-b", "dev")
@@ -412,7 +790,7 @@ class MainTest(RepoCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def fake_checks(self, args):
+    def fake_checks(self, args, *_):
         self.runs += 1
         print(self.printed)
         return self.failed, self.CITED

@@ -52,8 +52,6 @@ const ref = color => `(() => { const c = document.createElement('canvas'); c.wid
 const addImage = color => page.eval(`(async () => { inputImages.push(await toEntry('i.png', ${ref(color)}));
   renderInputs(); refreshChoices(); })()`);
 // génération envoyée hors de l'interface (comme d'un autre appareil), 512×512 en 8 étapes
-const send = body => page.eval(`postJson('/api/generate', { width: 512, height: 512, steps: 8, cfg: 1, seed: -1,
-  preview: false, ref_images: [], ...${body} }).then(r => r.status)`);
 // les images de la pile gardées par ✓, puis la visionneuse des Tirages sur l'image au prompt donné
 async function view(prompt) {
   await page.keepPile();
@@ -131,11 +129,12 @@ test('échec : « Relancer » sur la carte de l\'échec', async () => {
 
 test('Tirages : demande reconstruite de l\'image (édition, annotation) ; absent pour un masque', async () => {
   await fresh();
-  assert.equal(await send(`{ mode: 'edit', prompt: 'zl5 edition',
+  assert.equal(await page.postGenerate(`{ mode: 'edit', prompt: 'zl5 edition',
     ref_images: [${ref('#c02020')}, ${ref('#2060c0')}] }`), 202);
-  assert.equal(await send(`{ mode: 'annot', prompt: 'zl6 annotation', ref_images: [${ref('#a040c0')}], seed: 1234 }`),
+  assert.equal(await page.postGenerate(`{ mode: 'annot', prompt: 'zl6 annotation',
+    ref_images: [${ref('#a040c0')}], seed: 1234 }`),
     202);
-  assert.equal(await send(`{ mode: 'mask', prompt: 'zl7 masque', init_image: ${ref('#30a050')},
+  assert.equal(await page.postGenerate(`{ mode: 'mask', prompt: 'zl7 masque', init_image: ${ref('#30a050')},
     mask_image: ${ref('#ffffff')}, ref_images: [${ref('#808080')}] }`), 202);
   await bench.idle({ page });
   await view('zl5 edition');
@@ -155,7 +154,7 @@ test('Tirages : demande reconstruite de l\'image (édition, annotation) ; absent
 
 test('espace du moment : dans l\'espace public, puis dans l\'espace privé', async () => {
   await fresh();
-  assert.equal(await send(`{ mode: 't2i', prompt: 'zl9 publique' }`), 202);
+  assert.equal(await page.postGenerate(`{ mode: 't2i', prompt: 'zl9 publique' }`), 202);
   await bench.idle({ page });
   await view('zl9 publique');
   const pub = await again('#vAgain');
@@ -165,7 +164,7 @@ test('espace du moment : dans l\'espace public, puis dans l\'espace privé', asy
   assert.equal(await post(exists ? '/api/private/unlock' : '/api/private/create', { code: CODE }), 200);
   await page.eval(`refreshStatus()`);
   await page.waitFor(`inPrivate()`, { what: 'dans l\'espace privé' });
-  assert.equal(await send(`{ mode: 't2i', prompt: 'zl8 privee', private: true }`), 202);
+  assert.equal(await page.postGenerate(`{ mode: 't2i', prompt: 'zl8 privee', private: true }`), 202);
   await bench.idle({ page });
   await view('zl8 privee');
   const priv = await again('#vAgain');
