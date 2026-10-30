@@ -910,6 +910,15 @@ def run_ui_file(f, flags, env, cap=None):
     return ("".join(lines) + note).rstrip(), proc.returncode or (1 if note else 0)
 
 
+def canonical(f):
+    """Chemin d'un fichier relatif à la racine du dépôt, avec des « / » (« ./tests/ui/x », un chemin absolu ou
+    « tests\\ui\\x » donnent « tests/ui/x ») ; tel quel s'il ne s'y ramène pas (autre lecteur sous Windows)."""
+    try:
+        return os.path.relpath(os.path.join(ROOT, f), ROOT).replace(os.sep, "/")
+    except ValueError:
+        return f
+
+
 def failed_titles(out):
     """Titres des tests en échec d'une sortie de node --test (lignes ✖ d'avant le résumé, qui les répète)."""
     head = out.split("\nℹ tests", 1)[0]
@@ -952,10 +961,10 @@ def run_ui(files, name=None, wait=None, jobs=None, repeat=1):
         if code or not counts.get("tests"):           # aucun test lancé : pas une réussite
             faults.append(f)
             shown.append(out)
-            RED["ui"].setdefault(file, [])
-            RED["ui"][file] = list(dict.fromkeys(RED["ui"][file] + failed_titles(out)))
+            key = canonical(file)                     # (le nom du dépôt, quelle que soit la forme tapée à --ui)
+            RED["ui"][key] = list(dict.fromkeys(RED["ui"].get(key, []) + failed_titles(out)))
             if capped:                                # tests jamais atteints après l'arrêt : le fichier entier
-                RED["ui"][file] = []
+                RED["ui"][key] = []
         failed = counts.get("fail", 0) + counts.get("cancelled", 0)
         todo = f", {counts['todo']} à faire" if counts.get("todo") else ""      # test « todo » : compté, sans échec
         cap_note = f", arrêté au plafond de {capped.group(1)} échecs" if capped else ""
@@ -1460,11 +1469,16 @@ def run_failed(args):
     # la liste vient d'un fichier du dossier temporaire : seuls se rejouent des fichiers de tests/ui et des modules du
     # banc qui existent (un chemin d'ailleurs ou une option de node ne se lance jamais)
     known_ui = set(ui_files(None))
-    ui = {f: t for f, t in red.get("ui", {}).items() if f in known_ui}
+    ui = {canonical(f): t for f, t in red.get("ui", {}).items() if canonical(f) in known_ui}
     bench = {m: n for m, n in red.get("bench", {}).items()
              if re.fullmatch(r"test_\w+", m) and os.path.isfile(os.path.join(ROOT, "tests", m + ".py"))}
-    for entry in [*(f for f in red.get("ui", {}) if f not in ui), *(m for m in red.get("bench", {}) if m not in bench)]:
+    ignored = [*(f for f in red.get("ui", {}) if canonical(f) not in ui),
+               *(m for m in red.get("bench", {}) if m not in bench)]
+    for entry in ignored:
         print(f"--failed : ignoré : {entry} (ni un fichier de tests/ui ni un module du banc)")
+    if not ui and not bench:                         # rien rejoué : pas un succès, et la liste reste
+        print("--failed : rien à rejouer parmi les tests rouges notés")
+        return {"Rejeu": ["rien rejoué"]}, []
     RED["ui"].clear(), RED["bench"].clear(), CAPPED_FILES.clear()
     failed, cited = {}, []
     for module, names in bench.items():

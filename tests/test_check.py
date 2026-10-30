@@ -432,6 +432,19 @@ class ReplayTest(StaticsMocked):
         for entry in ("/tmp/ailleurs.mjs", "--import=x", "tests/ui/../../ailleurs.test.mjs", "../ailleurs",
                       "test_zz_absent"):
             self.assertIn(f"ignoré : {entry}", out.getvalue())
+        # un fichier nommé autrement (« ./tests/ui/… », tapé ainsi à --ui) se rejoue sous son nom du dépôt ; une liste
+        # dont rien ne se rejoue n'est pas un succès
+        check.write_json(check.red_record(self.journal), {"when": "29/10/2026 14:00",
+                                                          "ui": {"./tests/ui/smoke.test.mjs": ["un rouge"]}})
+        with mock.patch.object(check, "run_ui_file", return_value=(GREEN_OUT, 0)) as run_file, \
+                mock.patch.object(check, "ui_titles", return_value=["un rouge"]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            failed, _ = check.run_failed(check.parse_args(["--failed"]))
+        self.assertEqual(([c.args[0] for c in run_file.call_args_list], failed), (["tests/ui/smoke.test.mjs"], {}))
+        check.write_json(check.red_record(self.journal), {"when": "29/10/2026 14:00", "ui": {"/tmp/x.mjs": []}})
+        with contextlib.redirect_stdout(io.StringIO()):
+            failed, _ = check.run_failed(check.parse_args(["--failed"]))
+        self.assertTrue(failed, "rien rejoué : pas « OK »")
 
     def test_many_red_files_are_not_replayed(self):
         files = [f"tests/ui/{c}.test.mjs" for c in "abcd"]
@@ -597,7 +610,7 @@ class FailCapTest(unittest.TestCase):
         self.assertIn("fichier arrêté après 3 échecs", text)
         self.assertNotIn("rouge 4", text, "arrêté au troisième")
         self.assertIn(f"Interface : {path} : 5 tests, 3 en échec, arrêté au plafond de 3 échecs", text)
-        self.assertEqual(check.RED["ui"][path], [], "plafonné : --failed le rejoue entier")
+        self.assertEqual(check.RED["ui"][check.canonical(path)], [], "plafonné : --failed le rejoue entier")
 
 
 class NoticeBaseTest(RepoCase):
