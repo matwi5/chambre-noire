@@ -533,7 +533,7 @@ def hook_lines(stdin):
         try:
             with open(hook_mark(data), "w", encoding="utf-8") as f:
                 f.write(str(time.time()))
-        except OSError:
+        except (OSError, UnsafeTmp):                 # (dossier privé refusé : sans marqueur, jamais de blocage)
             pass
         return 0
     if not folder or not os.path.isdir(folder):
@@ -555,7 +555,7 @@ def hook_lines(stdin):
             with open(hook_mark(data), encoding="utf-8") as f:
                 started = float(f.read()) - 1
             os.remove(hook_mark(data))
-        except (OSError, ValueError):
+        except (OSError, ValueError, UnsafeTmp):
             started = time.time() - 60
         try:
             changed = set(git("diff", "--name-only", "HEAD", "--", *LINE_FILES).splitlines() + new_files(*LINE_FILES))

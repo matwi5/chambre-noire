@@ -544,6 +544,13 @@ class PrivateTmpTest(unittest.TestCase):
                 contextlib.redirect_stderr(io.StringIO()) as err:
             self.assertEqual(check.main(["--failed"]), 2)
         self.assertIn("dossier refusé", err.getvalue())
+        # le hook, lui, ne bloque jamais une commande Bash pour un dossier refusé (PreToolUse en code 2 la refuserait)
+        pre = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "x", "cwd": HERE,
+                          "tool_input": {"command": "true"}})
+        post = pre.replace("PreToolUse", "PostToolUse")
+        with mock.patch.object(check, "private_tmp", side_effect=check.UnsafeTmp("dossier refusé")):
+            self.assertEqual(check.hook_lines(pre), 0)
+            self.assertIn(check.hook_lines(post), (0, 2))   # (2 : des lignes longues de l'arbre, jamais le refus)
 
 
 class AtTest(unittest.TestCase):
