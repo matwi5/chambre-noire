@@ -301,6 +301,28 @@ test('« Relancer » une image de Qwen avec MiniMax H3 choisi : aperçus compté
   }
 });
 
+test('« Relancer » une image MiniMax H3 avant le premier statut : le champ model part quand même', async () => {
+  bench.h3();
+  try {
+    await fresh();
+    await page.modelsSeen(2);
+    assert.equal(await page.postGenerate(`{ mode: 't2i', prompt: 'zl17 h3', model: 'h3', steps: 6 }`), 202);
+    await bench.idle({ page });
+    await view('zl17 h3');
+    await page.eval(`closeViewer()`);
+    const n = await page.eval(`sentBodies.length`);
+    // liste des modèles pas encore lue (page rechargée, statut en route) ; Qwen, lui, part toujours sans champ
+    await page.eval(`modelList = null; lastModels = ''; againFrom(histItems.find(it => it.prompt === 'zl17 h3'))`);
+    await page.waitFor(`sentBodies.length > ${n}`, { what: 'relance envoyée' });
+    assert.deepEqual(await page.eval(`[sentBodies.at(-1).model, sentBodies.at(-1).steps]`), ['h3', 6]);
+    await bench.idle({ page });
+    await page.modelsSeen(2);
+    page.assertNoErrors();
+  } finally {
+    bench.h3(false);
+  }
+});
+
 test('espace privé : « Relancer » une image privée MiniMax H3 garde son modèle', async () => {
   bench.h3();
   try {

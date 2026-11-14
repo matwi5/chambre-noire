@@ -820,7 +820,8 @@ Qwen ; `H3-Q4`, `H3-Q8` : MiniMax H3 ; autre valeur : le modèle des Réglages, 
 modèle désinstallé depuis donne le refus du Mac, affiché tel quel. **Reprendre** remet ce modèle dans les Réglages
 (les étapes choisies restent quand il impose les siennes) ; **Éditer** garde celui des Réglages. Avec Qwen
 seul, ou devant un serveur qui n'envoie pas la liste `models` de `/api/status`, la ligne n'apparaît pas et la demande
-part sans champ `model`.
+de **Révéler** part sans champ `model` ; **Relancer** refaite à partir d'une image envoie le sien dès que le Mac liste
+ses modèles, et toujours pour MiniMax H3.
 
 **Licence de MiniMax H3.** Ses poids sont soumis à la licence publiée par MiniMax avec le modèle (fichier `LICENSE`
 du dépôt [MiniMaxAI/MiniMax-H3-Image](https://huggingface.co/MiniMaxAI/MiniMax-H3-Image)). Elle exclut des

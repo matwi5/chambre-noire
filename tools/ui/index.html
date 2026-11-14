@@ -948,7 +948,7 @@ const resSel = () => RES.find(p=>p.k===opt.res) || RES[1];
 const stepsSel = () => STEPS.find(p=>p.k===opt.steps) || STEPS[1];
 // modèles installés que le Mac propose (/api/status, models : clé, nom, étapes permises, intervalle des aperçus…) ;
 // null avant le premier statut et devant un serveur qui n'envoie pas la liste. La ligne « Modèle » n'est montrée qu'à
-// partir de deux modèles ; sinon la demande part sans champ model (Qwen pour le serveur)
+// partir de deux modèles ; sinon la demande composée (buildRequest) part sans champ model (Qwen pour le serveur)
 let modelList = null, lastModels = '';
 const modelShown = () => !!modelList && modelList.length>1;
 // modèle de la saisie : le dernier choisi s'il est installé, sinon Qwen (le choix retenu n'est pas oublié : il
@@ -2262,7 +2262,8 @@ function keptRequest(p){                          // l'image seule (sa photo d'u
   const c=campaign[p.lot.rank-1]; return {...one, ref_images:[c.image], width:c.width, height:c.height}; }
 // modèle d'une image (« Relancer », « Reprendre ») lu dans son champ model, la clé de version de sa génération (journal,
 // fiche privée ; MODEL_TABLE de tools/launch.py) : absent ou version de Qwen, Qwen ; version de MiniMax H3, MiniMax H3 ;
-// toute autre valeur (inconnue, d'un autre type, ligne illisible) : null, le modèle choisi dans les Réglages
+// toute autre valeur (inconnue, d'un autre type) : null, le modèle choisi dans les Réglages. Une ligne du journal sans
+// model (ancienne, ou illisible : la liste la rend sans texte ni modèle, donc sans « Relancer ») arrive en null : Qwen
 const VERSION_MODELS = { q4:'qwen', q8:'qwen', 'uc-q4':'qwen', 'uc-q8':'qwen', 'h3-q4':'h3', 'h3-q8':'h3' };
 const modelOfImage = it => it.model===undefined || it.model===null ? 'qwen'
   : typeof it.model==='string' && Object.hasOwn(VERSION_MODELS, it.model) ? VERSION_MODELS[it.model] : null;
@@ -2279,7 +2280,9 @@ async function againFrom(it){
   const model=modelOfImage(it) ?? modelSel()?.key, fixed=(modelList||[]).find(m=>m.key===model)?.steps;
   return relaunch({ ...base, mode:it.mode||'t2i', prompt:it.prompt, width:it.width, height:it.height,
     steps:Array.isArray(fixed) && fixed.length ? fixed[0] : it.steps, ref_images:images,
-    ...(modelList && model ? {model} : {}) }); }
+    // le champ part dès que le Mac liste ses modèles, et toujours pour un autre modèle que Qwen (même avant le premier
+    // statut : sinon une image MiniMax H3 repartirait en Qwen sans rien dire ; le Mac la contrôle)
+    ...(model && (modelList || model!=='qwen') ? {model} : {}) }); }
 // un seul « Relancer » à la fois : un double appui sur une carte, qui reste à l'écran, ne relance pas deux fois
 let relaunching=false;
 // rien pendant « Sortir » (exiting) : aucune demande privée vers une session qui se ferme (décision du porteur,
