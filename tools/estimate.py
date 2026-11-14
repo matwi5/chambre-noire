@@ -21,8 +21,9 @@ sd.cpp ramène chaque référence à la surface de la sortie (proportions gardé
 (W/16)·(H/16) jetons pour une image de W×H pixels. tools/ui/index.html applique la même formule avec les
 coefficients que /api/status lui envoie : les deux doivent rester identiques.
 
-Chaque modèle a sa famille (FAMILIES) : ses valeurs de départ, le cache de préfixe (Qwen seulement) et deux
-paramètres de ses références, que /api/status envoie avec ses coefficients (absents : ceux de Qwen) :
+Chaque modèle a sa famille (FAMILIES) : ses valeurs de départ, le cache de préfixe (Qwen seulement), measure (faux :
+aucune mesure gardée, pour la vidéo tant qu'elle n'a pas sa formule) et deux paramètres de ses références, que
+/api/status envoie avec ses coefficients (absents : ceux de Qwen) :
 
   rw        poids d'une référence dans les jetons (n = (W·H + rw·références) / 256 / 1024) ; Qwen 1, MiniMax H3 2 ;
   rmin      petit côté minimal d'une référence telle que le moteur la lit (ref_px) ; Qwen 0, MiniMax H3 1024.
@@ -31,7 +32,8 @@ MiniMax H3 garde la forme de la formule de Qwen, sans cache de préfixe ; R rest
 lecture par le VAE), seul le temps d'une étape compte chaque référence deux fois.
 
 Calibration : chaque génération terminée ajoute une mesure à tools/calibration.json (les 40 dernières par moteur et
-par clé de version : q4, uc-q8, h3-q4…), sauf une génération privée (un fichier dont le contenu ne se lit pas est
+par clé de version : q4, uc-q8, h3-q4…), sauf une génération privée et une génération d'une famille sans mesure
+(measure faux : la vidéo) (un fichier dont le contenu ne se lit pas est
 mis de côté, renommé calibration.json.illisible-<date>, et le suivant repart à neuf), étiquetée avec la release de
 sd.cpp qui l'a produite ;
 seules comptent les mesures de la release installée, si bien qu'une mise à jour du moteur repart des valeurs de départ.
@@ -80,6 +82,8 @@ H3_PRIORS = {
 FAMILIES = {
     "qwen": {"priors": PRIORS, "kv": True, "rw": 1, "rmin": 0},
     "h3": {"priors": H3_PRIORS, "kv": False, "rw": 2, "rmin": 1024},
+    # vidéo : valeurs de MiniMax H3 en attendant sa formule (ticket 12), et aucune mesure gardée d'ici là (measure)
+    "video": {"priors": H3_PRIORS, "kv": False, "rw": 2, "rmin": 1024, "measure": False},
 }
 KEEP = 40          # mesures conservées par moteur et par clé de version
 LOCK_WAIT = 10     # secondes d'attente au plus du verrou de calibration.json (Store.add)
@@ -135,8 +139,11 @@ def median(xs):
 
 def make_sample(job, engine=LEGACY_ENGINE, family="qwen"):
     """Mesure d'une génération terminée (dictionnaire de tools/launch.py) par la release engine, avec la formule de la
-    famille de son modèle, ou None s'il manque une durée."""
+    famille de son modèle, ou None s'il manque une durée ou que sa famille ne garde pas de mesure (measure faux : la
+    vidéo, tant qu'elle n'a pas sa formule)."""
     fam = FAMILIES[family]
+    if not fam.get("measure", True):
+        return None
     r = job["req"]
     w, h, steps = int(r["width"]), int(r["height"]), int(r["steps"])
     enc, samp, vae = job.get("encode_seconds_net"), job.get("sampling_seconds"), job.get("vae_seconds")

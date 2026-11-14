@@ -37,11 +37,15 @@ Dans l'ordre du fichier :
 
 - **Constantes et moteur** (en tête) : `ROOT`, `P()` (chemin sous la racine, relu à chaque appel : le banc repointe
   `ROOT`), `MODELS` et `DIFFUSION` (noms des fichiers de modèles, à garder égaux à ceux de `setup.py`), `H3_DIFFUSION`
-  et `H3_FILES` (fichiers de MiniMax H3, sous les noms publiés, à garder égaux à ceux de `setup.py`), `MAX_VARIANTS`,
+  et `H3_FILES` (fichiers de MiniMax H3, sous les noms publiés, à garder égaux à ceux de `setup.py`),
+  `VIDEO_DIFFUSION` et `VIDEO_FILES` (fichiers de la vidéo : modèle, VAE vidéo, LoRA turbo, encodeur de MiniMax H3),
+  `MAX_VARIANTS`,
   `MAX_CAMPAIGN`, `MAX_SIDE`, `PAGE_MODES` et `MODE_LABELS` (libellés des modes dans un refus), `MODEL_TABLE` (table
   fermée des modèles qu'une demande nomme par son champ `model` : versions, fichiers, release minimale du moteur,
   étapes, tailles, images jointes, modes et entrées permis, guidage, aperçus et options de sd-cli imposés, option de
-  `setup.py`, versions qu'une machine peut demander par `tools/config.local.json`), `BACKENDS` (options de sd-cli par
+  `setup.py`, versions qu'une machine peut demander par `tools/config.local.json` ; pour la vidéo, tailles et nombres
+  d'images permis, ni références ni lots ni aperçu, méthode d'échantillonnage du moteur, balise du LoRA ajoutée au
+  prompt, sortie `.webp`), `BACKENDS` (options de sd-cli par
   moteur, réglages Metal justifiés en commentaire), `PLATFORM_BACKENDS`, `PROGRESS_RE` et `TAKING_RE` (lecture de la
   sortie de sd-cli), `PRIVATE_JOB_TTL`, `DONE_LINE` (ligne de fin commune à toutes les générations réussies).
   `record_calib`, `load_config`, `code_version` (commit, date et branche du dossier servi, empreinte `server` de
@@ -179,7 +183,8 @@ un système de fichiers qui ne le connaît pas, `NO_LOCK`), met le fichier sur l
 `calibration.json.illisible-<date>`, une autre version ou une erreur du disque lèvent sans rien toucher ;
 `record_calib` pose `job["measured"]`, que `tools/calibrate.py` vérifie) ;
 `PRIORS` (Qwen) et `H3_PRIORS` (MiniMax H3), réunis par modèle dans `FAMILIES` (valeurs de départ, cache de préfixe
-`kv`, poids `rw` et petit côté minimal `rmin` des références).
+`kv`, poids `rw` et petit côté minimal `rmin` des références ; `measure` faux : aucune mesure gardée, pour la vidéo
+tant qu'elle n'a pas sa formule).
 `tools/calibrate.py` : générations de calibration, `RUNS` (Qwen) et `H3_RUNS` (`--model h3`), hors de la file
 (`run_job`).
 
@@ -618,7 +623,8 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
 
 ## Tests
 
-`tests/bench.py` (banc : `start`, `call`, `generate`, `wait_job`, `wait_idle`, `wait_until`, `capture_push`),
+`tests/bench.py` (banc : `start`, `call`, `generate`, `wait_job`, `wait_idle`, `wait_until`, `capture_push`,
+`video`, qui installe la vidéo le temps d'un test : le banc part avec Qwen et MiniMax H3),
 `tests/fake_sdcli.py` (faux moteur), `tests/test_*.py`, `tests/check.py` (tous les contrôles), `tests/ui/`
 (`driver.mjs`, `serve.py`, tests `*.test.mjs`). Commandes dans `CLAUDE.md`. Vues du pilote : `PHONE` (celle de
 `phonePage`), `PC` (souris), `TABLET` et `TABLET_WIDE` (tactile), ouvertes par `newPage` et changées sans

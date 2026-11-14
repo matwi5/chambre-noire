@@ -12,7 +12,8 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   tourne.
 - Chaque génération lance sd-cli (rechargement quasi instantané grâce à --mmap et au cache disque),
   lit sa progression (étape k/N, secondes par étape), expose des aperçus intermédiaires optionnels et écrit le PNG
-  dans son dossier de travail jobs/<id>/ ; fini, il passe dans la pile (outputs/.pile/), à trier : Garder le fait
+  (ou le WebP animé d'une vidéo) dans son dossier de travail jobs/<id>/ ; fini, il passe dans la pile (outputs/.pile/),
+  à trier : Garder le fait
   passer dans les tirages (outputs/), Jeter l'efface avec tout ce qui s'y rattache.
 - Espace privé ({"private": true} dans /api/generate, session de l'espace exigée) : pendant le calcul, fichiers de
   travail dans jobs/private_<id>/, supprimé dès la fin du job (ni journal, ni calibration ; dans logs/, rien que la
@@ -88,6 +89,16 @@ H3_FILES = {
     "vae": P("models", "vae", "minimax_h3_image_vae_fp16.safetensors"),
     "llm": P("models", "text_encoders", "qwen3vl_32b_minimax_h3-Q4_K_M.gguf"),
 }
+# Vidéo (MiniMax H3 fl2va) : modèle allégé, VAE vidéo, LoRA turbo 4 étapes (seul fichier de son dossier, désigné dans
+# le prompt par son nom sans extension), et l'encodeur de texte de MiniMax H3, sous les noms publiés par leurs dépôts
+VIDEO_DIFFUSION = {
+    "h3-video": P("models", "diffusion_models", "minimax_h3_fl2va_pruned-Q4_K_M.gguf"),
+}
+VIDEO_FILES = {
+    "vae": P("models", "vae", "minimax_h3_video_vae_fp16.safetensors"),
+    "llm": H3_FILES["llm"],
+    "lora": P("models", "loras", "minimax_h3_fl2v_turbo_4step_v1.3_768p_comfyui_bf16.safetensors"),
+}
 MAX_VARIANTS = 4                          # images d'un lot de variantes (tous les modes, hors campagne)
 MAX_CAMPAIGN = 10                         # photos d'une campagne (mode Éditer), comme les références d'une édition
 MAX_SIDE = 4096                           # côté le plus grand d'une image demandée, pour tout modèle
@@ -101,17 +112,34 @@ MODE_LABELS = {"t2i": "texte vers image", "edit": "édition", "mask": "masque", 
 # la page permis ; cfg et preview_every : guidage et intervalle des aperçus imposés (None : ceux de la demande) ;
 # args : options de sd-cli propres au modèle (celles de l'essai pour MiniMax H3) ; setup : option de setup.py qui
 # l'installe ; config : versions qu'une machine peut demander par la clé du modèle dans tools/config.local.json
-# ("h3": "q8"), la valeur lue n'y étant comparée qu'aux noms de cette table (None : pas de choix, Qwen garde --model).
-# MiniMax H3 reprend les tailles et les images jointes de Qwen, sans plafond propre (série 10).
+# ("h3": "q8"), la valeur lue n'y étant comparée qu'aux noms de cette table (None : pas de choix, Qwen garde --model) ;
+# sizes : tailles permises, [largeur, hauteur] (None : toute taille jusqu'à max_side) ; frames : nombres d'images
+# permis d'une vidéo (None : une image, champ frames refusé) ; refs : images de référence permises ; lots : variantes
+# (count) et campagne permises ; preview : aperçus possibles ; sampler : méthode d'échantillonnage imposée (None :
+# celle du moteur, comme l'essai de la vidéo) ; lora : le serveur ajoute à la fin du prompt la balise du LoRA
+# files["lora"], désigné par son nom de fichier sans extension, dans son dossier ; ext : extension de la sortie (.webp :
+# vidéo en WebP animé).
+# MiniMax H3 reprend les tailles et les images jointes de Qwen, sans plafond propre (série 10). La vidéo : les quatre
+# tailles et les trois durées de la série 9 (Q26), son image de départ par -i, sans son ni aperçu (Q23, A17).
 MODEL_TABLE = {
     "qwen": {"name": "Qwen", "versions": DIFFUSION, "files": MODELS, "engine": 0, "steps": None, "max_side": MAX_SIDE,
              "max_refs": MAX_CAMPAIGN, "modes": PAGE_MODES, "init_image": True, "mask": True,
-             "negative_prompt": True, "cfg": None, "preview_every": None, "args": [], "setup": "", "config": None},
+             "negative_prompt": True, "cfg": None, "preview_every": None, "args": [], "setup": "", "config": None,
+             "sizes": None, "frames": None, "refs": True, "lots": True, "preview": True, "sampler": "euler",
+             "lora": False, "ext": ".png"},
     "h3": {"name": "MiniMax H3", "versions": H3_DIFFUSION, "files": H3_FILES, "engine": 1090, "steps": [6],
            "max_side": MAX_SIDE, "max_refs": MAX_CAMPAIGN, "modes": ["t2i", "edit"], "init_image": False,
            "mask": False, "negative_prompt": False, "cfg": 1.0, "preview_every": 2,
            "args": ["--sigmas", "minimax-h3-image", "--rng", "cpu"], "setup": "--h3",
-           "config": {"q4": "h3-q4", "q8": "h3-q8"}},
+           "config": {"q4": "h3-q4", "q8": "h3-q8"}, "sizes": None, "frames": None, "refs": True, "lots": True,
+           "preview": True, "sampler": "euler", "lora": False, "ext": ".png"},
+    "video": {"name": "Vidéo", "versions": VIDEO_DIFFUSION, "files": VIDEO_FILES, "engine": 1090, "steps": [4],
+              "max_side": 864, "max_refs": 1, "modes": ["t2i"], "init_image": True, "mask": False,
+              "negative_prompt": False, "cfg": 1.0, "preview_every": None,
+              "args": ["-M", "vid_gen", "--rng", "cpu", "--fps", "24"], "setup": "--h3-video", "config": None,
+              "sizes": [[480, 288], [288, 480], [864, 480], [480, 864]], "frames": [56, 73, 124], "refs": False,
+              "lots": False, "preview": False, "sampler": None,
+              "lora": True, "ext": ".webp"},
 }
 EXE = "sd-cli.exe" if os.name == "nt" else "sd-cli"
 # moteurs de la plateforme, par ordre de repli quand celui demandé n'est pas installé
@@ -150,7 +178,8 @@ def record_calib(job):
     Seules les générations de tools/calibrate.py en parlent : dans logs/, une ligne de calibration ne suivrait que les
     générations normales et les distinguerait des privées (décision du 23/10/2026). Chaque modèle range sa mesure sous
     la clé de version de sa génération (job_model, posé à la création), faite avec la formule de sa famille : jamais
-    sous celle d'un autre modèle. Une génération privée n'arrive pas ici (run_job s'arrête avant)."""
+    sous celle d'un autre modèle ; une famille sans mesure (la vidéo, estimate.FAMILIES) n'en range aucune. Une
+    génération privée n'arrive pas ici (run_job s'arrête avant)."""
     talk = job.get("calibration")
     key, version = job_model(job)
     try:
@@ -296,6 +325,8 @@ def installed_models():
                         "modes": spec["modes"], "init_image": spec["init_image"], "mask": spec["mask"],
                         "negative_prompt": spec["negative_prompt"], "max_refs": spec["max_refs"],
                         "max_side": spec["max_side"], "preview_every": spec["preview_every"]})
+            if spec["frames"]:                   # vidéo : ses tailles, ses durées, ni variantes ni campagne
+                out[-1].update(sizes=spec["sizes"], frames=spec["frames"], lots=spec["lots"])
     return out
 
 
@@ -1182,7 +1213,8 @@ def to_pile(job, meta):
     jamais une ligne du journal (son prompt) sans image. Le passage dans la pile et le statut « done » se font sous
     S.turn, comme une annulation (cancel_job) : une génération annulée entre-temps n'arrive pas dans la pile, False
     (run_job la jette). jobs/ et outputs/ sont sous ROOT, sur le même disque : os.replace déplace sans copier (un
-    outputs/ sur un autre disque ferait échouer la génération). Le PNG est mis sur le disque avant d'être déplacé :
+    outputs/ sur un autre disque ferait échouer la génération). La sortie (PNG, ou WebP d'une vidéo) est mise sur le
+    disque avant d'être déplacée :
     une coupure ne laisse pas dans la pile un fichier vide derrière un renommage écrit."""
     try:                                        # fsync seul : le F_FULLFSYNC de sync_dir(PILE) suit le déplacement
         with open(job["out"], "rb") as f:
@@ -1434,7 +1466,7 @@ def images_in(folder):
             item = {"name": name, "time": int(st.st_mtime), "size": st.st_size, "mode": m.get("mode"),
                     "prompt": m.get("prompt"), "width": m.get("width"), "height": m.get("height"),
                     "steps": m.get("steps"), "seconds": m.get("seconds"), "model": m.get("model"),
-                    "seed": m.get("seed"),
+                    "frames": m.get("frames"), "seed": m.get("seed"),
                     # identifiant, rang, taille et marqueur de campagne d'une image de lot ; None pour une image seule
                     "lot": m.get("lot"),
                     "inputs": input_files(os.path.join(INPUTS, output_stem(name)))}
@@ -1817,12 +1849,19 @@ def build_cmd(job):
     spec = MODEL_TABLE[key]
     files = {**spec["files"], "diffusion": spec["versions"][version]}
     cfg = spec["cfg"] if spec["cfg"] is not None else r.get("cfg", S.cfg.get("cfg_scale", 1.0))
+    prompt, lora = r["prompt"], []
+    if spec["lora"]:                             # LoRA de la table, par une balise ajoutée à la fin du prompt (vidéo)
+        prompt += f"<lora:{os.path.splitext(os.path.basename(files['lora']))[0]}:1>"
+        lora = ["--lora-model-dir", os.path.dirname(files["lora"])]
     cmd = [P("sdcpp", S.backend, EXE),
            "--diffusion-model", files["diffusion"], "--vae", files["vae"], "--llm", files["llm"]] + (
            ["--llm_vision", files["llm_vision"]] if "llm_vision" in files else []) + BACKENDS[S.backend] + (
-           spec["args"]) + ["-p", r["prompt"], "-W", str(r["width"]), "-H", str(r["height"]),
-           "--steps", str(r["steps"]), "--cfg-scale", str(cfg),
-           "--sampling-method", "euler", "-s", str(r.get("seed", -1)), "-o", job["out"]]
+           spec["args"]) + lora + ["-p", prompt, "-W", str(r["width"]), "-H", str(r["height"]),
+           "--steps", str(r["steps"]), "--cfg-scale", str(cfg)] + (
+           ["--sampling-method", spec["sampler"]] if spec["sampler"] else []) + [
+           "-s", str(r.get("seed", -1)), "-o", job["out"]]
+    if spec["frames"]:                           # vidéo : nombre d'images, une des valeurs de la table (model_error)
+        cmd += ["--video-frames", str(r["frames"])]
     if r.get("negative_prompt"):
         cmd += ["-n", r["negative_prompt"]]
     job["ref_px"] = []
@@ -1833,12 +1872,14 @@ def build_cmd(job):
         cmd += ["-r", f]
     if r.get("init_image"):
         write_data_url(r["init_image"], os.path.join(d, "init.png"), "image d'origine")
-        cmd += ["-i", os.path.join(d, "init.png"), "--strength", str(r.get("strength", 1.0))]
+        cmd += ["-i", os.path.join(d, "init.png")]
+        if not spec["frames"]:                   # l'image de départ d'une vidéo n'a pas de force (essai v8)
+            cmd += ["--strength", str(r.get("strength", 1.0))]
         job["init_px"] = w * h
     if r.get("mask_image"):
         write_data_url(r["mask_image"], os.path.join(d, "mask.png"), "masque")
         cmd += ["--mask", os.path.join(d, "mask.png")]
-    if r.get("preview"):
+    if r.get("preview") and spec["preview"]:   # jamais pour une vidéo (A17)
         interval = preview_every(job, r)
         cmd += ["--preview", "vae", "--preview-path", os.path.join(d, "preview_%03d.png"), "--preview-interval", str(interval)]
         job["preview_interval"] = interval
@@ -1900,7 +1941,8 @@ def run_job(job):
     # et au décodage. Une image d'origine retouchée à moins de 1 n'en calcule qu'une part (« 1/1 » pour 0,05 sur 25
     # étapes) : seule la fenêtre compte alors.
     r = job["req"]
-    partial = r.get("init_image") and float(r.get("strength", 1.0)) < 1
+    video = bool(MODEL_TABLE[job_model(job)[0]]["frames"])   # sa force n'entre pas dans la commande (build_cmd)
+    partial = r.get("init_image") and not video and float(r.get("strength", 1.0)) < 1
     steps_total, sampling = None if partial else int(r["steps"]), False
     while True:
         try:
@@ -2003,6 +2045,8 @@ def run_job(job):
                     "steps": job["req"]["steps"], "seed": job["req"].get("seed"), "seconds": job["seconds"], "encode_seconds": job.get("encode_seconds"),
                     "sec_per_it": job.get("sec_per_it"), "size": job["size"], "backend": S.backend,
                     "model": job_model(job)[1]}
+            if video:                             # durée d'une vidéo, écrite une fois avec model, jamais réécrite
+                meta["frames"] = job["req"]["frames"]
             if job.get("lot"):
                 meta["lot"] = job["lot"]
             if not to_pile(job, meta):            # annulée pendant la fin du calcul : rien n'en reste
@@ -2032,6 +2076,8 @@ def keep_private(job):
             "seed": r.get("seed"), "seconds": job["seconds"], "model": job_model(job)[1], "lot": job.get("lot"),
             "time": int(job["finished"]),
             "dims": job.get("dims"), "pile": True}   # à trier : la marque reste dans la fiche chiffrée
+    if MODEL_TABLE[job_model(job)[0]]["frames"]:   # durée d'une vidéo, comme dans le journal (to_pile)
+        meta["frames"] = r["frames"]
     with open(job["out"], "rb") as f:
         image = f.read()
     return store_private(job["public"], meta, image, read_inputs(job["dir"]))
@@ -2241,6 +2287,22 @@ def model_error(req):
         return f"{spec['name']} n'est pas installé : lancez setup.py {spec['setup']} (Mac seulement)"
     if spec["steps"] and req["steps"] not in spec["steps"]:
         return f"étapes : {', '.join(map(str, spec['steps']))} avec {spec['name']}"
+    frames = req.get("frames")                   # nombre d'images d'une vidéo : une des valeurs de la table, entière
+    if spec["frames"]:
+        if not (isinstance(frames, int) and not isinstance(frames, bool) and frames in spec["frames"]):
+            return f"frames : {', '.join(map(str, spec['frames']))} avec {spec['name']}"
+    elif frames is not None:
+        return "frames : pour une vidéo seulement"
+    if not spec["lots"] and ((req.get("count") or 1) > 1 or req.get("campaign") is not None):
+        return f"{spec['name']} : une seule par demande, sans lot ni campagne"
+    # balise LoRA écrite dans le prompt : elle ferait charger un autre fichier, ou avalerait celle que le serveur ajoute
+    # (« <lora:x » en fin de prompt) ; refusée plutôt que retirée, le prompt gardé restant celui envoyé
+    if spec["lora"] and "<lora:" in req["prompt"].lower():
+        return f"prompt : pas de balise <lora:…> avec {spec['name']}"
+    if spec["sizes"] and [req["width"], req["height"]] not in spec["sizes"]:
+        return f"taille : {', '.join(f'{w}×{h}' for w, h in spec['sizes'])} avec {spec['name']}"
+    if req.get("ref_images") and not spec["refs"]:
+        return f"{spec['name']} n'accepte pas d'images de référence"
     sizes = [(req["width"], req["height"])] + [(c["width"], c["height"]) for c in req.get("campaign") or []]
     if any(max(w, h) > spec["max_side"] for w, h in sizes):
         return f"largeur et hauteur : {spec['max_side']} au plus avec {spec['name']}"
@@ -2420,11 +2482,12 @@ def new_job(req, inputs, model, lot=None):
     mode = request_mode(req)
     d = P("jobs", ("private_" if private else "") + jid)
     os.makedirs(d, exist_ok=True)
-    if private:                                 # PNG en clair et prompt dans ses métadonnées : pour le seul compte,
+    if private:                                 # sortie en clair et prompt dans ses métadonnées : pour le seul compte,
         os.chmod(d, 0o700)                      # même sans le masque de restrict_new_files
-    # le PNG s'écrit dans le dossier de travail : une génération normale le fait passer dans la pile une fois fini
-    # (to_pile), la pile ne voit jamais une image à moitié écrite ; une privée le chiffre (keep_private)
-    out = os.path.join(d, f"{jid}_{mode}.png")
+    # la sortie (PNG, ou WebP animé d'une vidéo : extension de son modèle) s'écrit dans le dossier de travail : une
+    # génération normale la fait passer dans la pile une fois finie (to_pile), la pile ne voit jamais une image à moitié
+    # écrite ; une privée la chiffre (keep_private)
+    out = os.path.join(d, f"{jid}_{mode}{MODEL_TABLE[model[0]]['ext']}")
     return {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
             "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot, "model": model[0],
             "version": model[1],

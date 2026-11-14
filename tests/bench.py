@@ -12,6 +12,7 @@ précédentes, l'espace privé et ses sessions.
 Outils : call() (trois origines : le Mac, par défaut ; remote=True, HTTPS relayé par « tailscale serve »,
 HTTPS_HOST ; wifi=True, http:// direct d'un autre appareil, WIFI_HOST), call_full() (avec les en-têtes),
 generate(), wait_job() (pour un statut final, attend aussi que worker() en ait fini : settled), wait_until(cond),
+video() (la vidéo installée le temps d'un bloc ; le banc part avec Qwen et MiniMax H3),
 wait_idle() (tout le Mac au repos), capture_push() (notifications interceptées ; sent.decided complet après
 wait_idle()), release(nom), journal(), files(), LOG (sorties du serveur). Faux moteur (tests/fake_sdcli.py) : FAIL,
 SLOW[=s], FAILSEED=<n>, HOLD[=nom][@k], NOISE, FEWER=<n> dans le prompt (HOLD garde une génération en cours sans
@@ -90,6 +91,11 @@ def start():
         for k, path in table.items():
             table[k] = launch.P("models", os.path.basename(path))
             open(table[k], "w").close()
+    # vidéo : chemins repointés de même, fichiers posés par video() le temps d'un test (sans eux, /api/status ne la
+    # liste pas, comme sur une machine qui ne l'a pas installée) ; l'encodeur est celui de MiniMax H3
+    for table in (launch.VIDEO_DIFFUSION, launch.VIDEO_FILES):
+        for k, path in table.items():
+            table[k] = launch.P("models", os.path.basename(path))
     ui = os.path.join(os.path.dirname(HERE), "tools", "ui")   # l'interface du dépôt, relue à chaque requête
     try:
         os.symlink(ui, launch.P("tools", "ui"))
@@ -132,6 +138,21 @@ def install_fake_engine():
     with open(exe, "w") as f:
         f.write(f'#!/bin/sh\nQWEN_FAKE_HOLD="{hold_dir()}" exec "{sys.executable}" "{fake}" "$@"\n')
     os.chmod(exe, 0o755)
+
+
+@contextlib.contextmanager
+def video():
+    """La vidéo installée le temps du bloc : ses faux fichiers propres (modèle, VAE vidéo, LoRA) posés à côté des
+    autres, puis retirés, même en cas d'échec ; l'encodeur partagé avec MiniMax H3 reste."""
+    made = [p for p in list(launch.VIDEO_DIFFUSION.values()) + list(launch.VIDEO_FILES.values())
+            if not os.path.exists(p)]
+    for p in made:
+        open(p, "w").close()
+    try:
+        yield
+    finally:
+        for p in made:
+            os.remove(p)
 
 
 def hold_dir():

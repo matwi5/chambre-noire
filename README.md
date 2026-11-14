@@ -1029,15 +1029,19 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `server_version` : la même chose au lancement du serveur, `null` sans `main()` ; `rev` : compteur de la pile et des
   tirages de l'espace de l'appareil, qui change à chaque image arrivée dans la pile et à chaque Garder, Jeter et
   Supprimer, et part de l'heure du lancement du serveur : l'interface relit pile et tirages quand il change ;
-  `models` : les modèles installés, dans l'ordre `qwen` puis `h3`, chacun avec `key`, `name`, `version` (clé de
+  `models` : les modèles installés, dans l'ordre `qwen`, `h3` puis `video`, chacun avec `key`, `name`, `version` (clé de
   version que la génération écrira), `steps` (étapes permises, `null` : 1 à 200), `modes` (modes de la page permis),
   `init_image`, `mask` et `negative_prompt` (acceptés ou non), `max_refs` (images jointes que la page propose ; le
-  serveur n'en borne pas le nombre), `max_side` (côté le plus grand, refusé au-delà) et `preview_every` (intervalle
-  des aperçus imposé, `null` : celui de la demande) ; MiniMax H3 n'y est que si ses fichiers sont là et que le
-  moteur du serveur, lu au lancement, est au moins `master-1090`) ; `estimates` : coefficients d'estimation de Qwen
+  serveur n'en borne pas le nombre ; pour la vidéo, 1 : son image de départ, `init_image`, sans image de référence),
+  `max_side` (côté le plus grand, refusé au-delà) et `preview_every` (intervalle
+  des aperçus imposé, `null` : celui de la demande ; la vidéo n'a jamais d'aperçu), et pour la vidéo seulement `sizes`
+  (tailles permises,
+  `[largeur, hauteur]`), `frames` (nombres d'images permis) et `lots` (`false` : ni variantes ni campagne) ; MiniMax
+  H3 et la vidéo n'y sont que si leurs fichiers sont là et que le moteur du serveur, lu au lancement, est au moins
+  `master-1090`) ; `estimates` : coefficients d'estimation de Qwen
   (formule de `tools/estimate.py`, `samples` : nombre de mesures) ; `model_estimates` : ceux de chaque modèle de
-  `models`, par clé, avec pour MiniMax H3 `rw` (poids d'une référence dans la séquence) et `rmin` (petit côté minimal
-  d'une référence) ; lots :
+  `models`, par clé, avec pour MiniMax H3 et la vidéo `rw` (poids d'une référence dans la séquence) et `rmin` (petit
+  côté minimal d'une référence) ; lots :
   `"count"` de 2 à 4 dans `/api/generate` (tous les modes ; 1 : génération seule ; 400 « count : pas de variantes dans
   une campagne » au-delà de 1 avec `campaign`) crée autant de générations ; `"campaign": [{"image": <data URL>,
   "width", "height"}, …]` (1 à 10 photos, en édition, `"mode": "edit"`, sans `ref_images`) crée une édition par photo,
@@ -1052,7 +1056,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   (elle s'écrit dans son dossier de travail `jobs/<id>/`, puis y passe avec sa ligne du journal) ; les tirages sont
   les images de `outputs/`, dont toutes celles d'avant la pile ; `GET /api/pile` et `GET /api/history` (une entrée par
   image, la plus récente d'abord, avec `name`, `time`, `size`, `mode`, `prompt`, `width`, `height`, `steps`,
-  `seconds`, `model`, `seed`, `inputs` et `lot` : `id`, `rank`, `size`, `campaign`, ou `null` pour une image seule ;
+  `seconds`, `model`, `frames` (nombre d'images d'une vidéo, `null` pour une image), `seed`, `inputs` et `lot` :
+  `id`, `rank`, `size`, `campaign`, ou `null` pour une image seule ;
   le journal des images, les PNG de la pile et tout ce que le serveur, `tools/calibrate.py` et sd-cli créent depuis
   leur lancement ne sont lisibles que par le compte qui les fait tourner (fichiers en 0o600, dossiers en 0o700 ; les
   fichiers plus anciens gardent leurs droits, mais `outputs/`, `jobs/` et `logs/` sont fermés aux autres comptes à
@@ -1156,8 +1161,19 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   (version `h3-q4`, ou `h3-q8` si `tools/config.local.json` porte `"h3": "q8"`, lu au lancement du serveur, et que
   son fichier est là, ou si seul ce fichier est là) : sa commande, sa ligne de `outputs/journal.jsonl` et la
   fiche d'une image privée (champ `model`) les lisent sur elle. Une génération MiniMax H3 range sa mesure de durée
-  sous sa version, et la file l'estime avec les coefficients de MiniMax H3. Elle refuse aussi
-  (400 « L'incognito n'existe plus : passez par l'espace privé. ») une demande `"incognito": true`, qu'enverrait une
+  sous sa version, et la file l'estime avec les coefficients de MiniMax H3. `"model": "video"` demande une vidéo
+  muette (vidéo absente : 400 qui demande `setup.py --h3-video`) : le champ `frames` (56, 73 ou 124 images, soit 2, 3
+  ou 5 secondes à 24 images par seconde) est exigé, et refusé (400) pour un autre modèle ; la vidéo refuse (400) une
+  taille autre que 480×288, 288×480, 864×480 et 480×864, des étapes autres que 4, des images de référence, un masque,
+  un prompt négatif, un lot (`count` au-delà de 1, `campaign`) et une balise `<lora:…>` dans le prompt ; elle accepte
+  une image de départ (`init_image`, première image de la vidéo, sans `strength`). Sa commande est celle de l'essai
+  du moteur en mode vidéo : guidage 1, générateur de bruit `cpu`, 24 images par seconde, le LoRA turbo 4 étapes
+  appliqué par une balise que le serveur ajoute à la fin du prompt (le prompt gardé est celui de la demande), sans
+  son ni aperçu (`preview` est ignoré). Elle arrive dans la pile en WebP animé (`<identifiant>_<mode>.webp`), sa ligne
+  du journal porte `"model": "h3-video"` et `frames` ; elle se trie, se notifie et s'annule comme une image, et
+  n'enregistre pas encore de mesure de durée (son estimation dans la file reprend les valeurs de MiniMax H3). La
+  route refuse aussi (400 « L'incognito n'existe plus : passez par l'espace privé. ») une demande `"incognito": true`,
+  qu'enverrait une
   page d'avant le retrait de l'incognito restée ouverte : rien n'est écrit sur l'ordinateur, pas même au journal du
   serveur (les requêtes `/api/generate` n'y vont jamais) ; le champ `page` d'une
   telle page est ignoré. Une génération qui ne peut pas se préparer (image d'entrée illisible, par exemple) échoue
