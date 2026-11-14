@@ -1,6 +1,8 @@
 """setup.py : une calibration qui échoue ne passe plus inaperçue. L'erreur de tools/calibrate.py est affichée, et
 l'installation dit qu'elle continue sans calibration (une calibration cassée était passée inaperçue au groupe B du
-parcours des pages, 10/2026). Le moteur du Mac installé est la release épinglée, et remplace l'ancienne.
+parcours des pages, 10/2026). Le moteur du Mac installé est la release épinglée, et remplace l'ancienne. MiniMax H3
+s'installe par --h3 et --h3-q8 (Mac seulement), sans retélécharger un fichier déjà vérifié, et --check dit ce qui est
+installé pour chaque modèle.
 
   venv/bin/python -m unittest discover -s tests -p test_setup.py
 
@@ -104,6 +106,122 @@ class MacEngineTest(unittest.TestCase):
         for be, (tag, archives) in setup.SDCPP.items():
             self.assertRegex(tag, r"^master-\d+-[0-9a-f]{7}$", be)
             self.assertIn(tag.rsplit("-", 1)[1], archives[0][0], be)     # l'archive est celle de la release
+
+
+def small(entries):
+    """Les fichiers épinglés entries (dict ou liste de (url, chemin, taille, sha256)) avec une taille de 5 octets : les
+    faux téléchargements écrivent 5 octets, au lieu de 11 à 21 Go."""
+    if isinstance(entries, dict):
+        return {k: (url, local, 5, digest) for k, (url, local, _, digest) in entries.items()}
+    return [(url, local, 5, digest) for url, local, _, digest in entries]
+
+
+class H3InstallTest(unittest.TestCase):
+    """setup.py --h3 et --h3-q8, et --check, dans un dossier temporaire : téléchargements et empreintes simulés."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="qwen-setup-h3-")
+        self.addCleanup(self.tmp.cleanup)
+        self.urls, self.digests = [], []
+        files = {"H3_DIFFUSION": small(setup.H3_DIFFUSION), "H3_FILES": small(setup.H3_FILES),
+                 "DIFFUSION": small(setup.DIFFUSION), "ENCODER": small(setup.ENCODER), "VAE": small([setup.VAE])[0]}
+        digest = {local: d for _, local, _, d in
+                  list(setup.DIFFUSION.values()) + list(setup.H3_DIFFUSION.values()) + list(setup.H3_FILES.values())
+                  + setup.ENCODER + [setup.VAE]}
+        for name, value in files.items():
+            patcher = mock.patch.object(setup, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+        def download(url, dest, size):
+            self.urls.append(url)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, "wb") as f:
+                f.write(b"poids")
+
+        def sha256(path):
+            self.digests.append(os.path.basename(path))
+            return digest[os.path.relpath(path, self.tmp.name).replace(os.sep, "/")]
+
+        for name, value in (("P", lambda *a: os.path.join(self.tmp.name, *a)), ("download", download),
+                            ("sha256", sha256), ("MACOS", True), ("WINDOWS", False)):
+            patcher = mock.patch.object(setup, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def run_setup(self, *argv):
+        """main() de setup.py avec ces options, réduit à ses étapes de modèles (moteur, correctif, réglage du moteur,
+        raccourci et calibration remplacés) ; renvoie ce qu'il imprime."""
+        out = io.StringIO()
+        with mock.patch.object(sys, "argv", ["setup.py", *argv]), contextlib.redirect_stdout(out), \
+                mock.patch.object(setup, "step_engine", lambda backends, check_only: True), \
+                mock.patch.object(setup, "step_fix", lambda check_only: True), \
+                mock.patch.object(setup, "step_config", lambda backends, check_only: None), \
+                mock.patch.object(setup, "step_shortcut", lambda check_only: True), \
+                mock.patch.object(setup, "step_calibrate", lambda versions, check_only, skip: []):
+            setup.main()
+        return out.getvalue()
+
+    def pinned(self, *keys):
+        """Adresses épinglées des fichiers MiniMax H3 nommés (clés de H3_DIFFUSION ou de H3_FILES)."""
+        return [{**setup.H3_DIFFUSION, **setup.H3_FILES}[k][0] for k in keys]
+
+    def h3_urls(self):
+        return sorted(u for u in self.urls if u in self.pinned(*setup.H3_DIFFUSION, *setup.H3_FILES))
+
+    def test_h3_downloads_the_pinned_q4_files_once(self):
+        self.run_setup("--h3", "--no-calibrate")
+        self.assertEqual(self.h3_urls(), sorted(self.pinned("h3-q4", "llm", "vae")))
+        self.urls.clear()
+        self.digests.clear()
+        self.run_setup("--h3", "--no-calibrate")                     # déjà vérifiés : ni téléchargés ni rehachés
+        self.assertEqual(self.urls, [])
+        self.assertEqual(self.digests, [])
+
+    def test_h3_q8_downloads_the_q8_model_with_the_shared_files(self):
+        self.run_setup("--h3-q8", "--no-calibrate")
+        self.assertEqual(self.h3_urls(), sorted(self.pinned("h3-q8", "llm", "vae")))
+
+    def test_without_the_option_nothing_of_h3_is_downloaded(self):
+        self.run_setup("--no-calibrate")
+        self.assertTrue(self.urls)
+        self.assertEqual(self.h3_urls(), [])
+
+    def test_the_options_are_refused_outside_macos_before_any_download(self):
+        for option in ("--h3", "--h3-q8"):
+            with mock.patch.object(setup, "MACOS", False), mock.patch.object(setup, "WINDOWS", True), \
+                    self.assertRaises(SystemExit) as stop:
+                self.run_setup(option)
+            self.assertIn("Mac", str(stop.exception), option)
+            self.assertIn(option, str(stop.exception), option)
+        self.assertEqual(self.urls, [])
+        self.assertEqual(os.listdir(self.tmp.name), [])
+
+    def test_check_says_what_is_installed_for_each_model(self):
+        self.run_setup("--no-calibrate")                             # Qwen seul
+        out = self.run_setup("--check")
+        self.assertIn("Qwen : installé (q4)", out)
+        self.assertIn("MiniMax H3 : non installé (option --h3, ou --h3-q8 pour la version Q8_0)", out)
+        self.assertIn("État : complet", out)
+        self.run_setup("--h3", "--no-calibrate")
+        self.urls.clear()
+        out = self.run_setup("--check")
+        self.assertIn("MiniMax H3 : installé (h3-q4)", out)
+        self.assertIn("État : complet", out)
+        self.assertEqual(self.urls, [])                              # --check ne télécharge rien
+
+    def test_check_says_a_partial_h3_install_and_its_option(self):
+        self.run_setup("--h3-q8", "--no-calibrate")
+        os.remove(os.path.join(self.tmp.name, *setup.H3_FILES["llm"][1].split("/")))
+        out = self.run_setup("--check")
+        self.assertIn("MiniMax H3 : incomplet", out)
+        self.assertIn("setup.py --h3-q8", out)
+        self.assertIn("État : incomplet", out)
+
+    def test_check_outside_macos_says_h3_is_for_the_mac(self):
+        with mock.patch.object(setup, "MACOS", False), mock.patch.object(setup, "WINDOWS", True):
+            out = self.run_setup("--check")
+        self.assertIn("MiniMax H3 : Mac seulement", out)
 
 
 if __name__ == "__main__":

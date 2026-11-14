@@ -184,6 +184,50 @@ class StatusModelsTest(bench.BenchCase):
             self.assertEqual([m["key"] for m in call("GET", "/api/status")[1]["models"]], ["qwen"])
 
 
+class ConfigVersionTest(bench.BenchCase):
+    """Version de MiniMax H3 propre à la machine : "h3": "q8" dans tools/config.local.json (lu au lancement, S.cfg)."""
+
+    def version(self, value=None):
+        """Version de MiniMax H3 dans /api/status quand la configuration porte "h3": value (None : sans clé h3)."""
+        cfg = {k: v for k, v in S.cfg.items() if k != "h3"}
+        if value is not None:
+            cfg["h3"] = value
+        with mock.patch.object(S, "cfg", cfg):
+            models = {m["key"]: m for m in call("GET", "/api/status")[1]["models"]}
+        return models["h3"]["version"]
+
+    def test_q8_in_the_config_chooses_the_q8_version(self):
+        self.assertEqual(self.version("q8"), "h3-q8")
+        with mock.patch.object(S, "cfg", {**S.cfg, "h3": "q8"}):
+            j = wait_job(generate(**H3)["id"])
+        self.assertEqual(j["status"], "done", j)
+        self.assertIn(launch.H3_DIFFUSION["h3-q8"], S.jobs[j["id"]]["cmd"])
+        self.assertNotIn(launch.H3_DIFFUSION["h3-q4"], S.jobs[j["id"]]["cmd"])
+        self.assertEqual(bench.journal()[-1]["model"], "h3-q8")
+
+    def test_without_a_value_it_is_q4(self):
+        self.assertEqual(self.version(None), "h3-q4")
+        self.assertEqual(self.version("q4"), "h3-q4")
+
+    def test_an_unknown_value_falls_back_to_a_present_version(self):
+        for value in ("q9", "h3-q8", "Q8", "", "../x", 8, ["q8"], {"q8": True}, True):
+            self.assertEqual(self.version(value), "h3-q4", value)
+
+    def test_an_unknown_value_never_reaches_the_command(self):
+        with mock.patch.object(S, "cfg", {**S.cfg, "h3": "../zq9-chemin"}):
+            j = wait_job(generate(**H3)["id"])
+        self.assertEqual(j["status"], "done", j)
+        self.assertIn(launch.H3_DIFFUSION["h3-q4"], S.jobs[j["id"]]["cmd"])
+        self.assertNotIn("zq9-chemin", S.jobs[j["id"]]["cmd"])
+
+    def test_an_absent_version_falls_back_to_the_present_one(self):
+        with without(launch.H3_DIFFUSION["h3-q8"]):
+            self.assertEqual(self.version("q8"), "h3-q4")
+        with without(launch.H3_DIFFUSION["h3-q4"]):
+            self.assertEqual(self.version("q4"), "h3-q8")
+            self.assertEqual(self.version("q9"), "h3-q8")
+
+
 class PrivateH3Test(bench.PrivateFilesCheck, bench.BenchCase):
     def setUp(self):
         super().setUp()

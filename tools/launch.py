@@ -100,15 +100,18 @@ MODE_LABELS = {"t2i": "texte vers image", "edit": "édition", "mask": "masque", 
 # max_refs : images jointes que la page propose (le serveur n'en borne pas le nombre, comme avant) ; modes : modes de
 # la page permis ; cfg et preview_every : guidage et intervalle des aperçus imposés (None : ceux de la demande) ;
 # args : options de sd-cli propres au modèle (celles de l'essai pour MiniMax H3) ; setup : option de setup.py qui
-# l'installe. MiniMax H3 reprend les tailles et les images jointes de Qwen, sans plafond propre (série 10).
+# l'installe ; config : versions qu'une machine peut demander par la clé du modèle dans tools/config.local.json
+# ("h3": "q8"), la valeur lue n'y étant comparée qu'aux noms de cette table (None : pas de choix, Qwen garde --model).
+# MiniMax H3 reprend les tailles et les images jointes de Qwen, sans plafond propre (série 10).
 MODEL_TABLE = {
     "qwen": {"name": "Qwen", "versions": DIFFUSION, "files": MODELS, "engine": 0, "steps": None, "max_side": MAX_SIDE,
              "max_refs": MAX_CAMPAIGN, "modes": PAGE_MODES, "init_image": True, "mask": True,
-             "negative_prompt": True, "cfg": None, "preview_every": None, "args": [], "setup": ""},
+             "negative_prompt": True, "cfg": None, "preview_every": None, "args": [], "setup": "", "config": None},
     "h3": {"name": "MiniMax H3", "versions": H3_DIFFUSION, "files": H3_FILES, "engine": 1090, "steps": [6],
            "max_side": MAX_SIDE, "max_refs": MAX_CAMPAIGN, "modes": ["t2i", "edit"], "init_image": False,
            "mask": False, "negative_prompt": False, "cfg": 1.0, "preview_every": 2,
-           "args": ["--sigmas", "minimax-h3-image", "--rng", "cpu"], "setup": "--h3"},
+           "args": ["--sigmas", "minimax-h3-image", "--rng", "cpu"], "setup": "--h3",
+           "config": {"q4": "h3-q4", "q8": "h3-q8"}},
 }
 EXE = "sd-cli.exe" if os.name == "nt" else "sd-cli"
 # moteurs de la plateforme, par ordre de repli quand celui demandé n'est pas installé
@@ -229,15 +232,20 @@ def engine_tag(backend):
 
 def model_version(key):
     """Version installée du modèle key de MODEL_TABLE, ou None. Qwen : celle du serveur (S.model), jamais refusée (un
-    fichier manquant fait échouer la génération, comme avant). Un autre : la première de ses versions dont le fichier
-    existe, si ses autres fichiers existent et que la release du moteur du serveur (S.engine, lue au démarrage, comme
-    pour les mesures de durée) est au moins la sienne."""
+    fichier manquant fait échouer la génération, comme avant). Un autre : si ses autres fichiers existent et que la
+    release du moteur du serveur (S.engine, lue au démarrage, comme pour les mesures de durée) est au moins la sienne,
+    la version que la configuration de la machine demande (S.cfg[key], lue au démarrage) si son fichier existe, sinon
+    la première de ses versions dont le fichier existe. La valeur lue n'est comparée qu'aux noms de spec["config"] :
+    absente, inconnue, d'un autre type qu'un texte ou d'une version absente, elle retombe sur une version présente."""
     if key == "qwen":
         return S.model
     spec = MODEL_TABLE[key]
     if estimate.release_number(S.engine) < spec["engine"] or not all(os.path.exists(p) for p in spec["files"].values()):
         return None
-    return next((v for v, path in spec["versions"].items() if os.path.exists(path)), None)
+    present = [v for v, path in spec["versions"].items() if os.path.exists(path)]
+    wanted = S.cfg.get(key)
+    chosen = next((v for name, v in (spec["config"] or {}).items() if name == wanted), None)
+    return chosen if chosen in present else next(iter(present), None)
 
 
 def request_model(req):

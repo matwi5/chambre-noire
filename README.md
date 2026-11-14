@@ -122,7 +122,7 @@ venv\Scripts\python.exe setup.py --cuda
 
 Les téléchargements reprennent seuls si la connexion coupe (cinq tentatives), et là où ils s'étaient arrêtés si l'on
 relance la commande. Pour vérifier une installation sans rien télécharger : `venv\Scripts\python.exe setup.py --check`
-(sur Mac : `venv/bin/python setup.py --check`).
+(sur Mac : `venv/bin/python setup.py --check`) ; il dit aussi ce qui est installé pour chaque modèle.
 
 ## Lancement
 
@@ -775,6 +775,45 @@ Windows quand le moteur Windows passera à cette release ou à une plus récente
 résolution native 2048×2048 (4:3 2400×1792, 3:2 2528×1696, 16:9 2752×1536 et inverses), jusqu'à 10 images de référence.
 L'interface applique ces réglages ; la résolution 1440p correspond exactement aux tailles officielles.
 
+**MiniMax H3 (option, Mac seulement).** `setup.py --h3` installe un second modèle d'image, MiniMax H3 Image, que le
+serveur propose à côté de Qwen ; `setup.py --h3-q8` installe sa version Q8_0. Il n'est ni installé ni utilisé par
+défaut. Ces options sont refusées hors de macOS : son moteur (release `master-1090` de stable-diffusion.cpp, celle
+du Mac) et ses réglages n'ont été essayés que sur Mac. Le serveur le propose dès que ses fichiers sont là, si son
+moteur est déjà en `master-1090` ; sinon, seulement après un redémarrage qui suit `setup.py`, car il lit la release du
+moteur à son lancement. Une demande le choisit par `"model": "h3"` (API locale, voir
+[Fonctionnement technique](#fonctionnement-technique)).
+
+| Fichier | Rôle | Taille | Source |
+| --- | --- | --- | --- |
+| `minimax_h3_image_pruned-Q4_K_M.gguf` (option `--h3`) | Modèle de diffusion MiniMax H3 Image allégé, quantifié 4 bits | 11,4 Go | [Hearthscale/MiniMax-H3-Image-GGUF](https://huggingface.co/Hearthscale/MiniMax-H3-Image-GGUF) |
+| `minimax_h3_image_pruned-Q8_0.gguf` (option `--h3-q8`) | Même modèle quantifié 8 bits | 21,4 Go | idem |
+| `qwen3vl_32b_minimax_h3-Q4_K_M.gguf` | Encodeur de texte, GGUF quantifié 4 bits | 18,2 Go | [leejet/MiniMax-H3-GGUF](https://huggingface.co/leejet/MiniMax-H3-GGUF) |
+| `minimax_h3_image_vae_fp16.safetensors` | Décodeur d'image (VAE), fp16 | 1,17 Go | [Comfy-Org/MiniMax-H3-Image](https://huggingface.co/Comfy-Org/MiniMax-H3-Image), dossier `vae` |
+
+L'encodeur et le VAE servent aux deux versions : `--h3-q8` seul installe le modèle Q8_0 avec eux, sans le Q4_K_M.
+Place à prévoir en plus de celle de Qwen (voir [Prérequis](#prérequis)), autant à télécharger : ≈ 30,8 Go avec
+`--h3`, ≈ 40,8 Go avec `--h3-q8` seul, ≈ 52,3 Go avec les deux versions.
+Quand les deux versions sont là, Q4_K_M sert par défaut, et `"h3": "q8"` dans `tools/config.local.json` choisit
+Q8_0 (lu au lancement du serveur) ; une autre valeur, ou une version absente, retombe sur la version présente.
+MiniMax H3 travaille en 6 étapes fixes, guidance 1, avec un aperçu tous les 2 pas, en texte vers image et en
+édition (images de référence comme avec Qwen) ; il n'accepte ni image de départ, ni masque, ni annotation, ni prompt
+négatif.
+
+**Licence de MiniMax H3.** Ses poids sont soumis à la licence publiée par MiniMax avec le modèle (fichier `LICENSE`
+du dépôt [MiniMaxAI/MiniMax-H3-Image](https://huggingface.co/MiniMaxAI/MiniMax-H3-Image)). Elle exclut des
+territoires (« Excluded Territories ») : l'Union européenne, le Royaume-Uni, la Corée du Sud et les États-Unis ; elle
+n'est accordée que hors de ceux-ci, et interdit d'utiliser les poids comme les images produites hors du territoire
+qu'elle couvre. Lisez-la avant de lancer `setup.py --h3`.
+
+Empreintes SHA256 vérifiées par `setup.py`, chaque fichier épinglé sur un commit de son dépôt :
+
+```text
+13fc0add19eaf268ac4ad38704e312c634627feb443ffa89c9a4dce6301926d2  minimax_h3_image_pruned-Q4_K_M.gguf
+311889a1d8e28122c6b9bd1322d7e46e9d56a60bb1b75b269c87f2855c051640  minimax_h3_image_pruned-Q8_0.gguf
+11e6efe70a57ce7f4838c47bdbd1a1c4b8ce10e2b7747f1b065990b70f4b05fc  text_encoders/qwen3vl_32b_minimax_h3-Q4_K_M.gguf
+d80e9c2e5cfc9844869961ff5a58c9a9e52182df6bfb30b26018dd7f348721af  vae/minimax_h3_image_vae_fp16.safetensors
+```
+
 ## Performances
 
 Un GPU intégré est lent pour un modèle de cette taille. Mesures de référence sur un portable
@@ -1070,7 +1109,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   il accepte les tailles et les images de référence de Qwen, sans plafond propre, en texte vers image comme en
   édition, variantes et campagnes comprises ; sa commande impose le guidage 1, les sigmas `minimax-h3-image`, le
   générateur de bruit `cpu` et un aperçu tous les 2 pas. La génération garde son modèle et sa version dès sa création
-  (version `h3-q4`, ou `h3-q8` si seul ce fichier est là) : sa commande, sa ligne de `outputs/journal.jsonl` et la
+  (version `h3-q4`, ou `h3-q8` si `tools/config.local.json` porte `"h3": "q8"`, lu au lancement du serveur, et que
+  son fichier est là, ou si seul ce fichier est là) : sa commande, sa ligne de `outputs/journal.jsonl` et la
   fiche d'une image privée (champ `model`) les lisent sur elle. Une génération MiniMax H3 n'ajoute aucune mesure de
   durée, et la file l'estime pour l'instant avec les mesures de Qwen (estimation fausse). Elle refuse aussi
   (400 « L'incognito n'existe plus : passez par l'espace privé. ») une demande `"incognito": true`, qu'enverrait une
@@ -1252,6 +1292,11 @@ Sur Mac : `venv/bin/python tests/run_tests.py --steps 8`. Le script lit le code 
   [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1).
 - **Encodeur GGUF (Mac)** : Alibaba Qwen, [Qwen/Qwen3-VL-8B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF),
   sous licence Apache 2.0.
+- **MiniMax H3 Image** (option, Mac) : MiniMax,
+  [MiniMaxAI/MiniMax-H3-Image](https://huggingface.co/MiniMaxAI/MiniMax-H3-Image), sous la licence publiée avec le
+  modèle, qui exclut l'Union européenne, le Royaume-Uni, la Corée du Sud et les États-Unis (voir
+  [Le modèle](#le-modèle)) ; fichiers tirés de ces poids : quantification GGUF du modèle par Hearthscale,
+  encodeur de texte GGUF par leejet, VAE par Comfy-Org.
 - **Moteur** : [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (licence MIT).
 - **Police pixel** : [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans), © 2021 The Pixelify Sans Project
   Authors, sous **SIL Open Font License 1.1** ([tools/ui/OFL.txt](tools/ui/OFL.txt)) ; sous-ensemble latin en woff2

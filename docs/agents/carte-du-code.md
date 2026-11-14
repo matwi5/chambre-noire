@@ -36,21 +36,22 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
 Dans l'ordre du fichier :
 
 - **Constantes et moteur** (en tête) : `ROOT`, `P()` (chemin sous la racine, relu à chaque appel : le banc repointe
-  `ROOT`), `MODELS` et `DIFFUSION` (noms des fichiers de modèles, à garder égaux à ceux de `setup.py`),
-  `H3_DIFFUSION` et `H3_FILES` (fichiers de MiniMax H3, sous les noms publiés), `MAX_VARIANTS`, `MAX_CAMPAIGN`,
-  `MAX_SIDE`, `PAGE_MODES` et `MODE_LABELS` (libellés des modes dans un refus), `MODEL_TABLE` (table fermée des
-  modèles qu'une demande nomme par son champ `model` : versions, fichiers, release minimale du moteur, étapes,
-  tailles, images jointes, modes et entrées permis, guidage, aperçus et options de sd-cli imposés), `BACKENDS`
-  (options de sd-cli par moteur, réglages Metal justifiés en commentaire), `PLATFORM_BACKENDS`, `PROGRESS_RE` et
-  `TAKING_RE` (lecture de la sortie de sd-cli), `PRIVATE_JOB_TTL`,
-  `DONE_LINE` (ligne de fin commune à toutes les générations réussies).
-  `record_calib`, `load_config`, `code_version` (commit, date et branche du dossier servi, empreinte `server`
-  de `launch.py` et `estimate.py`, relus toutes les `VERSION_TTL` s ; git seulement s'il y a un `.git`, jamais après un
+  `ROOT`), `MODELS` et `DIFFUSION` (noms des fichiers de modèles, à garder égaux à ceux de `setup.py`), `H3_DIFFUSION`
+  et `H3_FILES` (fichiers de MiniMax H3, sous les noms publiés, à garder égaux à ceux de `setup.py`), `MAX_VARIANTS`,
+  `MAX_CAMPAIGN`, `MAX_SIDE`, `PAGE_MODES` et `MODE_LABELS` (libellés des modes dans un refus), `MODEL_TABLE` (table
+  fermée des modèles qu'une demande nomme par son champ `model` : versions, fichiers, release minimale du moteur,
+  étapes, tailles, images jointes, modes et entrées permis, guidage, aperçus et options de sd-cli imposés, option de
+  `setup.py`, versions qu'une machine peut demander par `tools/config.local.json`), `BACKENDS` (options de sd-cli par
+  moteur, réglages Metal justifiés en commentaire), `PLATFORM_BACKENDS`, `PROGRESS_RE` et `TAKING_RE` (lecture de la
+  sortie de sd-cli), `PRIVATE_JOB_TTL`, `DONE_LINE` (ligne de fin commune à toutes les générations réussies).
+  `record_calib`, `load_config`, `code_version` (commit, date et branche du dossier servi, empreinte `server` de
+  `launch.py` et `estimate.py`, relus toutes les `VERSION_TTL` s ; git seulement s'il y a un `.git`, jamais après un
   échec, sauf un délai dépassé ; `S.started` : la même chose au lancement, posé par `main()`), `engine_tag`,
-  `model_version` (version installée d'un modèle de la table : fichiers présents et `S.engine` assez
-  récent ; Qwen : `S.model`, jamais refusé), `request_model` (clé et version d'une demande, tirées de la table, une
-  fois par demande), `job_model` (clé et version posées sur la génération par `new_job` ; sans elles, celle de
-  `tools/calibrate.py`, Qwen), `preview_every`, `installed_models` (`models` de `/api/status`), `default_backend`.
+  `model_version` (version installée d'un modèle de la table : fichiers présents et `S.engine` assez récent ; celle
+  que demande `S.cfg[<clé>]` si son fichier est là, la valeur n'étant comparée qu'aux noms de la table, sinon la
+  première présente ; Qwen : `S.model`, jamais refusé), `request_model` (clé et version d'une demande, tirées de la
+  table, une fois par demande), `job_model` (clé et version posées sur la génération par `new_job` ; sans elles, celle
+  de `tools/calibrate.py`, Qwen), `preview_every`, `installed_models` (`models` de `/api/status`), `default_backend`.
 - **Accès** : `ACCESS_FILE`, `ACCESS_COOKIE`, `ENTRY_TOKEN`, `ENTRY_PAGE`, `ENTRY_TTL`, `ENTRY_LOCK`, `ENTRY_USED`
   (entrée à usage unique de `--enter`), `LOCAL_CLIENTS`, `PUBLIC_FILES` (manifeste, icônes, logo, police pixel, service
   worker, servis sans cookie), `LOGIN_PAGE`, `LOGIN_MAC` (phrase de l'ordinateur, à la place de `<!--mac-->` pour une

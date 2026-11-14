@@ -5,6 +5,8 @@ Windows : venv\Scripts\python.exe setup.py [options]   ·   macOS (Apple Silicon
     setup.py              # installation complète (≈ 15 Go à télécharger)
     setup.py --q8         # + modèle Q8_0, plus fidèle que Q4_K_M (≈ 7,6 Go de plus)
     setup.py --uc         # + variante communautaire du modèle (uc-q4, et uc-q8 avec --q8)
+    setup.py --h3         # Mac : + MiniMax H3, modèle Q4_K_M avec son encodeur et son VAE (≈ 30,8 Go de plus)
+    setup.py --h3-q8      # Mac : + MiniMax H3 en Q8_0 (≈ 21,4 Go, plus encodeur et VAE, 19,4 Go, s'ils manquent)
     setup.py --cuda       # Windows : + moteur CUDA pour carte NVIDIA (≈ 900 Mo de plus)
     setup.py --no-cpu     # Windows : sans le moteur de secours CPU
     setup.py --no-calibrate  # sans les générations de calibration de fin d'installation
@@ -70,6 +72,29 @@ TE_GGUF = (QWEN_VL + "Qwen3VL-8B-Instruct-Q8_0.gguf", "models/text_encoders/Qwen
 TE_VISION = (QWEN_VL + "mmproj-Qwen3VL-8B-Instruct-F16.gguf", "models/text_encoders/mmproj-Qwen3VL-8B-Instruct-F16.gguf",
              1159029824, "ca524100ebf825c9a870db1c580d03879e0da0ab2541697e2458e64891cf9d38")
 ENCODER = [TE_GGUF, TE_VISION] if MACOS else [TE]
+
+# --- MiniMax H3 (Mac seulement, options --h3 et --h3-q8) : fichiers épinglés et vérifiés de la même façon ---------
+# Modèle de diffusion allégé, quantifié en GGUF par Hearthscale ; encodeur de texte (GGUF Q4_K_M) publié par leejet ;
+# VAE fp16 publié par Comfy-Org. Mêmes clés, noms et dossiers que H3_DIFFUSION et H3_FILES de tools/launch.py.
+HF = "https://huggingface.co/"
+HEARTHSCALE = HF + "Hearthscale/MiniMax-H3-Image-GGUF/resolve/2cd99b1e7307385b61def10c5caf0cbbef3aaaa2/"
+H3_DIFFUSION = {   # version -> (url, chemin local, taille, sha256)
+    "h3-q4": (HEARTHSCALE + "minimax_h3_image_pruned-Q4_K_M.gguf",
+              "models/diffusion_models/minimax_h3_image_pruned-Q4_K_M.gguf", 11429589600,
+              "13fc0add19eaf268ac4ad38704e312c634627feb443ffa89c9a4dce6301926d2"),
+    "h3-q8": (HEARTHSCALE + "minimax_h3_image_pruned-Q8_0.gguf",
+              "models/diffusion_models/minimax_h3_image_pruned-Q8_0.gguf", 21447217248,
+              "311889a1d8e28122c6b9bd1322d7e46e9d56a60bb1b75b269c87f2855c051640"),
+}
+H3_FILES = {   # fichiers communs aux deux versions
+    "vae": (HF + "Comfy-Org/MiniMax-H3-Image/resolve/0bb149f51e3156ed4b90dd45d5620346bfe1df8f/"
+            "vae/minimax_h3_image_vae_fp16.safetensors", "models/vae/minimax_h3_image_vae_fp16.safetensors",
+            1168505312, "d80e9c2e5cfc9844869961ff5a58c9a9e52182df6bfb30b26018dd7f348721af"),
+    "llm": (HF + "leejet/MiniMax-H3-GGUF/resolve/d9c4c6312b4728a68a15a35626d84775a6523783/"
+            "qwen3vl_32b_minimax_h3-Q4_K_M.gguf", "models/text_encoders/qwen3vl_32b_minimax_h3-Q4_K_M.gguf",
+            18218065024, "11e6efe70a57ce7f4838c47bdbd1a1c4b8ce10e2b7747f1b065990b70f4b05fc"),
+}
+H3_OPTIONS = {"h3-q4": "--h3", "h3-q8": "--h3-q8"}   # option de setup.py par version
 
 
 def human(n):
@@ -218,32 +243,79 @@ def step_config(backends, check_only):
     print(f"[config] backend par défaut : {best}")
 
 
-def step_models(versions, check_only):
+def step_files(entries, check_only, tag="[modèle]"):
+    """Télécharge et vérifie les fichiers épinglés entries ((url, chemin local, taille, sha256)) ; un fichier à la bonne
+    taille et déjà vérifié (marqueur .sha256ok) n'est ni retéléchargé ni rehaché. --check : présence et taille
+    seulement ; renvoie False si un fichier manque."""
     ok = True
-    for url, local, size, digest in [DIFFUSION[v] for v in versions] + ENCODER + [VAE]:
+    for url, local, size, digest in entries:
         dest = P(*local.split("/"))
         label = os.path.basename(local)
         if os.path.exists(dest) and os.path.getsize(dest) == size:
-            print(f"[modèle] {label} : présent ({human(size)})")
+            print(f"{tag} {label} : présent ({human(size)})")
             if check_only:
                 continue
             marker = dest + ".sha256ok"
             if os.path.exists(marker):
                 continue
         elif check_only:
-            print(f"[modèle] {label} : ABSENT")
+            print(f"{tag} {label} : ABSENT")
             ok = False
             continue
         else:
-            print(f"[modèle] {label} : téléchargement ({human(size)})")
+            print(f"{tag} {label} : téléchargement ({human(size)})")
             download(url, dest, size)
         got = sha256(dest)
         if got != digest:
             os.replace(dest, dest + ".corrompu")
-            sys.exit(f"[modèle] {label} : SHA256 incorrect ({got}). Fichier renommé en .corrompu, relancez setup.py.")
+            sys.exit(f"{tag} {label} : SHA256 incorrect ({got}). Fichier renommé en .corrompu, relancez setup.py.")
         open(dest + ".sha256ok", "w").write(digest)
-        print(f"[modèle] {label} : SHA256 conforme")
+        print(f"{tag} {label} : SHA256 conforme")
     return ok
+
+
+def step_models(versions, check_only):
+    return step_files([DIFFUSION[v] for v in versions] + ENCODER + [VAE], check_only)
+
+
+def h3_versions(a):
+    """Versions de MiniMax H3 demandées par --h3 et --h3-q8 (dans l'ordre de H3_DIFFUSION) ; hors de macOS, refus
+    avant toute écriture : son moteur et ses réglages ne sont mesurés que sur Mac."""
+    wanted = [v for v, on in (("h3-q4", a.h3), ("h3-q8", a.h3_q8)) if on]
+    if wanted and not MACOS:
+        sys.exit(f"{' et '.join(H3_OPTIONS[v] for v in wanted)} : MiniMax H3 s'installe sur Mac seulement "
+                 "(Apple Silicon, moteur Metal).")
+    return wanted
+
+
+def step_h3(versions, check_only):
+    """MiniMax H3 : les versions données et les fichiers communs (encodeur de texte, VAE) ; sans version, rien."""
+    if not versions:
+        return True
+    return step_files([H3_DIFFUSION[v] for v in versions] + list(H3_FILES.values()), check_only, "[MiniMax H3]")
+
+
+def installed(entry):
+    """Le fichier épinglé entry est là, à sa taille (sans le rehacher, comme --check)."""
+    dest = P(*entry[1].split("/"))
+    return os.path.exists(dest) and os.path.getsize(dest) == entry[2]
+
+
+def model_summary():
+    """--check : ce qui est installé pour chaque modèle. Renvoie les lignes à afficher et l'option de setup.py qui
+    complète un MiniMax H3 à moitié installé (None : rien à compléter ; un MiniMax H3 absent est facultatif)."""
+    qwen = [v for v, entry in DIFFUSION.items() if installed(entry)]
+    complete = qwen and all(installed(entry) for entry in ENCODER + [VAE])
+    lines = ["Qwen : " + (f"installé ({', '.join(qwen)})" if complete else "incomplet")]
+    if not MACOS:
+        return lines + ["MiniMax H3 : Mac seulement"], None
+    h3 = [v for v, entry in H3_DIFFUSION.items() if installed(entry)]
+    if h3 and all(installed(entry) for entry in H3_FILES.values()):
+        return lines + [f"MiniMax H3 : installé ({', '.join(h3)})"], None
+    if not any(os.path.exists(P(*entry[1].split("/"))) for entry in [*H3_DIFFUSION.values(), *H3_FILES.values()]):
+        return lines + ["MiniMax H3 : non installé (option --h3, ou --h3-q8 pour la version Q8_0)"], None
+    option = H3_OPTIONS["h3-q8"] if h3 == ["h3-q8"] else H3_OPTIONS["h3-q4"]
+    return lines + [f"MiniMax H3 : incomplet, lancez : {PY} setup.py {option}"], option
 
 
 def step_fix(check_only):
@@ -311,18 +383,30 @@ def step_calibrate(versions, check_only, skip):
     return failed
 
 
-def main():
+def parser():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--q8", action="store_true", help="installer aussi le modèle Q8_0, plus fidèle (≈ 7,6 Go)")
     ap.add_argument("--uc", action="store_true", help="installer aussi la variante communautaire du modèle (uc-q4, "
                     "et uc-q8 avec --q8)")
+    ap.add_argument("--h3", action="store_true", help="Mac : installer aussi MiniMax H3, modèle Q4_K_M avec son "
+                    "encodeur de texte et son VAE (≈ 30,8 Go)")
+    ap.add_argument("--h3-q8", action="store_true", help="Mac : installer aussi MiniMax H3 en Q8_0 (≈ 21,4 Go, plus "
+                    "l'encodeur et le VAE s'ils manquent) ; \"h3\": \"q8\" dans tools/config.local.json le choisit "
+                    "quand les deux versions sont là")
     ap.add_argument("--cuda", action="store_true", help="Windows : installer aussi le moteur CUDA (cartes NVIDIA, ≈ 900 Mo)")
     ap.add_argument("--no-cpu", action="store_true", help="Windows : ne pas installer le moteur de secours CPU")
     ap.add_argument("--no-calibrate", action="store_true", help="ne pas lancer les générations de calibration")
     ap.add_argument("--check", action="store_true", help="vérifier sans rien télécharger")
-    a = ap.parse_args()
+    return ap
+
+
+def main():
+    a = parser().parse_args()
     if not (WINDOWS or MACOS):
         sys.exit("Ce projet cible Windows et macOS (binaires stable-diffusion.cpp de ces systèmes). Voir le README pour Linux.")
+    h3 = h3_versions(a)
+    if a.check:                    # comme pour Qwen : --check vérifie aussi les versions présentes
+        h3 += [v for v in H3_DIFFUSION if v not in h3 and os.path.exists(P(*H3_DIFFUSION[v][1].split("/")))]
     for d in ("models/diffusion_models", "models/text_encoders", "models/vae", "outputs", "logs", "jobs"):
         os.makedirs(P(*d.split("/")), exist_ok=True)
     if MACOS:
@@ -337,18 +421,28 @@ def main():
         P(*DIFFUSION[v][1].split("/")))))]
     ok = step_engine(backends, a.check)
     ok = step_models(versions, a.check) and ok
+    step_h3(h3, a.check)              # facultatif : son état, à --check, vient de model_summary
     ok = step_fix(a.check) and ok
     step_config(backends, a.check)
     step_shortcut(a.check)
     uncalibrated = step_calibrate(versions, a.check, a.no_calibrate) if ok else []
     launch = f"{PY} {os.path.join('tools', 'launch.py')}"
     if a.check:
-        print("\nÉtat : " + ("complet" if ok else f"incomplet, lancez : {PY} setup.py"))
+        lines, h3_option = model_summary()
+        for line in lines:
+            print(f"[modèles] {line}")
+        rerun = f"{PY} setup.py" + (f" {h3_option}" if h3_option else "")
+        print("\nÉtat : " + ("complet" if ok and not h3_option else f"incomplet, lancez : {rerun}"))
     else:
         print(f"\nInstallation terminée. Démarrage : double-clic sur {SHORTCUT},")
         print(f"ou : {launch}   puis http://127.0.0.1:7860/")
         for v in versions[1:]:
             print(f"Modèle {v} : {launch} --model {v}   (ou \"model\": \"{v}\" dans tools/config.local.json)")
+        if h3:
+            print(f"MiniMax H3 ({', '.join(h3)}) : une demande le choisit par \"model\": \"h3\" ; relancez le "
+                  "serveur si ce script vient de mettre à jour son moteur" + (
+                      " ; version Q8_0 quand les deux sont là : \"h3\": \"q8\" dans tools/config.local.json, puis "
+                      "relancez le serveur" if "h3-q8" in h3 else ""))
         for v in uncalibrated:
             print(f"Calibration du modèle {v} en échec (erreur « [calibration] » plus haut), pour réessayer : "
                   f"{PY} {os.path.join('tools', 'calibrate.py')} --model {v}")
