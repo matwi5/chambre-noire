@@ -29,6 +29,7 @@ tools/sdcpp_release.json
 tools/calibration.json
 tools/calibration.json.lock
 tools/calibration.json.*.tmp
+tools/calibration.json.illisible-*
 tools/config.local.json
 
 # raccourci macOS généré par setup.py

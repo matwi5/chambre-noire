@@ -2177,6 +2177,12 @@ $('queueList').addEventListener('click', async ev=>{
   b.disabled=true; log(b.dataset.kind==='first' ? 'passage en tête demandé' : 'annulation demandée');
   // 404 ou 409 (la file a pu avancer) : la file rafraîchie suffit, sans message
   await postJson(b.dataset.post, {}).catch(()=>{}); queueHtml=''; refreshStatus(); });   // bouton réactivé
+// temps d'une étape et du décodage d'une entrée de la file (modèle, taille, étapes), n images d'entrée comptées à la
+// taille de la sortie, portées au petit côté minimal du modèle
+function timesOf(e, n){ const c=coefsOf(e.model); if(!c) return {};
+  const px=refPx(e.width, e.height, e.width, e.height, c.rmin||0);
+  const pr=parts(e.width, e.height, e.steps, {refs:Array(n).fill(px), init:0}, false, PREVIEW_EVERY, c);
+  return { stepSec:pr.step, vaeSec:pr.vae }; }
 // suivi des générations de la page : une interrogation par seconde de chacune tant qu'elle n'est pas terminée
 function track(j, info){
   // déjà suivie (génération privée reprise de la file pendant l'envoi de sa demande) : complétée par info, et lancée
@@ -2330,8 +2336,11 @@ async function followQueue(entries, info){
       if(!isActive({j}) || !!j.private!==inPrivate() || info.adopted && leavingPrivate || pageJobs.some(p=>p.id===j.id))
         continue;
       if(!j.private) log('reprise de la génération '+j.id);
-      // prompt complet du suivi (la file n'en a que le début ; serveur pas encore relancé : l'extrait)
-      track(j, {prompt:j.prompt||e.prompt, est:e.estimate, w:e.width, h:e.height, steps:e.steps, ...info}); }
+      // prompt complet du suivi (la file n'en a que le début ; serveur pas encore relancé : l'extrait) ; temps d'une
+      // étape et du décodage avec les coefficients de son modèle (approchés comme dans relaunch : chaque image
+      // d'entrée à la taille de la sortie), pas de celui des Réglages ; serveur sans model : ceux des Réglages
+      track(j, {prompt:j.prompt||e.prompt, est:e.estimate, w:e.width, h:e.height, steps:e.steps,
+        ...(e.model ? timesOf(e, (j.inputs||[]).length) : {}), ...info}); }
     catch(err){}
     finally{ following.delete(e.id); } } }
 // générations normales de la file (espace public) lancées depuis ce navigateur : après un rechargement, et au retour

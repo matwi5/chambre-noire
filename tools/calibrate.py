@@ -14,7 +14,8 @@ Les images produites restent dans jobs/ (pas dans outputs/ ni dans le journal). 
 moteur et ce modèle ont déjà trois mesures faites avec la release de sd.cpp installée : après une mise à jour du
 moteur, la calibration est refaite. setup.py lance ce script à la fin de l'installation, pour Qwen seulement :
 MiniMax H3 se calibre à la main, et se recalibre de même après une mise à jour du moteur. Une mesure qui n'a pas pu
-être gardée (tools/calibration.json illisible, verrou tenu trop longtemps) arrête le script en échec. Un serveur déjà
+être gardée (verrou tenu trop longtemps, fichier d'un format plus récent, erreur du disque) arrête le script en
+échec ; un fichier illisible est mis de côté et la calibration repart d'un fichier neuf. Un serveur déjà
 lancé ne prend ces mesures qu'à sa relance ou après sa prochaine mesure gardée (génération finie hors de l'espace
 privé) : il garde les mesures lues au lancement.
 """
@@ -49,10 +50,6 @@ def main():
     if a.if_needed and launch.S.store.count(launch.S.backend, version, launch.S.engine) >= len(runs):
         print(f"[calibration] {launch.S.backend}/{version} : déjà faite ({launch.S.engine})")
         return
-    try:                                      # un fichier illisible n'est jamais écrasé : rien ne serait gardé
-        launch.S.store.read(strict=True)
-    except Exception as e:
-        sys.exit(f"[calibration] {launch.CALIB} illisible ({e}) : supprimez-le pour repartir de zéro")
     ref = None
     for i, (kind, w, h) in enumerate(runs, 1):
         jid = time.strftime("%Y%m%d_%H%M%S") + f"_calibration{i}"

@@ -815,7 +815,7 @@ Avec MiniMax H3 et au moins une image jointe, l'aide sous les images dit de les 
 jointe allonge beaucoup le calcul et que le rendu sort plus dur qu'avec Qwen, suivie du temps estimé de la demande.
 **Dessiner** est grisé (« Dessiner se fait avec Qwen »), et **Dessiner** depuis une image est refusé par un message ;
 variantes, campagnes et confirmation au-delà d'une heure restent les mêmes qu'avec Qwen.
-Chaque image garde la version de son modèle (ligne d'informations : `Q4`, `UC-Q8`, `H3-Q4`…). **Relancer** refait la
+Chaque image garde la version de son modèle (ligne d'informations : `Q4`, `Q8`, `H3-Q4`…). **Relancer** refait la
 demande avec ce modèle, celle que la page a gardée ou celle refaite à partir de l'image (version absente ou de Qwen :
 Qwen ; `H3-Q4`, `H3-Q8` : MiniMax H3 ; autre valeur : le modèle des Réglages, avec ses étapes s'il les impose) ; un
 modèle désinstallé depuis donne le refus du Mac, affiché tel quel. **Reprendre** remet ce modèle dans les Réglages
@@ -876,7 +876,7 @@ temps d'une étape compte chaque image de référence deux fois dans la séquenc
 1024 pixels de petit côté au moins (lecture coûteuse, plusieurs minutes par image).
 
 Les coefficients partent de valeurs propres au moteur (Vulkan, CUDA, CPU, Metal), puis sont ajustés sur les mesures de
-votre machine : les 40 dernières générations par moteur et par version de modèle (`q4`, `uc-q8`, `h3-q4`…), chaque
+votre machine : les 40 dernières générations par moteur et par version de modèle (`q4`, `q8`, `h3-q4`…), chaque
 modèle sur ses seules mesures, résumées par des médianes, si bien qu'une
 génération anormale (machine occupée, premier chargement du modèle) ne fausse pas l'estimation. Chaque mesure garde
 la version de stable-diffusion.cpp qui l'a produite : après une mise à jour du moteur, les anciennes mesures sont
@@ -893,8 +893,9 @@ privé).
 Pendant une génération, le temps restant se fonde sur la moyenne des derniers pas. Les mesures sont stockées dans
 `tools/calibration.json` ; supprimez ce fichier pour repartir de zéro (l'ancien format est ignoré). Le serveur et
 `tools/calibrate.py` l'écrivent chacun à son tour, sous un verrou (`tools/calibration.json.lock`) ; un fichier
-illisible n'est jamais écrasé : plus aucune mesure ne s'y ajoute tant qu'il n'est pas supprimé, et
-`tools/calibrate.py` s'arrête en échec en le disant.
+illisible (abîmé, modifié à la main) est mis de côté, renommé `tools/calibration.json.illisible-<date>`, jamais
+supprimé, et les mesures repartent d'un fichier neuf ; un fichier d'un format plus récent n'est jamais touché, et
+`tools/calibrate.py` s'arrête alors en échec.
 
 Pour gagner du temps sans perte de qualité : branchez le portable sur secteur et choisissez le mode d'alimentation
 « Performances optimales » dans les paramètres Windows.
@@ -1019,8 +1020,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `queue_position`), `ahead` (durée restante estimée, en secondes, des générations de l'autre espace placées devant
   elle : ce qui reste de celle en cours, l'estimation des autres ; vu de l'espace public, une génération privée y est
   estimée comme une génération de Qwen, quel que soit son modèle ; 0 sans travail caché), `lot`, `estimate` et
-  `elapsed` en secondes, `kind` (`normal` ou `private`), `id`, `mode`, le début du `prompt`, et `width`, `height` et
-  `steps` de la demande ; `queued` : générations en attente de l'espace ; `current_job` : la génération en cours si
+  `elapsed` en secondes, `kind` (`normal` ou `private`), `id`, `mode`, `model` (clé du modèle de la génération), le
+  début du `prompt`, et `width`, `height` et `steps` de la demande ; `queued` : générations en attente de l'espace ;
+  `current_job` : la génération en cours si
   elle est de l'espace, sinon `null` ; `last_job` : dernière génération normale, `null` dans l'espace privé ; `busy` :
   le Mac calcule, quel que soit l'espace ; `version` : `commit`, `date` et `branch` du dernier commit du dossier servi
   (`null` hors git) et `server`, empreinte de `tools/launch.py` et `tools/estimate.py`, relus toutes les 30 s ;

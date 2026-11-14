@@ -31,8 +31,9 @@ MiniMax H3 garde la forme de la formule de Qwen, sans cache de préfixe ; R rest
 lecture par le VAE), seul le temps d'une étape compte chaque référence deux fois.
 
 Calibration : chaque génération terminée ajoute une mesure à tools/calibration.json (les 40 dernières par moteur et
-par clé de version : q4, uc-q8, h3-q4…), sauf une génération privée, et rien tant que le fichier est illisible (il
-n'est jamais écrasé : à supprimer pour repartir de zéro), étiquetée avec la release de sd.cpp qui l'a produite ;
+par clé de version : q4, uc-q8, h3-q4…), sauf une génération privée (un fichier dont le contenu ne se lit pas est
+mis de côté, renommé calibration.json.illisible-<date>, et le suivant repart à neuf), étiquetée avec la release de
+sd.cpp qui l'a produite ;
 seules comptent les mesures de la release installée, si bien qu'une mise à jour du moteur repart des valeurs de départ.
 Les coefficients sont recalculés à partir
 de ces mesures, par des médianes qui ignorent une génération anormale (machine occupée, premier chargement du modèle
@@ -279,6 +280,10 @@ def sync_dir(d):
         os.close(fd)
 
 
+class Unreadable(ValueError):
+    """calibration.json présent, mais son contenu ne se lit pas (pas du JSON en UTF-8, ou pas des mesures)."""
+
+
 class Store:
     """Mesures conservées dans tools/calibration.json, par « moteur/clé de version » (« metal/uc-q8 »,
     « metal/h3-q4 ») ; chaque modèle ne lit et n'ajoute que sous les clés de ses versions."""
@@ -288,31 +293,50 @@ class Store:
         self.samples = self.read()
 
     def read(self, strict=False):
-        """Mesures du fichier ; absent ou de l'ancien format (sans version), vide. strict : un fichier présent mais
-        illisible, ou d'une autre version (un format plus récent), lève (add n'écrit pas par-dessus) au lieu de compter
-        pour vide."""
+        """Mesures du fichier ; absent ou de l'ancien format (sans version), vide. strict : au lieu de compter pour
+        vide, lève Unreadable pour un contenu qui ne se lit pas, ValueError pour une autre version (un format plus
+        récent) et OSError pour une erreur du disque."""
+        name = os.path.basename(self.path)
         try:
-            with open(self.path, encoding="utf-8") as f:
-                d = json.load(f)
-            if not isinstance(d, dict) or d.get("version", 2) != 2:
-                raise ValueError(f"{os.path.basename(self.path)} : format inconnu")
+            with open(self.path, "rb") as f:
+                raw = f.read()
         except FileNotFoundError:
-            d = {}
-        except Exception:
+            return {}
+        except OSError:
             if strict:
                 raise
-            d = {}
+            return {}
+        try:
+            d = json.loads(raw.decode("utf-8"))
+            if not isinstance(d, dict) or not isinstance(d.get("samples", {}), dict):
+                raise ValueError("pas des mesures")
+        except ValueError as e:                    # JSON, UTF-8 (UnicodeDecodeError) ou forme
+            if strict:
+                raise Unreadable(f"{name} illisible ({e})") from e
+            return {}
+        if "version" in d and d["version"] != 2:
+            if strict:
+                raise ValueError(f"{name} : version {d['version']!r} inconnue")
+            return {}
         # l'ancien format (moyennes par moteur, sans version) est ignoré : la calibration repart de zéro
         return d.get("samples", {}) if d.get("version") == 2 else {}
 
     def add(self, backend, model, sample):
         """Ajoute une mesure sous « backend/model » (les KEEP dernières). Le serveur et tools/calibrate.py écrivent le
         même fichier : tout se fait sous le verrou de <fichier>.lock, relu sous lui (l'autre a pu écrire), puis remplacé
-        d'un coup par un fichier temporaire propre au processus, mis sur le disque avant le renommage. Un fichier
-        présent mais illisible (ou d'une autre version), ou un verrou qui ne vient pas, lève sans rien écrire : les
-        mesures gardées ne sont jamais remplacées par la seule nouvelle."""
+        d'un coup par un fichier temporaire propre au processus, mis sur le disque avant le renommage. Un fichier dont
+        le contenu ne se lit pas est mis de côté (renommé <fichier>.illisible-<date>, jamais supprimé) et l'ajout
+        repart d'un fichier neuf ; une autre version, une erreur du disque ou un verrou qui ne vient pas lèvent sans
+        rien toucher : des mesures lisibles ne sont jamais remplacées par la seule nouvelle."""
         with file_lock(self.path + ".lock"):
-            samples = self.read(strict=True)
+            try:
+                samples = self.read(strict=True)
+            except Unreadable:
+                aside = f"{self.path}.illisible-{time.strftime('%Y%m%d-%H%M%S')}"
+                if os.path.lexists(aside):
+                    raise
+                os.rename(self.path, aside)
+                samples = {}
             key = f"{backend}/{model}"
             samples[key] = (samples.get(key, []) + [sample])[-KEEP:]
             tmp = f"{self.path}.{os.getpid()}.tmp"

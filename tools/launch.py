@@ -2384,7 +2384,7 @@ def queue_entry(job, position, ahead, coefs):
             "estimate": round(est, 1),
             "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None,
             "kind": "private" if job.get("private") else "normal", "id": job["id"], "mode": job["mode"],
-            "width": r["width"], "height": r["height"], "steps": r["steps"],
+            "model": job_model(job)[0], "width": r["width"], "height": r["height"], "steps": r["steps"],
             "prompt": prompt[:80] + ("…" if len(prompt) > 80 else "")}
 
 

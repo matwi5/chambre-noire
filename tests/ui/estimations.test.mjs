@@ -54,6 +54,27 @@ test('la page estime chaque modèle comme le serveur, demande par demande', asyn
   page.assertNoErrors();
 });
 
+test('une génération MiniMax H3 reprise de la file se suit avec ses temps, Réglages sur Qwen', async () => {
+  await page.freshLabo(bench);
+  await page.modelsSeen(2);
+  assert.equal(await page.postGenerate(`{ prompt: 'HOLD=estime-ui zet2 suivie', model: 'h3', steps: 6,
+    width: 1024, height: 1024 }`), 202);
+  const id = (await bench.api('/api/status')).queue.find(e => e.prompt.includes('zet2')).id;
+  await page.eval(`refreshStatus()`);
+  await page.waitFor(`queueState.some(e => e.id === '${id}')`, { what: 'entrée de la file lue' });
+  // reprise au rechargement (resumeOwn) : la génération était à cette page
+  await page.eval(`localStorage.setItem('qwen-own', JSON.stringify(['${id}'])); resumeOwn(queueState)`);
+  await page.waitFor(`pageJobs.some(p => p.id === '${id}')`, { what: 'génération reprise' });
+  const [chosen, vae, step, c] = await page.eval(`[modelSel().key, ...(p => [p.vaeSec, p.stepSec])(
+    pageJobs.find(p => p.id === '${id}')), coefsOf('h3')]`);
+  assert.equal(chosen, 'qwen');
+  assert.ok(Math.abs(vae - c.v * 1024 * 1024 / 1e6) < 1e-6, `décodage ${vae} s`);
+  assert.ok(Math.abs(step - (c.a * 4 + c.b * 16)) < 1e-6, `étape ${step} s`);
+  bench.release('estime-ui');
+  await bench.idle({ page });
+  page.assertNoErrors();
+});
+
 test('le modèle choisi donne ses coefficients à l\'estimation affichée ; ancien serveur : ceux de Qwen', async () => {
   await page.freshLabo(bench);
   await page.modelsSeen(2);

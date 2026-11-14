@@ -323,7 +323,13 @@ export async function startBench({ relay = false } = {}) {
     // jeton et page d'entrée du banc, comme launch.py --enter : chemin de la page de redirection vers /entrer
     async enter() { return JSON.parse(await server.ask('entrer')).entry; },
     // MiniMax H3 installé (fichiers vides, comme bench.start()) ou retiré : le serveur les cherche à chaque statut
-    h3(on = true) { for (const f of h3) if (on) fs.writeFileSync(f, ''); else fs.rmSync(f, { force: true }); },
+    h3(on = true) {
+      // jamais hors du dossier du banc (une ligne de serve.py fausse ne touche pas aux vrais modèles)
+      const rel = f => path.relative(dir, path.resolve(f));
+      const out = h3.filter(f => !rel(f) || rel(f).startsWith('..') || path.isAbsolute(rel(f)));
+      if (out.length) throw new Error(`bench.h3 : chemins hors du banc (${out.join(', ')})`);
+      for (const f of h3) if (on) fs.writeFileSync(f, ''); else fs.rmSync(f, { force: true });
+    },
     async stop() { if (directBench === entry) directBench = null; await relayed?.stop(); await server.stop(); },
   };
 }

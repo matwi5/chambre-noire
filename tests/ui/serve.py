@@ -18,6 +18,10 @@ import bench  # noqa: E402
 
 url = bench.start()
 h3 = sorted(set(bench.launch.H3_DIFFUSION.values()) | set(bench.launch.H3_FILES.values()))
+root = os.path.realpath(bench.launch.ROOT)
+outside = [p for p in h3 if os.path.commonpath([os.path.realpath(p), root]) != root]
+if outside:                             # une table que bench.start() ne repointe pas : jamais les vrais modèles
+    sys.exit(f"serve.py : fichiers de MiniMax H3 hors du banc ({', '.join(outside)}), rien n'est supprimé")
 for path in h3:
     os.remove(path)
 print(json.dumps({"url": url, "hold": bench.hold_dir(), "https": bench.HTTPS_HOST, "h3": h3,

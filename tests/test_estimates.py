@@ -3,7 +3,7 @@ formule de sa famille (sans cache de préfixe, références portées à 1024 px 
 mesures rangées sous la clé de version de chaque génération sans toucher à celles de Qwen, coefficients de chaque
 modèle installé dans /api/status, estimation de la file selon le modèle, travail privé compté comme Qwen dans l'ahead
 vu de l'espace public, calibration de MiniMax H3 par tools/calibrate.py. Sur le banc à faux moteur (voir bench.py)."""
-import contextlib, io, json, os, sys, tempfile, unittest
+import contextlib, glob, io, json, os, sys, tempfile, unittest
 from unittest import mock
 
 import bench
@@ -114,6 +114,7 @@ class StatusEstimatesTest(bench.BenchCase):
         s = call("GET", "/api/status")[1]
         h3 = s["model_estimates"]["h3"]
         entry = next(e for e in s["queue"] if e["id"] == b)
+        self.assertEqual([e["model"] for e in s["queue"] if e["id"] in (a, b)], ["qwen", "h3"])   # suivi par la page
         self.assertAlmostEqual(entry["estimate"], estimate.predict(h3, 512, 512, 6, [], 0, 3), delta=0.1)
         bench.release("estimations")
         wait_job(b)
@@ -197,7 +198,7 @@ class H3CalibrationTest(bench.BenchCase):
             os.umask(umask)
         return stop, out.getvalue()
 
-    def test_an_unreadable_file_stops_the_calibration_before_any_generation(self):
+    def test_an_unreadable_file_is_set_aside_and_the_calibration_goes_on(self):
         kept = open(launch.CALIB, "rb").read() if os.path.exists(launch.CALIB) else None
 
         def restore():
@@ -210,9 +211,10 @@ class H3CalibrationTest(bench.BenchCase):
         with open(launch.CALIB, "w", encoding="utf-8") as f:
             f.write("{abîmé")
         stop, out = self.calibrate()
-        self.assertIn("illisible", stop or "")
-        self.assertNotIn("1/3", out)
-        self.assertEqual(open(launch.CALIB, encoding="utf-8").read(), "{abîmé")
+        aside = glob.glob(launch.CALIB + ".illisible-*")
+        self.addCleanup(lambda: [os.remove(f) for f in aside])
+        self.assertEqual((stop, len(samples()[f"{S.backend}/h3-q4"])), (None, 3), out)
+        self.assertEqual([open(f, encoding="utf-8").read() for f in aside], ["{abîmé"])
 
     def test_a_lost_sample_makes_the_calibration_fail(self):
         with mock.patch.object(estimate.Store, "add", side_effect=TimeoutError("verrou tenu")):
@@ -251,13 +253,43 @@ class StoreLockTest(unittest.TestCase):
         saved = json.load(open(self.path, encoding="utf-8"))["samples"]
         self.assertEqual({k: len(v) for k, v in saved.items()}, {"metal/uc-q8": 1, "metal/q4": 30, "metal/h3-q4": 30})
 
-    def test_an_unreadable_file_is_never_overwritten(self):
+    def aside(self):
+        d = os.path.dirname(self.path)
+        return sorted(os.path.join(d, f) for f in os.listdir(d) if ".illisible-" in f)
+
+    def test_an_unreadable_file_is_set_aside_and_a_new_one_started(self):
+        for content in (b'{"version": 2, "samples": {"metal/uc-q8": [', b"\xff\xfe pas de l'UTF-8", b"[1, 2]",
+                        b'{"version": 2, "samples": [1]}'):
+            with self.subTest(content=content):
+                for f in self.aside():
+                    os.remove(f)
+                with open(self.path, "wb") as f:
+                    f.write(content)                               # écriture coupée, ou fichier abîmé
+                estimate.Store(self.path).add("metal", "h3-q4", {"step": 6.2})
+                [aside] = self.aside()
+                self.assertEqual(open(aside, "rb").read(), content)   # gardé tel quel, jamais supprimé
+                self.assertEqual(estimate.Store(self.path).samples, {"metal/h3-q4": [{"step": 6.2}]})
+
+    def test_a_file_already_set_aside_this_second_stops_the_sample(self):
         with open(self.path, "w", encoding="utf-8") as f:
-            f.write('{"version": 2, "samples": {"metal/uc-q8": [')     # écriture coupée, ou fichier abîmé
+            f.write("{abîmé")
+        with mock.patch.object(estimate.time, "strftime", return_value="20261114-120000"):
+            with open(self.path + ".illisible-20261114-120000", "w", encoding="utf-8") as f:
+                f.write("{déjà")
+            with self.assertRaises(estimate.Unreadable):
+                estimate.Store(self.path).add("metal", "h3-q4", {"step": 6.2})
+        self.assertEqual(open(self.path, encoding="utf-8").read(), "{abîmé")
+        self.assertEqual(open(self.path + ".illisible-20261114-120000", encoding="utf-8").read(), "{déjà")
+
+    @unittest.skipIf(os.name == "nt" or os.geteuid() == 0, "droits POSIX, compte ordinaire")
+    def test_a_file_the_disk_refuses_is_neither_moved_nor_overwritten(self):
         kept = open(self.path, "rb").read()
-        with self.assertRaises(ValueError):
+        os.chmod(self.path, 0)
+        self.addCleanup(os.chmod, self.path, 0o600)
+        with self.assertRaises(PermissionError):
             estimate.Store(self.path).add("metal", "h3-q4", {"step": 6.2})
-        self.assertEqual(open(self.path, "rb").read(), kept)
+        os.chmod(self.path, 0o600)
+        self.assertEqual((open(self.path, "rb").read(), self.aside()), (kept, []))
 
     def test_a_held_lock_writes_nothing_then_lets_the_sample_in(self):
         store = estimate.Store(self.path)
@@ -276,7 +308,7 @@ class StoreLockTest(unittest.TestCase):
         kept = open(self.path, "rb").read()
         with self.assertRaises(ValueError):
             estimate.Store(self.path).add("metal", "h3-q4", {"step": 6.2})
-        self.assertEqual(open(self.path, "rb").read(), kept)
+        self.assertEqual((open(self.path, "rb").read(), self.aside()), (kept, []))
 
     def test_a_failed_write_keeps_the_file_and_leaves_no_temporary(self):
         kept = open(self.path, "rb").read()

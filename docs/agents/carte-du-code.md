@@ -143,7 +143,8 @@ Dans l'ordre du fichier :
   `moved_first`), `in_space` (génération de l'espace public ou privé), `queue_ranks` (rang dans l'espace),
   `queue_position`, `request_inputs` (tailles des références lues dans leur en-tête), `job_estimate` (estimation par
   `estimate.predict`, seule source, avec les coefficients, `rmin` et l'intervalle des aperçus du modèle de la
-  génération ; `as_qwen` : comme une génération de Qwen), `queue_entry` (ligne de `queue` dans `/api/status`),
+  génération ; `as_qwen` : comme une génération de Qwen), `queue_entry` (ligne de `queue` dans `/api/status`, avec la
+  clé `model`),
   `queue_view` (file vue depuis un espace, `ahead` : travail caché de l'autre espace devant chaque entrée, le travail
   privé compté comme du Qwen vu de l'espace public), `new_job` (`input_names` : noms des images d'entrée gardées),
   `public(job)` (ce que `/api/job/<id>` et `/api/generate` montrent, `mode` et `inputs` compris), `quiet_request`.
@@ -174,7 +175,8 @@ Dans l'ordre du fichier :
 format `master-NNN-hash` du marqueur, `prefix_cache`, `make_sample`, `class Store` pour `tools/calibration.json`, dont
 `add` écrit sous `file_lock` (verrou entre processus de `calibration.json.lock`, attente `LOCK_WAIT` ; sans lui sur
 un système de fichiers qui ne le connaît pas, `NO_LOCK`), met le fichier sur le disque avant le renommage (`sync_fd`,
-`sync_dir`, copies de celles de `launch.py`) et ne réécrit jamais un fichier illisible ou d'une autre version ;
+`sync_dir`, copies de celles de `launch.py`) ; un contenu qui ne se lit pas (`Unreadable`) est mis de côté,
+`calibration.json.illisible-<date>`, une autre version ou une erreur du disque lèvent sans rien toucher ;
 `record_calib` pose `job["measured"]`, que `tools/calibrate.py` vérifie) ;
 `PRIORS` (Qwen) et `H3_PRIORS` (MiniMax H3), réunis par modèle dans `FAMILIES` (valeurs de départ, cache de préfixe
 `kv`, poids `rw` et petit côté minimal `rmin` des références).
@@ -329,8 +331,8 @@ dernier bloc, après le HTML.
     de la page seulement ; `pollJobs` chaque seconde ; une privée « inconnue » quitte la page sans message), `finish`
     (fin d'une génération : ses aperçus en route abandonnés, publique ou privée, avant l'oubli d'une privée, la pile
     relue, l'échec gardé pour sa carte, l'annulée retirée), `drop` (retire une
-    génération de la page) ; bouton `#go` ; reprise : `followQueue` (suit des entrées de la file), `resumeOwn`
-    (générations normales de
+    génération de la page) ; bouton `#go` ; reprise : `followQueue` (suit des entrées de la file, temps d'étape et de
+    décodage de leur modèle par `timesOf`), `resumeOwn` (générations normales de
     ce navigateur, après un rechargement et au retour dans l'espace public), `resume`, `adoptPrivate` (dans l'espace
     privé, toutes les générations privées actives de la file, `adopted` : pas lancées par la page, qui ne les fait pas
     oublier).
