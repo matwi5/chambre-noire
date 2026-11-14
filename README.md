@@ -824,6 +824,18 @@ seul, ou devant un serveur qui n'envoie pas la liste `models` de `/api/status`, 
 de **Révéler** part sans champ `model` ; **Relancer** refaite à partir d'une image envoie le sien dès que le Mac liste
 ses modèles, et toujours pour MiniMax H3.
 
+**Vidéo dans l'interface.** Quand le Mac propose la vidéo, la ligne **Modèle** gagne « Vidéo ». Ce choix remplace
+les lignes **Format**, **Résolution**, **Étapes** et **Images** et l'aperçu par trois lignes : **Durée** (« 2 s »,
+« 3 s », « 5 s »), **Taille** (« Petite », 480×288 ; « Normale », 864×480) et **Format** (paysage ou portrait),
+retenues par le navigateur. Une seule image jointe est acceptée : elle sert d'image de départ, que la vidéo anime ;
+**Dessiner** est grisé et il n'y a ni variantes ni campagne. Pendant le calcul, la carte en cours montre l'étape (sur
+4) et l'heure de fin prévue, sans aperçu. La vidéo finie arrive dans la pile, où elle s'anime en boucle, comme dans la
+visionneuse ; sa vignette des **Tirages** est fixe (sa première image). Elle se garde, se jette et se supprime comme
+une image ; dans la visionneuse, **Éditer** et **Dessiner** n'y sont pas, **Copier** est grisé (le presse-papiers ne
+prend que des images PNG), et **Partager** et **Télécharger** donnent le fichier `.webp`, sous un nom en `.webp`.
+**Relancer** refait la vidéo avec sa durée et son image de départ (durée absente ou inconnue : celle des Réglages),
+et **Reprendre** remet la vidéo, sa durée, sa taille et son format dans les Réglages.
+
 **Licence de MiniMax H3.** Ses poids sont soumis à la licence publiée par MiniMax avec le modèle (fichier `LICENSE`
 du dépôt [MiniMaxAI/MiniMax-H3-Image](https://huggingface.co/MiniMaxAI/MiniMax-H3-Image)). Elle exclut des
 territoires (« Excluded Territories ») : l'Union européenne, le Royaume-Uni, la Corée du Sud et les États-Unis ; elle

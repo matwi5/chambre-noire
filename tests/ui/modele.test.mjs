@@ -22,8 +22,6 @@ after(async () => {
 });
 
 const CELLS = `[...$('setGrid').querySelectorAll('[data-set]')].map(c => c.dataset.set)`;
-// demande envoyée par « Révéler » (celle que la page garde pour sa génération)
-const reqOf = async text => { await page.generate(text); return page.eval(`pageJobs.at(-1).req`); };
 
 test('Qwen seul, ou serveur sans liste de modèles : pas de ligne Modèle, demande sans champ model', async () => {
   bench.h3(false);
@@ -31,13 +29,14 @@ test('Qwen seul, ou serveur sans liste de modèles : pas de ligne Modèle, deman
   await page.modelsSeen(1);
   assert.equal(await page.eval(`$('modelRow').hidden`), true, 'ligne Modèle avec un seul modèle');
   assert.equal((await page.eval(CELLS)).includes('modele'), false, 'case Modèle avec un seul modèle');
-  assert.equal('model' in await reqOf('zmo1 qwen seul'), false, 'champ model envoyé avec un seul modèle');
+  assert.equal('model' in await page.sentRequest('zmo1 qwen seul'), false, 'champ model envoyé avec un seul modèle');
   bench.h3();
   await bench.idle();
   await page.oldServer();
   assert.equal(await page.eval(`modelList`), null, 'liste lue d\'un serveur qui ne l\'envoie pas');
   assert.equal(await page.eval(`$('modelRow').hidden`), true, 'ligne Modèle devant un ancien serveur');
-  assert.equal('model' in await reqOf('zmo1 ancien serveur'), false, 'champ model envoyé à un ancien serveur');
+  assert.equal('model' in await page.sentRequest('zmo1 ancien serveur'), false,
+    'champ model envoyé à un ancien serveur');
   await bench.idle();
   page.assertNoErrors();
 });
@@ -50,7 +49,7 @@ test('Qwen à la première ouverture, puis le dernier choisi ; non installé : Q
   assert.deepEqual(await page.eval(`[...$('modelOpts').querySelectorAll('[data-k]')].map(b => b.textContent)`),
     ['Qwen', 'MiniMax H3']);
   assert.equal(await page.eval(`modelSel().key`), 'qwen', 'pas Qwen à la première ouverture');
-  assert.equal((await reqOf('zmo2 qwen')).model, 'qwen');
+  assert.equal((await page.sentRequest('zmo2 qwen')).model, 'qwen');
   await bench.idle();
   await page.chooseModel('h3');
   await page.goto(bench.url + '/');
@@ -65,7 +64,8 @@ test('Qwen à la première ouverture, puis le dernier choisi ; non installé : Q
   bench.h3(false);
   await page.modelsSeen(1);
   assert.equal(await page.eval(`$('modelRow').hidden`), true, 'ligne Modèle sans MiniMax H3');
-  assert.equal('model' in await reqOf('zmo2 h3 retiré'), false, 'MiniMax H3 demandé alors qu\'il n\'est plus là');
+  assert.equal('model' in await page.sentRequest('zmo2 h3 retiré'), false,
+    'MiniMax H3 demandé alors qu\'il n\'est plus là');
   await bench.idle();
   bench.h3();
   await page.modelsSeen(2);
@@ -86,7 +86,7 @@ test('MiniMax H3 : sans Étapes, 6 étapes envoyées, aperçu toutes les 2 étap
   assert.equal(await page.eval(`$('stepRow').hidden`), true, 'ligne Étapes avec MiniMax H3');
   assert.match(await page.eval(`$('previewChk').parentElement.textContent`), /Aperçu toutes les 2 étapes/);
   assert.deepEqual(await choices(), qwen, 'formats ou résolutions différents de ceux de Qwen');
-  const req = await reqOf('zmo3 h3');
+  const req = await page.sentRequest('zmo3 h3');
   assert.equal(req.model, 'h3');
   assert.equal(req.steps, 6);
   await page.waitFor(`pileItems.some(it => it.prompt === 'zmo3 h3')`, { what: 'image MiniMax H3 dans la pile' });

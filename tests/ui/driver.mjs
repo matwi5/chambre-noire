@@ -37,6 +37,7 @@
 //                                                // Espace maintenue, répétée par le système (event.repeat), relâchée
 //   await page.typePrompt('texte')               // texte tapé dans le champ du Labo (événement input)
 //   await page.generate('texte')                 // tapé dans le Labo puis « Révéler » : demande acceptée
+//   await page.sentRequest('texte')              // generate, puis la demande envoyée (gardée par la page)
 //   await page.overflowing()                     // éléments visibles qui dépassent de la largeur de la vue
 //   await page.visible('#prompt')                // élément affiché (ni absent, ni masqué, ni sans boîte)
 //   await page.pasteImage()                      // une image de 64×64 collée dans le champ du Labo (Cmd+V)
@@ -82,6 +83,8 @@
 //   await bench.enter()                          // page d'entrée (jeton à usage unique), comme launch.py --enter
 //   bench.h3(); bench.h3(false)                  // MiniMax H3 installé, ou retiré (le banc part avec Qwen seul :
 //                                                // tests/ui/serve.py) ; la page le voit à son statut suivant
+//   bench.video(); bench.video(false)            // la vidéo installée ou retirée, de même (l'encodeur partagé avec
+//                                                // MiniMax H3 reste à son retrait s'il l'a)
 //   await page.oldServer()                       // la page lit /api/status sans models ni model_estimates, comme un
 //                                                // serveur d'avant MiniMax H3 (jusqu'au prochain chargement)
 //   await page.modelsSeen(2)                     // statut relu tout de suite : la page a lu 2 modèles installés
@@ -280,7 +283,7 @@ async function startPython(script, args, what) {
 // pas les pages d'office, pour que la page du code reste visible). stop() arrête tout.
 export async function startBench({ relay = false } = {}) {
   const server = await startPython('serve.py', [], 'serveur du banc');
-  const { url: direct, hold, https, cookie, h3 } = JSON.parse(server.first);
+  const { url: direct, hold, https, cookie, h3, video } = JSON.parse(server.first);
   const relayed = relay ? await startPython('relay.py', [direct, https], 'relais du banc')
     .catch(async e => { await server.stop(); throw e; }) : null;
   const url = relayed ? `http://127.0.0.1:${relayed.first.trim()}` : direct;
@@ -290,6 +293,14 @@ export async function startBench({ relay = false } = {}) {
   const macFetch = route => fetch(direct + route, { headers: { Cookie: `${cookie.name}=${cookie.value}` } });
   const entry = relayed ? null : { url, cookie };
   if (entry) directBench = entry;
+  // fichiers d'un modèle posés (vides, comme bench.start()) ou retirés, jamais hors du dossier du banc (une ligne de
+  // serve.py fausse ne touche pas aux vrais modèles) : le serveur les cherche à chaque statut
+  const installModel = (what, list, on) => {
+    const rel = f => path.relative(dir, path.resolve(f));
+    const out = list.filter(f => !rel(f) || rel(f).startsWith('..') || path.isAbsolute(rel(f)));
+    if (out.length) throw new Error(`${what} : chemins hors du banc (${out.join(', ')})`);
+    for (const f of list) if (on) fs.writeFileSync(f, ''); else fs.rmSync(f, { force: true });
+  };
   return {
     url, direct, dir, pids: [server.pid, ...relayed ? [relayed.pid] : []],   // processus du banc (et du relais)
     // attend que le Mac soit au repos : rien en cours ni en file, toutes origines et tous espaces confondus (à faire
@@ -323,13 +334,10 @@ export async function startBench({ relay = false } = {}) {
     // jeton et page d'entrée du banc, comme launch.py --enter : chemin de la page de redirection vers /entrer
     async enter() { return JSON.parse(await server.ask('entrer')).entry; },
     // MiniMax H3 installé (fichiers vides, comme bench.start()) ou retiré : le serveur les cherche à chaque statut
-    h3(on = true) {
-      // jamais hors du dossier du banc (une ligne de serve.py fausse ne touche pas aux vrais modèles)
-      const rel = f => path.relative(dir, path.resolve(f));
-      const out = h3.filter(f => !rel(f) || rel(f).startsWith('..') || path.isAbsolute(rel(f)));
-      if (out.length) throw new Error(`bench.h3 : chemins hors du banc (${out.join(', ')})`);
-      for (const f of h3) if (on) fs.writeFileSync(f, ''); else fs.rmSync(f, { force: true });
-    },
+    h3(on = true) { installModel('bench.h3', h3, on); },
+    // vidéo installée (ses fichiers vides, encodeur de MiniMax H3 compris) ou retirée (l'encodeur, partagé avec
+    // MiniMax H3, reste s'il l'a)
+    video(on = true) { installModel('bench.video', on ? video : video.filter(f => !h3.includes(f)), on); },
     async stop() { if (directBench === entry) directBench = null; await relayed?.stop(); await server.stop(); },
   };
 }
@@ -894,6 +902,8 @@ async function connect(wsUrl, { closeTab, siblings, tabs = async () => [] }) {
     },
     // texte tapé dans le Labo puis « Révéler » : attend la demande acceptée (une génération de plus suivie par la
     // page), le Labo affiché ; une feuille ouverte est d'abord refermée
+    // demande envoyée par « Révéler » après generate(text) : celle que la page garde pour sa génération
+    async sentRequest(text) { await page.generate(text); return page.eval(`pageJobs.at(-1).req`); },
     async generate(text) {
       await page.closeSheet();
       if (await page.eval(`mode`) !== 'labo') await page.tab('labo');

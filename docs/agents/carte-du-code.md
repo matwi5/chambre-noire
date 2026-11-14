@@ -237,8 +237,14 @@ dernier bloc, après le HTML.
     « Modèle » montrée à partir de deux modèles), `modelSel` (modèle de la saisie : le dernier choisi s'il est
     installé, sinon Qwen ; `null` sans ligne, la demande part alors sans champ `model`), `fixedSteps` et `chosenSteps`
     (étapes imposées par le modèle, sinon celles choisies), `previewEvery` (intervalle des aperçus du modèle),
-    `isH3` et `drawAllowed` (Dessiner permis : le modèle prend le masque ; grisé avec MiniMax H3, refusé par
-    `drawFrom`) ; aide des images selon le modèle (`REF_HINT`, `H3_REF_HINT`, `H3_CAMP_HINT`, posée par
+    `isH3` et `drawAllowed` (Dessiner permis : le modèle prend le masque ; grisé avec MiniMax H3 et la vidéo, refusé
+    par `drawFrom`) ; vidéo : `videoModel` (modèle choisi qui a des durées et des tailles, `frames` et `sizes` du
+    statut), `videoOpt` (réglages retenus, `opt.video` : durée, taille, format, écrits dans `qwen-opt` une fois
+    choisis), `videoFrames`, `videoDims` (taille au format choisi : Petite, la plus petite du Mac ; Normale, la plus
+    grande), `videoSettingsFor` (ceux d'une image, pour « Reprendre »), `durationLabel`, `maxRefs` (une image jointe
+    avec la vidéo, son image de départ ; lignes `#videoRows` : `#durOpts`, `#vsizeOpts`, `#vfmtOpts`, à la place du
+    format, de la résolution, des étapes, des images et de l'aperçu, classe `video` de `#setSheet`) ; aide des images
+    selon le modèle (`REF_HINT`, `H3_REF_HINT`, `H3_CAMP_HINT`, posée par
     `renderInputs`) et mention de l'édition MiniMax H3 `#h3Note` (`H3_EDIT_NOTE` et l'estimation du moment, par
     `refreshChoices`) ; nature
     de la demande lue dans la saisie :
@@ -298,7 +304,8 @@ dernier bloc, après le HTML.
     jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
     de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
   - « bouton Avant » : `beforeFile` (règle de l'image comparable, seule source : `edit` à une image d'entrée, `mask` →
-    `init.png`), `beforeShown` (bouton montré, image privée comprise, masqué sur une image privée pendant « Sortir » :
+    `init.png` ; jamais sur une vidéo), `beforeShown` (bouton montré, image privée comprise, masqué sur une image privée
+    pendant « Sortir » :
     `leavingPrivate`), `reaimBefore` (cadres revisés : « Sortir » demandé ou refusé, dans `privLock`), `aimBefore`
     (cadre visé sur une image : visionneuse dans `openViewer`,
     carte du dessus dans `renderPile`, son entrée chargée en avance), `placeBefore` (cadre posé sur le contenu affiché
@@ -387,7 +394,8 @@ dernier bloc, après le HTML.
     après une lecture réussie ; `histAsk` : rev de la lecture en cours, pas relancée pour le même ; `histSeq` : une
     réponse dépassée est ignorée ; rien pendant « Sortir » ; visionneuse ouverte recalée sur la liste relue),
     `renderGallery` (redessinée seulement si les tirages changent, `histShown` ; état vide avec le logo et « Aller au
-    Labo »), `openViewer`, `stepViewer`,
+    Labo »), `openViewer` (sur une vidéo, `isVideoItem` : ni Éditer `#vEdit` ni Dessiner `#vDraw`, Copier `#vCopy`
+    grisé), `stepViewer`,
     `closeViewer` et `emptyViewer` (contenu vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace
     privé), raccourcis du PC (écouteur `keydown` juste avant celui de la visionneuse : → et ← sur la pile par
     `sortTop`, Z et Ctrl/⌘ + Z par `undoDiscard`, Ctrl/⌘ + Entrée dans `#prompt` par `#go` ; rien pendant une saisie,
@@ -399,7 +407,9 @@ dernier bloc, après le HTML.
     sans défilement ni bouton activé ; champs : `FORM_FIELDS`), gestes : `zoomable` (pincer, molette, glisser ; son
     image avant reçoit la même transformation, `twin` ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les
     images d'entrée).
-  - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
+  - « partager et copier » (le type du fichier partagé est celui du fichier servi : WebP d'une vidéo ; noms tirés
+    de l'extension réelle, `extOf`, `stemOf`) ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et
+    `emptyInputs`,
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;
     « Reprendre » : `resumeFrom` (saisie remplacée, confirmation si elle n'est pas vide), `resumeImages` (images
     d'entrée selon le mode, `RESUME_FILES` : demande gardée `req`, sinon galerie), `canResume` (bouton `#vResume`),
@@ -602,8 +612,10 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
 - Les clés de `MODEL_TABLE` sont recopiées dans `index.html` : `qwen` (modèle d'une demande sans champ `model`) pour
   le défaut de `opt.model`, le repli de `modelSel`, la ligne de Qwen mise à part dans la feuille Moteur et le modèle
   d'une demande relancée sans `model` (`relaunch`) ; `h3` dans `isH3` (aide `<Picture N>` et mention de l'édition,
-  propres à MiniMax H3) ; les clés de version (`DIFFUSION`, `H3_DIFFUSION`) dans `VERSION_MODELS`, que lit
-  `modelOfImage`.
+  propres à MiniMax H3) ; les clés de version (`DIFFUSION`, `H3_DIFFUSION`, `VIDEO_DIFFUSION`) dans
+  `VERSION_MODELS`, que lisent `modelOfImage`, `isVideoItem` et `privExt` (nom en `.webp` d'une vidéo privée).
+- Les 24 images par seconde de la vidéo (`--fps 24` de `MODEL_TABLE`) donnent ses durées affichées
+  (`durationLabel` : 56, 73 et 124 images, « 2 s », « 3 s », « 5 s »).
 - `PREVIEW_EVERY = 5` côté interface égale le défaut `preview_interval` de `build_cmd` (`preview_every`, quand le
   modèle n'impose pas le sien).
 - La longueur minimale du code privé (`MIN_PRIVATE_CODE`, 8) est aussi vérifiée dans `index.html` (feuilles

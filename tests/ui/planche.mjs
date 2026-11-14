@@ -15,7 +15,8 @@
 // pastille « +1 en attente », générations retenues par HOLD=planche, relâchées après les captures), reglages (feuille
 // Réglages ouverte, MiniMax H3 installé et choisi) et grille (la même feuille fermée : grille sous le texte), le
 // modèle remis à Qwen après les captures, et edition (MiniMax H3 choisi, deux images jointes : aide, mention,
-// Dessiner grisé ; saisie vidée et Qwen remis après les captures).
+// Dessiner grisé ; saisie vidée et Qwen remis après les captures), video (Vidéo choisie, feuille Réglages ouverte) et
+// video-visionneuse (une vidéo finie dans la visionneuse).
 // La rangée « avant » n'emploie que des aides du pilote présentes depuis longtemps (goto, waitFor, eval, generate,
 // keepPile, tab, enterPrivate, send ; bench.release, bench.idle), pour tourner avec le pilote de ce commit ; les
 // tailles passent par applyView, importée du pilote de l'arbre de travail, qui n'emploie que send.
@@ -130,6 +131,27 @@ const VIEWS = {
   visionneuse: async page => {
     await page.eval(`openViewer(0, histItems)`);
     await page.waitFor(`$('viewer').classList.contains('on') && $('vImg').complete`, { what: 'visionneuse' });
+  },
+  // vidéo choisie, feuille Réglages ouverte (bench.video et videoModel n'existent pas avant la vidéo : la rangée
+  // « avant » montre la feuille de ce commit)
+  video: async (page, bench) => {
+    bench.video?.();
+    await page.eval(`closeViewer()`);
+    await page.tab('labo');
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`typeof videoModel === 'undefined' || (modelList || []).some(m => m.key === 'video')`,
+      { what: 'vidéo installée' });
+    await page.eval(`opt.model = 'video'; refreshChoices(); openSheet('setSheet')`);
+    return { after: () => page.eval(`closeSheet()`) };
+  },
+  // une vidéo finie, dans la visionneuse (avant la vidéo : une image du modèle choisi)
+  'video-visionneuse': async page => {
+    await page.generate('planche : une vidéo');
+    const at = `pileView().findIndex(it => it.prompt === 'planche : une vidéo')`;
+    await page.waitFor(`${at} >= 0`, { what: 'vidéo dans la pile', timeout: 30000 });
+    await page.eval(`openViewer(${at}, pileView())`);
+    await page.waitFor(`$('viewer').classList.contains('on') && $('vImg').complete`, { what: 'visionneuse' });
+    return { after: () => page.eval(`closeViewer(); opt.model = 'qwen'; saveOpt(); refreshChoices()`) };
   },
   prive: async page => {
     await page.eval(`closeViewer()`);

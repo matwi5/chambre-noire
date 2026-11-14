@@ -44,9 +44,14 @@ Le nombre qui fixe le bruit de départ d'une génération ; deux graines différ
 _À éviter_ : seed (sauf dans le code)
 
 **Modèle** :
-Ce qu'on choisit dans la ligne « Modèle » des Réglages : Qwen, ou MiniMax H3 quand il est installé ; chaque
-génération porte le sien.
+Ce qu'on choisit dans la ligne « Modèle » des Réglages : Qwen, ou MiniMax H3 et Vidéo quand ils sont installés ;
+chaque génération porte le sien.
 _À éviter_ : employer « modèle » pour un prompt réutilisable ou pour une quantification (Q4_K_M, Q8_0 : une version)
+
+**Vidéo** :
+Un tirage animé de 2 à 5 secondes, sans son, fait par le modèle Vidéo (MiniMax H3) depuis un texte ou une image de
+départ ; un WebP animé, qui se trie, se garde et se supprime comme une image.
+_À éviter_ : film, clip, animation
 
 **Version** (d'un modèle) :
 La quantification installée d'un modèle (Q4_K_M ou Q8_0), choisie par machine ; la ligne d'informations d'un tirage

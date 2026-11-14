@@ -214,6 +214,9 @@
   .chips4 { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
   .chipsn { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0, 1fr); gap:6px; }   /* ligne Modèle */
   #setSheet.camp :is(#fmtHead, #ratioOpts, #countRow) { display:none; }   /* campagne : chaque photo a son format, et pas de variantes */
+  /* vidéo : durée, taille et format à la place du format, de la résolution, des étapes, des images et de l'aperçu */
+  #setSheet:not(.video) #videoRows, #setSheet.video :is(#fmtHead, #ratioOpts, #resHead, #resOpts, #stepRow, #countRow, #previewRow) { display:none; }
+  .btn-icon:disabled { opacity:.35; cursor:default; }   /* Copier sur une vidéo */
   .pane-head b { font-weight:inherit; }
   .opt { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; min-width:0; padding:10px 2px 9px;
     border-radius:var(--r-m); border:1px solid var(--line); background:var(--field); color:var(--ink2); cursor:pointer; transition:background .2s, color .2s, border-color .2s; }
@@ -739,7 +742,7 @@
     <button class="btn-icon mat" onclick="closeViewer()" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <div class="v-right"><span class="chipbtn mat" id="vCount"></span>
       <button class="btn-icon mat" data-share onclick="viewerShare()" aria-label="Partager" title="Partager"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3.5"/><path d="m7.5 8 4.5-4.5L16.5 8"/><path d="M8 11H6.5A2.5 2.5 0 0 0 4 13.5v5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-5a2.5 2.5 0 0 0-2.5-2.5H16"/></svg></button>
-      <button class="btn-icon mat" data-copy onclick="viewerCopy()" aria-label="Copier l'image" title="Copier l'image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="12" height="12" rx="2.8"/><path d="M15.5 8.5V6.3a2.8 2.8 0 0 0-2.8-2.8H6.3a2.8 2.8 0 0 0-2.8 2.8v6.4a2.8 2.8 0 0 0 2.8 2.8h2.2"/></svg></button>
+      <button class="btn-icon mat" id="vCopy" data-copy onclick="viewerCopy()" aria-label="Copier l'image" title="Copier l'image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="12" height="12" rx="2.8"/><path d="M15.5 8.5V6.3a2.8 2.8 0 0 0-2.8-2.8H6.3a2.8 2.8 0 0 0-2.8 2.8v6.4a2.8 2.8 0 0 0 2.8 2.8h2.2"/></svg></button>
       <a class="btn-icon mat" id="vDl" download aria-label="Télécharger" title="Télécharger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg></a></div>
   </div>
   <div class="v-stage" id="vStage">
@@ -754,8 +757,8 @@
     <div class="v-lot" id="vLot" hidden><button class="btn secondary small" id="vLotOpen" onclick="openLot()">Voir le lot</button><button class="btn secondary small" onclick="downloadLot()">Tout télécharger</button></div>
     <div class="v-sort" id="vSort" hidden><button class="btn secondary" data-sort onclick="sortFromViewer('discard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>Jeter</button><button class="btn" data-sort onclick="sortFromViewer('keep')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>Garder</button></div>
     <div class="acts v-acts">
-      <button class="act" onclick="viewerAction('edit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/></svg><span>Éditer</span></button>
-      <button class="act" onclick="viewerAction('mask')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg><span>Dessiner</span></button>
+      <button class="act" id="vEdit" onclick="viewerAction('edit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="12.5" height="12.5" rx="3"/><path d="M8 4.5h9a3.5 3.5 0 0 1 3.5 3.5v9"/><path d="m3.8 17 3.7-3.7 2.8 2.8 1.7-1.7 3.7 3.7"/></svg><span>Éditer</span></button>
+      <button class="act" id="vDraw" onclick="viewerAction('mask')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.7a2.4 2.4 0 0 1 3.4 0l1.1 1.1a2.4 2.4 0 0 1 0 3.4L9.9 18.6 5 19.9l1.3-4.9Z"/><path d="m13.3 6.2 4.5 4.5"/></svg><span>Dessiner</span></button>
       <button class="act" id="vResume" onclick="viewerAction('resume')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15M4.5 11.5h15M4.5 16.5h8"/><path d="m16 15.5 2.5 2.5 3-4"/></svg><span>Reprendre</span></button>
       <button class="act" id="vAgain" onclick="viewerAction('again')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 9.5A8 8 0 0 0 5.2 7.2L4 8.5"/><path d="M4 4.5v4h4"/><path d="M4.5 14.5a8 8 0 0 0 14.3 2.3l1.2-1.3"/><path d="M20 19.5v-4h-4"/></svg><span>Relancer</span></button>
       <button class="act danger" id="vDelete" onclick="viewerAction('delete')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V4.5h5V7"/><path d="m6.5 7 1 12.5h9l1-12.5"/></svg><span>Supprimer</span></button>
@@ -793,11 +796,12 @@
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
   <div class="sheet-head"><h2 id="setTitle">Réglages</h2><button class="btn small" onclick="closeSheet()">OK</button></div>
   <div id="modelRow" hidden><h3>Modèle</h3><div class="chipsn" id="modelOpts"></div></div>
+  <div id="videoRows"><h3>Durée</h3><div class="chipsn" id="durOpts"></div><h3>Taille</h3><div class="chipsn" id="vsizeOpts"></div><h3>Format</h3><div class="chipsn" id="vfmtOpts"></div></div>
   <h3 id="fmtHead">Format</h3><div class="ratios" id="ratioOpts"></div>
-  <h3>Résolution</h3><div class="chips5" id="resOpts"></div>
+  <h3 id="resHead">Résolution</h3><div class="chips5" id="resOpts"></div>
   <div id="stepRow"><h3>Étapes</h3><div class="chips5" id="stepOpts"></div></div>
   <div id="countRow"><h3>Images</h3><div class="chips4" id="countOpts"></div></div>
-  <label class="switch"><input type="checkbox" id="previewChk"><span class="track"></span><span>Aperçu toutes les <span id="previewGap">5</span> étapes <small id="previewCost"></small></span></label>
+  <label class="switch" id="previewRow"><input type="checkbox" id="previewChk"><span class="track"></span><span>Aperçu toutes les <span id="previewGap">5</span> étapes <small id="previewCost"></small></span></label>
   <label class="switch" id="notifRow" hidden><input type="checkbox" id="notifChk"><span class="track"></span><span>Notification en fin de génération <small id="notifNote"></small></span></label>
   <div class="estimate" id="estimate"><span id="estText"></span><b id="estTime"></b></div>
 </section>
@@ -946,6 +950,8 @@ const savedOpt = (()=>{ try{ const o=JSON.parse(localStorage.getItem('qwen-opt')
 ['ratio','res','steps'].forEach(k=>{ if(savedOpt[k]) opt[k]=savedOpt[k]; });
 if(Number.isInteger(savedOpt.count) && savedOpt.count>=1 && savedOpt.count<=MAX_VARIANTS) opt.count=savedOpt.count;
 if(typeof savedOpt.model==='string') opt.model=savedOpt.model;
+// réglages de la vidéo (video : frames, size, orient), écrits dans qwen-opt seulement une fois choisis
+if(savedOpt.video && typeof savedOpt.video==='object' && !Array.isArray(savedOpt.video)) opt.video=savedOpt.video;
 // (un ancien champ incognito, l'incognito ayant été retiré, est signalé une fois au chargement puis oublié : init)
 let notifyOn = savedOpt.notify!==false, campaignOn = !!savedOpt.campaign;
 function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt, v:2, preview:$('previewChk').checked, notify:notifyOn, campaign:campaignOn})); }catch(e){} }
@@ -966,17 +972,39 @@ const chosenSteps = () => fixedSteps() ?? stepsSel().steps;
 // intervalle des aperçus : celui que le modèle impose, sinon celui de la page
 const previewEvery = () => modelSel()?.preview_every || PREVIEW_EVERY;
 const isH3 = () => modelSel()?.key==='h3';
+// vidéo : modèle dont le Mac donne les nombres d'images (frames) et les tailles (sizes) ; null pour un modèle d'image
+const videoModel = () => { const m=modelSel();
+  return m && Array.isArray(m.frames) && m.frames.length && Array.isArray(m.sizes) && m.sizes.length ? m : null; };
+// réglages de la vidéo retenus (opt.video : frames, size « small » ou « normal », orient « land » ou « port »)
+const videoOpt = () => ({ frames:null, size:'small', orient:'land',
+  ...(opt.video && typeof opt.video==='object' ? opt.video : {}) });
+const VIDEO_SIZES = { small:'Petite', normal:'Normale' }, VIDEO_ORIENTS = { land:'Paysage', port:'Portrait' };
+const durationLabel = f => Math.round(f/24)+' s';  // 24 images par seconde (commande du serveur)
+// nombre d'images de la vidéo : celui retenu s'il est permis, sinon le premier (2 s)
+const videoFrames = m => m.frames.includes(videoOpt().frames) ? videoOpt().frames : m.frames[0];
+// taille de la vidéo, parmi celles du Mac au format choisi (paysage : plus large que haute) : Petite, la plus petite ;
+// Normale, la plus grande
+function videoDims(m, size=videoOpt().size, orient=videoOpt().orient){
+  const fit=m.sizes.filter(([w, h])=>orient==='port' ? h>w : w>=h).sort((a, b)=>a[0]*a[1]-b[0]*b[1]);
+  const list=fit.length ? fit : m.sizes; return (size==='normal' ? list[list.length-1] : list[0]).slice(); }
+// réglages de la vidéo d'une image (Reprendre) : sa durée si elle est permise (sinon celle des Réglages), sa taille
+// et son format
+function videoSettingsFor(it, m){ const orient=it.height>it.width ? 'port' : 'land';
+  const normal=videoDims(m, 'normal', orient), size=it.width===normal[0] && it.height===normal[1] ? 'normal' : 'small';
+  return { frames: m.frames.includes(it.frames) ? it.frames : videoFrames(m), size, orient }; }
+// images jointes : une seule avec la vidéo (son image de départ), 10 sinon
+const maxRefs = () => videoModel() ? 1 : MAX_REFS;
 // Dessiner (masque, annotation) : seulement avec un modèle qui prend le masque (pas MiniMax H3 : A16)
 const drawAllowed = () => { const m=modelSel(); return !m || m.modes.includes('mask'); };
 function applyModels(list){
   const key=JSON.stringify(list ?? null); if(key===lastModels) return; lastModels=key;
   modelList = Array.isArray(list) ? list : null; renderInputs(); refreshChoices(); }
-function currentDims(){ return dimsFor(opt.ratio, resSel().scale); }
+function currentDims(){ const vm=videoModel(); return vm ? videoDims(vm) : dimsFor(opt.ratio, resSel().scale); }
 // campagne : l'interrupteur n'est proposé qu'à partir de 2 images d'entrée (donc hors dessin) ; son réglage
 // (campaignOn) est gardé, mais ignoré tant qu'il n'est pas proposé
-const campaignShown = () => inputImages.length>=2;
+const campaignShown = () => inputImages.length>=2 && !videoModel();   // (jamais avec la vidéo : une image)
 const inCampaign = () => inputKind()==='edit' && campaignShown() && campaignOn;
-const variants = () => inCampaign() ? 1 : opt.count;   // images de la prochaine demande (une campagne : une par photo)
+const variants = () => inCampaign() || videoModel() ? 1 : opt.count;   // (une vidéo par demande)   // images de la prochaine demande (une campagne : une par photo)
 // campagne : chaque photo est éditée seule, au format pris en charge le plus proche de sa forme, à la résolution choisie
 function photoDims(im){ const [rw,rh]=RATIOS[closestRatio(im.w, im.h)], sc=resSel().scale; return [round32(rw*sc), round32(rh*sc)]; }
 function campaignPlan(){ const rmin=refMin(); return inputImages.map(im=>{ const [w,h]=photoDims(im); return { im, w, h, inp:{ refs:[refPx(im.w, im.h, w, h, rmin)], init:0 } }; }); }
@@ -988,6 +1016,7 @@ function refPx(rw, rh, w, h, rmin=0){ let vw=Math.sqrt(w*h*rw/rh), vh=vw*rh/rw; 
 const refMin = () => coefsOf(modelSel()?.key)?.rmin || 0;
 // références et image de départ envoyées au moteur pour la nature de la demande (voir buildRequest)
 function inputsFor(w, h){ const k=inputKind();
+  if(videoModel()) return { refs: [], init: 0 };   // vidéo : sans références
   if(k==='edit'){ const rmin=refMin(); return { refs: inputImages.map(im=>refPx(im.w, im.h, w, h, rmin)), init: 0 }; }
   if(k==='mask') return { refs: [w*h], init: maskMode()==='annotation' ? 0 : w*h };
   return { refs: [], init: 0 };
@@ -1010,8 +1039,9 @@ const H3_CAMP_HINT = 'Chaque photo est éditée seule : désignez-la dans le tex
 const DRAW_QWEN = 'Dessiner se fait avec Qwen';
 const shape = (w, h, size) => { const k=size/Math.max(w,h); return `<i class="shape" style="width:${Math.max(6,Math.round(w*k))}px;height:${Math.max(6,Math.round(h*k))}px"></i>`; };
 function refreshChoices(){
-  const im=singleImage(), kind=inputKind(), nrefs = kind==='edit' ? inputImages.length : 0, pv=$('previewChk').checked;
-  $('prompt').placeholder=PLACEHOLDERS[kind];
+  const vm=videoModel(), im=singleImage(), kind=inputKind(), nrefs = kind==='edit' && !vm ? inputImages.length : 0;
+  const pv=$('previewChk').checked && !vm;         // vidéo : pas d'aperçu
+  $('prompt').placeholder=PLACEHOLDERS[vm ? 't2i' : kind];
   if(opt.ratio==='image' && !im) opt.ratio='1:1'; if(!(opt.ratio in RATIOS) && opt.ratio!=='image') opt.ratio='1:1';
   if(forceImageRatio && im) opt.ratio='image'; forceImageRatio=false;
   const near = im ? closestRatio(im.w, im.h) : null;
@@ -1021,7 +1051,14 @@ function refreshChoices(){
   const steps=chosenSteps(); const [w,h]=currentDims(); const inp=inputsFor(w, h); const n=variants();
   const plan=inCampaign() ? campaignPlan() : null;  // campagne : estimation photo par photo
   const total=(st, prev)=>plan ? plan.reduce((t, x)=>t+parts(x.w, x.h, st, x.inp, prev).total, 0) : n*parts(w, h, st, inp, prev).total;
-  const campMode=!!plan; $('setSheet').classList.toggle('camp', campMode);
+  const campMode=!!plan; $('setSheet').classList.toggle('camp', campMode); $('setSheet').classList.toggle('video', !!vm);
+  const chips = (list, sel) => list.map(([k, label])=>{ const on=k===sel;
+    return `<button class="opt${on?' on':''}" data-k="${k}" aria-pressed="${on}"><b>${label}</b></button>`; }).join('');
+  const vo=videoOpt(), fr=vm ? videoFrames(vm) : null, vsize=vo.size==='normal' ? 'normal' : 'small';
+  const vorient=vo.orient==='port' ? 'port' : 'land';
+  $('durOpts').innerHTML = vm ? chips(vm.frames.map(f=>[f, durationLabel(f)]), fr) : '';
+  $('vsizeOpts').innerHTML = vm ? chips(Object.entries(VIDEO_SIZES), vsize) : '';
+  $('vfmtOpts').innerHTML = vm ? chips(Object.entries(VIDEO_ORIENTS), vorient) : '';
   $('resOpts').innerHTML = RES.map(p=>{ const on=p.k===opt.res;
     return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}"><b>${p.label}</b></button>`; }).join('');
   const approx = s => E ? '≈ '+fmt(s) : '…';     // avant le premier /api/status, pas de coefficients
@@ -1037,12 +1074,14 @@ function refreshChoices(){
   // grille des réglages (chaque case ouvre la feuille) ; campagne : les photos à la place du format, pas de variantes
   const cell = (k, label, value, title) => `<button class="setcell" data-set="${k}"${title ? ` title="${title}"` : ''}>`
     + `<small>${label}</small><b>${value}</b></button>`;
-  $('setGrid').innerHTML = (model ? cell('modele', 'Modèle', esc(model.name)) : '')
-    + (campMode ? cell('format', 'Campagne', plan.length+' photos')
+  $('setGrid').innerHTML = (model ? cell('modele', 'Modèle', esc(model.name)) : '') + (vm
+    ? cell('duree', 'Durée', durationLabel(fr)) + cell('vtaille', 'Taille', VIDEO_SIZES[vsize], `${w}×${h}`)
+      + cell('vformat', 'Format', VIDEO_ORIENTS[vorient]) : (campMode ? cell('format', 'Campagne', plan.length+' photos')
     : cell('format', 'Format', shape(rw,rh,13)+(opt.ratio==='image'?'Image':opt.ratio)))
     + cell('taille', 'Taille', resSel().label, `${w}×${h}`) + (fixed ? '' : cell('etapes', 'Étapes', steps))
-    + (campMode ? '' : cell('images', 'Images', n));
-  $('estText').textContent = plan ? `${plan.length} photos, chacune à son format · ${steps} étapes`
+    + (campMode ? '' : cell('images', 'Images', n)));
+  $('estText').textContent = vm ? `${w}×${h} · ${durationLabel(fr)}${inputImages.length ? ' · image de départ' : ''}`
+    : plan ? `${plan.length} photos, chacune à son format · ${steps} étapes`
     : `${w}×${h} · ${steps} étapes${nrefs>1?' · '+nrefs+' références':''}${n>1?' · '+n+' images':''}`;
   $('h3Note').hidden = !(isH3() && inputImages.length);
   $('h3Note').textContent = H3_EDIT_NOTE+' Temps estimé : '+approx(E && total(steps, pv))+'.';
@@ -1063,6 +1102,9 @@ function refreshChoices(){
   $('campChk').checked=campaignOn;
   $('campChk').addEventListener('change', ()=>{ campaignOn=$('campChk').checked; saveOpt(); renderInputs(); refreshChoices(); });
   $('countOpts').addEventListener('click', e=>{ const b=e.target.closest('[data-k]'); if(!b) return; opt.count=+b.dataset.k; saveOpt(); refreshChoices(); });
+  [['durOpts','frames'],['vsizeOpts','size'],['vfmtOpts','orient']].forEach(([id,key])=>$(id).addEventListener('click', e=>{
+    const b=e.target.closest('[data-k]'); if(!b) return;
+    opt.video={...videoOpt(), [key]: key==='frames' ? +b.dataset.k : b.dataset.k}; saveOpt(); refreshChoices(); }));
   $('modelOpts').addEventListener('click', e=>{ const b=e.target.closest('[data-k]'); if(!b) return; opt.model=b.dataset.k; saveOpt(); renderInputs(); refreshChoices(); });
   $('setGrid').addEventListener('click', e=>{ if(e.target.closest('[data-set]')) openSheet('setSheet'); });
   ['previewChk','mask_mode'].forEach(id=>$(id).addEventListener('change', ()=>{ saveOpt(); refreshChoices(); }));
@@ -1289,14 +1331,15 @@ function wireDrop(dropId, inputId, handler){ const d=$(dropId), inp=$(inputId); 
 // illisible n'arrête pas les suivantes. Choix, dépôt et collage ; refusé pendant le dessin, même allumé pendant la lecture
 async function addInputFiles(files, {list, priv}=noteInput()){ if(refuseWhileDrawing(list)) return;
   let skipped=0, bad=0;
-  for(const f of files){ if(list.length>=MAX_REFS){ skipped++; continue; }
+  for(const f of files){ if(list.length>=maxRefs()){ skipped++; continue; }
     let entry; try{ entry=await toEntry(f.name, await readFile(f), priv); }catch(e){ bad++; continue; }
     if(refuseWhileDrawing(list)) return;
-    if(list.length>=MAX_REFS){ skipped++; continue; }
+    if(list.length>=maxRefs()){ skipped++; continue; }
     list.push(entry); if(list===inputImages){ renderInputs(); suggestRatio(); } }
   if(priv!==inPrivate()) return;                   // espace changé pendant la lecture : pas de message dans l'autre
   if(bad) toast(`${bad} fichier${bad>1?'s':''} illisible${bad>1?'s':''} : non ajouté${bad>1?'s':''}`, 'err');
-  else if(skipped) toast(`${MAX_REFS} ${inCampaign() ? 'photos' : 'images'} au maximum : ${skipped} non ajoutée${skipped>1?'s':''}`, 'err'); }
+  else if(skipped) toast(videoModel() ? `Vidéo : une seule image de départ, ${skipped} non ajoutée${skipped>1?'s':''}`
+    : `${MAX_REFS} ${inCampaign() ? 'photos' : 'images'} au maximum : ${skipped} non ajoutée${skipped>1?'s':''}`, 'err'); }
 wireDrop('inDrop','inFiles', addInputFiles);
 $('inDrop').addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); $('inDrop').click(); } });
 // coller une image (Cmd+V, « Coller ») sur le Labo : elle rejoint les images d'entrée comme un dépôt ; un collage
@@ -1318,9 +1361,11 @@ function renderInputs(){ const t=$('inThumbs'); clearImages(t); t.innerHTML='';
   if(inputImages.length!==1) drawOn=false;         // dessin : sur une image seule (en-tête et campagne en dépendent)
   const k=inputImages.length, camp=inCampaign();   // campagne : des photos éditées une à une
   $('refTitle').textContent = camp ? 'Photos de la campagne' : 'Images d\'entrée';
-  $('dropHint').textContent = `facultatif : 1 à ${MAX_REFS} images à modifier ou à citer dans le texte`;
-  $('refCount').textContent = !k ? '' : camp ? k+' photos' : k+' / '+MAX_REFS;
-  $('refs').classList.toggle('full', k>=MAX_REFS); $('campSwitch').hidden=!campaignShown();
+  const vm=videoModel(), max=maxRefs();
+  $('dropHint').textContent = vm ? 'facultatif : 1 image de départ'
+    : `facultatif : 1 à ${MAX_REFS} images à modifier ou à citer dans le texte`;
+  $('refCount').textContent = !k ? '' : camp ? k+' photos' : k+' / '+max;
+  $('refs').classList.toggle('full', k>=max); $('campSwitch').hidden=!campaignShown();
   const h3=isH3(); $('refHint').hidden = h3 ? !k : k<2 || camp;
   $('refHint').textContent = !h3 ? REF_HINT : camp ? H3_CAMP_HINT : H3_REF_HINT;
   inputImages.forEach((im,i)=>{ const d=document.createElement('div'); d.className='thumb';
@@ -1444,7 +1489,15 @@ function paintedReference(w,h,opaque){ const a=document.createElement('canvas');
 const requestBase = () => ({ cfg:CFG, seed:-1, preview:$('previewChk').checked, preview_interval:PREVIEW_EVERY, ref_images:[],
   init_image:null, mask_image:null, strength:1.0 });
 function buildRequest(){
-  const [w,h]=currentDims(); const steps=chosenSteps(), model=modelSel();
+  const [w,h]=currentDims(); const steps=chosenSteps(), model=modelSel(), vm=videoModel();
+  if(vm){                                          // vidéo : texte, et au plus une image de départ, sans aperçu
+    if(inputImages.length>1) throw new Error('Vidéo : une seule image de départ.');
+    const body={ ...requestBase(), mode:'t2i', prompt:$('prompt').value.trim(), width:w, height:h, steps, preview:false,
+      model:vm.key, frames:videoFrames(vm) };
+    if(inputImages.length) body.init_image=inputImages[0].dataUrl;
+    if(!body.prompt) throw new Error('Le texte est vide.');
+    if(inPrivate()) body.private=true;
+    return body; }
   const kind=inputKind(), body={ ...requestBase(), mode:kind, prompt:$('prompt').value.trim(), width:w, height:h, steps };
   if(model) body.model=model.key;                  // ligne « Modèle » montrée : le modèle choisi (sinon Qwen)
   if(kind==='edit'){
@@ -1565,7 +1618,7 @@ function forgetPrivateImages(){ if(reveal.img) clearReveal();   // canevas de la
 // campagne comprises, chaque image ayant sa copie) → cette image ; un Dessin avec masque → sa photo non peinte
 // (init.png, déjà à la taille de la sortie, la référence peinte ignorée) ; rien d'autre (texte → image, plusieurs
 // images d'entrée, annotation, dont seule la photo peinte en rouge est gardée)
-function beforeFile(it){ const ins=it.inputs || [];
+function beforeFile(it){ const ins=it.inputs || []; if(isVideoItem(it)) return null;   // vidéo : pas d'Avant
   if(it.mode==='edit' && ins.length===1) return ins[0];
   if(it.mode==='mask' && ins.includes('init.png')) return 'init.png';
   return null; }
@@ -1710,7 +1763,7 @@ async function loadPile(rev){ const priv=inPrivate(), at=Date.now();   // espace
   if(priv && leavingPrivate) return; const seq=++pileSeq;
   let items;
   try{ const r=await fetch(pileApi('pile', priv)); if(!r.ok) return;
-    items=(await r.json()).map(it=>({...it, pile:true, ...(it.private ? {name:privName(it.id)} : {})})); }
+    items=(await r.json()).map(it=>({...it, pile:true, ...(it.private ? {name:privName(it.id, privExt(it))} : {})})); }
   catch(e){ return; }
   // réponse d'un espace quitté ou en train de l'être, ou dépassée par une plus récente
   if(priv!==inPrivate() || priv && leavingPrivate || seq!==pileSeq) return;
@@ -2224,7 +2277,7 @@ function finish(p){                                // génération terminée : s
     if(p.lot) lotCancels.set(p.lot.id, (lotCancels.get(p.lot.id) || new Set()).add(p.lot.rank)); }   // sa case le dira
   else { p.doneAt=Date.now();
     if(j.status==='done'){ const secs=j.seconds||0;
-      p.result={...(p.result||{}), name:j.private ? privName(j.item) : j.name, dims:j.dims};
+      p.result={...(p.result||{}), name:j.private ? privName(j.item, extOf(j.name)) : j.name, dims:j.dims};
       log('terminé en '+Math.round(secs)+' s → '+(j.private ? 'image privée' : j.path), !!j.private); }
     else log('ERREUR '+(j.error||j.status), !!j.private); }
   if(j.status==='done') pileRead=false;            // son image arrive : pas de « Rien à trier » entre-temps
@@ -2280,7 +2333,12 @@ function keptRequest(p){                          // l'image seule (sa photo d'u
 // fiche privée ; MODEL_TABLE de tools/launch.py) : absent ou version de Qwen, Qwen ; version de MiniMax H3, MiniMax H3 ;
 // toute autre valeur (inconnue, d'un autre type) : null, le modèle choisi dans les Réglages. Une ligne du journal sans
 // model (ancienne, ou illisible : la liste la rend sans texte ni modèle, donc sans « Relancer ») arrive en null : Qwen
-const VERSION_MODELS = { q4:'qwen', q8:'qwen', 'uc-q4':'qwen', 'uc-q8':'qwen', 'h3-q4':'h3', 'h3-q8':'h3' };
+const VERSION_MODELS = { q4:'qwen', q8:'qwen', 'uc-q4':'qwen', 'uc-q8':'qwen', 'h3-q4':'h3', 'h3-q8':'h3',
+  'h3-video':'video' };
+// vidéo (WebP animé) : par l'extension de son nom ou, pour une image privée, par la version de son modèle
+const isVideoItem = it => !!it && (/\.webp$/i.test(it.name || '') || VERSION_MODELS[it.model]==='video');
+const extOf = name => ((name || '').match(/\.[^.]+$/) || ['.png'])[0].toLowerCase();   // extension réelle d'une sortie
+const stemOf = name => (name || '').replace(/\.[^.]*$/, '');                              // nom sans son extension
 const modelOfImage = it => it.model===undefined || it.model===null ? 'qwen'
   : typeof it.model==='string' && Object.hasOwn(VERSION_MODELS, it.model) ? VERSION_MODELS[it.model] : null;
 const canAgain = it => !!(it.page && it.page.req)
@@ -2293,9 +2351,13 @@ async function againFrom(it){
   catch(e){ if(priv===inPrivate()) toast('Images d\'entrée illisibles', 'err'); return; }
   if(priv!==inPrivate()) return;                   // espace changé pendant la lecture : rien ne part
   // modèle de l'image (inconnu : celui des Réglages), et ses étapes s'il les impose (celles de l'image sinon)
-  const model=modelOfImage(it) ?? modelSel()?.key, fixed=(modelList||[]).find(m=>m.key===model)?.steps;
+  const model=modelOfImage(it) ?? modelSel()?.key, spec=(modelList||[]).find(m=>m.key===model), fixed=spec?.steps;
+  // vidéo : son image de départ, et sa durée si elle est permise (sinon celle des Réglages)
+  const video = model==='video' ? { mode:'t2i', ref_images:[], init_image:images[0] || null, preview:false,
+    ...(spec && Array.isArray(spec.frames) ? { frames: spec.frames.includes(it.frames) ? it.frames : videoFrames(spec) }
+      : Number.isInteger(it.frames) ? { frames: it.frames } : {}) } : {};
   return relaunch({ ...base, mode:it.mode||'t2i', prompt:it.prompt, width:it.width, height:it.height,
-    steps:Array.isArray(fixed) && fixed.length ? fixed[0] : it.steps, ref_images:images,
+    steps:Array.isArray(fixed) && fixed.length ? fixed[0] : it.steps, ref_images:images, ...video,
     // le champ part dès que le Mac liste ses modèles, et toujours pour un autre modèle que Qwen (même avant le premier
     // statut : sinon une image MiniMax H3 repartirait en Qwen sans rien dire ; le Mac la contrôle)
     ...(model && (modelList || model!=='qwen') ? {model} : {}) }); }
@@ -2467,8 +2529,10 @@ const MODE_LABELS={ t2i:'Texte → image', edit:'Édition', mask:'Masque', annot
 const resultUrl = name => '/api/result?name='+encodeURIComponent(name);
 const thumbUrl = it => '/api/thumb?name='+encodeURIComponent(it.name)+'&t='+it.time;
 // image privée (it.private, it.id) : lue déchiffrée par la session
-const privImage = id => '/api/private/image?id='+id, privThumb = id => '/api/private/thumb?id='+id, privName = id => 'prive_'+id.slice(0, 8)+'.png';
+const privImage = id => '/api/private/image?id='+id, privThumb = id => '/api/private/thumb?id='+id, privName = (id, ext='.png') => 'prive_'+id.slice(0, 8)+ext;
 const srcOf = it => it.private ? privImage(it.id) : resultUrl(it.name);
+// extension du nom donné à une image privée (sa fiche note la version de son modèle : WebP pour une vidéo)
+const privExt = it => VERSION_MODELS[it.model]==='video' ? '.webp' : '.png';
 const thumbOf = it => it.private ? privThumb(it.id) : thumbUrl(it);
 const dlOf = it => it.private ? privImage(it.id)+'&download=1' : resultUrl(it.name)+'&download=1';
 function goTab(m){ document.querySelector(`#tabbar [data-pane="${m}"]`).click(); }
@@ -2485,7 +2549,7 @@ let histRev=null, histSeq=0, histShown='', histAsk=null;
 async function loadHistory(rev){ const priv=inPrivate(); if(priv && leavingPrivate) return;   // (comme loadPile)
   const seq=++histSeq; histAsk=rev ?? null;   // réponse arrivée après un changement d'espace : ignorée
   try{ const r=await fetch(priv ? '/api/private/history' : '/api/history'); if(!r.ok) throw new Error();
-    const items=(await r.json()).map(it=>it.private ? {...it, name:privName(it.id)} : it);
+    const items=(await r.json()).map(it=>it.private ? {...it, name:privName(it.id, privExt(it))} : it);
     if(priv!==inPrivate() || priv && leavingPrivate || seq!==histSeq) return;
     // visionneuse ouverte sur les Tirages : elle suit la nouvelle liste (rang, voisines), l'image vue y restant
     const at=vIndex>=0 && vList===histItems ? items.findIndex(x=>x.name===vList[vIndex].name) : -1;
@@ -2536,6 +2600,8 @@ function openViewer(i, list=vList){ if(exiting()) return;   // « Sortir » en a
     it.lot ? `image ${it.lot.rank}/${it.lot.size}` : '', it.seed!=null && it.seed>=0 ? 'graine '+it.seed : '']
     .filter(Boolean).map(c=>`<span>${esc(c)}</span>`).join('');
   $('vDl').href=dlOf(it); $('vDl').download=it.name; renderInputsButton(it); $('vResume').hidden=!canResume(it);
+  // vidéo : ni Éditer ni Dessiner, Copier grisé (le presse-papiers ne prend que du PNG)
+  const video=isVideoItem(it); $('vEdit').hidden=$('vDraw').hidden=video; $('vCopy').disabled=video;
   $('vAgain').hidden=!canAgain(it);
   // image de la pile : Garder et Jeter à la place de Supprimer
   const members=lotMembers(it); $('vSort').hidden=!it.pile; $('vDelete').hidden=!!it.pile;
@@ -2668,15 +2734,18 @@ async function drawFrom(name, read, {list, priv}=noteInput()){
 // référence, où le trait rouge est déjà incrusté (elle repart en édition). Lues dans la demande que la page a gardée
 // (une image de la pile lancée par elle), sinon dans les Tirages ou la pile, publics ou privés ; la saisie visée est notée avant toute
 // attente
-const RESUME_FILES = { edit:f=>f.startsWith('ref_'), mask:f=>f==='init.png', annot:f=>f==='ref_1.png' };
+const RESUME_FILES = { edit:f=>f.startsWith('ref_'), mask:f=>f==='init.png', annot:f=>f==='ref_1.png',
+  video:f=>f==='init.png' };                       // vidéo : son image de départ
 function resumeImages(it){                         // [{name, url}] : adresse data: (demande gardée) ou route de la galerie
-  const m=it.mode, base=it.name.slice(0, -4), req=it.page && it.page.req; if(!(m in RESUME_FILES)) return [];
+  const m=isVideoItem(it) ? 'video' : it.mode, base=stemOf(it.name), req=it.page && it.page.req;
+  if(!(m in RESUME_FILES)) return [];
   if(!req) return (it.inputs||[]).filter(RESUME_FILES[m]).map(f=>({name:base+'_'+f, url:inputUrl(it, f)}));
+  if(m==='video') return req.init_image ? [{name:base+'_init.png', url:req.init_image}] : [];
   const urls = m==='mask' ? [req.init_image] : m==='annot' ? [req.ref_images[0]]
     : req.campaign ? [req.campaign[it.lot.rank-1].image] : req.ref_images;
   return urls.map((url, k)=>({name:base+(m==='mask' ? '_init.png' : '_ref_'+(k+1)+'.png'), url})); }
 // absent pour une édition ou un dessin dont les images d'entrée ne sont pas connues (images anciennes)
-const canResume = it => !(it.mode in RESUME_FILES) || resumeImages(it).length>0;
+const canResume = it => isVideoItem(it) || !(it.mode in RESUME_FILES) || resumeImages(it).length>0;
 // réglages (format, résolution, étapes) qui redonnent une image de w×h en steps étapes avec la saisie affichée, sinon
 // les plus proches ; à égalité, un format nommé plutôt que « Image » ; étapes inconnues : celles du moment
 function settingsFor(w, h, steps){ let best=null;
@@ -2708,7 +2777,9 @@ async function resumeFrom(it){
     showLabo('composer');                          // (qui propose le format « Image » : remplacé ci-dessous)
     // la même demande : ses réglages (les étapes, sauf celles qu'impose le modèle : celles des Réglages restent), et
     // une édition à plusieurs références n'est pas une campagne
-    if(it.width && it.height) Object.assign(opt, settingsFor(it.width, it.height, fixedSteps()==null ? it.steps : NaN));
+    const vm=videoModel();                         // vidéo : sa durée, sa taille et son format (format de Qwen gardé)
+    if(vm && it.width && it.height) opt.video=videoSettingsFor(it, vm);
+    else if(it.width && it.height) Object.assign(opt, settingsFor(it.width, it.height, fixedSteps()==null ? it.steps : NaN));
     if(campaignShown()) $('campChk').checked=campaignOn=false;
     saveOpt(); renderInputs(); refreshChoices(); toast('Image reprise'); }
   else {                                           // espace changé pendant la lecture : dans sa saisie mise de côté
@@ -2729,7 +2800,7 @@ const canCopy = !!(window.isSecureContext && navigator.clipboard && navigator.cl
 document.querySelectorAll('[data-share]').forEach(b=>b.hidden=!canShare);
 document.querySelectorAll('[data-copy]').forEach(b=>b.hidden=!canCopy);
 async function shareImage(url, name){
-  try{ const b=await (await fetch(url)).blob(); await navigator.share({files:[new File([b], name, {type:'image/png'})]}); }
+  try{ const b=await (await fetch(url)).blob(); await navigator.share({files:[new File([b], name, {type:b.type || 'image/png'})]}); }
   catch(e){ if(e.name!=='AbortError') toast('Partage impossible : '+e.message, 'err'); } }
 async function copyImage(url){
   try{ await navigator.clipboard.write([new ClipboardItem({'image/png': fetch(url).then(r=>r.blob()).then(b=>new Blob([b], {type:'image/png'}))})]); toast('Image copiée'); }
@@ -2737,7 +2808,7 @@ async function copyImage(url){
 // actions de la visionneuse et de ses images d'entrée : rien pendant « Sortir » (exiting), la visionneuse reste ouverte,
 // sans message (décision du porteur, groupe F du 28/10/2026) ; aucune requête privée vers une session qui se ferme
 function viewerShare(){ const it=vList[vIndex]; if(it && !exiting()) shareImage(srcOf(it), it.name); }
-function viewerCopy(){ const it=vList[vIndex]; if(it && !exiting()) copyImage(srcOf(it)); }
+function viewerCopy(){ const it=vList[vIndex]; if(it && !exiting() && !isVideoItem(it)) copyImage(srcOf(it)); }   // (PNG seulement)
 ['vDl', 'ivDl'].forEach(k=>$(k).addEventListener('click', e=>{ if(exiting()) e.preventDefault(); }));   // (téléchargements)
 // ------------------------------------------------------------ images d'entrée d'une image de la galerie
 let ivIndex=-1, ivOwner=null;
@@ -2758,7 +2829,7 @@ function showInput(i){ if(!ivOwner || exiting()) return;   // fermée (boutons e
   if(n>1) [it.inputs[(ivIndex+1)%n], it.inputs[(ivIndex+n-1)%n]].forEach(g=>{ preload(thumb(g)); preload(inputUrl(it, g)); });
   $('ivImg').alt=inputLabel(it, f); $('ivLabel').textContent=inputLabel(it, f);
   $('ivCount').textContent=`${ivIndex+1} / ${n}`; $('iv').classList.toggle('single', n<2);
-  $('ivDl').href=inputUrl(it, f, '&download=1'); $('ivDl').download=it.name.slice(0, -4)+'_'+f; }
+  $('ivDl').href=inputUrl(it, f, '&download=1'); $('ivDl').download=stemOf(it.name)+'_'+f; }
 function closeInputs(){ resetInputZoom(); $('iv').classList.remove('on'); ivIndex=-1; ivOwner=null; syncThemeColor();
   clearTimeout(ivEmpty); ivEmpty=setTimeout(emptyInputs, FADE_MS); }   // après le fondu de fermeture
 function emptyInputs(){ clearTimeout(ivEmpty); clearImage($('ivImg'));
@@ -2766,7 +2837,7 @@ function emptyInputs(){ clearTimeout(ivEmpty); clearImage($('ivImg'));
 async function inputAction(kind){             // repartir de cette image d'entrée : Éditer (référence) ou Dessiner
   if(!ivOwner || ivIndex<0 || exiting()) return;  // second appui pendant le fondu de fermeture ; « Sortir »
   if(kind==='edit' && refuseWhileDrawing()) return;   // refusé avant de fermer : l'image reste à l'écran
-  const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=it.name.slice(0, -4)+'_'+f;
+  const it=ivOwner, f=it.inputs[ivIndex], url=inputUrl(it, f), name=stemOf(it.name)+'_'+f;
   closeInputs(); closeViewer();
   return kind==='mask' ? drawFrom(name, ()=>dataUrlOf(name, url)) : useAsEditInput(name, url); }
 const resetInputZoom=zoomable($('ivStage'), $('ivImg'), $('iv'), d=>showInput(ivIndex+d), closeInputs);   // comme la visionneuse
