@@ -474,7 +474,8 @@ image).
 Le bouton **Dessiner**, sous les images d'entrée du Labo, transforme l'unique image d'entrée en dessin :
 
 1. Avec une image, **Dessiner** active le dessin sur elle ; sans image, il fait choisir une image, puis active le
-   dessin. À plusieurs images, il est grisé (« Dessiner se fait sur une seule image »).
+   dessin. À plusieurs images, il est grisé (« Dessiner se fait sur une seule image ») ; avec MiniMax H3 aussi (voir
+   [Le modèle](#le-modèle)).
 2. Peindre en rouge la zone à modifier (taille du pinceau réglable, gomme, bouton pour tout effacer).
 3. Choisir le mode :
    - **Masque** : seule la zone peinte est régénérée, tout le reste est conservé au pixel près ;
@@ -806,7 +807,12 @@ Dans l'interface, dès que le Mac propose MiniMax H3, le panneau **Réglages** g
 (« Qwen », « MiniMax H3 »), rappelée en tête de la grille sous le texte ; le navigateur retient le dernier modèle
 choisi (Qwen à la première ouverture, et tant que le modèle retenu n'est pas installé). Avec MiniMax H3, la ligne
 **Étapes** disparaît (6 étapes) et l'aperçu se fait toutes les 2 étapes ; formats et résolutions restent ceux de Qwen.
-Le panneau **Moteur** ajoute une ligne par autre modèle installé, avec sa version (`H3-Q4`, `H3-Q8`). Avec Qwen
+Le panneau **Moteur** ajoute une ligne par autre modèle installé, avec sa version (`H3-Q4`, `H3-Q8`).
+Avec MiniMax H3 et au moins une image jointe, l'aide sous les images dit de les désigner dans le texte par
+`<Picture 1>`, `<Picture 2>`… (en campagne, chaque photo est `<Picture 1>`), et une mention avertit que chaque image
+jointe allonge beaucoup le calcul et que le rendu sort plus dur qu'avec Qwen, suivie du temps estimé de la demande.
+**Dessiner** est grisé (« Dessiner se fait avec Qwen »), et **Dessiner** depuis une image est refusé par un message ;
+variantes, campagnes et confirmation au-delà d'une heure restent les mêmes qu'avec Qwen. Avec Qwen
 seul, ou devant un serveur qui n'envoie pas la liste `models` de `/api/status`, la ligne n'apparaît pas et la demande
 part sans champ `model`.
 

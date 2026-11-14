@@ -22,24 +22,13 @@ after(async () => {
 });
 
 const CELLS = `[...$('setGrid').querySelectorAll('[data-set]')].map(c => c.dataset.set)`;
-// la page a lu la liste des modèles du Mac (statut demandé tout de suite)
-async function seen(n) {
-  await page.eval(`refreshStatus()`);
-  await page.waitFor(`(modelList || []).length === ${n}`, { what: `${n} modèle(s) lu(s)` });
-}
-// MiniMax H3 choisi dans la feuille Réglages, ouverte par la grille puis fermée
-async function pickH3() {
-  await page.click(`#setGrid [data-set="modele"]`);
-  await page.click(`#modelOpts [data-k="h3"]`);
-  await page.eval(`closeSheet()`);
-}
 // demande envoyée par « Révéler » (celle que la page garde pour sa génération)
 const reqOf = async text => { await page.generate(text); return page.eval(`pageJobs.at(-1).req`); };
 
 test('Qwen seul, ou serveur sans liste de modèles : pas de ligne Modèle, demande sans champ model', async () => {
   bench.h3(false);
   await page.freshLabo(bench);
-  await seen(1);
+  await page.modelsSeen(1);
   assert.equal(await page.eval(`$('modelRow').hidden`), true, 'ligne Modèle avec un seul modèle');
   assert.equal((await page.eval(CELLS)).includes('modele'), false, 'case Modèle avec un seul modèle');
   assert.equal('model' in await reqOf('zmo1 qwen seul'), false, 'champ model envoyé avec un seul modèle');
@@ -56,16 +45,16 @@ test('Qwen seul, ou serveur sans liste de modèles : pas de ligne Modèle, deman
 test('Qwen à la première ouverture, puis le dernier choisi ; non installé : Qwen, sans oublier le choix', async () => {
   bench.h3();
   await page.freshLabo(bench);
-  await seen(2);
+  await page.modelsSeen(2);
   assert.equal(await page.eval(`$('modelRow').hidden`), false, 'ligne Modèle absente avec deux modèles');
   assert.deepEqual(await page.eval(`[...$('modelOpts').querySelectorAll('[data-k]')].map(b => b.textContent)`),
     ['Qwen', 'MiniMax H3']);
   assert.equal(await page.eval(`modelSel().key`), 'qwen', 'pas Qwen à la première ouverture');
   assert.equal((await reqOf('zmo2 qwen')).model, 'qwen');
   await bench.idle();
-  await pickH3();
+  await page.chooseModel('h3');
   await page.goto(bench.url + '/');
-  await seen(2);
+  await page.modelsSeen(2);
   assert.equal(await page.eval(`modelSel().key`), 'h3', 'dernier modèle choisi oublié au rechargement');
   // clés de la mémoire de la page inchangées : le modèle s'ajoute à qwen-opt
   const saved = await page.eval(`JSON.parse(localStorage.getItem('qwen-opt'))`);
@@ -74,12 +63,12 @@ test('Qwen à la première ouverture, puis le dernier choisi ; non installé : Q
   assert.deepEqual(Object.keys(saved).sort(),
     ['campaign', 'count', 'model', 'notify', 'preview', 'ratio', 'res', 'steps', 'v']);
   bench.h3(false);
-  await seen(1);
+  await page.modelsSeen(1);
   assert.equal(await page.eval(`$('modelRow').hidden`), true, 'ligne Modèle sans MiniMax H3');
   assert.equal('model' in await reqOf('zmo2 h3 retiré'), false, 'MiniMax H3 demandé alors qu\'il n\'est plus là');
   await bench.idle();
   bench.h3();
-  await seen(2);
+  await page.modelsSeen(2);
   assert.equal(await page.eval(`modelSel().key`), 'h3', 'choix oublié pendant que MiniMax H3 manquait');
   page.assertNoErrors();
 });
@@ -87,13 +76,13 @@ test('Qwen à la première ouverture, puis le dernier choisi ; non installé : Q
 test('MiniMax H3 : sans Étapes, 6 étapes envoyées, aperçu toutes les 2 étapes, formats de Qwen', async () => {
   bench.h3();
   await page.freshLabo(bench);
-  await seen(2);
+  await page.modelsSeen(2);
   const choices = () => page.eval(`['ratioOpts', 'resOpts'].map(id => [...$(id).querySelectorAll('[data-k]')]
     .map(b => b.dataset.k))`);
   const qwen = await choices();
   assert.equal(await page.eval(`$('stepRow').hidden`), false, 'Étapes masquées avec Qwen');
   assert.match(await page.eval(`$('previewChk').parentElement.textContent`), /Aperçu toutes les 5 étapes/);
-  await pickH3();
+  await page.chooseModel('h3');
   assert.equal(await page.eval(`$('stepRow').hidden`), true, 'ligne Étapes avec MiniMax H3');
   assert.match(await page.eval(`$('previewChk').parentElement.textContent`), /Aperçu toutes les 2 étapes/);
   assert.deepEqual(await choices(), qwen, 'formats ou résolutions différents de ceux de Qwen');
@@ -107,11 +96,11 @@ test('MiniMax H3 : sans Étapes, 6 étapes envoyées, aperçu toutes les 2 étap
 test('la grille rappelle le modèle ; une ligne Moteur par autre modèle, lampe inchangée', async () => {
   bench.h3();
   await page.freshLabo(bench);
-  await seen(2);
+  await page.modelsSeen(2);
   const lamp = await page.eval(`$('lamp').title`);
   assert.deepEqual(await page.eval(CELLS), ['modele', 'format', 'taille', 'etapes', 'images']);
   assert.match(await page.eval(`$('setGrid').textContent`), /ModèleQwen/);
-  await pickH3();
+  await page.chooseModel('h3');
   assert.deepEqual(await page.eval(CELLS), ['modele', 'format', 'taille', 'images'], 'grille avec MiniMax H3');
   assert.match(await page.eval(`$('setGrid').textContent`), /ModèleMiniMax H3/);
   assert.deepEqual(await page.overflowing(), [], 'la grille dépasse à 367 px');

@@ -214,7 +214,11 @@ dernier bloc, après le HTML.
     `/api/status`, posée par `applyModels` ; `null` devant un serveur qui ne l'envoie pas), `modelShown` (ligne
     « Modèle » montrée à partir de deux modèles), `modelSel` (modèle de la saisie : le dernier choisi s'il est
     installé, sinon Qwen ; `null` sans ligne, la demande part alors sans champ `model`), `fixedSteps` et `chosenSteps`
-    (étapes imposées par le modèle, sinon celles choisies), `previewEvery` (intervalle des aperçus du modèle) ; nature
+    (étapes imposées par le modèle, sinon celles choisies), `previewEvery` (intervalle des aperçus du modèle),
+    `isH3` et `drawAllowed` (Dessiner permis : le modèle prend le masque ; grisé avec MiniMax H3, refusé par
+    `drawFrom`) ; aide des images selon le modèle (`REF_HINT`, `H3_REF_HINT`, `H3_CAMP_HINT`, posée par
+    `renderInputs`) et mention de l'édition MiniMax H3 `#h3Note` (`H3_EDIT_NOTE` et l'estimation du moment, par
+    `refreshChoices`) ; nature
     de la demande lue dans la saisie :
     `inputKind` (`t2i` sans image d'entrée, `edit` avec, `mask` dessin actif : `drawOn`), `singleImage`, `campaignShown`
     (interrupteur proposé à partir de 2 images), `inCampaign`, `variants` ; brouillon unique `qwen-prompt` (dans

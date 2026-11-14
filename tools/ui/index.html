@@ -704,6 +704,7 @@
       <p class="mm-annot">Le trait rouge sert de repère au modèle ; pratique pour plusieurs zones.</p>
     </div>
     <p class="hint" id="refHint" hidden>Désignez-les par leur numéro : « the woman in image 1 wears the jacket from image 2 ».</p>
+    <p class="hint" id="h3Note" hidden></p>
     <label class="switch" id="campSwitch" hidden><input type="checkbox" id="campChk"><span class="track"></span><span>Campagne <small>le même texte appliqué à chaque photo séparément, une image par photo</small></span></label>
   </div>
   <textarea id="prompt" class="prompt" rows="4" aria-label="Texte du prompt"></textarea>
@@ -959,9 +960,12 @@ const fixedSteps = () => { const st=modelSel()?.steps; return Array.isArray(st) 
 const chosenSteps = () => fixedSteps() ?? stepsSel().steps;
 // intervalle des aperçus : celui que le modèle impose, sinon celui de la page
 const previewEvery = () => modelSel()?.preview_every || PREVIEW_EVERY;
+const isH3 = () => modelSel()?.key==='h3';
+// Dessiner (masque, annotation) : seulement avec un modèle qui prend le masque (pas MiniMax H3 : A16)
+const drawAllowed = () => { const m=modelSel(); return !m || m.modes.includes('mask'); };
 function applyModels(list){
   const key=JSON.stringify(list ?? null); if(key===lastModels) return; lastModels=key;
-  modelList = Array.isArray(list) ? list : null; refreshChoices(); }
+  modelList = Array.isArray(list) ? list : null; renderInputs(); refreshChoices(); }
 function currentDims(){ return dimsFor(opt.ratio, resSel().scale); }
 // campagne : l'interrupteur n'est proposé qu'à partir de 2 images d'entrée (donc hors dessin) ; son réglage
 // (campaignOn) est gardé, mais ignoré tant qu'il n'est pas proposé
@@ -988,6 +992,12 @@ function parts(w, h, steps, inp, preview, every=previewEvery()){   // every : in
   return { step, enc, vae, previews, total: enc + steps*step + vae + previews*vae }; }
 function fmt(s){ if(s<90) return Math.round(s)+' s'; if(s<3600) return Math.round(s/60)+' min'; return (s/3600).toFixed(1).replace('.',',')+' h'; }
 
+const H3_EDIT_NOTE = 'Avec MiniMax H3, chaque image jointe allonge beaucoup le calcul, et le rendu sort plus dur qu\'avec Qwen.';
+// aide sous les images : Qwen les désigne par leur numéro, MiniMax H3 par « <Picture N> » (documentation du moteur)
+const REF_HINT = $('refHint').textContent;
+const H3_REF_HINT = 'Désignez-les dans le texte par <Picture 1>, <Picture 2>… : « the woman in <Picture 1> wears the jacket from <Picture 2> ».';
+const H3_CAMP_HINT = 'Chaque photo est éditée seule : désignez-la dans le texte par <Picture 1>.';
+const DRAW_QWEN = 'Dessiner se fait avec Qwen';
 const shape = (w, h, size) => { const k=size/Math.max(w,h); return `<i class="shape" style="width:${Math.max(6,Math.round(w*k))}px;height:${Math.max(6,Math.round(h*k))}px"></i>`; };
 function refreshChoices(){
   const im=singleImage(), kind=inputKind(), nrefs = kind==='edit' ? inputImages.length : 0, pv=$('previewChk').checked;
@@ -1024,6 +1034,8 @@ function refreshChoices(){
     + (campMode ? '' : cell('images', 'Images', n));
   $('estText').textContent = plan ? `${plan.length} photos, chacune à son format · ${steps} étapes`
     : `${w}×${h} · ${steps} étapes${nrefs>1?' · '+nrefs+' références':''}${n>1?' · '+n+' images':''}`;
+  $('h3Note').hidden = !(isH3() && inputImages.length);
+  $('h3Note').textContent = H3_EDIT_NOTE+' Temps estimé : '+approx(E && total(steps, pv))+'.';
   if(!E){ estSeconds=estOne=0; campaignEst=[]; $('previewCost').textContent=''; $('estTime').textContent=$('goEta').textContent='…'; return; }
   // estimation d'une image (suivi de chaque génération) et de toute la demande (bouton, confirmation au-delà d'une heure)
   const pr=plan ? parts(plan[0].w, plan[0].h, steps, plan[0].inp, pv) : parts(w,h,steps,inp,pv);
@@ -1041,7 +1053,7 @@ function refreshChoices(){
   $('campChk').checked=campaignOn;
   $('campChk').addEventListener('change', ()=>{ campaignOn=$('campChk').checked; saveOpt(); renderInputs(); refreshChoices(); });
   $('countOpts').addEventListener('click', e=>{ const b=e.target.closest('[data-k]'); if(!b) return; opt.count=+b.dataset.k; saveOpt(); refreshChoices(); });
-  $('modelOpts').addEventListener('click', e=>{ const b=e.target.closest('[data-k]'); if(!b) return; opt.model=b.dataset.k; saveOpt(); refreshChoices(); });
+  $('modelOpts').addEventListener('click', e=>{ const b=e.target.closest('[data-k]'); if(!b) return; opt.model=b.dataset.k; saveOpt(); renderInputs(); refreshChoices(); });
   $('setGrid').addEventListener('click', e=>{ if(e.target.closest('[data-set]')) openSheet('setSheet'); });
   ['previewChk','mask_mode'].forEach(id=>$(id).addEventListener('change', ()=>{ saveOpt(); refreshChoices(); }));
   renderInputs(); refreshChoices();
@@ -1298,7 +1310,9 @@ function renderInputs(){ const t=$('inThumbs'); clearImages(t); t.innerHTML='';
   $('refTitle').textContent = camp ? 'Photos de la campagne' : 'Images d\'entrée';
   $('dropHint').textContent = `facultatif : 1 à ${MAX_REFS} images à modifier ou à citer dans le texte`;
   $('refCount').textContent = !k ? '' : camp ? k+' photos' : k+' / '+MAX_REFS;
-  $('refs').classList.toggle('full', k>=MAX_REFS); $('refHint').hidden = k<2 || camp; $('campSwitch').hidden=!campaignShown();
+  $('refs').classList.toggle('full', k>=MAX_REFS); $('campSwitch').hidden=!campaignShown();
+  const h3=isH3(); $('refHint').hidden = h3 ? !k : k<2 || camp;
+  $('refHint').textContent = !h3 ? REF_HINT : camp ? H3_CAMP_HINT : H3_REF_HINT;
   inputImages.forEach((im,i)=>{ const d=document.createElement('div'); d.className='thumb';
     d.innerHTML=`<img src="${esc(im.dataUrl)}" alt=""><span>${i+1}</span><button aria-label="Retirer l'image ${i+1}">×</button>`;
     d.querySelector('button').onclick=()=>{ inputImages.splice(i,1); renderInputs(); suggestRatio(); }; t.appendChild(d); });
@@ -1372,7 +1386,7 @@ function drawCanvasFor(im, pixels){ drawFor=im;   // sans image : canevas rédui
 function renderDrawing(){
   const n=inputImages.length, im=n===1 ? inputImages[0] : null;
   if(drawFor && !inputImages.includes(drawFor)) drawCanvasFor(null);
-  if(!im) drawOn=false;
+  const barred=!drawAllowed(); if(!im || barred) drawOn=false;
   if(drawOn && drawFor!==im) drawCanvasFor(im);
   // image de la zone de dessin, comparée sans relire son adresse ; par showImage, comme toute image affichée (jamais
   // celle d'avant, d'un autre espace, le temps du chargement), avec l'image que toEntry a déjà décodée : posée tout de
@@ -1381,8 +1395,8 @@ function renderDrawing(){
   const show=drawOn ? im : null;
   if(show!==paintShown){ paintShown=show; if(show) showImage($('paintImg'), show.dataUrl, {decoded:show.img}); else clearImage($('paintImg')); }
   $('composer').classList.toggle('drawing', drawOn);
-  $('drawBtn').classList.toggle('on', drawOn); $('drawBtn').setAttribute('aria-pressed', drawOn); $('drawBtn').disabled=n>1;
-  $('drawHint').textContent = n>1 ? 'Dessiner se fait sur une seule image' : ''; }
+  $('drawBtn').classList.toggle('on', drawOn); $('drawBtn').setAttribute('aria-pressed', drawOn); $('drawBtn').disabled=n>1 || barred;
+  $('drawHint').textContent = barred ? DRAW_QWEN : n>1 ? 'Dessiner se fait sur une seule image' : ''; }
 // Dessiner (grisé à plusieurs images) : sans image, choix d'une image puis dessin, la saisie visée notée à l'ouverture du
 // sélecteur ; avec une image, l'allume ou l'éteint (le tracé reste)
 let drawPick=null;
@@ -2605,6 +2619,7 @@ async function useAsMaskInput(name, url){ if(name) await drawFrom(name, ()=>data
 // « Dessiner » sur une image (visionneuse, images d'entrée) : elle remplace les images de la saisie, après
 // confirmation s'il y en avait, dessin actif, tracé vierge ; la saisie visée est notée avant toute attente
 async function drawFrom(name, read, {list, priv}=noteInput()){
+  if(!drawAllowed()){ toast(DRAW_QWEN+' : choisissez-le dans les Réglages', 'err'); return; }
   // la question n'est posée que pour la saisie affichée : une saisie mise de côté (espace changé pendant que le
   // sélecteur était ouvert) qui a des images n'est pas remplacée
   const replace = async n => !n || list===inputImages && await ask('Dessiner sur cette image ?',

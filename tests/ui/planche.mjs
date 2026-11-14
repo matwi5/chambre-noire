@@ -14,7 +14,8 @@
 // Avant tenu sur la carte du dessus, au doigt ou à la souris selon la taille), encours (carte en cours avec la
 // pastille « +1 en attente », générations retenues par HOLD=planche, relâchées après les captures), reglages (feuille
 // Réglages ouverte, MiniMax H3 installé et choisi) et grille (la même feuille fermée : grille sous le texte), le
-// modèle remis à Qwen après les captures.
+// modèle remis à Qwen après les captures, et edition (MiniMax H3 choisi, deux images jointes : aide, mention,
+// Dessiner grisé ; saisie vidée et Qwen remis après les captures).
 // La rangée « avant » n'emploie que des aides du pilote présentes depuis longtemps (goto, waitFor, eval, generate,
 // keepPile, tab, enterPrivate, send ; bench.release, bench.idle), pour tourner avec le pilote de ce commit ; les
 // tailles passent par applyView, importée du pilote de l'arbre de travail, qui n'emploie que send.
@@ -72,6 +73,20 @@ const VIEWS = {
     await page.waitFor(`typeof modelList === 'undefined' || (modelList || []).length > 1`, { what: 'deux modèles' });
     await page.eval(`opt.model = 'h3'; refreshChoices(); openSheet('setSheet')`);
     return { after: () => page.eval(`closeSheet()`) };
+  },
+  edition: async (page, bench) => {
+    bench.h3?.();
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`typeof modelList === 'undefined' || (modelList || []).length > 1`, { what: 'deux modèles' });
+    await page.eval(`closeSheet(); opt.model = 'h3'; refreshChoices()`);
+    for (let k = 0; k < 2; k++) await page.eval(`(async () => { const dt = new DataTransfer(),
+      c = document.createElement('canvas'); c.width = c.height = 64; const b = await new Promise(r => c.toBlob(r));
+      dt.items.add(new File([b], 'image.png', { type: 'image/png' }));
+      $('prompt').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true })); })()`);
+    await page.waitFor(`inputImages.length === 2`, { what: 'deux images jointes' });
+    await page.eval(`renderInputs(); refreshChoices(); $('refs').scrollIntoView()`);
+    return { after: () => page.eval(`inputImages.length = 0; opt.model = 'qwen'; saveOpt(); renderInputs();
+      refreshChoices()`) };
   },
   grille: async page => {
     await page.eval(`opt.model = 'h3'; refreshChoices(); closeSheet()`);

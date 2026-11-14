@@ -84,6 +84,9 @@
 //                                                // tests/ui/serve.py) ; la page le voit à son statut suivant
 //   await page.oldServer()                       // la page lit /api/status sans sa liste models, comme devant un
 //                                                // serveur d'avant MiniMax H3 (jusqu'au prochain chargement)
+//   await page.modelsSeen(2)                     // statut relu tout de suite : la page a lu 2 modèles installés
+//   await page.chooseModel('h3')                 // modèle choisi dans la feuille Réglages (ouverte par la grille,
+//                                                // puis fermée) ; la ligne Modèle doit être montrée
 //   await page.launch('texte', { private: true })   // génération demandée hors de l'interface (autre appareil)
 //   await page.leaks(['mot', 'id'])              // marqueurs restés dans la page (texte, attributs, champs, mémoire)
 //   const bench = await startBench({ relay: true }); await bench.login(page);   // comme le téléphone par Tailscale :
@@ -563,6 +566,17 @@ async function connect(wsUrl, { closeTab, siblings, tabs = async () => [] }) {
     // requêtes privées de la page en route (fetch vers /api/private/), comptées dans __privInflight dès le chargement
     // du document ; sur un document déjà chargé avant la connexion, à partir de l'appel
     countPrivate() { return page.eval(COUNT_PRIVATE); },
+    // la page a lu n modèles installés (statut demandé tout de suite)
+    async modelsSeen(n) {
+      await page.eval(`refreshStatus()`);
+      await page.waitFor(`(modelList || []).length === ${n}`, { what: `${n} modèle(s) lu(s)` });
+    },
+    // modèle key choisi dans la feuille Réglages, ouverte par la case Modèle de la grille, puis fermée
+    async chooseModel(key) {
+      await page.click(`#setGrid [data-set="modele"]`);
+      await page.click(`#modelOpts [data-k="${key}"]`);
+      await page.eval(`closeSheet()`);
+    },
     // /api/status lu par la page sans sa liste models (serveur d'avant MiniMax H3), jusqu'au prochain chargement
     oldServer() {
       return page.eval(`(() => { const real = window.fetch;
