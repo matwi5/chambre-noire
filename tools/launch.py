@@ -1448,8 +1448,10 @@ def thumb_jpeg(src):
 
 def output_thumb(fp):
     """Miniature d'une sortie, dans outputs/.thumbs/ : <radical>.jpg pour un « .png » (comme avant les vidéos), son nom
-    entier suivi de .jpg pour toute autre sortie (« x.webp.jpg », « x.PNG.jpg ») : deux sorties d'un même dossier
-    n'ont jamais la même (sauf deux noms qu'un disque insensible à la casse confond, qu'il ne garde pas côte à côte).
+    entier suivi de .jpg pour toute autre sortie (« x.webp.jpg », « x.PNG.jpg ») : deux sorties du serveur d'un même
+    dossier (radical en identifiant de génération, sans point) n'ont jamais la même (sauf deux noms qu'un disque
+    insensible à la casse confond, qu'il ne garde pas côte à côte) ; deux noms déposés à la main, « a.webp » et
+    « a.webp.png », la partagent.
     Une sortie de la pile et un tirage de même nom à la casse près la partagent, comme avant les vidéos."""
     stem, ext = os.path.splitext(os.path.basename(fp))
     return os.path.join(THUMBS, stem + ("" if ext == ".png" else ext) + ".jpg")

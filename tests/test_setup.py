@@ -218,6 +218,15 @@ class H3InstallTest(unittest.TestCase):
         self.assertIn("setup.py --h3-q8", out)
         self.assertIn("État : incomplet", out)
 
+    def test_check_says_an_interrupted_h3_download(self):
+        part = os.path.join(self.tmp.name, *setup.H3_DIFFUSION["h3-q4"][1].split("/")) + ".part"
+        os.makedirs(os.path.dirname(part))
+        with open(part, "wb") as f:
+            f.write(b"po")
+        out = self.run_setup("--check")
+        self.assertIn("MiniMax H3 : incomplet, lancez : venv/bin/python setup.py --h3", out)
+        self.assertIn("État : incomplet", out)
+
     def test_check_outside_macos_says_h3_is_for_the_mac(self):
         with mock.patch.object(setup, "MACOS", False), mock.patch.object(setup, "WINDOWS", True):
             out = self.run_setup("--check")

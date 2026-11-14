@@ -303,7 +303,8 @@ def installed(entry):
 
 def model_summary():
     """--check : ce qui est installé pour chaque modèle. Renvoie les lignes à afficher et l'option de setup.py qui
-    complète un MiniMax H3 à moitié installé (None : rien à compléter ; un MiniMax H3 absent est facultatif)."""
+    complète un MiniMax H3 à moitié installé ou à moitié téléchargé (None : rien à compléter ; un MiniMax H3 absent
+    est facultatif)."""
     qwen = [v for v, entry in DIFFUSION.items() if installed(entry)]
     complete = qwen and all(installed(entry) for entry in ENCODER + [VAE])
     lines = ["Qwen : " + (f"installé ({', '.join(qwen)})" if complete else "incomplet")]
@@ -312,7 +313,9 @@ def model_summary():
     h3 = [v for v, entry in H3_DIFFUSION.items() if installed(entry)]
     if h3 and all(installed(entry) for entry in H3_FILES.values()):
         return lines + [f"MiniMax H3 : installé ({', '.join(h3)})"], None
-    if not any(os.path.exists(P(*entry[1].split("/"))) for entry in [*H3_DIFFUSION.values(), *H3_FILES.values()]):
+    started = [P(*entry[1].split("/")) + suffix for entry in [*H3_DIFFUSION.values(), *H3_FILES.values()]
+               for suffix in ("", ".part")]            # .part : téléchargement interrompu, repris par l'option
+    if not any(os.path.exists(path) for path in started):
         return lines + ["MiniMax H3 : non installé (option --h3, ou --h3-q8 pour la version Q8_0)"], None
     option = H3_OPTIONS["h3-q8"] if h3 == ["h3-q8"] else H3_OPTIONS["h3-q4"]
     return lines + [f"MiniMax H3 : incomplet, lancez : {PY} setup.py {option}"], option
