@@ -148,25 +148,24 @@ BACKENDS = {
 def record_calib(job):
     """Ajoute la mesure de la génération aux données de calibration (voir tools/estimate.py), sous la clé de sa version.
     Seules les générations de tools/calibrate.py en parlent : dans logs/, une ligne de calibration ne suivrait que les
-    générations normales et les distinguerait des privées (décision du 23/10/2026). Une génération d'un autre modèle que
-    Qwen n'ajoute rien tant que sa formule manque (ticket 06 de la mission MiniMax H3) : rangée sous la clé de Qwen,
-    elle fausserait ses estimations."""
+    générations normales et les distinguerait des privées (décision du 23/10/2026). Chaque modèle range sa mesure sous
+    la clé de version de sa génération (job_model, posé à la création), faite avec la formule de sa famille : jamais
+    sous celle d'un autre modèle. Une génération privée n'arrive pas ici (run_job s'arrête avant)."""
     talk = job.get("calibration")
     key, version = job_model(job)
-    if key != "qwen":
-        return
     try:
-        sample = estimate.make_sample(job, S.engine)
+        sample = estimate.make_sample(job, S.engine, key)
         if not sample:
             return
         S.store.add(S.backend, version, sample)
+        job["measured"] = True                    # tools/calibrate.py le vérifie : une mesure perdue y est un échec
     except Exception as e:
         if talk:
             print(f"[calibration] ignorée : {e}", flush=True)
         return
     if not talk:
         return
-    c = S.store.coefficients(S.backend, version, S.engine)
+    c = S.store.coefficients(S.backend, version, S.engine, key)
     print(f"[calibration] {S.backend}/{version} : étape {sample['step']:.2f} s ({sample['w']}×{sample['h']}"
           f"{', ' + str(len(job.get('ref_px') or [])) + ' réf.' if job.get('ref_px') else ''}), "
           f"encodage {sample['enc']:.0f} s, décodage {sample['vae']:.0f} s — {c['samples']} mesure{'s' if c['samples'] > 1 else ''}", flush=True)
@@ -257,8 +256,8 @@ def request_model(req):
 
 
 def job_model(job):
-    """(clé, version) du modèle d'une génération, posés à sa création (new_job) ; une génération sans modèle, celle de
-    tools/calibrate.py, est Qwen à la version du serveur."""
+    """(clé, version) du modèle d'une génération, posés à sa création (new_job), ou par tools/calibrate.py sur les
+    siennes ; une génération sans ces champs (aucune n'en crée aujourd'hui) est Qwen à la version du serveur."""
     if "model" not in job:
         return "qwen", S.model
     return job["model"], job["version"]
@@ -267,6 +266,24 @@ def job_model(job):
 def preview_every(job, r):
     """Intervalle des aperçus d'une génération de demande r : celui que son modèle impose, sinon celui de la demande."""
     return MODEL_TABLE[job_model(job)[0]]["preview_every"] or int(r.get("preview_interval") or 5)
+
+
+def model_coefficients(key, version):
+    """Coefficients d'estimation du modèle key à sa version installée (valeurs de départ de sa famille, ajustées sur les
+    mesures de cette version, de ce moteur et de cette release)."""
+    return S.store.coefficients(S.backend, version, S.engine, key)
+
+
+def coefficient_reader():
+    """coefs(clé, version) : model_coefficients, chacun calculé une fois par lecture de l'état (un ajustement par modèle
+    et non par génération de la file)."""
+    seen = {}
+
+    def coefs(key, version):
+        if (key, version) not in seen:
+            seen[key, version] = model_coefficients(key, version)
+        return seen[key, version]
+    return coefs
 
 
 def installed_models():
@@ -1811,7 +1828,8 @@ def build_cmd(job):
     job["ref_px"] = []
     for i, ref in enumerate(r.get("ref_images") or []):
         f = os.path.join(d, f"ref_{i+1}.png")
-        job["ref_px"].append(estimate.ref_px(*write_data_url(ref, f, f"image de référence {i+1}"), w, h))   # telles que sd.cpp les redimensionne
+        job["ref_px"].append(estimate.ref_px(*write_data_url(ref, f, f"image de référence {i+1}"), w, h,
+                                             estimate.FAMILIES[key]["rmin"]))   # telles que sd.cpp les redimensionne
         cmd += ["-r", f]
     if r.get("init_image"):
         write_data_url(r["init_image"], os.path.join(d, "init.png"), "image d'origine")
@@ -2324,26 +2342,31 @@ def queue_position(job):
 
 
 def request_inputs(req):
-    """Pixels des images d'entrée tels que build_cmd les donnera au moteur, lus dans l'en-tête des images dès la demande,
-    pour estimer la durée avant le calcul : (références, image de départ). Une image illisible ne compte pas (elle
-    fera échouer sa génération)."""
-    w, h, refs = req["width"], req["height"], []
+    """Images d'entrée lues dans leur en-tête dès la demande, pour estimer la durée avant le calcul : (tailles (largeur,
+    hauteur) des références, pixels de l'image de départ). job_estimate les ramène comme le moteur selon le modèle
+    (estimate.ref_px). Une image illisible ne compte pas (elle fera échouer sa génération)."""
+    w, h, sizes = req["width"], req["height"], []
     for ref in req.get("ref_images") or []:
         try:
-            refs.append(estimate.ref_px(*image_size(io.BytesIO(data_url_bytes(ref))), w, h))
+            sizes.append(tuple(image_size(io.BytesIO(data_url_bytes(ref)))))
         except Exception:
             pass
-    return refs, (w * h if req.get("init_image") else 0)
+    return sizes, (w * h if req.get("init_image") else 0)
 
 
-def job_estimate(job, r, coefs):
-    """Durée estimée d'une génération de la file (estimate.predict, seule source de l'estimation) ; r : sa demande, lue
-    une seule fois par l'appelant (forget_files la retire à la fin d'une génération secrète, à tout moment)."""
-    refs, init = job["inputs"]
-    previews = r["steps"] // preview_every(job, r) if r.get("preview") else 0
-    # coefficients de Qwen pour tout modèle tant que ceux de MiniMax H3 manquent (ticket 06) : estimation fausse
-    # d'ici là
-    return estimate.predict(coefs, r["width"], r["height"], r["steps"], refs, init, previews)
+def job_estimate(job, r, coefs, as_qwen=False):
+    """Durée estimée d'une génération de la file (estimate.predict, seule source de l'estimation), avec les
+    coefficients, la règle des références et l'intervalle des aperçus de son modèle ; r : sa demande, lue une seule
+    fois par l'appelant (forget_files la retire à la fin d'une génération secrète, à tout moment) ; coefs(clé,
+    version) : coefficients d'un modèle. as_qwen : comptée comme une génération de Qwen (coefficients, références,
+    aperçus de la demande), pour le travail privé dans l'ahead vu de l'espace public (queue_view)."""
+    key, version = ("qwen", S.model) if as_qwen else job_model(job)
+    sizes, init = job["inputs"]
+    w, h, rmin = r["width"], r["height"], estimate.FAMILIES[key]["rmin"]
+    refs = [estimate.ref_px(rw, rh, w, h, rmin) for rw, rh in sizes]
+    every = int(r.get("preview_interval") or 5) if as_qwen else preview_every(job, r)
+    previews = r["steps"] // every if r.get("preview") else 0
+    return estimate.predict(coefs(key, version), w, h, r["steps"], refs, init, previews)
 
 
 def queue_entry(job, position, ahead, coefs):
@@ -2368,7 +2391,9 @@ def queue_entry(job, position, ahead, coefs):
 def queue_view(private, coefs):
     """Liste de la file vue depuis un espace : les entrées de ses seules générations, rangs propres à l'espace
     (queue_ranks) ; le travail de l'autre espace placé devant une entrée compte dans son ahead (la génération en cours
-    pour ce qui lui reste, les autres pour leur estimation)."""
+    pour ce qui lui reste, les autres pour leur estimation). Vu de l'espace public, le travail privé est estimé comme
+    une génération de Qwen (job_estimate, as_qwen) : son ahead ne dit rien du modèle d'une génération privée (ses
+    étapes, sa taille et ses images y pèsent comme avant). coefs(clé, version) : coefficients d'un modèle."""
     active, now = active_jobs(), time.time()
     ranks, entries, hidden = queue_ranks(active, private), [], 0.0
     for j in active:
@@ -2378,7 +2403,7 @@ def queue_view(private, coefs):
                 entries.append(e)
         else:
             r = j.get("req")
-            est = job_estimate(j, r, coefs) if r else 0.0
+            est = job_estimate(j, r, coefs, as_qwen=secret(j)) if r else 0.0
             hidden += max(0.0, est - (now - j["started"])) if j["status"] == "running" and j.get("started") else est
     return entries
 
@@ -2787,17 +2812,19 @@ class H(BaseHTTPRequestHandler):
             # génération en cours lue une seule fois : relu plus bas, S.current pourrait déjà désigner la suivante (une
             # privée, dont l'identifiant partirait dans current_job hors de l'espace privé)
             current_id = S.current
-            coefs, current = S.store.coefficients(S.backend, S.model, S.engine), S.jobs.get(current_id) or {}
+            coefs, current, models = coefficient_reader(), S.jobs.get(current_id) or {}, installed_models()
             queue = queue_view(inside, coefs)
             return self._send(200, {"sd_ready": not missing, "backend": S.backend, "busy": current_id is not None,
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model,
-                                    "models": installed_models(),     # modèles installés et leurs limites
+                                    "models": models,                 # modèles installés et leurs limites
+                                    # coefficients d'estimation de chacun, par clé (ceux de Qwen : aussi estimates)
+                                    "model_estimates": {m["key"]: coefs(m["key"], m["version"]) for m in models},
                                     "queued": sum(e["status"] == "queued" for e in queue),
                                     "queue": queue,
                                     "current_job": current_id if current and in_space(current, inside) else None,
                                     "last_job": public(last) if last else None,
-                                    "estimates": coefs,
+                                    "estimates": coefs("qwen", S.model),  # Qwen (chaque modèle : model_estimates)
                                     # pile et tirages de l'espace de l'appareil (hors de l'espace privé : le public)
                                     "rev": S.rev["private" if inside else "public"],
                                     # code servi (git) : l'interface maintenant, le serveur à son lancement

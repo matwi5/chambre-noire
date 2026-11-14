@@ -82,7 +82,7 @@
 //   await bench.enter()                          // page d'entrée (jeton à usage unique), comme launch.py --enter
 //   bench.h3(); bench.h3(false)                  // MiniMax H3 installé, ou retiré (le banc part avec Qwen seul :
 //                                                // tests/ui/serve.py) ; la page le voit à son statut suivant
-//   await page.oldServer()                       // la page lit /api/status sans sa liste models, comme devant un
+//   await page.oldServer()                       // la page lit /api/status sans models ni model_estimates, comme un
 //                                                // serveur d'avant MiniMax H3 (jusqu'au prochain chargement)
 //   await page.modelsSeen(2)                     // statut relu tout de suite : la page a lu 2 modèles installés
 //   await page.chooseModel('h3')                 // modèle choisi dans la feuille Réglages (ouverte par la grille,
@@ -577,11 +577,12 @@ async function connect(wsUrl, { closeTab, siblings, tabs = async () => [] }) {
       await page.click(`#modelOpts [data-k="${key}"]`);
       await page.eval(`closeSheet()`);
     },
-    // /api/status lu par la page sans sa liste models (serveur d'avant MiniMax H3), jusqu'au prochain chargement
+    // /api/status lu par la page sans models ni model_estimates (serveur d'avant MiniMax H3), jusqu'au prochain
+    // chargement
     oldServer() {
       return page.eval(`(() => { const real = window.fetch;
         window.fetch = (u, o) => u !== '/api/status' ? real(u, o) : real(u, o).then(async r => {
-          const s = await r.json(); delete s.models;
+          const s = await r.json(); delete s.models; delete s.model_estimates;
           return new Response(JSON.stringify(s), { status: r.status, headers: r.headers }); });
         return refreshStatus(); })()`);
     },

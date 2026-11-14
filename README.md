@@ -808,6 +808,7 @@ Dans l'interface, dès que le Mac propose MiniMax H3, le panneau **Réglages** g
 (« Qwen », « MiniMax H3 »), rappelée en tête de la grille sous le texte ; le navigateur retient le dernier modèle
 choisi (Qwen à la première ouverture, et tant que le modèle retenu n'est pas installé). Avec MiniMax H3, la ligne
 **Étapes** disparaît (6 étapes) et l'aperçu se fait toutes les 2 étapes ; formats et résolutions restent ceux de Qwen.
+Les temps estimés suivent le modèle choisi (voir [Performances](#performances)).
 Le panneau **Moteur** ajoute une ligne par autre modèle installé, avec sa version (`H3-Q4`, `H3-Q8`).
 Avec MiniMax H3 et au moins une image jointe, l'aide sous les images dit de les désigner dans le texte par
 `<Picture 1>`, `<Picture 2>`… (en campagne, chaque photo est `<Picture 1>`), et une mention avertit que chaque image
@@ -870,17 +871,30 @@ RTX 4060/4070) : une image 720p de 20 étapes en moins d'une minute.
 - le décodage de l'image, et de chaque aperçu, est proportionnel au nombre de pixels ;
 - s'y ajoute une part fixe : chargement du modèle, premier pas plus lent.
 
+MiniMax H3 garde la même formule, avec ses propres valeurs de départ (mesurées sur Mac) et sans cache de préfixe : le
+temps d'une étape compte chaque image de référence deux fois dans la séquence, et le moteur lit chaque référence à
+1024 pixels de petit côté au moins (lecture coûteuse, plusieurs minutes par image).
+
 Les coefficients partent de valeurs propres au moteur (Vulkan, CUDA, CPU, Metal), puis sont ajustés sur les mesures de
-votre machine : les 40 dernières générations par moteur et par modèle, résumées par des médianes, si bien qu'une
+votre machine : les 40 dernières générations par moteur et par version de modèle (`q4`, `uc-q8`, `h3-q4`…), chaque
+modèle sur ses seules mesures, résumées par des médianes, si bien qu'une
 génération anormale (machine occupée, premier chargement du modèle) ne fausse pas l'estimation. Chaque mesure garde
 la version de stable-diffusion.cpp qui l'a produite : après une mise à jour du moteur, les anciennes mesures sont
 ignorées et `setup.py` refait la calibration. Dès que deux tailles
 d'image assez différentes ont été mesurées, a et b sont ajustés séparément, ce qui fiabilise les estimations en haute
 résolution. Pour que ce soit le cas dès la première image, `setup.py` finit par trois courtes générations de
 calibration (texte → image en 512 et 768 px, édition en 512 px) ; `--no-calibrate` les saute et
-`tools/calibrate.py` les relance. Tant qu'aucune mesure n'existe, l'état indique « estimations non calibrées ».
+`tools/calibrate.py` les relance. Tant qu'aucune mesure n'existe, l'état indique « estimations non calibrées » (celles
+de Qwen). MiniMax H3 se calibre à part, par `tools/calibrate.py --model h3` (6 étapes : texte → image en 1024 et 512 px,
+édition en 1024 px, environ 9 minutes sur Mac), que `setup.py` ne lance pas, ni après une mise à jour du moteur ;
+sans cela, ses estimations partent de ses valeurs de départ et s'ajustent à l'usage. Un serveur déjà lancé ne prend
+les mesures de `tools/calibrate.py` qu'à sa relance ou après sa prochaine génération mesurée (finie, hors de l'espace
+privé).
 Pendant une génération, le temps restant se fonde sur la moyenne des derniers pas. Les mesures sont stockées dans
-`tools/calibration.json` ; supprimez ce fichier pour repartir de zéro (l'ancien format est ignoré).
+`tools/calibration.json` ; supprimez ce fichier pour repartir de zéro (l'ancien format est ignoré). Le serveur et
+`tools/calibrate.py` l'écrivent chacun à son tour, sous un verrou (`tools/calibration.json.lock`) ; un fichier
+illisible n'est jamais écrasé : plus aucune mesure ne s'y ajoute tant qu'il n'est pas supprimé, et
+`tools/calibrate.py` s'arrête en échec en le disant.
 
 Pour gagner du temps sans perte de qualité : branchez le portable sur secteur et choisissez le mode d'alimentation
 « Performances optimales » dans les paramètres Windows.
@@ -1003,7 +1017,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   générations normales ; l'appareil est dans l'espace privé quand sa session est ouverte et que la requête est sûre,
   comme pour `private.unlocked` ; chaque entrée porte `status`, `position` (rang dans l'espace, comme
   `queue_position`), `ahead` (durée restante estimée, en secondes, des générations de l'autre espace placées devant
-  elle : ce qui reste de celle en cours, l'estimation des autres ; 0 sans travail caché), `lot`, `estimate` et
+  elle : ce qui reste de celle en cours, l'estimation des autres ; vu de l'espace public, une génération privée y est
+  estimée comme une génération de Qwen, quel que soit son modèle ; 0 sans travail caché), `lot`, `estimate` et
   `elapsed` en secondes, `kind` (`normal` ou `private`), `id`, `mode`, le début du `prompt`, et `width`, `height` et
   `steps` de la demande ; `queued` : générations en attente de l'espace ; `current_job` : la génération en cours si
   elle est de l'espace, sinon `null` ; `last_job` : dernière génération normale, `null` dans l'espace privé ; `busy` :
@@ -1017,7 +1032,10 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `init_image`, `mask` et `negative_prompt` (acceptés ou non), `max_refs` (images jointes que la page propose ; le
   serveur n'en borne pas le nombre), `max_side` (côté le plus grand, refusé au-delà) et `preview_every` (intervalle
   des aperçus imposé, `null` : celui de la demande) ; MiniMax H3 n'y est que si ses fichiers sont là et que le
-  moteur du serveur, lu au lancement, est au moins `master-1090`) ; lots :
+  moteur du serveur, lu au lancement, est au moins `master-1090`) ; `estimates` : coefficients d'estimation de Qwen
+  (formule de `tools/estimate.py`, `samples` : nombre de mesures) ; `model_estimates` : ceux de chaque modèle de
+  `models`, par clé, avec pour MiniMax H3 `rw` (poids d'une référence dans la séquence) et `rmin` (petit côté minimal
+  d'une référence) ; lots :
   `"count"` de 2 à 4 dans `/api/generate` (tous les modes ; 1 : génération seule ; 400 « count : pas de variantes dans
   une campagne » au-delà de 1 avec `campaign`) crée autant de générations ; `"campaign": [{"image": <data URL>,
   "width", "height"}, …]` (1 à 10 photos, en édition, `"mode": "edit"`, sans `ref_images`) crée une édition par photo,
@@ -1135,8 +1153,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   générateur de bruit `cpu` et un aperçu tous les 2 pas. La génération garde son modèle et sa version dès sa création
   (version `h3-q4`, ou `h3-q8` si `tools/config.local.json` porte `"h3": "q8"`, lu au lancement du serveur, et que
   son fichier est là, ou si seul ce fichier est là) : sa commande, sa ligne de `outputs/journal.jsonl` et la
-  fiche d'une image privée (champ `model`) les lisent sur elle. Une génération MiniMax H3 n'ajoute aucune mesure de
-  durée, et la file l'estime pour l'instant avec les mesures de Qwen (estimation fausse). Elle refuse aussi
+  fiche d'une image privée (champ `model`) les lisent sur elle. Une génération MiniMax H3 range sa mesure de durée
+  sous sa version, et la file l'estime avec les coefficients de MiniMax H3. Elle refuse aussi
   (400 « L'incognito n'existe plus : passez par l'espace privé. ») une demande `"incognito": true`, qu'enverrait une
   page d'avant le retrait de l'incognito restée ouverte : rien n'est écrit sur l'ordinateur, pas même au journal du
   serveur (les requêtes `/api/generate` n'y vont jamais) ; le champ `page` d'une
@@ -1171,7 +1189,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 ├── tools/
 │   ├── launch.py         serveur local + pilotage de sd-cli
 │   ├── estimate.py       modèle de coût et calibration des estimations de durée
-│   ├── calibrate.py      générations de calibration (lancées par setup.py)
+│   ├── calibrate.py      générations de calibration (lancées par setup.py pour Qwen, à la main pour MiniMax H3)
 │   ├── ui/index.html     l'interface
 │   ├── ui/manifest.webmanifest, sw.js, icon-*.png   installation sur le téléphone (application)
 │   ├── ui/PixelifySans.woff2, OFL.txt   police pixel du nom et des titres, et sa licence (servie sans code d'accès)

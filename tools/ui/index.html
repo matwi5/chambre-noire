@@ -896,12 +896,17 @@ const RES   = [ {k:'low',label:'360p',scale:0.25}, {k:'medium',label:'540p',scal
 const STEPS = [ {k:'low',label:'Low',steps:8}, {k:'medium',label:'Medium',steps:12}, {k:'high',label:'High',steps:20}, {k:'xhigh',label:'XHigh',steps:30}, {k:'max',label:'Max',steps:40} ];
 const CFG = 1, MAX_PIXELS = 2048*2048, MAX_INPUT_SIDE = 2048, PREVIEW_EVERY = 5, MAX_VARIANTS = 4, MAX_REFS = 10;   // MAX_REFS : références d'une édition, photos d'une campagne
 // coefficients d'estimation envoyés par /api/status (tools/estimate.py) : valeurs de départ du moteur, puis ajustées
-// sur les générations mesurées de la machine. Même formule que estimate.predict() côté serveur.
-let E = null, calibrated = false, lastE = '';
-function applyEstimates(est){
+// sur les générations mesurées de la machine. Même formule que estimate.predict() côté serveur. E : ceux de Qwen
+// (estimates, dont l'état « calibrées » du panneau Moteur) ; EM : ceux de chaque modèle installé, par clé
+// (model_estimates ; null devant un serveur qui ne les envoie pas : E pour tout modèle)
+let E = null, EM = null, calibrated = false, lastE = '';
+function applyEstimates(est, byModel){
   if(!est) return; calibrated = est.samples > 0;
-  const key = JSON.stringify(est); if(key === lastE) return; lastE = key; E = est; refreshChoices();
+  const key = JSON.stringify([est, byModel ?? null]); if(key === lastE) return; lastE = key; E = est;
+  EM = byModel && typeof byModel==='object' ? byModel : null; refreshChoices();
 }
+// coefficients d'un modèle (clé de MODEL_TABLE ; absente : Qwen), ceux de Qwen à défaut
+const coefsOf = key => (EM && EM[key || 'qwen']) || E;
 
 const $ = id => document.getElementById(id);
 // mode : page affichée (labo, tirages) ; inputImages : images d'entrée de la saisie ; drawOn : dessin actif (sur la seule
@@ -974,20 +979,25 @@ const inCampaign = () => inputKind()==='edit' && campaignShown() && campaignOn;
 const variants = () => inCampaign() ? 1 : opt.count;   // images de la prochaine demande (une campagne : une par photo)
 // campagne : chaque photo est éditée seule, au format pris en charge le plus proche de sa forme, à la résolution choisie
 function photoDims(im){ const [rw,rh]=RATIOS[closestRatio(im.w, im.h)], sc=resSel().scale; return [round32(rw*sc), round32(rh*sc)]; }
-function campaignPlan(){ return inputImages.map(im=>{ const [w,h]=photoDims(im); return { im, w, h, inp:{ refs:[refPx(im.w, im.h, w, h)], init:0 } }; }); }
+function campaignPlan(){ const rmin=refMin(); return inputImages.map(im=>{ const [w,h]=photoDims(im); return { im, w, h, inp:{ refs:[refPx(im.w, im.h, w, h, rmin)], init:0 } }; }); }
 // pixels d'une référence telle que sd.cpp la donne au modèle : ramenée à la surface de la sortie, côtés multiples de 32
-function refPx(rw, rh, w, h){ const vw=Math.sqrt(w*h*rw/rh), vh=vw*rh/rw, snap=x=>Math.max(32, Math.floor(x/32+0.5)*32); return snap(vw)*snap(vh); }
+// puis, si rmin, portée à rmin pixels de petit côté au moins (MiniMax H3 : 1024)
+function refPx(rw, rh, w, h, rmin=0){ let vw=Math.sqrt(w*h*rw/rh), vh=vw*rh/rw; const snap=x=>Math.max(32, Math.floor(x/32+0.5)*32);
+  if(rmin && Math.min(vw, vh)<rmin){ const k=rmin/Math.min(vw, vh); vw*=k; vh*=k; } return snap(vw)*snap(vh); }
+// petit côté minimal d'une référence pour le modèle choisi (coefficients de sa famille, rmin ; absent : 0)
+const refMin = () => coefsOf(modelSel()?.key)?.rmin || 0;
 // références et image de départ envoyées au moteur pour la nature de la demande (voir buildRequest)
 function inputsFor(w, h){ const k=inputKind();
-  if(k==='edit') return { refs: inputImages.map(im=>refPx(im.w, im.h, w, h)), init: 0 };
+  if(k==='edit'){ const rmin=refMin(); return { refs: inputImages.map(im=>refPx(im.w, im.h, w, h, rmin)), init: 0 }; }
   if(k==='mask') return { refs: [w*h], init: maskMode()==='annotation' ? 0 : w*h };
   return { refs: [], init: 0 };
 }
-// étape = a·n + b·n² (n = jetons/1024, sortie + références) ; avec le cache de préfixe (E.kv), a·nt + b·nt·n (nt : jetons
-// de la sortie), plus le préfixe calculé une fois (étape·nr/nt) ; encodage, VAE et part fixe : voir tools/estimate.py
-function parts(w, h, steps, inp, preview, every=previewEvery()){   // every : intervalle des aperçus
-  const R=inp.refs.reduce((t,p)=>t+p, 0)/1e6, I=inp.init/1e6, M=w*h/1e6, nt=w*h/256/1024, n=(w*h + R*1e6)/256/1024, p=E.kv ? nt : n;
-  const step=E.a*p + E.b*p*n, prefix=E.kv ? step*(n-nt)/nt : 0, enc=E.o + E.e0 + E.e1*R + E.u*(R+I) + prefix, vae=E.v*M;
+// étape = a·n + b·n² (n = jetons/1024, sortie + références comptées c.rw fois) ; avec le cache de préfixe (c.kv),
+// a·nt + b·nt·n (nt : jetons de la sortie), plus le préfixe calculé une fois (étape·nr/nt) ; encodage, VAE et part
+// fixe : voir tools/estimate.py. every : intervalle des aperçus ; c : coefficients (ceux du modèle choisi)
+function parts(w, h, steps, inp, preview, every=previewEvery(), c=coefsOf(modelSel()?.key)){
+  const R=inp.refs.reduce((t,p)=>t+p, 0)/1e6, I=inp.init/1e6, M=w*h/1e6, nt=w*h/256/1024, n=(w*h + (c.rw||1)*R*1e6)/256/1024, p=c.kv ? nt : n;
+  const step=c.a*p + c.b*p*n, prefix=c.kv ? step*(n-nt)/nt : 0, enc=c.o + c.e0 + c.e1*R + c.u*(R+I) + prefix, vae=c.v*M;
   const previews = preview ? Math.floor(steps/every) : 0;
   return { step, enc, vae, previews, total: enc + steps*step + vae + previews*vae }; }
 function fmt(s){ if(s<90) return Math.round(s)+' s'; if(s<3600) return Math.round(s/60)+' min'; return (s/3600).toFixed(1).replace('.',',')+' h'; }
@@ -1233,7 +1243,7 @@ async function refreshStatus(){
     $('phone').hidden=!s.phone; if(s.phone) facts('phoneFacts', [['Adresse', s.phone.urls[0]], ...s.phone.urls.slice(1).map(u=>['ou', u]), ['Code', s.phone.code, 'code']]);
     const modelTag = s.model_version ? ' · '+s.model_version.toUpperCase() : '', busy=!!(s.busy || s.queued);
     applyModels(s.models);
-    if(s.sd_ready){ applyEstimates(s.estimates); setLamp(busy ? 'ok busy' : 'ok', (busy ? 'Calcul en cours' : 'Moteur prêt')+modelTag); }
+    if(s.sd_ready){ applyEstimates(s.estimates, s.model_estimates); setLamp(busy ? 'ok busy' : 'ok', (busy ? 'Calcul en cours' : 'Moteur prêt')+modelTag); }
     else setLamp('err', 'Moteur indisponible');
     // marque de l'onglet : posée tant que le Mac dit l'espace ouvert pour cet appareil, levée quand il le dit fermé
     // (sortie, fermeture par le Mac après 15 minutes, espace supprimé)
@@ -2294,10 +2304,11 @@ async function relaunch(req){
   const dims = k => camp ? [camp[k].width, camp[k].height] : [body.width, body.height];
   const refs=camp ? 1 : body.ref_images.length, n=camp ? camp.length : body.count || 1;
   // estimation de la k-ième par parts(), approchée : sans les proportions des références (refPx), chacune comptée à la
-  // taille de la sortie (au plus un arrondi près)
-  // aperçus comptés à l'intervalle du modèle de la demande (absent : Qwen), pas à celui des Réglages
-  const every=(modelList||[]).find(m=>m.key===(body.model||'qwen'))?.preview_every || PREVIEW_EVERY;
-  const cost = k => { const [w, h]=dims(k); return parts(w, h, body.steps, {refs:Array(refs).fill(w*h), init:body.init_image ? w*h : 0}, body.preview, every); };
+  // taille de la sortie (au plus un arrondi près), portée au petit côté minimal du modèle ; aperçus, coefficients et
+  // références du modèle de la demande (absent : Qwen), pas de celui des Réglages
+  const every=(modelList||[]).find(m=>m.key===(body.model||'qwen'))?.preview_every || PREVIEW_EVERY, c=coefsOf(body.model);
+  const cost = k => { const [w, h]=dims(k), px=refPx(w, h, w, h, c?.rmin || 0);
+    return parts(w, h, body.steps, {refs:Array(refs).fill(px), init:body.init_image ? w*h : 0}, body.preview, every, c); };
   const est = k => E ? cost(k).total : 0;
   const total=Array.from({length:n}, (_, k)=>est(k)).reduce((t, x)=>t+x, 0);
   askNotifications();

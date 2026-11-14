@@ -50,8 +50,11 @@ Dans l'ordre du fichier :
   `model_version` (version installée d'un modèle de la table : fichiers présents et `S.engine` assez récent ; celle
   que demande `S.cfg[<clé>]` si son fichier est là, la valeur n'étant comparée qu'aux noms de la table, sinon la
   première présente ; Qwen : `S.model`, jamais refusé), `request_model` (clé et version d'une demande, tirées de la
-  table, une fois par demande), `job_model` (clé et version posées sur la génération par `new_job` ; sans elles, celle
-  de `tools/calibrate.py`, Qwen), `preview_every`, `installed_models` (`models` de `/api/status`), `default_backend`.
+  table, une fois par demande), `job_model` (clé et version posées sur la génération par `new_job`, ou par
+  `tools/calibrate.py` sur les siennes ; sans elles, Qwen à la version du serveur), `preview_every`,
+  `model_coefficients` (coefficients d'un modèle à sa version,
+  formule de sa famille) et `coefficient_reader` (les mêmes, une fois par lecture de l'état : `estimates` et
+  `model_estimates` de `/api/status`, file), `installed_models` (`models` de `/api/status`), `default_backend`.
 - **Accès** : `ACCESS_FILE`, `ACCESS_COOKIE`, `ENTRY_TOKEN`, `ENTRY_PAGE`, `ENTRY_TTL`, `ENTRY_LOCK`, `ENTRY_USED`
   (entrée à usage unique de `--enter`), `LOCAL_CLIENTS`, `PUBLIC_FILES` (manifeste, icônes, logo, police pixel, service
   worker, servis sans cookie), `LOGIN_PAGE`, `LOGIN_MAC` (phrase de l'ordinateur, à la place de `<!--mac-->` pour une
@@ -138,10 +141,12 @@ Dans l'ordre du fichier :
   tirées par le serveur pour être écrites au journal), `active_jobs` (génération en cours puis `S.pending`, lus sous
   `S.turn`), `move_first` (« Passer en tête » : routes `/api/job/<id>/first` et `/api/lot/<id>/first`, réponse par
   `moved_first`), `in_space` (génération de l'espace public ou privé), `queue_ranks` (rang dans l'espace),
-  `queue_position`, `request_inputs`, `job_estimate` (estimation par `estimate.predict`, seule source), `queue_entry`
-  (ligne de `queue` dans `/api/status`), `queue_view` (file vue depuis un espace, `ahead` : travail caché de l'autre
-  espace devant chaque entrée), `new_job` (`input_names` : noms des images d'entrée gardées), `public(job)` (ce que
-  `/api/job/<id>` et `/api/generate` montrent, `mode` et `inputs` compris), `quiet_request`.
+  `queue_position`, `request_inputs` (tailles des références lues dans leur en-tête), `job_estimate` (estimation par
+  `estimate.predict`, seule source, avec les coefficients, `rmin` et l'intervalle des aperçus du modèle de la
+  génération ; `as_qwen` : comme une génération de Qwen), `queue_entry` (ligne de `queue` dans `/api/status`),
+  `queue_view` (file vue depuis un espace, `ahead` : travail caché de l'autre espace devant chaque entrée, le travail
+  privé compté comme du Qwen vu de l'espace public), `new_job` (`input_names` : noms des images d'entrée gardées),
+  `public(job)` (ce que `/api/job/<id>` et `/api/generate` montrent, `mode` et `inputs` compris), `quiet_request`.
 - **HTTP** : `class Server` (file de 128 connexions : la galerie en ouvre une par miniature ; `handle_error` : une
   connexion coupée, `cut_connection`, donne une ligne neutre, sans pile d'appels), `class H` : `log_request` (n'écrit
   que les requêtes en erreur), `log_message` (tait les routes de `QUIET_ROUTES` d'après leur chemin, par
@@ -165,8 +170,16 @@ Dans l'ordre du fichier :
   `tests/ui/serve.py` un jeton et sa page, comme `--enter`. `tools/make_shortcut.py` :
   `mac_command` (texte de `Chambre noire.command` : interface déjà lancée, `launch.py --enter`), `mac`, `windows`.
 
-`tools/estimate.py` : modèle de coût des durées (`predict`, `ref_px`, `release_number`, seule lecture du format
-`master-NNN-hash` du marqueur, `prefix_cache`, `make_sample`, `class Store` pour `tools/calibration.json`).
+`tools/estimate.py` : modèle de coût des durées (`predict`, `ref_px`, `tokens`, `release_number`, seule lecture du
+format `master-NNN-hash` du marqueur, `prefix_cache`, `make_sample`, `class Store` pour `tools/calibration.json`, dont
+`add` écrit sous `file_lock` (verrou entre processus de `calibration.json.lock`, attente `LOCK_WAIT` ; sans lui sur
+un système de fichiers qui ne le connaît pas, `NO_LOCK`), met le fichier sur le disque avant le renommage (`sync_fd`,
+`sync_dir`, copies de celles de `launch.py`) et ne réécrit jamais un fichier illisible ou d'une autre version ;
+`record_calib` pose `job["measured"]`, que `tools/calibrate.py` vérifie) ;
+`PRIORS` (Qwen) et `H3_PRIORS` (MiniMax H3), réunis par modèle dans `FAMILIES` (valeurs de départ, cache de préfixe
+`kv`, poids `rw` et petit côté minimal `rmin` des références).
+`tools/calibrate.py` : générations de calibration, `RUNS` (Qwen) et `H3_RUNS` (`--model h3`), hors de la file
+(`run_job`).
 
 ## `tools/ui/index.html` : l'interface (HTML, CSS et JavaScript, sans dépendance ni build)
 
@@ -207,8 +220,10 @@ dernier bloc, après le HTML.
   celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`, `#privCodeSheet`…).
 - **JavaScript**, sections dans l'ordre :
   - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
-    privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
-    (`refPx`, `inputsFor`, `parts` : copies de `estimate.py`) ; réglages `opt` (`localStorage` `qwen-opt`, dont
+    privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` (`E` :
+    coefficients de Qwen, `estimates` ; `EM` : ceux de chaque modèle, `model_estimates`, `null` devant un serveur qui
+    ne les envoie pas), `coefsOf` (coefficients d'un modèle, ceux de Qwen à défaut) ; estimation (`refPx`, `refMin`,
+    `inputsFor`, `parts` : copies de `estimate.py`) ; réglages `opt` (`localStorage` `qwen-opt`, dont
     `model`, la clé du dernier modèle choisi), `refreshChoices` (exemple du champ, `PLACEHOLDERS`, ligne « Modèle »
     `#modelRow`, ligne « Étapes » `#stepRow`, grille `#setGrid`) ; modèles installés : `modelList` (liste `models` de
     `/api/status`, posée par `applyModels` ; `null` devant un serveur qui ne l'envoie pas), `modelShown` (ligne
@@ -540,9 +555,11 @@ invariants ».
   fin. Une demande `"incognito": true` (mode retiré, d'une page d'avant) est refusée (400) sans rien écrire, journal
   du serveur compris (`/api/generate` est tue). Au lancement sur Mac, `exclude_from_backup` exclut `jobs/` de Time
   Machine.
-- **Estimation des durées** : `tools/estimate.py` (`predict`, priors par moteur, mesures par `"<moteur>/<modèle>"`
-  dans `tools/calibration.json`, filtrées sur la release de sd.cpp installée lue dans `sdcpp/<moteur>/.installed`). Les
-  coefficients partent vers l'interface par `/api/status`.
+- **Estimation des durées** : `tools/estimate.py` (`predict`, priors par moteur et par famille de modèle, mesures par
+  `"<moteur>/<clé de version>"` dans `tools/calibration.json`, chaque modèle sous les clés de ses versions, filtrées
+  sur la release de sd.cpp installée lue dans `sdcpp/<moteur>/.installed`). `record_calib` range la mesure d'une
+  génération normale ou de calibration (jamais d'une privée) sous la version de sa génération (`job_model`). Les
+  coefficients partent vers l'interface par `/api/status` (`estimates` : Qwen ; `model_estimates` : chaque modèle).
 
 ## Pièges de l'interface
 
@@ -572,8 +589,9 @@ invariants ».
 Registre des constantes et formules recopiées d'un côté à l'autre : une modification se fait des deux côtés
 (`CODING_STANDARDS.md`).
 
-- `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()` et `ref_px()` de `estimate.py` (jetons de
-  16×16 px, arrondi à 32) : formule et coefficients.
+- `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()`, `tokens()` et `ref_px()` de `estimate.py`
+  (jetons de 16×16 px, arrondi à 32, références comptées `rw` fois, petit côté porté à `rmin`) : formule et
+  coefficients ; `coefsOf` y lit `rw` et `rmin` envoyés avec les coefficients (`FAMILIES`), absents pour Qwen (1 et 0).
 - Les clés de `MODEL_TABLE` sont recopiées dans `index.html` : `qwen` (modèle d'une demande sans champ `model`) pour
   le défaut de `opt.model`, le repli de `modelSel`, la ligne de Qwen mise à part dans la feuille Moteur et le modèle
   d'une demande relancée sans `model` (`relaunch`) ; `h3` dans `isH3` (aide `<Picture N>` et mention de l'édition,
@@ -594,7 +612,7 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
   icône du manifeste dans `PUBLIC_FILES`.
 - Pas une copie : l'estimation de chaque génération de la file (`job_estimate`, pour `queue_entry` et le travail caché
   `ahead`) appelle `estimate.predict` ; l'estimation de « Relancer » (`relaunch`) est approchée (chaque référence
-  comptée à la taille de la sortie, pas de `refPx`).
+  comptée à la taille de la sortie, passée par `refPx` pour le seul `rmin` de son modèle).
 
 ## Tests
 

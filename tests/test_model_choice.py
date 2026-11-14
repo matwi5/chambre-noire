@@ -1,6 +1,7 @@
 """Modèle d'une demande (champ model) : table fermée du serveur, refus avant la file, commande de MiniMax H3, modèle
-gardé par la génération (commande, journal, fiche privée), aucune mesure de durée pour MiniMax H3 (ticket 06), modèles
-installés dans /api/status. Sur le banc à faux moteur (voir bench.py), avec de faux fichiers de modèle."""
+gardé par la génération (commande, journal, fiche privée), mesure de durée de MiniMax H3 sous sa propre clé (ticket
+06, détails dans test_estimates.py), modèles installés dans /api/status. Sur le banc à faux moteur (voir bench.py), avec
+de faux fichiers de modèle."""
 import contextlib, os, unittest
 from unittest import mock
 
@@ -133,10 +134,13 @@ class H3GenerationTest(bench.BenchCase):
         self.assertIn(launch.H3_DIFFUSION["h3-q8"], S.jobs[j["id"]]["cmd"])
         self.assertEqual(bench.journal()[-1]["model"], "h3-q8")
 
-    def test_h3_records_no_duration_sample(self):
+    def test_h3_records_its_sample_under_its_own_key_only(self):
         before = samples()
         self.assertEqual(wait_job(generate(**H3)["id"])["status"], "done")
-        self.assertEqual(samples(), before)
+        key = f"{S.backend}/h3-q4"
+        self.assertEqual(len(samples()[key]), min(len(before.get(key, [])) + 1, 40))
+        others = lambda d: {k: v for k, v in d.items() if k != key}
+        self.assertEqual(others(samples()), others(before))
         # Qwen mesure toujours, sous sa clé (taille propre à ce test)
         self.assertEqual(wait_job(generate("a red car", width=352, height=224)["id"])["status"], "done")
         last = samples()[f"{S.backend}/{S.model}"][-1]

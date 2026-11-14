@@ -290,8 +290,8 @@ test('« Relancer » une image de Qwen avec MiniMax H3 choisi : aperçus compté
     const b = await again('#vAgain');
     assert.deepEqual([b.model, b.preview, b.steps], ['qwen', true, 8]);
     const none = `{ refs: [], init: 0 }`;
-    const [est, qwen, h3] = await page.eval(`[pageJobs.at(-1).est, parts(512, 512, 8, ${none}, true, 5).total,
-      parts(512, 512, 8, ${none}, true, 2).total]`);
+    const at = every => `parts(512, 512, 8, ${none}, true, ${every}, coefsOf('qwen')).total`;
+    const [est, qwen, h3] = await page.eval(`[pageJobs.at(-1).est, ${at(5)}, ${at(2)}]`);
     assert.notEqual(qwen, h3, 'cas qui ne distingue pas les deux intervalles');
     assert.equal(est, qwen, 'estimation de la relance à l\'intervalle du modèle des Réglages');
     await bench.idle({ page });

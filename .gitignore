@@ -27,6 +27,8 @@ tools/sdcpp_release.json
 
 # mesures de vitesse et réglages propres à chaque machine
 tools/calibration.json
+tools/calibration.json.lock
+tools/calibration.json.*.tmp
 tools/config.local.json
 
 # raccourci macOS généré par setup.py
