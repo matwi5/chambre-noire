@@ -31,7 +31,7 @@ ACCESS_CODE = "test-code"
 HTTPS_HOST = "qwen-banc.example.ts.net"             # nom fictif de « tailscale serve » (HTTPS, relayé depuis 127.0.0.1)
 WIFI_HOST = "mac-du-banc.local"                     # nom fictif du Mac sur le Wi-Fi (http:// direct)
 LOG = []                                            # sorties du serveur (print et journal des requêtes), hors de l'écran
-ENGINE = "master-959-0000000"                       # release du faux moteur, écrite dans son marqueur .installed
+ENGINE = "master-1090-0000000"                      # release du faux moteur, écrite dans son marqueur .installed
 SHOWN = 200                                         # caractères au plus d'une réponse recopiée dans un message d'échec
 _server = None
 

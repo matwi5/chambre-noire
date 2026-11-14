@@ -23,8 +23,10 @@ PY = r"venv\Scripts\python.exe" if WINDOWS else "venv/bin/python"
 SHORTCUT = "Chambre noire.lnk" if WINDOWS else "Chambre noire.command"
 
 # --- moteur stable-diffusion.cpp (versions testées, épinglées par moteur) ------------------------
-# Windows reste sur master-890 ; le Mac passe à master-959, qui charge les poids en --mmap sur Metal, y rend le VAE
-# rapide et ajoute le cache de préfixe de Qwen-Image 2.1 (les étapes d'une édition ne recalculent plus les références).
+# Windows reste sur master-890. Le Mac est passé à master-959, qui charge les poids en --mmap sur Metal, y rend le VAE
+# rapide et ajoute le cache de préfixe de Qwen-Image 2.1 (les étapes d'une édition ne recalculent plus les références),
+# puis à master-1090, qui fait aussi tourner MiniMax H3 et sa vidéo (Qwen y a été vérifié en texte vers image, édition
+# et masque avec aperçus ; ses mesures de durée repartent de zéro, comme à chaque changement de release).
 SDCPP_WIN = "master-890-74988b2"
 SDCPP = {   # backend -> (release, archives à extraire dans sdcpp/<backend>/ ; empreintes : API GitHub de la release)
     "vulkan": (SDCPP_WIN, [("sd-master-74988b2-bin-win-vulkan-x64.zip", "744c8f817c66ecfd02fbb9dc8b122e1f29f7240db1f6086dfde2669403c5d896")]),
@@ -32,8 +34,8 @@ SDCPP = {   # backend -> (release, archives à extraire dans sdcpp/<backend>/ ; 
     "cuda":   (SDCPP_WIN, [("sd-master-74988b2-bin-win-cuda12-x64.zip", "e9b86c2166aaf3a89f3e13326312d34b79ec1a2b61101d0ccff2805e7ee7b269"),
                            ("cudart-sd-bin-win-cu12-x64.zip",           "fe20366827d357c00797eebb58244dddab7fd9a348d70090c3871004c320f38d")]),
     # macOS : binaire universel (arm64 + x86_64) compilé avec Metal
-    "metal":  ("master-959-d637cfb", [("sd-master-d637cfb-bin-Darwin-macOS-26.6.2-arm64.zip",
-                                       "535b5eccae1d7c81a20466b41433f062d64130e5513fd069006cdd6401dc4ce5")]),
+    "metal":  ("master-1090-8b1e9df", [("sd-master-8b1e9df-bin-Darwin-macOS-26.7.2-arm64.zip",
+                                        "dcf8fcd492a0d7c89eab61a662a393df082f7b81d53a21855e957d389f4d2528")]),
 }
 SDCPP_URL = "https://github.com/leejet/stable-diffusion.cpp/releases/download/{tag}/{name}"
 

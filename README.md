@@ -94,7 +94,7 @@ venv\Scripts\python.exe setup.py
 Sur Mac : `venv/bin/python setup.py`. Ce script, à lancer une seule fois :
 
 - télécharge stable-diffusion.cpp (version épinglée et vérifiée par SHA256) dans `sdcpp\` : versions Vulkan et CPU
-  sous Windows (release `master-890`), version Metal sur Mac (release `master-959`) ; relancé après une mise à jour de
+  sous Windows (release `master-890`), version Metal sur Mac (release `master-1090`) ; relancé après une mise à jour de
   ce dépôt, il remplace un moteur dont la version épinglée a changé ;
 - télécharge les fichiers du modèle depuis Hugging Face dans `models\` (≈ 14,6 Go sous Windows, ≈ 15,1 Go sur Mac)
   et vérifie chacun contre son empreinte SHA256 (voir [Le modèle](#le-modèle)) ;
@@ -769,7 +769,7 @@ quantifiée, ce que stable-diffusion.cpp (version `master-890-74988b2`) interpr�
 `tools/fix_int8_te.py` en crée une copie `qwen3vl_8b_int8_convrot_embfix.safetensors` où seule cette table repasse
 en bf16 (dé-rotation Hadamard comprise) ; toutes les autres couches restent en int8. Même taille, même qualité.
 La release `master-959` charge le fichier d'origine sans ce correctif (vérifié sur Mac) ; il deviendra inutile sous
-Windows quand le moteur Windows passera à cette version.
+Windows quand le moteur Windows passera à cette release ou à une plus récente.
 
 **Réglages officiels du modèle** (fiche Qwen) : 40 étapes, guidance 1, sampler Euler, pas de prompt négatif,
 résolution native 2048×2048 (4:3 2400×1792, 3:2 2528×1696, 16:9 2752×1536 et inverses), jusqu'à 10 images de référence.
@@ -822,8 +822,9 @@ Pendant une génération, le temps restant se fonde sur la moyenne des derniers 
 Pour gagner du temps sans perte de qualité : branchez le portable sur secteur et choisissez le mode d'alimentation
 « Performances optimales » dans les paramètres Windows.
 
-**Mac à puce Apple.** Mesures sur une puce **Apple M6, 32 Go de mémoire unifiée**, moteur Metal (release
-`master-959`), encodeur GGUF, modèle Q4_K_M :
+**Mac à puce Apple.** Mesures sur une puce **Apple M6, 32 Go de mémoire unifiée**, moteur Metal, encodeur GGUF,
+modèle Q4_K_M, faites avec la release `master-959`, avant le passage à `master-1090` (une génération de 1024×1024
+en 40 étapes y a pris une durée voisine) :
 
 | Génération | Durée mesurée |
 | --- | --- |
@@ -882,7 +883,7 @@ xattr -dr com.apple.quarantine sdcpp/metal
 
 **Mac : l'édition est longue avant la première étape.** L'installation date d'avant l'encodeur GGUF : l'encodeur int8
 tourne alors sur le processeur, à ≈ 2 min par référence. Relancez `venv/bin/python setup.py`, qui installe le moteur
-`master-959` et l'encodeur GGUF.
+épinglé (`master-1090`) et l'encodeur GGUF.
 
 **Mac : en résolution 1440p avec des références, la mémoire est juste.** Sur 32 Go, une édition 2048×2048 fonctionne :
 le moteur libère l'encodeur après usage et décode l'image par tuiles (avertissements « retrying with spatial tiling »
@@ -912,8 +913,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     s'adapte aux cartes à 8 Go ;
   - CPU : `--backend cpu`, secours sans GPU ;
   - Metal (Mac) : `--backend MTL0 --fa --mmap --params-backend te=disk --llm_vision <mmproj>`, avec
-    stable-diffusion.cpp `master-959` et l'encodeur GGUF. Choix mesurés sur une puce M6 : l'encodeur int8 n'a pas de
-    noyau Metal (sd-cli plante s'il est placé sur le GPU), l'encodeur GGUF y lit une référence 512×512 en ≈ 3 s ; le VAE
+    stable-diffusion.cpp `master-1090` et l'encodeur GGUF. Choix mesurés sur une puce M6 avec `master-959`, repris
+    tels quels sur `master-1090` (qui annonce `--fa` déprécié ; non remesuré) : l'encodeur int8 n'a pas de noyau
+    Metal (sd-cli plante s'il est placé sur le GPU), l'encodeur GGUF y lit une référence 512×512 en ≈ 3 s ; le VAE
     décode 11 fois plus vite sur Metal que sur le processeur (3 s contre 37 s en 512×512) ; `--fa` (flash attention
     partout, tour vision comprise) évite une faute mémoire du GPU sur une référence en 2048×2048 ;
     `--params-backend te=disk` libère les poids de l'encodeur après l'encodage, ce qui laisse la place au cache de

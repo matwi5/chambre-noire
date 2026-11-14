@@ -99,7 +99,8 @@ BACKENDS = {
     "vulkan": ["--backend", "diffusion=vulkan0,vae=vulkan0,te=cpu", "--offload-to-cpu", "--mmap"],
     "cuda":   ["--backend", "cuda0", "--offload-to-cpu", "--diffusion-fa", "--mmap"],
     "cpu":    ["--backend", "cpu", "--mmap"],
-    # Metal (Mac Apple Silicon, mesuré sur M6 avec sd.cpp d637cfb, release master-959) : tout sur le GPU.
+    # Metal (Mac Apple Silicon, mesuré sur M6 avec sd.cpp d637cfb, release master-959 ; repris tels quels sur la
+    # release master-1090, celle de setup.py, qui annonce --fa déprécié : non remesuré) : tout sur le GPU.
     # - encodeur GGUF Q8_0 : 3 s pour une édition 512×512, contre 150 s pour l'encodeur int8 sur le CPU
     #   (Metal n'a pas de noyau int8 : kernel_mul_mm_i8_i8 absent, sd-cli plante si on l'y place) ;
     # - VAE : décodage 11 fois plus rapide que sur le CPU (3 s contre 37 s en 512×512) ;
@@ -1847,7 +1848,7 @@ def run_job(job):
                 t = TAKING_RE.search(text)
                 if t:
                     job["vae_seconds"] = float(t.group(1))
-            elif "[ERROR" in text or text.startswith("[E]") or "GGML_ASSERT" in text:   # [E] : journaux de master-959
+            elif "[ERROR" in text or text.startswith("[E]") or "GGML_ASSERT" in text:   # [E] : depuis master-959
                 job["error_lines"] = (job.get("error_lines") or []) + [text]
     rc = proc.wait()
     logf.close()
