@@ -1781,6 +1781,13 @@ def run_job(job):
     buf = b""
     tail = []
     fd = proc.stdout.fileno()
+    # une barre d'avancement n'est une étape qu'entre la fin de l'encodage du prompt et la fin de l'échantillonnage,
+    # et si son total est le nombre d'étapes : MiniMax H3 et la vidéo en impriment d'autres à la lecture d'une image
+    # et au décodage. Une image d'origine retouchée à moins de 1 n'en calcule qu'une part (« 1/1 » pour 0,05 sur 25
+    # étapes) : seule la fenêtre compte alors.
+    r = job["req"]
+    partial = r.get("init_image") and float(r.get("strength", 1.0)) < 1
+    steps_total, sampling = None if partial else int(r["steps"]), False
     while True:
         try:
             chunk = os.read(fd, 4096)
@@ -1802,6 +1809,8 @@ def run_job(job):
             tail[:] = tail[-8:]
             pm = PROGRESS_RE.search(text)
             if pm:
+                if not sampling or steps_total not in (None, int(pm.group(2))):
+                    continue                     # barre de lecture d'une image ou de décodage
                 speed = float(pm.group(3))
                 job["step"], job["total"] = int(pm.group(1)), int(pm.group(2))
                 job["sec_per_it"] = speed if pm.group(4) == "s/it" else round(1 / max(speed, 1e-6), 3)
@@ -1822,12 +1831,14 @@ def run_job(job):
                 if t:
                     job["venc_seconds"] = float(t.group(1))
             elif "get_learned_condition completed" in text:
+                sampling = True
                 job["phase"] = "génération"
                 job["encode_seconds"] = round(time.time() - job["started"], 1)
                 t = TAKING_RE.search(text)
                 if t:
                     job["encode_seconds_net"] = float(t.group(1))
             elif "sampling completed" in text:
+                sampling = False
                 job["phase"] = "décodage VAE"
                 t = TAKING_RE.search(text)
                 if t:

@@ -435,7 +435,10 @@ invariants ».
 
 - **Une génération** : `worker()` exécute les jobs un par un via `run_job()`, qui construit la ligne de commande
   (`build_cmd`), lit la sortie de sd-cli ligne à ligne et en tire l'étape, la phase et les durées (`PROGRESS_RE`,
-  lignes « … completed, taking x s ») qui alimentent la calibration. Les jobs vivent en mémoire (`S.jobs`) et ne
+  lignes « … completed, taking x s ») qui alimentent la calibration. Une barre d'avancement n'est une étape qu'entre
+  « get_learned_condition completed » et « sampling completed », et si son total est le nombre d'étapes demandé (sauf
+  une image d'origine retouchée à `strength` moins de 1, dont le moteur ne calcule qu'une part) : MiniMax H3 et la
+  vidéo impriment d'autres barres à la lecture d'une image et au décodage. Les jobs vivent en mémoire (`S.jobs`) et ne
   survivent pas à un redémarrage.
 - **Fichiers** : dossier de travail `jobs/<id>/` (images d'entrée, aperçus, `sd-cli.log`, et l'image tant qu'elle se
   calcule ; les 20 derniers gardés au lancement), image finale `outputs/.pile/<id>_<mode>.png` (la pile, à trier),
