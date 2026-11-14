@@ -2260,6 +2260,12 @@ function keptRequest(p){                          // l'image seule (sa photo d'u
   if(!p.lot) return {...p.req};
   const {count, campaign, ...one}=p.req; if(!campaign) return one;
   const c=campaign[p.lot.rank-1]; return {...one, ref_images:[c.image], width:c.width, height:c.height}; }
+// modèle d'une image (« Relancer », « Reprendre ») lu dans son champ model, la clé de version de sa génération (journal,
+// fiche privée ; MODEL_TABLE de tools/launch.py) : absent ou version de Qwen, Qwen ; version de MiniMax H3, MiniMax H3 ;
+// toute autre valeur (inconnue, d'un autre type, ligne illisible) : null, le modèle choisi dans les Réglages
+const VERSION_MODELS = { q4:'qwen', q8:'qwen', 'uc-q4':'qwen', 'uc-q8':'qwen', 'h3-q4':'h3', 'h3-q8':'h3' };
+const modelOfImage = it => it.model===undefined || it.model===null ? 'qwen'
+  : typeof it.model==='string' && Object.hasOwn(VERSION_MODELS, it.model) ? VERSION_MODELS[it.model] : null;
 const canAgain = it => !!(it.page && it.page.req)
   || it.mode!=='mask' && canResume(it) && !!(it.prompt && it.width && it.height && it.steps);
 async function againFrom(it){
@@ -2269,8 +2275,11 @@ async function againFrom(it){
   try{ images=await Promise.all(resumeImages(it).map(f=>dataUrlOf(f.name, f.url))); }
   catch(e){ if(priv===inPrivate()) toast('Images d\'entrée illisibles', 'err'); return; }
   if(priv!==inPrivate()) return;                   // espace changé pendant la lecture : rien ne part
-  return relaunch({ ...base, mode:it.mode||'t2i', prompt:it.prompt, width:it.width, height:it.height, steps:it.steps,
-    ref_images:images }); }
+  // modèle de l'image (inconnu : celui des Réglages), et ses étapes s'il les impose (celles de l'image sinon)
+  const model=modelOfImage(it) ?? modelSel()?.key, fixed=(modelList||[]).find(m=>m.key===model)?.steps;
+  return relaunch({ ...base, mode:it.mode||'t2i', prompt:it.prompt, width:it.width, height:it.height,
+    steps:Array.isArray(fixed) && fixed.length ? fixed[0] : it.steps, ref_images:images,
+    ...(modelList && model ? {model} : {}) }); }
 // un seul « Relancer » à la fois : un double appui sur une carte, qui reste à l'écran, ne relance pas deux fois
 let relaunching=false;
 // rien pendant « Sortir » (exiting) : aucune demande privée vers une session qui se ferme (décision du porteur,
@@ -2670,10 +2679,13 @@ async function resumeFrom(it){
   if(here){
     $('prompt').value=it.prompt;
     if(!priv) $('prompt').dispatchEvent(new Event('input'));   // brouillon public
+    // le modèle de l'image (un modèle désinstallé depuis laisse la place à Qwen, modelSel), posé avant le dessin
+    const model=modelOfImage(it); if(model) opt.model=model;
     list.splice(0, list.length, ...entries); drawOn=mask; if(mask) setMaskMode('mask');
     showLabo('composer');                          // (qui propose le format « Image » : remplacé ci-dessous)
-    // la même demande : ses réglages, et une édition à plusieurs références n'est pas une campagne
-    if(it.width && it.height) Object.assign(opt, settingsFor(it.width, it.height, it.steps));
+    // la même demande : ses réglages (les étapes, sauf celles qu'impose le modèle : celles des Réglages restent), et
+    // une édition à plusieurs références n'est pas une campagne
+    if(it.width && it.height) Object.assign(opt, settingsFor(it.width, it.height, fixedSteps()==null ? it.steps : NaN));
     if(campaignShown()) $('campChk').checked=campaignOn=false;
     saveOpt(); renderInputs(); refreshChoices(); toast('Image reprise'); }
   else {                                           // espace changé pendant la lecture : dans sa saisie mise de côté

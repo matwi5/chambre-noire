@@ -381,10 +381,12 @@ dernier bloc, après le HTML.
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;
     « Reprendre » : `resumeFrom` (saisie remplacée, confirmation si elle n'est pas vide), `resumeImages` (images
     d'entrée selon le mode, `RESUME_FILES` : demande gardée `req`, sinon galerie), `canResume` (bouton `#vResume`),
-    `settingsFor` (format, résolution et étapes qui redonnent l'image) ; « Relancer » (visionneuse `#vAgain`, carte
+    `settingsFor` (format, résolution et étapes qui redonnent l'image ; `resumeFrom` remet aussi son modèle,
+    `modelOfImage`, avant le dessin) ; « Relancer » (visionneuse `#vAgain`, carte
     d'échec `data-again`) : `keptRequest` (demande gardée : l'image seule), `againFrom` (reconstruite de
-    l'image sinon), `canAgain`, `relaunch` (graine et espace du moment ; estimation), puis `launch` (envoi commun, rien
-    d'une demande privée pendant « Sortir », avec
+    l'image sinon, avec son modèle lu par `modelOfImage` : clé de version → modèle, inconnue → celui des Réglages,
+    et les étapes que ce modèle impose), `canAgain`, `relaunch` (graine et espace du moment ; estimation), puis `launch`
+    (envoi commun, rien d'une demande privée pendant « Sortir », avec
     « Révéler » : suivi, `accepted` (vidage de la saisie de « Révéler », champ replié), message, haut du Labo), `again`
     (un geste à la fois ; rien pendant « Sortir », `exiting()`, comme « Révéler » `#go`) ;
     actions de la visionneuse : `viewerAction` (comme `inputAction`, `viewerShare`, `viewerCopy`, `downloadLot` et les
@@ -575,7 +577,8 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
 - Les clés de `MODEL_TABLE` sont recopiées dans `index.html` : `qwen` (modèle d'une demande sans champ `model`) pour
   le défaut de `opt.model`, le repli de `modelSel`, la ligne de Qwen mise à part dans la feuille Moteur et le modèle
   d'une demande relancée sans `model` (`relaunch`) ; `h3` dans `isH3` (aide `<Picture N>` et mention de l'édition,
-  propres à MiniMax H3).
+  propres à MiniMax H3) ; les clés de version (`DIFFUSION`, `H3_DIFFUSION`) dans `VERSION_MODELS`, que lit
+  `modelOfImage`.
 - `PREVIEW_EVERY = 5` côté interface égale le défaut `preview_interval` de `build_cmd` (`preview_every`, quand le
   modèle n'impose pas le sien).
 - La longueur minimale du code privé (`MIN_PRIVATE_CODE`, 8) est aussi vérifiée dans `index.html` (feuilles

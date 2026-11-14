@@ -511,7 +511,8 @@ partir de 1024 px) : **Éditer** (ajoute l'image aux images d'entrée du Labo),
 de travail et ligne du journal des générations compris). Le champ de création n'est pas sur les Tirages.
 
 **Reprendre** remet dans le Labo la saisie d'où vient l'image, à la place de la saisie en cours (après confirmation si
-elle n'est pas vide) : son texte, ses réglages (format, résolution, étapes) et ses images d'entrée selon son usage.
+elle n'est pas vide) : son texte, ses réglages (format, résolution, étapes, et son modèle : voir
+[Le modèle](#le-modèle)) et ses images d'entrée selon son usage.
 Une édition revient avec ses références (Campagne éteinte : c'était une seule édition) ; un dessin en masque avec son
 image de départ, Dessiner actif en masque et le tracé vide (la zone peinte n'est pas gardée) ; une annotation revient
 en édition, avec sa référence où le trait rouge est déjà dessiné. Les images d'entrée se lisent dans les Tirages
@@ -524,9 +525,9 @@ dont les Tirages n'ont pas gardé les images d'entrée (images anciennes).
 **Labo**, comme **Révéler** : dans l'espace où l'on est (dans l'espace privé, tout part en privé). Pour une image de la
 pile lancée par la page, c'est la demande qu'elle a gardée (une image d'un lot : cette image seule, sa photo pour une
 campagne), de même pour une carte d'échec. Pour une image des Tirages, ou une image reprise après un
-rechargement, la demande est refaite à partir de l'image : son texte, ses images d'entrée, ses dimensions, ses étapes
-et son usage (une annotation repart en annotation), pour une seule image ; le geste est absent pour un dessin en masque
-(le masque n'est pas gardé avec l'image) et pour une édition dont les images d'entrée ne sont pas connues.
+rechargement, la demande est refaite à partir de l'image : son texte, ses images d'entrée, ses dimensions, ses étapes,
+son modèle et son usage (une annotation repart en annotation), pour une seule image ; le geste est absent pour un dessin
+en masque (le masque n'est pas gardé avec l'image) et pour une édition dont les images d'entrée ne sont pas connues.
 
 Une image ne s'affiche qu'une fois chargée : sa miniature d'abord, puis l'image complète, sans jamais laisser voir un
 instant l'image vue avant (ni celle d'une autre image, ni celle de l'autre espace). Les images voisines de la
@@ -812,7 +813,12 @@ Avec MiniMax H3 et au moins une image jointe, l'aide sous les images dit de les 
 `<Picture 1>`, `<Picture 2>`… (en campagne, chaque photo est `<Picture 1>`), et une mention avertit que chaque image
 jointe allonge beaucoup le calcul et que le rendu sort plus dur qu'avec Qwen, suivie du temps estimé de la demande.
 **Dessiner** est grisé (« Dessiner se fait avec Qwen »), et **Dessiner** depuis une image est refusé par un message ;
-variantes, campagnes et confirmation au-delà d'une heure restent les mêmes qu'avec Qwen. Avec Qwen
+variantes, campagnes et confirmation au-delà d'une heure restent les mêmes qu'avec Qwen.
+Chaque image garde la version de son modèle (ligne d'informations : `Q4`, `UC-Q8`, `H3-Q4`…). **Relancer** refait la
+demande avec ce modèle, celle que la page a gardée ou celle refaite à partir de l'image (version absente ou de Qwen :
+Qwen ; `H3-Q4`, `H3-Q8` : MiniMax H3 ; autre valeur : le modèle des Réglages, avec ses étapes s'il les impose) ; un
+modèle désinstallé depuis donne le refus du Mac, affiché tel quel. **Reprendre** remet ce modèle dans les Réglages
+(les étapes choisies restent quand il impose les siennes) ; **Éditer** garde celui des Réglages. Avec Qwen
 seul, ou devant un serveur qui n'envoie pas la liste `models` de `/api/status`, la ligne n'apparaît pas et la demande
 part sans champ `model`.
 

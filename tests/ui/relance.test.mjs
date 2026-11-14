@@ -198,3 +198,127 @@ test('double appui sur « Relancer » d\'un échec : une seule relance', async (
   assert.equal(await page.eval(`sentBodies.length`), 2, 'une seule demande en plus');
   page.assertNoErrors();
 });
+
+// Modèle de l'image (ticket 07 de MiniMax H3) : « Relancer » renvoie la demande avec son modèle, gardée par la page ou
+// reconstruite du champ model de l'image (clé de version) ; MiniMax H3 installé le temps de ces tests seulement
+test('modèle d\'une image : absent ou version de Qwen, Qwen ; de MiniMax H3, MiniMax H3 ; sinon null', async () => {
+  await fresh();
+  const read = item => page.eval(`modelOfImage(${item})`);
+  assert.equal(await read(`{}`), 'qwen', 'absent');
+  assert.equal(await read(`{ model: null }`), 'qwen', 'absent de la ligne (null de la liste)');
+  for (const v of ['q4', 'q8', 'uc-q4', 'uc-q8']) assert.equal(await read(`{ model: '${v}' }`), 'qwen', v);
+  for (const v of ['h3-q4', 'h3-q8']) assert.equal(await read(`{ model: '${v}' }`), 'h3', v);
+  for (const v of [`'zz-q4'`, `'H3-Q4'`, `'h3'`, `'constructor'`, `42`, `['h3-q4']`, `{}`]) {
+    assert.equal(await read(`{ model: ${v} }`), null, `valeur inconnue ou illisible : ${v}`);
+  }
+  page.assertNoErrors();
+});
+
+test('« Relancer » : le modèle de l\'image, demande gardée ou Tirages ; inconnu : celui des Réglages', async () => {
+  bench.h3();
+  try {
+    await fresh();
+    await page.modelsSeen(2);
+    await page.chooseModel('h3');
+    await page.generate('zl12 h3 gardee');
+    await bench.idle({ page });
+    await page.chooseModel('qwen');
+    await page.viewPile('zl12 h3 gardee');
+    const kept = await again('#vAgain');
+    assert.deepEqual([kept.model, kept.steps], ['h3', 6], 'demande gardée par la page');
+    await bench.idle({ page });
+    assert.equal(await page.postGenerate(`{ mode: 't2i', prompt: 'zl13 h3 tirage', model: 'h3', steps: 6 }`), 202);
+    assert.equal(await page.postGenerate(`{ mode: 't2i', prompt: 'zl13 qwen tirage' }`), 202);
+    await bench.idle({ page });
+    await view('zl13 h3 tirage');
+    assert.match(await page.eval(`$('vChips').textContent`), /H3-Q4/, 'clé de version en majuscules');
+    const fromLog = await again('#vAgain');
+    assert.deepEqual([fromLog.model, fromLog.steps], ['h3', 6], 'reconstruite du journal, Réglages sur Qwen');
+    await bench.idle({ page });
+    await page.eval(`opt.model = 'h3'; saveOpt(); refreshChoices()`);   // (champ replié : la pile reste triable)
+    await view('zl13 qwen tirage');
+    assert.equal((await again('#vAgain')).model, 'qwen', 'image de Qwen, Réglages sur MiniMax H3');
+    await bench.idle({ page });
+    const odd = `histItems.find(it => it.prompt === 'zl13 qwen tirage')`;
+    await page.eval(`againFrom({ ...${odd}, model: 'zz-q4' })`);
+    await page.waitFor(`sentBodies.at(-1).prompt === 'zl13 qwen tirage' && sentBodies.length > 4`,
+      { what: 'relance d\'une image au modèle inconnu' });
+    assert.deepEqual(await page.eval(`[sentBodies.at(-1).model, sentBodies.at(-1).steps]`), ['h3', 6],
+      'modèle inconnu : celui des Réglages, avec ses étapes');
+    await bench.idle({ page });
+    page.assertNoErrors();
+  } finally {
+    bench.h3(false);
+  }
+});
+
+test('« Relancer » une image MiniMax H3 désinstallé depuis : le refus du serveur, tel quel', async () => {
+  bench.h3();
+  try {
+    await fresh();
+    await page.modelsSeen(2);
+    assert.equal(await page.postGenerate(`{ mode: 't2i', prompt: 'zl14 h3', model: 'h3', steps: 6 }`), 202);
+    await bench.idle({ page });
+    bench.h3(false);
+    await page.modelsSeen(1);
+    await view('zl14 h3');
+    await page.watchToasts();
+    const n = await page.eval(`sentBodies.length`);
+    await page.click('#vAgain');
+    await page.waitFor(`sentBodies.length > ${n}`, { what: 'relance envoyée' });
+    await page.waitFor(`seenToasts.some(t => t.startsWith('Erreur : MiniMax H3'))`,
+      { what: 'refus du serveur affiché' });
+    const error = await page.eval(`seenToasts.find(t => t.startsWith('Erreur'))`);
+    assert.equal(error, 'Erreur : MiniMax H3 n\'est pas installé : lancez setup.py --h3 (Mac seulement)');
+    page.errors.length = 0;                           // (le 400 du serveur, écrit par Chrome dans la console)
+    page.assertNoErrors();
+  } finally {
+    bench.h3(false);
+  }
+});
+
+test('« Relancer » une image de Qwen avec MiniMax H3 choisi : aperçus comptés à l\'intervalle de Qwen', async () => {
+  bench.h3();
+  try {
+    await fresh();
+    await page.modelsSeen(2);
+    await page.eval(`$('previewChk').checked = true; saveOpt(); refreshChoices()`);
+    await page.generate('zl15 qwen apercu');
+    await bench.idle({ page });
+    await page.chooseModel('h3');
+    await page.viewPile('zl15 qwen apercu');
+    const b = await again('#vAgain');
+    assert.deepEqual([b.model, b.preview, b.steps], ['qwen', true, 8]);
+    const none = `{ refs: [], init: 0 }`;
+    const [est, qwen, h3] = await page.eval(`[pageJobs.at(-1).est, parts(512, 512, 8, ${none}, true, 5).total,
+      parts(512, 512, 8, ${none}, true, 2).total]`);
+    assert.notEqual(qwen, h3, 'cas qui ne distingue pas les deux intervalles');
+    assert.equal(est, qwen, 'estimation de la relance à l\'intervalle du modèle des Réglages');
+    await bench.idle({ page });
+    page.assertNoErrors();
+  } finally {
+    bench.h3(false);
+  }
+});
+
+test('espace privé : « Relancer » une image privée MiniMax H3 garde son modèle', async () => {
+  bench.h3();
+  try {
+    await fresh();
+    await page.modelsSeen(2);
+    await page.enterPrivate(CODE);
+    assert.equal(await page.postGenerate(`{ mode: 't2i', prompt: 'zl16 privee h3', model: 'h3', steps: 6,
+      private: true }`), 202);
+    await bench.idle({ page });
+    await view('zl16 privee h3');
+    assert.match(await page.eval(`$('vChips').textContent`), /H3-Q4/);
+    const b = await again('#vAgain');
+    assert.deepEqual([b.private, b.model, b.steps], [true, 'h3', 6]);
+    await bench.idle({ page });
+    await page.click('#privExit');
+    await page.waitFor(`!inPrivate()`, { what: 'sorti de l\'espace privé' });
+    page.assertNoErrors();
+  } finally {
+    bench.h3(false);
+  }
+});
