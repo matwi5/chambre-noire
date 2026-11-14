@@ -283,7 +283,8 @@ ajouter `?lite=1` ou `?lite=0` à l'adresse force l'un ou l'autre rendu.
 
 Sous le texte, une grille de quatre cases résume le format, la taille (la résolution), les étapes et le nombre
 d'images ; un appui sur une case ouvre le panneau **Réglages**. Quand un second modèle est installé, une case et une
-ligne **Modèle** s'y ajoutent en tête (voir [Le modèle](#le-modèle)). Tous les réglages sont à valeurs fixes :
+ligne **Modèle** s'y ajoutent en tête, et un modèle à étapes fixes (MiniMax H3) retire la case et la ligne **Étapes**
+(voir [Le modèle](#le-modèle)). Tous les réglages sont à valeurs fixes :
 
 | Réglage | Choix | Effet |
 | --- | --- | --- |
@@ -291,7 +292,7 @@ ligne **Modèle** s'y ajoutent en tête (voir [Le modèle](#le-modèle)). Tous l
 | **Résolution** | 360p (512×512) · 540p (768×768) · **720p** (1024×1024, par défaut) · 1080p (1536×1536) · 1440p (2048×2048, 2K natif du modèle) | Nombre de pixels, nommé d'après le format vidéo qui en compte autant (720p : ≈ 0,9 à 1 million de pixels) ; les dimensions exactes, qui dépendent du format, s'affichent en bas du panneau |
 | **Étapes** | Low 8 · Medium 12 · High 20 · XHigh 30 · **Max 40** (par défaut, réglage officiel du modèle) | Finesse des détails ; chaque option affiche le **temps estimé** |
 | **Images** (hors campagne) | **1**, 2, 3 ou 4 | Nombre de variantes du même prompt, chacune avec sa graine, avec ou sans images d'entrée, dessin compris (voir [Créer une image](#créer-une-image-labo)) ; le temps affiché est celui de toutes les images |
-| **Aperçu toutes les 5 étapes** | interrupteur, activé par défaut | Montre l'image en cours de formation ; coût affiché à côté |
+| **Aperçu toutes les 5 étapes** (2 avec MiniMax H3) | interrupteur, activé par défaut | Montre l'image en cours de formation ; coût affiché à côté |
 
 Le bouton **Révéler** affiche le temps estimé. Le navigateur retient les réglages choisis et le texte en cours de
 l'espace public (un seul brouillon).
@@ -312,8 +313,9 @@ de l'ordinateur ou du téléphone.
 La génération en cours de l'espace a sa **carte en cours** dans le Labo : sur le dessus quand la pile est vide, sinon
 juste derrière la pile, réduite à un bandeau au bord de celle-ci (sa vignette, son étape, l'heure de fin prévue et
 le liseré de son avancement). L'image s'y **révèle en pixels** : avant le premier aperçu, des carrés s'allument au
-hasard ; puis chaque aperçu (toutes les 5 étapes) s'affiche en mosaïque de gros carrés, de plus en plus fins à mesure
-que la génération avance, jusqu'à l'image nette qui arrive sur la pile. Sur un téléphone, l'animation est allégée ;
+hasard ; puis chaque aperçu (toutes les 5 étapes, 2 avec MiniMax H3) s'affiche en mosaïque de gros carrés, de plus en
+plus fins à mesure que la génération avance, jusqu'à l'image nette qui arrive sur la pile. Sur un téléphone,
+l'animation est allégée ;
 elle s'arrête si le système demande de réduire les animations. Lancée par la page : l'étape, la phase et l'heure de
 fin prévue (chiffres en chasse fixe), et un bouton d'annulation qui demande confirmation, puis annule la génération
 de la question, ou dit « Déjà terminée » si elle a fini entre-temps (une génération annulée ne laisse aucun fichier :
