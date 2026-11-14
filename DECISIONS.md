@@ -4,6 +4,33 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-11-14 · Deux modèles d'image, Qwen et MiniMax H3, choisis à chaque génération
+
+- **Contexte** : demande du porteur : « je veux le mettre dans l'app et ppuvoir switch entre qwen et ce nouveau »
+  (MiniMax H3 Image, que stable-diffusion.cpp sait lancer depuis sa release `master-1088`). Le serveur relance
+  `sd-cli` à chaque génération : rien n'oblige à fixer le modèle au démarrage.
+- **Décision** (porteur, 13 et 14/11/2026, questions posées avec une recommandation) :
+  - « a. un sélecteur dans l'interface, où chaque demande porte son modèle et la file peut mélanger les deux ;
+    b. un réglage global dans le panneau Moteur ; c. un redémarrage du serveur » → « a » ;
+  - « a. une première ligne « Modèle » dans la feuille Réglages, rappelée dans la grille sous le prompt ; b. dans la
+    feuille Moteur ; c. une bascule toujours visible au-dessus du prompt. Dans les trois cas : noms affichés « Qwen »
+    et « MiniMax H3 », Qwen à la première ouverture, puis le dernier modèle choisi » → « a » ;
+  - MiniMax H3 s'installe seulement par une option de `setup.py` (`--h3`, `--h3-q8`), sur Mac, et le README le
+    décrit dans sa partie technique, comme la variante communautaire de Qwen ;
+  - un seul moteur pour les deux modèles sur le Mac (`master-1090`) ; mêmes formats et résolutions que Qwen ;
+    avec MiniMax H3, 6 étapes fixes (pas de ligne « Étapes ») et un aperçu toutes les 2 étapes.
+- **Mise en œuvre** :
+  - le champ `model` d'une demande (`qwen`, `h3` ; absent : Qwen) ne sert qu'à choisir une entrée de
+    `MODEL_TABLE`, table fermée du serveur ; il n'entre jamais dans un chemin ni dans la commande ; un modèle
+    inconnu ou non installé est refusé (400) avant la file ;
+  - `/api/status` envoie la liste `models` des modèles installés et de leurs limites ; l'interface n'affiche la
+    ligne « Modèle » qu'à partir de deux modèles, et devant un serveur sans cette liste la demande part sans champ
+    `model` (l'interface est en ligne avant que le serveur soit relancé) ;
+  - chaque image garde la version du modèle de sa génération (champ `model` du journal et de la fiche privée :
+    `q4`, `uc-q8`, `h3-q4`…) ; la lampe et la ligne d'informations d'un tirage ne changent pas, et le panneau Moteur
+    gagne une ligne par autre modèle installé.
+- **Écarté** : un réglage global du serveur (une file ne pourrait pas mélanger les deux) ; deux moteurs côte à côte.
+
 ## 2026-10-27 · Interface pour PC et tablette ; bouton Avant pour comparer une édition à son image d'entrée
 
 - **Contexte** : grilling de deux demandes du porteur : « Actuellement l'app est optimisé pour mobile. Je veux que tu

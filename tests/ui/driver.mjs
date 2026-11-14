@@ -80,6 +80,10 @@
 //   await page.canvasInk('#revealCanvas')        // { width, height, ink } : pixels non transparents d'un canevas
 //   await bench.api('/api/pile')                 // réponse JSON d'une route du banc (le Mac, avec le cookie d'accès)
 //   await bench.enter()                          // page d'entrée (jeton à usage unique), comme launch.py --enter
+//   bench.h3(); bench.h3(false)                  // MiniMax H3 installé, ou retiré (le banc part avec Qwen seul :
+//                                                // tests/ui/serve.py) ; la page le voit à son statut suivant
+//   await page.oldServer()                       // la page lit /api/status sans sa liste models, comme devant un
+//                                                // serveur d'avant MiniMax H3 (jusqu'au prochain chargement)
 //   await page.launch('texte', { private: true })   // génération demandée hors de l'interface (autre appareil)
 //   await page.leaks(['mot', 'id'])              // marqueurs restés dans la page (texte, attributs, champs, mémoire)
 //   const bench = await startBench({ relay: true }); await bench.login(page);   // comme le téléphone par Tailscale :
@@ -273,7 +277,7 @@ async function startPython(script, args, what) {
 // pas les pages d'office, pour que la page du code reste visible). stop() arrête tout.
 export async function startBench({ relay = false } = {}) {
   const server = await startPython('serve.py', [], 'serveur du banc');
-  const { url: direct, hold, https, cookie } = JSON.parse(server.first);
+  const { url: direct, hold, https, cookie, h3 } = JSON.parse(server.first);
   const relayed = relay ? await startPython('relay.py', [direct, https], 'relais du banc')
     .catch(async e => { await server.stop(); throw e; }) : null;
   const url = relayed ? `http://127.0.0.1:${relayed.first.trim()}` : direct;
@@ -315,6 +319,8 @@ export async function startBench({ relay = false } = {}) {
     async kept(prompt) { return (await (await macFetch('/api/history')).json()).some(it => it.prompt === prompt); },
     // jeton et page d'entrée du banc, comme launch.py --enter : chemin de la page de redirection vers /entrer
     async enter() { return JSON.parse(await server.ask('entrer')).entry; },
+    // MiniMax H3 installé (fichiers vides, comme bench.start()) ou retiré : le serveur les cherche à chaque statut
+    h3(on = true) { for (const f of h3) if (on) fs.writeFileSync(f, ''); else fs.rmSync(f, { force: true }); },
     async stop() { if (directBench === entry) directBench = null; await relayed?.stop(); await server.stop(); },
   };
 }
@@ -557,6 +563,14 @@ async function connect(wsUrl, { closeTab, siblings, tabs = async () => [] }) {
     // requêtes privées de la page en route (fetch vers /api/private/), comptées dans __privInflight dès le chargement
     // du document ; sur un document déjà chargé avant la connexion, à partir de l'appel
     countPrivate() { return page.eval(COUNT_PRIVATE); },
+    // /api/status lu par la page sans sa liste models (serveur d'avant MiniMax H3), jusqu'au prochain chargement
+    oldServer() {
+      return page.eval(`(() => { const real = window.fetch;
+        window.fetch = (u, o) => u !== '/api/status' ? real(u, o) : real(u, o).then(async r => {
+          const s = await r.json(); delete s.models;
+          return new Response(JSON.stringify(s), { status: r.status, headers: r.headers }); });
+        return refreshStatus(); })()`);
+    },
     // espace privé au repos : pile privée lue, aucune requête privée en route (comptées dès le chargement du
     // document), aucune image de l'espace (secretUrl) en cours de décodage (secretLoads), ni demandée et pas encore
     // reçue, attachée ou non (requêtes vues par Chrome), ni sur le point de l'être : image non différée de la page pas

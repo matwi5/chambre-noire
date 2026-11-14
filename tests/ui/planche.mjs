@@ -12,7 +12,9 @@
 // d'ouverture finies (deux images d'animation, puis plus rien en cours ni en attente) ; une rangée par taille et par
 // version. Renvoie le chemin de la planche. Vues d'état, des scénarios tenus le temps des captures : avant (bouton
 // Avant tenu sur la carte du dessus, au doigt ou à la souris selon la taille), encours (carte en cours avec la
-// pastille « +1 en attente », générations retenues par HOLD=planche, relâchées après les captures).
+// pastille « +1 en attente », générations retenues par HOLD=planche, relâchées après les captures), reglages (feuille
+// Réglages ouverte, MiniMax H3 installé et choisi) et grille (la même feuille fermée : grille sous le texte), le
+// modèle remis à Qwen après les captures.
 // La rangée « avant » n'emploie que des aides du pilote présentes depuis longtemps (goto, waitFor, eval, generate,
 // keepPile, tab, enterPrivate, send ; bench.release, bench.idle), pour tourner avec le pilote de ce commit ; les
 // tailles passent par applyView, importée du pilote de l'arbre de travail, qui n'emploie que send.
@@ -63,6 +65,18 @@ const CELL_H = 760;
 // vues, dans l'ordre : chacune amène la page dans l'état voulu (en partant de la précédente)
 const VIEWS = {
   labo: async page => { await page.waitFor(READY, { what: 'moteur prêt' }); },
+  // (bench.h3 et modelList n'existent pas dans un commit d'avant la ligne Modèle : son banc a MiniMax H3 d'office)
+  reglages: async (page, bench) => {
+    bench.h3?.();
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`typeof modelList === 'undefined' || (modelList || []).length > 1`, { what: 'deux modèles' });
+    await page.eval(`opt.model = 'h3'; refreshChoices(); openSheet('setSheet')`);
+    return { after: () => page.eval(`closeSheet()`) };
+  },
+  grille: async page => {
+    await page.eval(`opt.model = 'h3'; refreshChoices(); closeSheet()`);
+    return { after: () => page.eval(`opt.model = 'qwen'; saveOpt(); refreshChoices()`) };
+  },
   pile: async page => {
     await page.generate('planche : une image dans la pile');
     await page.waitFor(`pileItems.length > 0 && (img => img && img.complete && img.naturalWidth > 0)

@@ -282,7 +282,8 @@ ajouter `?lite=1` ou `?lite=0` à l'adresse force l'un ou l'autre rendu.
 ### Réglages communs
 
 Sous le texte, une grille de quatre cases résume le format, la taille (la résolution), les étapes et le nombre
-d'images ; un appui sur une case ouvre le panneau **Réglages**. Tous les réglages sont à valeurs fixes :
+d'images ; un appui sur une case ouvre le panneau **Réglages**. Quand un second modèle est installé, une case et une
+ligne **Modèle** s'y ajoutent en tête (voir [Le modèle](#le-modèle)). Tous les réglages sont à valeurs fixes :
 
 | Réglage | Choix | Effet |
 | --- | --- | --- |
@@ -798,6 +799,14 @@ Q8_0 (lu au lancement du serveur) ; une autre valeur, ou une version absente, re
 MiniMax H3 travaille en 6 étapes fixes, guidance 1, avec un aperçu tous les 2 pas, en texte vers image et en
 édition (images de référence comme avec Qwen) ; il n'accepte ni image de départ, ni masque, ni annotation, ni prompt
 négatif.
+
+Dans l'interface, dès que le Mac propose MiniMax H3, le panneau **Réglages** gagne une première ligne **Modèle**
+(« Qwen », « MiniMax H3 »), rappelée en tête de la grille sous le texte ; le navigateur retient le dernier modèle
+choisi (Qwen à la première ouverture, et tant que le modèle retenu n'est pas installé). Avec MiniMax H3, la ligne
+**Étapes** disparaît (6 étapes) et l'aperçu se fait toutes les 2 étapes ; formats et résolutions restent ceux de Qwen.
+Le panneau **Moteur** ajoute une ligne par autre modèle installé, avec sa version (`H3-Q4`, `H3-Q8`). Avec Qwen
+seul, ou devant un serveur qui n'envoie pas la liste `models` de `/api/status`, la ligne n'apparaît pas et la demande
+part sans champ `model`.
 
 **Licence de MiniMax H3.** Ses poids sont soumis à la licence publiée par MiniMax avec le modèle (fichier `LICENSE`
 du dépôt [MiniMaxAI/MiniMax-H3-Image](https://huggingface.co/MiniMaxAI/MiniMax-H3-Image)). Elle exclut des

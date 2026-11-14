@@ -212,6 +212,7 @@
   .ratios { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
   .chips5 { display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; }
   .chips4 { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
+  .chipsn { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0, 1fr); gap:6px; }   /* ligne Modèle */
   #setSheet.camp :is(#fmtHead, #ratioOpts, #countRow) { display:none; }   /* campagne : chaque photo a son format, et pas de variantes */
   .pane-head b { font-weight:inherit; }
   .opt { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; min-width:0; padding:10px 2px 9px;
@@ -790,11 +791,12 @@
 <section class="sheet mat" id="setSheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
   <button class="grab" aria-label="Fermer" onclick="closeSheet()"></button>
   <div class="sheet-head"><h2 id="setTitle">Réglages</h2><button class="btn small" onclick="closeSheet()">OK</button></div>
+  <div id="modelRow" hidden><h3>Modèle</h3><div class="chipsn" id="modelOpts"></div></div>
   <h3 id="fmtHead">Format</h3><div class="ratios" id="ratioOpts"></div>
   <h3>Résolution</h3><div class="chips5" id="resOpts"></div>
-  <h3>Étapes</h3><div class="chips5" id="stepOpts"></div>
+  <div id="stepRow"><h3>Étapes</h3><div class="chips5" id="stepOpts"></div></div>
   <div id="countRow"><h3>Images</h3><div class="chips4" id="countOpts"></div></div>
-  <label class="switch"><input type="checkbox" id="previewChk"><span class="track"></span><span>Aperçu toutes les 5 étapes <small id="previewCost"></small></span></label>
+  <label class="switch"><input type="checkbox" id="previewChk"><span class="track"></span><span>Aperçu toutes les <span id="previewGap">5</span> étapes <small id="previewCost"></small></span></label>
   <label class="switch" id="notifRow" hidden><input type="checkbox" id="notifChk"><span class="track"></span><span>Notification en fin de génération <small id="notifNote"></small></span></label>
   <div class="estimate" id="estimate"><span id="estText"></span><b id="estTime"></b></div>
 </section>
@@ -930,17 +932,36 @@ function dimsExact(iw, ih, scale){ const px=MAX_PIXELS*scale*scale, r=iw/ih, h0=
 function dimsFor(key, scale){ const im=singleImage(); if(key==='image' && im) return dimsExact(im.w, im.h, scale); const [w,h]=RATIOS[key in RATIOS ? key : '1:1']; return [round32(w*scale), round32(h*scale)]; }
 // réglages choisis, retenus par ce navigateur d'une visite à l'autre
 const DRAFT_KEY = 'qwen-prompt';                  // brouillon du texte de l'espace public (jamais privé)
-const opt = { ratio:'1:1', res:'high', steps:'max', count:1 };   // count : images d'un lot de variantes (hors campagne)
+// count : images d'un lot de variantes (hors campagne) ; model : clé du dernier modèle choisi (ligne « Modèle »)
+const opt = { ratio:'1:1', res:'high', steps:'max', count:1, model:'qwen' };
 const savedOpt = (()=>{ try{ const o=JSON.parse(localStorage.getItem('qwen-opt')||'{}');
   if(o.v!==2){ delete o.res; delete o.steps; delete o.preview; }   // retenus avant les défauts High, 40 étapes et aperçus : remis une fois à ces défauts
   return o; }catch(e){ return {}; } })();
 ['ratio','res','steps'].forEach(k=>{ if(savedOpt[k]) opt[k]=savedOpt[k]; });
 if(Number.isInteger(savedOpt.count) && savedOpt.count>=1 && savedOpt.count<=MAX_VARIANTS) opt.count=savedOpt.count;
+if(typeof savedOpt.model==='string') opt.model=savedOpt.model;
 // (un ancien champ incognito, l'incognito ayant été retiré, est signalé une fois au chargement puis oublié : init)
 let notifyOn = savedOpt.notify!==false, campaignOn = !!savedOpt.campaign;
 function saveOpt(){ try{ localStorage.setItem('qwen-opt', JSON.stringify({...opt, v:2, preview:$('previewChk').checked, notify:notifyOn, campaign:campaignOn})); }catch(e){} }
 const resSel = () => RES.find(p=>p.k===opt.res) || RES[1];
 const stepsSel = () => STEPS.find(p=>p.k===opt.steps) || STEPS[1];
+// modèles installés que le Mac propose (/api/status, models : clé, nom, étapes permises, intervalle des aperçus…) ;
+// null avant le premier statut et devant un serveur qui n'envoie pas la liste. La ligne « Modèle » n'est montrée qu'à
+// partir de deux modèles ; sinon la demande part sans champ model (Qwen pour le serveur)
+let modelList = null, lastModels = '';
+const modelShown = () => !!modelList && modelList.length>1;
+// modèle de la saisie : le dernier choisi s'il est installé, sinon Qwen (le choix retenu n'est pas oublié : il
+// revient quand son modèle est de nouveau installé) ; null quand la ligne n'est pas montrée
+const modelSel = () => !modelShown() ? null
+  : modelList.find(m=>m.key===opt.model) || modelList.find(m=>m.key==='qwen') || modelList[0];
+// étapes de la demande : celles que le modèle impose (MiniMax H3 : 6, sans ligne « Étapes »), sinon celles choisies
+const fixedSteps = () => { const st=modelSel()?.steps; return Array.isArray(st) && st.length ? st[0] : null; };
+const chosenSteps = () => fixedSteps() ?? stepsSel().steps;
+// intervalle des aperçus : celui que le modèle impose, sinon celui de la page
+const previewEvery = () => modelSel()?.preview_every || PREVIEW_EVERY;
+function applyModels(list){
+  const key=JSON.stringify(list ?? null); if(key===lastModels) return; lastModels=key;
+  modelList = Array.isArray(list) ? list : null; refreshChoices(); }
 function currentDims(){ return dimsFor(opt.ratio, resSel().scale); }
 // campagne : l'interrupteur n'est proposé qu'à partir de 2 images d'entrée (donc hors dessin) ; son réglage
 // (campaignOn) est gardé, mais ignoré tant qu'il n'est pas proposé
@@ -963,7 +984,7 @@ function inputsFor(w, h){ const k=inputKind();
 function parts(w, h, steps, inp, preview){
   const R=inp.refs.reduce((t,p)=>t+p, 0)/1e6, I=inp.init/1e6, M=w*h/1e6, nt=w*h/256/1024, n=(w*h + R*1e6)/256/1024, p=E.kv ? nt : n;
   const step=E.a*p + E.b*p*n, prefix=E.kv ? step*(n-nt)/nt : 0, enc=E.o + E.e0 + E.e1*R + E.u*(R+I) + prefix, vae=E.v*M;
-  const previews = preview ? Math.floor(steps/PREVIEW_EVERY) : 0;
+  const previews = preview ? Math.floor(steps/previewEvery()) : 0;
   return { step, enc, vae, previews, total: enc + steps*step + vae + previews*vae }; }
 function fmt(s){ if(s<90) return Math.round(s)+' s'; if(s<3600) return Math.round(s/60)+' min'; return (s/3600).toFixed(1).replace('.',',')+' h'; }
 
@@ -977,13 +998,17 @@ function refreshChoices(){
   const ratioDims = r => r==='image' ? [im.w, im.h] : RATIOS[r];
   $('ratioOpts').innerHTML = (im ? ['image'] : []).concat(Object.keys(RATIOS)).map(r=>{ const [rw,rh]=ratioDims(r), on=r===opt.ratio;
     return `<button class="opt ratio${on?' on':''}${r===near?' near':''}" data-k="${r}" aria-pressed="${on}"${r===near?' title="Proche des proportions de l\'image"':''}>${shape(rw,rh,26)}<b>${r==='image'?'Image':r}</b></button>`; }).join('');
-  const steps=stepsSel().steps; const [w,h]=currentDims(); const inp=inputsFor(w, h); const n=variants();
+  const steps=chosenSteps(); const [w,h]=currentDims(); const inp=inputsFor(w, h); const n=variants();
   const plan=inCampaign() ? campaignPlan() : null;  // campagne : estimation photo par photo
   const total=(st, prev)=>plan ? plan.reduce((t, x)=>t+parts(x.w, x.h, st, x.inp, prev).total, 0) : n*parts(w, h, st, inp, prev).total;
   const campMode=!!plan; $('setSheet').classList.toggle('camp', campMode);
   $('resOpts').innerHTML = RES.map(p=>{ const on=p.k===opt.res;
     return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}"><b>${p.label}</b></button>`; }).join('');
   const approx = s => E ? '≈ '+fmt(s) : '…';     // avant le premier /api/status, pas de coefficients
+  const model=modelSel(), fixed=fixedSteps()!=null;
+  $('modelRow').hidden=!model; $('stepRow').hidden=fixed; $('previewGap').textContent=previewEvery();
+  $('modelOpts').innerHTML = !model ? '' : modelList.map(m=>{ const on=m.key===model.key;
+    return `<button class="opt${on?' on':''}" data-k="${esc(m.key)}" aria-pressed="${on}"><b>${esc(m.name)}</b></button>`; }).join('');
   $('stepOpts').innerHTML = STEPS.map(p=>{ const on=p.k===opt.steps;
     return `<button class="opt${on?' on':''}" data-k="${p.k}" aria-pressed="${on}" title="${p.label}"><b>${p.steps}</b><small>${approx(E && total(p.steps, pv))}</small></button>`; }).join('');
   $('countOpts').innerHTML = Array.from({length:MAX_VARIANTS}, (_, i)=>i+1).map(k=>{ const on=k===opt.count;
@@ -992,9 +1017,10 @@ function refreshChoices(){
   // grille des réglages (chaque case ouvre la feuille) ; campagne : les photos à la place du format, pas de variantes
   const cell = (k, label, value, title) => `<button class="setcell" data-set="${k}"${title ? ` title="${title}"` : ''}>`
     + `<small>${label}</small><b>${value}</b></button>`;
-  $('setGrid').innerHTML = (campMode ? cell('format', 'Campagne', plan.length+' photos')
+  $('setGrid').innerHTML = (model ? cell('modele', 'Modèle', esc(model.name)) : '')
+    + (campMode ? cell('format', 'Campagne', plan.length+' photos')
     : cell('format', 'Format', shape(rw,rh,13)+(opt.ratio==='image'?'Image':opt.ratio)))
-    + cell('taille', 'Taille', resSel().label, `${w}×${h}`) + cell('etapes', 'Étapes', steps)
+    + cell('taille', 'Taille', resSel().label, `${w}×${h}`) + (fixed ? '' : cell('etapes', 'Étapes', steps))
     + (campMode ? '' : cell('images', 'Images', n));
   $('estText').textContent = plan ? `${plan.length} photos, chacune à son format · ${steps} étapes`
     : `${w}×${h} · ${steps} étapes${nrefs>1?' · '+nrefs+' références':''}${n>1?' · '+n+' images':''}`;
@@ -1015,6 +1041,7 @@ function refreshChoices(){
   $('campChk').checked=campaignOn;
   $('campChk').addEventListener('change', ()=>{ campaignOn=$('campChk').checked; saveOpt(); renderInputs(); refreshChoices(); });
   $('countOpts').addEventListener('click', e=>{ const b=e.target.closest('[data-k]'); if(!b) return; opt.count=+b.dataset.k; saveOpt(); refreshChoices(); });
+  $('modelOpts').addEventListener('click', e=>{ const b=e.target.closest('[data-k]'); if(!b) return; opt.model=b.dataset.k; saveOpt(); refreshChoices(); });
   $('setGrid').addEventListener('click', e=>{ if(e.target.closest('[data-set]')) openSheet('setSheet'); });
   ['previewChk','mask_mode'].forEach(id=>$(id).addEventListener('change', ()=>{ saveOpt(); refreshChoices(); }));
   renderInputs(); refreshChoices();
@@ -1193,6 +1220,7 @@ async function refreshStatus(){
     // adresse et code d'accès pour le téléphone : envoyés seulement quand la page est ouverte sur le Mac
     $('phone').hidden=!s.phone; if(s.phone) facts('phoneFacts', [['Adresse', s.phone.urls[0]], ...s.phone.urls.slice(1).map(u=>['ou', u]), ['Code', s.phone.code, 'code']]);
     const modelTag = s.model_version ? ' · '+s.model_version.toUpperCase() : '', busy=!!(s.busy || s.queued);
+    applyModels(s.models);
     if(s.sd_ready){ applyEstimates(s.estimates); setLamp(busy ? 'ok busy' : 'ok', (busy ? 'Calcul en cours' : 'Moteur prêt')+modelTag); }
     else setLamp('err', 'Moteur indisponible');
     // marque de l'onglet : posée tant que le Mac dit l'espace ouvert pour cet appareil, levée quand il le dit fermé
@@ -1205,6 +1233,7 @@ async function refreshStatus(){
     // n'est demandé à une session qui se ferme, voir leavingPrivate)
     if(mode==='tirages' && rev!==histRev && rev!==histAsk && !leavingPrivate) loadHistory(rev);
     facts('engineFacts', [['État', s.sd_ready ? (busy ? 'génération en cours' : 'prêt') : (s.detail||'non prêt')], ['Moteur', s.backend], ['Modèle', s.model],
+      ...(s.models||[]).filter(m=>m.key!=='qwen').map(m=>[m.name, String(m.version).toUpperCase()]),
       ['File d\'attente', s.queued ? s.queued+' en attente' : ''], ['Estimations', !s.estimates ? '' : calibrated ? 'calibrées sur '+s.estimates.samples+' mesure'+(s.estimates.samples>1?'s':'') : 'non calibrées'],
       ['Version', fmtVersion(s.version)], ['Serveur', staleServer(s)]]); }
   catch(e){ setLamp('err', 'Mac injoignable'); facts('engineFacts', [['État', 'serveur injoignable']]); }
@@ -1391,8 +1420,9 @@ function paintedReference(w,h,opaque){ const a=document.createElement('canvas');
 const requestBase = () => ({ cfg:CFG, seed:-1, preview:$('previewChk').checked, preview_interval:PREVIEW_EVERY, ref_images:[],
   init_image:null, mask_image:null, strength:1.0 });
 function buildRequest(){
-  const [w,h]=currentDims(); const steps=stepsSel().steps;
+  const [w,h]=currentDims(); const steps=chosenSteps(), model=modelSel();
   const kind=inputKind(), body={ ...requestBase(), mode:kind, prompt:$('prompt').value.trim(), width:w, height:h, steps };
+  if(model) body.model=model.key;                  // ligne « Modèle » montrée : le modèle choisi (sinon Qwen)
   if(kind==='edit'){
     if(inCampaign()){ body.campaign=campaignPlan().map(x=>({image:x.im.dataUrl, width:x.w, height:x.h}));
       body.width=body.campaign[0].width; body.height=body.campaign[0].height; }

@@ -44,8 +44,14 @@ Le nombre qui fixe le bruit de départ d'une génération ; deux graines différ
 _À éviter_ : seed (sauf dans le code)
 
 **Modèle** :
-Le réseau de génération d'images utilisé (Q4_K_M ou Q8_0).
-_À éviter_ : employer « modèle » pour un prompt réutilisable
+Ce qu'on choisit dans la ligne « Modèle » des Réglages : Qwen, ou MiniMax H3 quand il est installé ; chaque
+génération porte le sien.
+_À éviter_ : employer « modèle » pour un prompt réutilisable ou pour une quantification (Q4_K_M, Q8_0 : une version)
+
+**Version** (d'un modèle) :
+La quantification installée d'un modèle (Q4_K_M ou Q8_0), choisie par machine ; la ligne d'informations d'un tirage
+affiche sa clé (`Q4`, `UC-Q8`, `H3-Q4`…).
+_À éviter_ : employer « version » pour le commit du code servi (panneau Moteur, « Version ») sans préciser
 
 ## Trier
 

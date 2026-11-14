@@ -208,8 +208,14 @@ dernier bloc, après le HTML.
 - **JavaScript**, sections dans l'ordre :
   - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
     privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
-    (`refPx`, `inputsFor`, `parts` : copies de `estimate.py`) ; réglages `opt` (`localStorage` `qwen-opt`),
-    `refreshChoices` (exemple du champ, `PLACEHOLDERS`, grille `#setGrid`) ; nature de la demande lue dans la saisie :
+    (`refPx`, `inputsFor`, `parts` : copies de `estimate.py`) ; réglages `opt` (`localStorage` `qwen-opt`, dont
+    `model`, la clé du dernier modèle choisi), `refreshChoices` (exemple du champ, `PLACEHOLDERS`, ligne « Modèle »
+    `#modelRow`, ligne « Étapes » `#stepRow`, grille `#setGrid`) ; modèles installés : `modelList` (liste `models` de
+    `/api/status`, posée par `applyModels` ; `null` devant un serveur qui ne l'envoie pas), `modelShown` (ligne
+    « Modèle » montrée à partir de deux modèles), `modelSel` (modèle de la saisie : le dernier choisi s'il est
+    installé, sinon Qwen ; `null` sans ligne, la demande part alors sans champ `model`), `fixedSteps` et `chosenSteps`
+    (étapes imposées par le modèle, sinon celles choisies), `previewEvery` (intervalle des aperçus du modèle) ; nature
+    de la demande lue dans la saisie :
     `inputKind` (`t2i` sans image d'entrée, `edit` avec, `mask` dessin actif : `drawOn`), `singleImage`, `campaignShown`
     (interrupteur proposé à partir de 2 images), `inCampaign`, `variants` ; brouillon unique `qwen-prompt` (dans
     `init` : reprise une fois des anciens `qwen-<onglet>_prompt`).
@@ -585,7 +591,9 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
 `tests/fake_sdcli.py` (faux moteur), `tests/test_*.py`, `tests/check.py` (tous les contrôles), `tests/ui/`
 (`driver.mjs`, `serve.py`, tests `*.test.mjs`). Commandes dans `CLAUDE.md`. Vues du pilote : `PHONE` (celle de
 `phonePage`), `PC` (souris), `TABLET` et `TABLET_WIDE` (tactile), ouvertes par `newPage` et changées sans
-rechargement par `setView` (`applyView`) ; clavier par `keyDown`, `keyUp` et `press`, appui maintenu par `hold`.
+rechargement par `setView` (`applyView`) ; le banc des tests d'interface part avec Qwen seul (`serve.py`), `bench.h3`
+installe ou retire MiniMax H3, `page.oldServer` fait lire un statut sans liste de modèles ; clavier par `keyDown`,
+`keyUp` et `press`, appui maintenu par `hold`.
 Chaque page s'ouvre au premier plan (`Page.bringToFront`) : dans une page cachée derrière un autre onglet, le verrou
 court d'une carte ou d'une image pas encore vue ne compte pas (`onScreen`) ; `topShown`, `made`, `viewPile` et
 `keepPile` la font passer devant, et `page.close` chaque page de l'espace privé avant de l'attendre au repos. Les
