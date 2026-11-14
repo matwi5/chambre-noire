@@ -2,7 +2,8 @@
 
 Il lit les options utiles de la ligne de commande construite par tools/launch.py (-p, -W, -H, --steps, -o,
 --preview-path, --preview-interval), imprime les lignes que le serveur analyse (progression « k/N - x.xxs/it » et
-lignes « … completed, taking x.xxs »), écrit les aperçus et l'image finale en PNG. Comme le vrai moteur (stb_image),
+lignes « … completed, taking x.xxs »), écrit les aperçus en PNG et l'image finale en PNG, ou en WebP animé quand -o
+finit par .webp (sortie d'une vidéo, images de teintes différentes : webp). Comme le vrai moteur (stb_image),
 il refuse avant tout calcul une image d'entrée (-r, -i, --mask) qui n'est ni PNG, ni JPEG, ni BMP, ni GIF (WebP, AVIF,
 TIFF…), avec le même message d'erreur.
 
@@ -52,6 +53,14 @@ def png(path, w, h, row):
         f.write(data)
 
 
+def webp(path, w, h, frames=4):
+    """WebP animé de w×h comme celui de la vidéo du vrai moteur : frames images de teintes différentes (la première,
+    rouge, est celle de la vignette), en boucle. Pillow seulement ici : le reste du faux moteur s'en passe."""
+    from PIL import Image
+    images = [Image.new("RGB", (w, h), (220 - 60 * k, 40, 40 + 60 * k)) for k in range(frames)]
+    images[0].save(path, "WEBP", save_all=True, append_images=images[1:], duration=42, loop=0, lossless=True)
+
+
 def unreadable_inputs(argv):
     """Images d'entrée de la ligne de commande que le vrai moteur ne saurait pas lire."""
     paths = [argv[i + 1] for i, a in enumerate(argv[:-1]) if a in ("-r", "-i", "--mask")]
@@ -95,7 +104,10 @@ def main(argv):
             # bruit : un aperçu de moins de 1000 octets serait ignoré par le serveur
             png(preview % k if "%" in preview else preview, 48, 48, lambda y: os.urandom(48 * 3))
     print(f"sampling completed, taking {steps * delay:.2f}s", flush=True)
-    png(out, w, h, lambda y: bytes((40 + 160 * y // h, 60, 200 - 120 * y // h)) * w)
+    if out.lower().endswith(".webp"):
+        webp(out, w, h)
+    else:
+        png(out, w, h, lambda y: bytes((40 + 160 * y // h, 60, 200 - 120 * y // h)) * w)
     print("decode_first_stage completed, taking 0.20s", flush=True)
     return 0
 

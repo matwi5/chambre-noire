@@ -969,21 +969,29 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `POST /api/keep {"name"}` (Garder : l'image passe de la pile aux tirages, d'un seul `os.replace` ; vignettes et
   images d'entrée restent où elles sont, rangées par nom d'image ; 409 si un tirage du même nom existe), `POST
   /api/discard {"name"}` (Jeter : seulement une image de la pile ; efface ses vignettes, ses images d'entrée, son
-  dossier de travail `jobs/<id>/` et ses lignes du journal, réécrit dans un fichier temporaire puis remplacé d'un
-  coup, les lignes illisibles recopiées telles quelles, puis le PNG en dernier, seulement si tout le reste est parti
-  (renommé en nom caché avant tout effacement : sous Windows, un PNG ouvert échoue là, sans rien effacer ; une pièce
-  qui résiste lui rend son nom, et un PNG resté caché après une panne le reprend au démarrage) : une pièce
-  qui résiste laisse l'image dans la pile, qu'on rejette ; une pièce déjà absente est sautée), `POST /api/delete
+  dossier de travail `jobs/<id>/` (sauf ceux qu'une autre image partage : voir plus bas, « même radical ») et ses
+  lignes du journal, réécrit dans un fichier temporaire puis remplacé d'un
+  coup, les lignes illisibles recopiées telles quelles, puis le fichier en dernier, seulement si tout le reste est
+  parti (renommé en nom caché avant tout effacement : sous Windows, un fichier ouvert échoue là, sans rien effacer ;
+  une pièce qui résiste lui rend son nom, et un fichier resté caché après une panne le reprend au démarrage) : une
+  pièce qui résiste laisse l'image dans la pile, qu'on rejette ; une pièce déjà absente est sautée), `POST /api/delete
   {"name"}` (Supprimer : seulement un tirage, effacé aussi complètement que Jeter) ; Garder et Jeter répondent 404 «
   déjà triée » pour une image qui n'est pas (ou plus) dans la pile, Supprimer 404 « fichier inconnu » pour un nom qui
   n'est pas un tirage ; chacun se fait d'un bloc, sous un seul verrou : quand deux appareils trient la même image, le
-  premier geste arrivé l'emporte. `GET /api/thumb?name=…` (miniatures gardées dans `outputs/.thumbs/`), `GET
-  /api/result?name=…&download=1` et les images d'entrée servent un tirage comme une image de la pile ; images d'entrée
-  d'une image : `GET /api/input?name=…&file=init.png|ref_N.png[&thumb=1][&download=1]` (gardées dans
-  `outputs/.inputs/<image>/`) ; prompts enregistrés : `GET /api/prompts` (`{"saved": [...], "types": [...]}`, `saved`
-  le dernier utilisé d'abord ; chaque prompt : `id`, `title`, `text`, `usage` = `t2i`, `edit` ou `mask`, `used` =
-  dernière utilisation en secondes ; `types` : les prompts types de `tools/prompt_types.json`, sans `used`, qu'aucune
-  route ne modifie), `POST /api/prompts {"title", "text", "usage"}` (création) ou `{"id", "title", "text"}`
+  premier geste arrivé l'emporte. Une image de la pile ou des tirages est un fichier `.png`, ou `.webp` pour une
+  vidéo (WebP animé), extension en casse quelconque ; toutes ces routes la désignent par son nom exact (nom de fichier
+  seul, sans nom caché en point) et rangent ses images d'entrée par son radical, le nom sans l'extension (deux
+  fichiers de même radical, que le serveur n'écrit jamais, les partagent : effacer l'un laisse à l'autre ses images
+  d'entrée et son dossier de travail).
+  `GET /api/thumb?name=…` (miniatures gardées dans `outputs/.thumbs/`, `<radical>.jpg` pour un PNG et
+  `<radical>.webp.jpg` pour une vidéo, dont c'est la première image), `GET /api/result?name=…&download=1` (type
+  `image/png` ou `image/webp`, d'après l'extension) et les images d'entrée servent un tirage comme une image de la
+  pile ; images d'entrée d'une image : `GET /api/input?name=…&file=init.png|ref_N.png[&thumb=1][&download=1]`
+  (gardées dans `outputs/.inputs/<radical>/`) ; prompts enregistrés : `GET /api/prompts`
+  (`{"saved": [...], "types": [...]}`, `saved` le dernier utilisé d'abord ; chaque prompt : `id`, `title`, `text`,
+  `usage` = `t2i`, `edit` ou `mask`, `used` = dernière utilisation en secondes ; `types` : les prompts types de
+  `tools/prompt_types.json`, sans `used`, qu'aucune route ne modifie), `POST /api/prompts {"title", "text", "usage"}`
+  (création) ou `{"id", "title", "text"}`
   (modification du titre et du texte), `POST /api/prompts/delete {"id"}`, `POST /api/prompts/used {"id"}` (le met en
   tête) ; 404 pour un `id` inconnu ; accès : `GET /entrer?jeton=…` (page de `tools/launch.py --enter`), depuis
   l'ordinateur lui-même seulement (ni le Wi-Fi ni le relais de Tailscale) : avec le jeton de `tools/entry_token` de

@@ -33,10 +33,11 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
         GET /api/private/image|thumb?id=<id>, GET /api/private/input?id=<id>&file=<init.png|ref_N.png>,
         prompts enregistrés de l'espace privé (private/prompts, chiffré) : GET /api/private/prompts,
         POST /api/private/prompts, POST /api/private/prompts/delete, POST /api/private/prompts/used,
-        GET /api/result?name=<png>[&download=1], GET /api/status, POST /api/login {"code": …} (cookie d'accès),
-        tirages et pile : GET /api/history, GET /api/pile, GET /api/thumb?name=<png>, POST /api/keep {"name": <png>},
-        POST /api/discard {"name": <png>}, POST /api/delete {"name": <png>},
-        images d'entrée d'une image : GET /api/input?name=<png>&file=<init.png|ref_N.png>[&thumb=1][&download=1],
+        GET /api/result?name=<sortie>[&download=1], GET /api/status, POST /api/login {"code": …} (cookie d'accès),
+        tirages et pile (<sortie> : nom d'une image .png ou d'une vidéo .webp) : GET /api/history, GET /api/pile,
+        GET /api/thumb?name=<sortie>, POST /api/keep {"name": <sortie>},
+        POST /api/discard {"name": <sortie>}, POST /api/delete {"name": <sortie>},
+        images d'entrée d'une image : GET /api/input?name=<sortie>&file=<init.png|ref_N.png>[&thumb=1][&download=1],
         notifications de fin de génération : GET /api/push/key, POST /api/push/subscribe {"subscription": …},
         POST /api/push/unsubscribe {"endpoint": …},
         prompts enregistrés (tools/saved_prompts.json, communs à tous les appareils) et prompts types
@@ -921,12 +922,49 @@ def push_notify(payload):
             push_subscriptions(lambda l: [x for x in l if x.get("endpoint") not in gone])
         print(f"[push] notification envoyée à {sent} appareil{'s' if sent > 1 else ''}", flush=True)
     threading.Thread(target=send, daemon=True).start()
-INPUTS = P("outputs", ".inputs")      # images d'entrée d'un tirage ou d'une image de la pile : .inputs/<nom sans .png>/
+INPUTS = P("outputs", ".inputs")      # images d'entrée d'un tirage ou d'une image de la pile : .inputs/<radical>/
 INPUT_RE = re.compile(r"(init|ref_\d+)\.png")
+# sortie d'une génération : une image en PNG, ou une vidéo en WebP animé ; reconnue par son extension réelle (casse
+# quelconque), qui donne aussi le type servi au navigateur. Le radical (nom sans l'extension) nomme ses vignettes,
+# son dossier d'images d'entrée et, avant le dernier « _ », sa génération (JOB_ID_RE).
+OUTPUT_TYPES = {".png": "image/png", ".webp": "image/webp"}
 # pile de l'espace public : images terminées à trier ; Garder les fait passer dans outputs/ (les tirages), Jeter les
 # efface. Vignettes et images d'entrée sont rangées par nom d'image et ne bougent pas quand elle passe aux tirages.
 PILE = P("outputs", ".pile")
 JOB_ID_RE = re.compile(r"\d{8}_\d{6}_[0-9a-f]{6}")   # identifiant d'une génération normale (new_job)
+
+
+def output_name(name):
+    """(radical, extension en minuscules) d'un nom de fichier de sortie, ou None : extension .png ou .webp, casse
+    quelconque ; un nom caché (point en tête : nom d'effacement, fichiers d'autres outils) n'en est pas un."""
+    name = str(name or "")
+    stem, ext = os.path.splitext(name)
+    if not stem or name.startswith(".") or ext.lower() not in OUTPUT_TYPES:
+        return None
+    return stem, ext.lower()
+
+
+def output_stem(fp):
+    """Radical d'une sortie (chemin ou nom) : son nom sans l'extension réelle."""
+    return os.path.splitext(os.path.basename(fp))[0]
+
+
+def output_names(folder, hidden=False, strict=False):
+    """Noms des sorties d'un dossier (outputs/ ou la pile), ou, avec hidden, ceux des sorties restées sous leur nom
+    caché (hidden_output) : même jugement (output_name) que les routes, quelle que soit la casse de l'extension. Un
+    dossier absent n'en a aucune ; illisible non plus (comme glob avant les vidéos : le serveur démarre et répond
+    quand même), sauf avec strict, pour un effacement qui en décide (shared_pieces) : l'erreur remonte alors."""
+    try:
+        names = os.listdir(folder)
+    except FileNotFoundError:
+        return []
+    except OSError:
+        if strict:
+            raise
+        return []
+    if hidden:
+        return [n for n in names if n.startswith(".") and output_name(n[1:])]
+    return [n for n in names if output_name(n)]
 
 
 def input_files(job_dir):
@@ -935,11 +973,11 @@ def input_files(job_dir):
     return sorted(names, key=lambda n: (n != "init.png", int(re.sub(r"\D", "", n) or 0)))
 
 
-def save_inputs(job_dir, out_png):
+def save_inputs(job_dir, out):
     """Copie les images d'entrée d'un job à côté de son image, pour les revoir depuis la galerie."""
     names = input_files(job_dir)
     if names:
-        dst = os.path.join(INPUTS, os.path.basename(out_png)[:-4])
+        dst = os.path.join(INPUTS, output_stem(out))
         os.makedirs(dst, exist_ok=True)
         for n in names:
             # copyfile, pas copy2 : la copie prend les droits du masque (restrict_new_files), pas ceux de la source
@@ -947,13 +985,17 @@ def save_inputs(job_dir, out_png):
 
 
 def image_in(folder, name):
-    """Chemin d'une image de folder à partir de son nom, ou None si le nom sort du dossier, n'est pas un PNG ou n'y
-    est pas."""
+    """Chemin d'une sortie de folder (image ou vidéo) à partir de son nom, ou None si le nom sort du dossier, n'est pas
+    une sortie (output_name) ou n'y est pas sous ce nom exact : sur un disque insensible à la casse (macOS), « X.PNG »
+    trouverait « x.png », et son effacement laisserait la ligne du journal, qui porte le nom exact."""
     name = os.path.basename(str(name or ""))
-    if not name or name.startswith(".") or not name.lower().endswith(".png"):
+    if not output_name(name):
         return None
     fp = os.path.join(folder, name)
-    return fp if os.path.isfile(fp) else None
+    try:                                        # le nom exact, seulement pour un fichier trouvé (chaque vignette)
+        return fp if os.path.isfile(fp) and name in os.listdir(folder) else None
+    except OSError:
+        return None
 
 
 def output_path(name):
@@ -1060,28 +1102,32 @@ def to_pile(job, meta):
     return True
 
 
-def hidden_png(fp):
-    """Nom caché d'un PNG pendant son effacement : un point devant, dans le même dossier ; images_in (glob « *.png »)
-    et les routes (image_in) ne voient pas les noms en point."""
+def hidden_output(fp):
+    """Nom caché d'une sortie pendant son effacement : un point devant, dans le même dossier ; images_in et les routes
+    (image_in) ne voient pas les noms en point (output_name)."""
     return os.path.join(os.path.dirname(fp), "." + os.path.basename(fp))
 
 
 def delete_output(fp):
-    """Efface une image (tirage ou image de la pile) et tout ce qui s'y rattache (décisions du 23/10/2026). Le PNG est
-    d'abord renommé en nom caché (hidden_png) : sous Windows, un fichier ouvert refuse ce renommage tout de suite, avant
-    que rien ne soit effacé. Puis ses miniatures, ses images d'entrée, son dossier de travail jobs/<id>/ (identifiant
-    tiré du nom, validé par JOB_ID_RE) et ses lignes du journal, et le PNG en dernier, seulement si tout le reste est
-    parti : une pièce qui résiste (ou toute autre exception) lui rend son nom, et l'image reste là où elle était, qu'un
-    second geste efface en entier, au lieu d'une ligne du journal (son prompt) que plus rien ne retirerait ; une panne
-    entre-temps est rattrapée au démarrage (restore_hidden_images). Une pièce déjà absente est sautée (le démarrage ne
-    garde que 20 dossiers de travail) ; une pièce qui résiste n'arrête pas les suivantes : la première erreur est levée
-    à la fin. Sous JOURNAL_LOCK (sort_image)."""
-    name, hidden = os.path.basename(fp), hidden_png(fp)
+    """Efface une sortie (tirage ou image de la pile, image PNG ou vidéo WebP) et tout ce qui s'y rattache (décisions
+    du 23/10/2026). Le fichier est d'abord renommé en nom caché (hidden_output) : sous Windows, un fichier ouvert
+    refuse ce renommage tout de suite, avant que rien ne soit effacé. Puis ses miniatures, ses images d'entrée, son
+    dossier de travail jobs/<id>/ (identifiant tiré du radical, validé par JOB_ID_RE) et ses lignes du journal, et le
+    fichier en dernier, seulement si tout le reste est parti : une pièce qui résiste (ou toute autre exception) lui
+    rend son nom, et l'image reste là où elle était, qu'un second geste efface en entier, au lieu d'une ligne du
+    journal (son prompt) que plus rien ne retirerait ; une panne entre-temps est rattrapée au démarrage
+    (restore_hidden_images). Une pièce déjà absente est sautée (le démarrage ne garde que 20 dossiers de travail) ; une
+    pièce qui résiste n'arrête pas les suivantes : la première erreur est levée à la fin. Images d'entrée et dossier
+    de travail sont rangés par radical : tant qu'une autre sortie les partage (« x.png » à côté de « x.webp », ce que
+    le serveur n'écrit jamais : un identifiant par génération ; shared_pieces), ils restent avec elle ; la vignette de
+    l'image, propre à chaque sortie (output_thumb), part toujours. Sous JOURNAL_LOCK (sort_image)."""
+    name, hidden = os.path.basename(fp), hidden_output(fp)
     os.replace(fp, hidden)
     try:
-        jid = name[:-4].rsplit("_", 1)[0]
-        steps = [lambda: delete_extras(name[:-4]), lambda: drop_from_journal(name)]
-        if JOB_ID_RE.fullmatch(jid):
+        jid = output_stem(name).rsplit("_", 1)[0]
+        keep_inputs, keep_job = shared_pieces(fp)
+        steps = [lambda: delete_extras(fp, keep_inputs), lambda: drop_from_journal(name)]
+        if not keep_job and JOB_ID_RE.fullmatch(jid):
             steps.insert(1, lambda: remove_tree(P("jobs", jid)))
         error = None
         for step in steps:
@@ -1099,8 +1145,41 @@ def delete_output(fp):
     raise error
 
 
+def shared_pieces(fp):
+    """(images d'entrée, dossier de travail) de fp qu'une autre sortie encore là partage, chacun vrai ou faux : une
+    sortie des tirages ou de la pile, visible ou restée sous son nom caché par un effacement coupé si elle revient au
+    démarrage (comes_back), dont le dossier est le même sur ce disque (os.path.samefile : un disque insensible à la
+    casse range « X » et « x » ensemble, un disque sensible les sépare). fp elle-même, sous son nom ou son nom caché,
+    n'en est pas. Un dossier qu'on ne peut pas lister ou comparer lève OSError (strict, same_file) : l'effacement
+    s'arrête et l'image reste, plutôt que de prendre pour seule une sortie qui partage peut-être ses pièces."""
+    folder, name = os.path.split(os.path.abspath(fp))
+    stem = output_stem(name)
+    jid = stem.rsplit("_", 1)[0]
+    inputs = job = False
+    for d in (P("outputs"), PILE):
+        for n in output_names(d, strict=True) + [h for h in output_names(d, hidden=True, strict=True)
+                                                 if comes_back(h)]:
+            other = output_stem(n[1:] if n.startswith(".") else n)
+            if other.casefold() != stem.casefold() or (os.path.abspath(d) == folder and n in (name, "." + name)):
+                continue
+            inputs = inputs or same_file(os.path.join(INPUTS, other), os.path.join(INPUTS, stem))
+            other_jid = other.rsplit("_", 1)[0]
+            job = job or bool(JOB_ID_RE.fullmatch(jid) and JOB_ID_RE.fullmatch(other_jid)
+                              and same_file(P("jobs", other_jid), P("jobs", jid)))
+    return inputs, job
+
+
+def same_file(a, b):
+    """Vrai si les chemins a et b désignent le même fichier ou dossier existant sur ce disque ; faux si l'un manque.
+    Toute autre erreur (droits, disque) remonte : un effacement ne se décide pas sur une comparaison ratée."""
+    try:
+        return os.path.samefile(a, b)
+    except FileNotFoundError:
+        return False
+
+
 def unhide(hidden, fp):
-    """Rend son nom au PNG d'un effacement qui n'a pas abouti ; s'il résiste, le démarrage le rattrapera
+    """Rend son nom à la sortie d'un effacement qui n'a pas abouti ; s'il résiste, le démarrage le rattrapera
     (restore_hidden_images) : l'erreur que voit l'appelant reste celle d'origine."""
     try:
         os.replace(hidden, fp)
@@ -1109,15 +1188,15 @@ def unhide(hidden, fp):
 
 
 def restore_hidden_images():
-    """Démarrage : un PNG resté sous son nom caché (delete_output coupé par une panne) reprend son nom ; l'image revient
-    dans la pile ou les tirages, et un nouveau geste l'efface en entier. Seuls les noms d'images du serveur
-    (identifiant JOB_ID_RE) sont rendus, pas un fichier caché d'un autre outil (« ._X.png » des volumes exFAT ou SMB) ;
-    si le nom d'origine est déjà pris, la copie cachée, en double, est supprimée. Un renommage qui échoue est retenté
-    au démarrage suivant."""
+    """Démarrage : une sortie (PNG ou WebP) restée sous son nom caché (delete_output coupé par une panne) reprend son
+    nom ; l'image revient dans la pile ou les tirages, et un nouveau geste l'efface en entier. Seuls les noms de
+    sorties du serveur (identifiant JOB_ID_RE) sont rendus, pas un fichier caché d'un autre outil (« ._X.png » des
+    volumes exFAT ou SMB) ; si le nom d'origine est déjà pris, la copie cachée, en double, est supprimée. Un renommage
+    qui échoue est retenté au démarrage suivant."""
     for folder in (P("outputs"), PILE):
-        for fp in glob.glob(os.path.join(folder, ".*.png")):
-            name = os.path.basename(fp)[1:]
-            if not JOB_ID_RE.fullmatch(name[:-4].rsplit("_", 1)[0]):
+        for hidden in output_names(folder, hidden=True):
+            fp, name = os.path.join(folder, hidden), hidden[1:]
+            if not comes_back(hidden):
                 continue
             dst = os.path.join(folder, name)
             try:
@@ -1127,6 +1206,12 @@ def restore_hidden_images():
                     os.replace(fp, dst)
             except OSError:
                 pass
+
+
+def comes_back(hidden):
+    """Vrai si la sortie cachée hidden (nom en point) reprend son nom au démarrage (restore_hidden_images) : un nom de
+    sortie du serveur (identifiant JOB_ID_RE), pas un fichier caché d'un autre outil."""
+    return bool(JOB_ID_RE.fullmatch(output_stem(hidden[1:]).rsplit("_", 1)[0]))
 
 
 def drop_from_journal(name):
@@ -1154,7 +1239,7 @@ SORTS = {"keep": (pile_path, "déjà triée"), "discard": (pile_path, "déjà tr
 
 
 def sort_image(action, name):
-    """Garder (keep : de la pile aux tirages, PNG seul déplacé, de façon atomique) ou Jeter (discard : effacement
+    """Garder (keep : de la pile aux tirages, fichier seul déplacé, de façon atomique) ou Jeter (discard : effacement
     complet) une image de la pile, Supprimer (delete : effacement complet) un tirage ; (code, réponse). D'un bloc sous
     JOURNAL_LOCK : le premier geste arrivé l'emporte, le second ne trouve plus l'image (404)."""
     find, unknown = SORTS[action]
@@ -1178,17 +1263,42 @@ def sort_image(action, name):
     return 200, {"ok": True}
 
 
-def delete_extras(stem):
-    """Miniatures et images d'entrée d'un tirage ou d'une image de la pile déjà supprimés."""
-    for th in [os.path.join(THUMBS, stem + ".jpg"), *glob.glob(os.path.join(THUMBS, glob.escape(stem) + "__*.jpg"))]:
+def delete_extras(fp, keep_inputs=False):
+    """Miniature d'un tirage ou d'une image de la pile fp déjà supprimés et, sauf keep_inputs (une autre sortie les
+    partage : delete_output), ses images d'entrée et leurs miniatures."""
+    stem = output_stem(fp)
+    thumbs = [output_thumb(fp)]
+    if not keep_inputs:
+        thumbs += input_thumbs(stem)
+    for th in thumbs:
         if os.path.exists(th):
             os.remove(th)
-    remove_tree(os.path.join(INPUTS, stem))
+    if not keep_inputs:
+        remove_tree(os.path.join(INPUTS, stem))
+
+
+def input_thumbs(stem):
+    """Miniatures des images d'entrée de radical stem (<radical>__<entrée>.jpg), telles que ce disque les range : un
+    disque insensible à la casse garde le nom d'une miniature faite pour « X », que « x » désigne aussi
+    (os.path.samefile sur le nom refait avec ce radical-ci)."""
+    try:
+        names = os.listdir(THUMBS)
+    except OSError:
+        return []
+    prefix = stem + "__"
+    found = []
+    for n in names:
+        if not (n.casefold().startswith(prefix.casefold()) and n.lower().endswith(".jpg")):
+            continue
+        mine = os.path.join(THUMBS, prefix + n[len(prefix):])
+        if n.startswith(prefix) or same_file(mine, os.path.join(THUMBS, n)):
+            found.append(os.path.join(THUMBS, n))
+    return found
 
 
 def remove_tree(d):
-    """Supprime un dossier ; déjà absent, rien ; un fichier qui résiste lève l'erreur (delete_output garde alors le
-    PNG)."""
+    """Supprime un dossier ; déjà absent, rien ; un fichier qui résiste lève l'erreur (delete_output garde alors la
+    sortie)."""
     try:
         shutil.rmtree(d)
     except FileNotFoundError:
@@ -1211,8 +1321,8 @@ def images_in(folder):
     items = []
     with JOURNAL_LOCK:
         meta = journal_entries()
-        for fp in glob.glob(os.path.join(folder, "*.png")):
-            name, st = os.path.basename(fp), os.stat(fp)
+        for name in output_names(folder):
+            st = os.stat(os.path.join(folder, name))
             m = meta.get(name, {})
             item = {"name": name, "time": int(st.st_mtime), "size": st.st_size, "mode": m.get("mode"),
                     "prompt": m.get("prompt"), "width": m.get("width"), "height": m.get("height"),
@@ -1220,7 +1330,7 @@ def images_in(folder):
                     "seed": m.get("seed"),
                     # identifiant, rang, taille et marqueur de campagne d'une image de lot ; None pour une image seule
                     "lot": m.get("lot"),
-                    "inputs": input_files(os.path.join(INPUTS, name[:-4]))}
+                    "inputs": input_files(os.path.join(INPUTS, output_stem(name)))}
             items.append((st.st_mtime_ns, item))   # à la nanoseconde : deux images d'un lot finies la même seconde
     return [it for _, it in sorted(items, key=lambda x: x[0], reverse=True)]
 
@@ -1246,11 +1356,20 @@ def thumb_jpeg(src):
     return buf.getvalue()
 
 
+def output_thumb(fp):
+    """Miniature d'une sortie, dans outputs/.thumbs/ : <radical>.jpg pour un « .png » (comme avant les vidéos), son nom
+    entier suivi de .jpg pour toute autre sortie (« x.webp.jpg », « x.PNG.jpg ») : deux sorties d'un même dossier
+    n'ont jamais la même (sauf deux noms qu'un disque insensible à la casse confond, qu'il ne garde pas côte à côte).
+    Une sortie de la pile et un tirage de même nom à la casse près la partagent, comme avant les vidéos."""
+    stem, ext = os.path.splitext(os.path.basename(fp))
+    return os.path.join(THUMBS, stem + ("" if ext == ".png" else ext) + ".jpg")
+
+
 def thumbnail(fp, th=None):
     """Miniature d'un tirage, d'une image de la pile ou d'une de leurs images d'entrée (fp), gardée dans
     outputs/.thumbs/ et refaite si l'image change. Mise en place sous JOURNAL_LOCK, et seulement si fp existe
     encore : une miniature finie après Jeter ou Supprimer ne reste pas ; FileNotFoundError alors."""
-    th = th or os.path.join(THUMBS, os.path.basename(fp)[:-4] + ".jpg")
+    th = th or output_thumb(fp)
     if not os.path.exists(th) or os.path.getmtime(th) < os.path.getmtime(fp):
         os.makedirs(THUMBS, exist_ok=True)
         tmp = f"{th}.{threading.get_ident()}.tmp"   # écrite à côté puis renommée : jamais lue à moitié écrite
@@ -2566,7 +2685,7 @@ class H(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "fichier inconnu"})
             name, data = found
             extra = {"Content-Disposition": f'attachment; filename="{name}"'} if q.get("download") else None
-            return self._send(200, data, "image/png", extra)
+            return self._send(200, data, OUTPUT_TYPES[output_name(name)[1]], extra)
         if path == "/api/history":
             return self._send(200, history())
         if path == "/api/pile":
@@ -2582,19 +2701,20 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {"key": key}) if key else self._send(503, {"error": "pywebpush non installé"})
         if path == "/api/input":                  # image d'entrée d'un tirage ou d'une image de la pile
             out, f = image_path(q.get("name")), q.get("file", "")
-            fp = os.path.join(INPUTS, os.path.basename(out)[:-4], f) if out and INPUT_RE.fullmatch(f) else None
+            fp = os.path.join(INPUTS, output_stem(out), f) if out and INPUT_RE.fullmatch(f) else None
             if not fp or not os.path.isfile(fp):
                 return self._send(404, {"error": "image d'entrée inconnue"})
             if q.get("thumb"):
                 try:   # l'envoi reste hors du try : une connexion coupée n'est pas une miniature impossible
-                    th = thumbnail(fp, os.path.join(THUMBS, f"{os.path.basename(out)[:-4]}__{f[:-4]}.jpg"))
+                    th = thumbnail(fp, os.path.join(THUMBS, f"{output_stem(out)}__{output_stem(f)}.jpg"))
                     data = open(th, "rb").read()
                 except FileNotFoundError:         # image jetée ou supprimée entre-temps
                     return self._send(404, {"error": "image d'entrée inconnue"})
                 except Exception as e:
                     return self._send(500, {"error": f"miniature impossible : {e}"})
                 return self._send(200, data, "image/jpeg")
-            extra = {"Content-Disposition": f'attachment; filename="{os.path.basename(out)[:-4]}_{f}"'} if q.get("download") else None
+            extra = ({"Content-Disposition": f'attachment; filename="{output_stem(out)}_{f}"'}
+                     if q.get("download") else None)
             try:
                 data = open(fp, "rb").read()
             except FileNotFoundError:             # image jetée ou supprimée entre-temps
@@ -2845,13 +2965,13 @@ def main():
         os.remove(os.path.join(PRIVATE, META_TMP))
     except FileNotFoundError:
         pass
-    restore_hidden_images()                            # PNG caché d'un effacement coupé : l'image revient
+    restore_hidden_images()                            # sortie cachée d'un effacement coupé : l'image revient
     if sys.platform == "darwin":
         exclude_from_backup(P("jobs"))
     # tirages antérieurs à la conservation des entrées, et images de la pile dont les entrées n'ont pas pu être
     # gardées (to_pile) : reprises depuis leur dossier de travail tant qu'il existe
-    for fp in glob.glob(P("outputs", "*.png")) + glob.glob(os.path.join(PILE, "*.png")):
-        stem = os.path.basename(fp)[:-4]
+    for fp in [os.path.join(d, n) for d in (P("outputs"), PILE) for n in output_names(d)]:
+        stem = output_stem(fp)
         if not os.path.isdir(os.path.join(INPUTS, stem)):
             try:
                 save_inputs(P("jobs", stem.rsplit("_", 1)[0]), fp)

@@ -84,8 +84,11 @@ Dans l'ordre du fichier :
   `prompts.tmp` et `META_TMP` d'une panne supprimés d'abord, scellés avec l'ancienne clé) et `finish_rekey` (termine ou
   abandonne un changement interrompu, au démarrage et sous `PRIVATE_LOCK` avant toute ouverture ou écriture) ;
   `private_code_error`.
-- **Galerie, pile et journal** : `input_files`, `save_inputs` (entrées copiées vers `outputs/.inputs/<image>/`),
-  `PILE` (`outputs/.pile/`, images à trier), `JOB_ID_RE`, `image_in` (nom validé dans un dossier), `output_path` (un
+- **Galerie, pile et journal** : `OUTPUT_TYPES` (sorties `.png` et `.webp`, et leur type servi), `output_name`
+  (jugement d'un nom de sortie : radical et extension, casse quelconque, pas de nom caché), `output_stem` (radical :
+  vignettes, entrées, identifiant), `output_names` (sorties d'un dossier, ou ses sorties cachées), `input_files`,
+  `save_inputs` (entrées copiées vers `outputs/.inputs/<radical>/`), `PILE` (`outputs/.pile/`, images à trier),
+  `JOB_ID_RE`, `image_in` (nom validé dans un dossier, sous son nom exact), `output_path` (un
   tirage), `pile_path` (une image de la pile), `image_path` (l'un ou l'autre : image, vignette et entrées servies),
   `on_image` (lecture d'une image par `image_path`, cherchée une seconde fois si elle vient d'être gardée),
   `JOURNAL_LOCK` (un `RLock` : journal, tri, lecture des tirages et de la pile), `journal_line` (une ligne lue, ou
@@ -93,12 +96,15 @@ Dans l'ordre du fichier :
   d'une génération normale : PNG du dossier de travail vers la pile, sous `S.turn` contre une annulation, puis ligne
   du journal et entrées, d'un bloc sous `JOURNAL_LOCK` ; PNG et journal en 0o600), `delete_output` (effacement complet
   : `delete_extras` (miniatures et entrées), dossier de travail et lignes du journal par `drop_from_journal`, réécrit
-  dans un fichier temporaire puis remplacé, et le PNG en dernier, seulement si tout le reste est parti, renommé en nom
-  caché avant tout effacement et rendu à son nom si une pièce résiste ; `restore_hidden_images` au démarrage ; une
-  pièce qui résiste n'arrête pas les suivantes), `SORTS` et `sort_image` (Garder, Jeter, Supprimer, d'un bloc sous
-  `JOURNAL_LOCK` : le premier geste arrivé l'emporte), `read_inputs`, `images_in` (PNG d'un dossier croisés avec le
-  journal), `history()` (les tirages), `pile()`, `thumb_jpeg`, `thumbnail` (`outputs/.thumbs/` ; mise en place sous
-  `JOURNAL_LOCK`, jamais pour une image déjà jetée).
+  dans un fichier temporaire puis remplacé, et le fichier en dernier, seulement si tout le reste est parti, renommé
+  en nom caché (`hidden_output`) avant tout effacement et rendu à son nom si une pièce résiste ; `restore_hidden_images`
+  au démarrage ; une pièce qui résiste n'arrête pas les suivantes ; entrées, leurs vignettes et dossier de travail
+  gardés tant qu'une autre sortie, visible ou cachée qui reviendra, les partage sur ce disque, `shared_pieces`,
+  `same_file`, `comes_back`, `input_thumbs`), `SORTS` et `sort_image` (Garder, Jeter, Supprimer, d'un bloc sous
+  `JOURNAL_LOCK` : le premier geste arrivé l'emporte), `read_inputs`, `images_in` (sorties d'un dossier croisées avec
+  le journal), `history()` (les tirages), `pile()`, `thumb_jpeg`, `output_thumb` (miniature de chaque sortie :
+  `<radical>.jpg` d'un `.png`, `<nom>.jpg` d'une autre, `x.webp.jpg` d'une vidéo), `thumbnail` (`outputs/.thumbs/` ;
+  mise en place sous `JOURNAL_LOCK`, jamais pour une image déjà jetée).
 - **État** : `class State`, instance `S` (moteur, modèle, générations en mémoire `S.jobs`, file `S.pending` (liste des
   générations en attente dans l'ordre de calcul, seule source de l'ordre) protégée avec `S.current` par la condition
   `S.turn`, lots `S.lots`, génération en cours `S.current`, sessions privées `S.private_sessions`, noms `S.lan_hosts`
@@ -141,9 +147,10 @@ Dans l'ordre du fichier :
   (masque 0o077 posé en tête de `main()` et de `tools/calibrate.py` : tout fichier créé ensuite, sd-cli compris, pour le
   seul compte du serveur), `close_folders` (dossiers du serveur créés avant le masque, fermés en 0o700 au lancement),
   `main()` (options ; `--enter` : `open_entry` puis sortie, sans serveur ; code d'accès par `setup_access` à chaque
-  lancement, `--lan`, Tailscale, ménage de `jobs/`, PNG cachés rendus par `restore_hidden_images`, threads ; navigateur
-  ouvert par `open_browser`, hors `--no-browser`). Le banc n'exécute pas `main()` : il pose lui-même `S.access_code`
-  (`ACCESS_CODE`), et `call()` envoie le cookie d'accès pour le Mac aussi ; le pilote d'interface connecte chaque page
+  lancement, `--lan`, Tailscale, ménage de `jobs/`, sorties cachées rendues par `restore_hidden_images`, threads ;
+  navigateur ouvert par `open_browser`, hors `--no-browser`). Le banc n'exécute pas `main()` : il pose lui-même
+  `S.access_code` (`ACCESS_CODE`), et `call()` envoie le cookie d'accès pour le Mac aussi ; le pilote d'interface
+  connecte chaque page
   de `chrome.phonePage()` au banc direct (un banc relayé : `bench.login(page)`) ; `bench.enter()` du pilote demande à
   `tests/ui/serve.py` un jeton et sa page, comme `--enter`. `tools/make_shortcut.py` :
   `mac_command` (texte de `Chambre noire.command` : interface déjà lancée, `launch.py --enter`), `mac`, `windows`.
@@ -432,11 +439,13 @@ invariants ».
   survivent pas à un redémarrage.
 - **Fichiers** : dossier de travail `jobs/<id>/` (images d'entrée, aperçus, `sd-cli.log`, et l'image tant qu'elle se
   calcule ; les 20 derniers gardés au lancement), image finale `outputs/.pile/<id>_<mode>.png` (la pile, à trier),
-  une ligne par image dans `outputs/journal.jsonl`. Garder (`/api/keep`) déplace le seul PNG vers `outputs/` (les
-  tirages, dont toutes les images d'avant la pile) ; miniatures (`outputs/.thumbs/`) et images d'entrée
-  (`outputs/.inputs/<image>/`) sont rangées par nom d'image et ne bougent pas. Les tirages (`/api/history`) et la pile
-  (`/api/pile`) sont les PNG de leur dossier croisés avec le journal (`images_in`). Les images d'entrée (`init.png`,
-  `ref_N.png`) sont copiées du dossier de travail en fin de job (`save_inputs`, et au démarrage pour les dossiers
+  une ligne par image dans `outputs/journal.jsonl`. Une sortie est un `.png`, ou un `.webp` (vidéo en WebP animé),
+  reconnue par `output_name` partout où une image se liste, se sert ou s'efface. Garder (`/api/keep`) déplace le seul
+  fichier vers `outputs/` (les tirages, dont toutes les images d'avant la pile) ; miniatures (`outputs/.thumbs/`) et
+  images d'entrée (`outputs/.inputs/<radical>/`) sont rangées par radical et ne bougent pas. Les tirages
+  (`/api/history`) et la pile (`/api/pile`) sont les sorties de leur dossier croisées avec le journal (`images_in`).
+  Les images d'entrée (`init.png`, `ref_N.png`) sont copiées du dossier de travail en fin de job (`save_inputs`, et
+  au démarrage pour les dossiers
   encore présents). Jeter (`/api/discard`, une image de la pile) et Supprimer (`/api/delete`, un tirage) effacent tout
   (`delete_output`), ligne du journal comprise. Toute écriture du journal et tout tri passent sous `JOURNAL_LOCK`
   (`to_pile`, `sort_image`), et chacun augmente `S.rev`. Une génération annulée (en cours ou en file) ne laisse
