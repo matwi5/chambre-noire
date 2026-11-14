@@ -1381,7 +1381,7 @@ $('modeErase').onclick=()=>{paintMode='erase'; $('modeErase').classList.add('on'
 function drawCanvasFor(im, pixels){ drawFor=im;   // sans image : canevas réduit, rien de la taille de l'image d'avant
   if(im){ canvas.width=im.w; canvas.height=im.h; } else canvas.width=canvas.height=1; clearMask();
   if(im && pixels) ctx.putImageData(pixels, 0, 0); }
-// bouton Dessiner (selon le nombre d'images) et zone de dessin : le tracé part avec son image, Dessiner s'éteint
+// bouton Dessiner (selon le nombre d'images et le modèle : grisé avec MiniMax H3) et zone de dessin : le tracé part avec son image, Dessiner s'éteint
 // sans image seule ; éteint, l'image n'est plus dans la zone de dessin (rien d'un autre espace n'y reste)
 function renderDrawing(){
   const n=inputImages.length, im=n===1 ? inputImages[0] : null;
@@ -1397,7 +1397,7 @@ function renderDrawing(){
   $('composer').classList.toggle('drawing', drawOn);
   $('drawBtn').classList.toggle('on', drawOn); $('drawBtn').setAttribute('aria-pressed', drawOn); $('drawBtn').disabled=n>1 || barred;
   $('drawHint').textContent = barred ? DRAW_QWEN : n>1 ? 'Dessiner se fait sur une seule image' : ''; }
-// Dessiner (grisé à plusieurs images) : sans image, choix d'une image puis dessin, la saisie visée notée à l'ouverture du
+// Dessiner (grisé à plusieurs images, et avec un modèle sans masque : MiniMax H3) : sans image, choix d'une image puis dessin, la saisie visée notée à l'ouverture du
 // sélecteur ; avec une image, l'allume ou l'éteint (le tracé reste)
 let drawPick=null;
 $('drawBtn').onclick=()=>{ if(inputImages.length){ drawOn=!drawOn; renderDrawing(); refreshChoices(); return; }

@@ -572,9 +572,10 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
 
 - `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()` et `ref_px()` de `estimate.py` (jetons de
   16×16 px, arrondi à 32) : formule et coefficients.
-- La clé `qwen` de `MODEL_TABLE` (modèle d'une demande sans champ `model`) est recopiée dans `index.html` : défaut de
-  `opt.model`, repli de `modelSel`, ligne de Qwen mise à part dans la feuille Moteur, modèle d'une demande relancée
-  sans `model` (`relaunch`).
+- Les clés de `MODEL_TABLE` sont recopiées dans `index.html` : `qwen` (modèle d'une demande sans champ `model`) pour
+  le défaut de `opt.model`, le repli de `modelSel`, la ligne de Qwen mise à part dans la feuille Moteur et le modèle
+  d'une demande relancée sans `model` (`relaunch`) ; `h3` dans `isH3` (aide `<Picture N>` et mention de l'édition,
+  propres à MiniMax H3).
 - `PREVIEW_EVERY = 5` côté interface égale le défaut `preview_interval` de `build_cmd` (`preview_every`, quand le
   modèle n'impose pas le sien).
 - La longueur minimale du code privé (`MIN_PRIVATE_CODE`, 8) est aussi vérifiée dans `index.html` (feuilles
