@@ -79,6 +79,37 @@ MODELS = {
 if sys.platform == "darwin":   # Metal n'a pas de calcul int8 : encodeur GGUF officiel et sa tour vision, sur le GPU
     MODELS["llm"] = P("models", "text_encoders", "Qwen3VL-8B-Instruct-Q8_0.gguf")
     MODELS["llm_vision"] = P("models", "text_encoders", "mmproj-Qwen3VL-8B-Instruct-F16.gguf")
+# MiniMax H3 : versions du modèle et fichiers communs (encodeur de texte, VAE), sous les noms publiés par leurs dépôts
+H3_DIFFUSION = {
+    "h3-q4": P("models", "diffusion_models", "minimax_h3_image_pruned-Q4_K_M.gguf"),
+    "h3-q8": P("models", "diffusion_models", "minimax_h3_image_pruned-Q8_0.gguf"),
+}
+H3_FILES = {
+    "vae": P("models", "vae", "minimax_h3_image_vae_fp16.safetensors"),
+    "llm": P("models", "text_encoders", "qwen3vl_32b_minimax_h3-Q4_K_M.gguf"),
+}
+MAX_VARIANTS = 4                          # images d'un lot de variantes (tous les modes, hors campagne)
+MAX_CAMPAIGN = 10                         # photos d'une campagne (mode Éditer), comme les références d'une édition
+MAX_SIDE = 4096                           # côté le plus grand d'une image demandée, pour tout modèle
+PAGE_MODES = ["t2i", "edit", "mask", "annot"]   # modes de la page ; un autre mode (API) se calcule comme t2i ou edit
+MODE_LABELS = {"t2i": "texte vers image", "edit": "édition", "mask": "masque", "annot": "annotation"}
+# Table fermée des modèles qu'une demande peut nommer (champ model, absent : qwen). La valeur reçue n'y sert qu'à
+# choisir une entrée : tout ce qui entre dans la commande ou un chemin vient d'ici. versions : fichier du modèle de
+# diffusion par clé de version (celle de Qwen est choisie au démarrage, S.model) ; files : autres fichiers ; engine :
+# release minimale de sd.cpp ; steps : étapes permises (None : 1 à 200) ; max_side : côté le plus grand permis ;
+# max_refs : images jointes que la page propose (le serveur n'en borne pas le nombre, comme avant) ; modes : modes de
+# la page permis ; cfg et preview_every : guidage et intervalle des aperçus imposés (None : ceux de la demande) ;
+# args : options de sd-cli propres au modèle (celles de l'essai pour MiniMax H3) ; setup : option de setup.py qui
+# l'installe. MiniMax H3 reprend les tailles et les images jointes de Qwen, sans plafond propre (série 10).
+MODEL_TABLE = {
+    "qwen": {"name": "Qwen", "versions": DIFFUSION, "files": MODELS, "engine": 0, "steps": None, "max_side": MAX_SIDE,
+             "max_refs": MAX_CAMPAIGN, "modes": PAGE_MODES, "init_image": True, "mask": True,
+             "negative_prompt": True, "cfg": None, "preview_every": None, "args": [], "setup": ""},
+    "h3": {"name": "MiniMax H3", "versions": H3_DIFFUSION, "files": H3_FILES, "engine": 1090, "steps": [6],
+           "max_side": MAX_SIDE, "max_refs": MAX_CAMPAIGN, "modes": ["t2i", "edit"], "init_image": False,
+           "mask": False, "negative_prompt": False, "cfg": 1.0, "preview_every": 2,
+           "args": ["--sigmas", "minimax-h3-image", "--rng", "cpu"], "setup": "--h3"},
+}
 EXE = "sd-cli.exe" if os.name == "nt" else "sd-cli"
 # moteurs de la plateforme, par ordre de repli quand celui demandé n'est pas installé
 PLATFORM_BACKENDS = ["metal"] if sys.platform == "darwin" else ["vulkan", "cuda", "cpu"]
@@ -86,8 +117,6 @@ PLATFORM_BACKENDS = ["metal"] if sys.platform == "darwin" else ["vulkan", "cuda"
 PROGRESS_RE = re.compile(r"(\d+)/(\d+)\s*-\s*([\d.]+)(s/it|it/s)")
 TAKING_RE = re.compile(r"taking ([\d.]+)\s*s")
 CALIB = P("tools", "calibration.json")
-MAX_VARIANTS = 4                          # images d'un lot de variantes (tous les modes, hors campagne)
-MAX_CAMPAIGN = 10                         # photos d'une campagne (mode Éditer), comme les références d'une édition
 PRIVATE_JOB_TTL = 24 * 3600               # génération privée finie, jamais oubliée par sa page : oubliée après ce délai
 # ligne de fin de toute génération réussie, normale ou privée, sans chemin ni durée : une seule source, pour que rien
 # dans logs/ ne distingue une génération privée (décision du 23/10/2026)
@@ -114,23 +143,28 @@ BACKENDS = {
 
 
 def record_calib(job):
-    """Ajoute la mesure de la génération aux données de calibration (voir tools/estimate.py). Seules les générations de
-    tools/calibrate.py en parlent : dans logs/, une ligne de calibration ne suivrait que les générations normales et les
-    distinguerait des privées (décision du 23/10/2026)."""
+    """Ajoute la mesure de la génération aux données de calibration (voir tools/estimate.py), sous la clé de sa version.
+    Seules les générations de tools/calibrate.py en parlent : dans logs/, une ligne de calibration ne suivrait que les
+    générations normales et les distinguerait des privées (décision du 23/10/2026). Une génération d'un autre modèle que
+    Qwen n'ajoute rien tant que sa formule manque (ticket 06 de la mission MiniMax H3) : rangée sous la clé de Qwen,
+    elle fausserait ses estimations."""
     talk = job.get("calibration")
+    key, version = job_model(job)
+    if key != "qwen":
+        return
     try:
         sample = estimate.make_sample(job, S.engine)
         if not sample:
             return
-        S.store.add(S.backend, S.model, sample)
+        S.store.add(S.backend, version, sample)
     except Exception as e:
         if talk:
             print(f"[calibration] ignorée : {e}", flush=True)
         return
     if not talk:
         return
-    c = S.store.coefficients(S.backend, S.model, S.engine)
-    print(f"[calibration] {S.backend}/{S.model} : étape {sample['step']:.2f} s ({sample['w']}×{sample['h']}"
+    c = S.store.coefficients(S.backend, version, S.engine)
+    print(f"[calibration] {S.backend}/{version} : étape {sample['step']:.2f} s ({sample['w']}×{sample['h']}"
           f"{', ' + str(len(job.get('ref_px') or [])) + ' réf.' if job.get('ref_px') else ''}), "
           f"encodage {sample['enc']:.0f} s, décodage {sample['vae']:.0f} s — {c['samples']} mesure{'s' if c['samples'] > 1 else ''}", flush=True)
 
@@ -191,6 +225,53 @@ def engine_tag(backend):
         return open(P("sdcpp", backend, ".installed"), encoding="utf-8").read().strip() or estimate.LEGACY_ENGINE
     except OSError:
         return estimate.LEGACY_ENGINE
+
+
+def model_version(key):
+    """Version installée du modèle key de MODEL_TABLE, ou None. Qwen : celle du serveur (S.model), jamais refusée (un
+    fichier manquant fait échouer la génération, comme avant). Un autre : la première de ses versions dont le fichier
+    existe, si ses autres fichiers existent et que la release du moteur du serveur (S.engine, lue au démarrage, comme
+    pour les mesures de durée) est au moins la sienne."""
+    if key == "qwen":
+        return S.model
+    spec = MODEL_TABLE[key]
+    if estimate.release_number(S.engine) < spec["engine"] or not all(os.path.exists(p) for p in spec["files"].values()):
+        return None
+    return next((v for v, path in spec["versions"].items() if os.path.exists(path)), None)
+
+
+def request_model(req):
+    """(clé, version) du modèle d'une demande que request_error a acceptée, tirées de la table, jamais de la demande ;
+    version None si le modèle a disparu depuis."""
+    wanted = req.get("model", "qwen")
+    key = next(k for k in MODEL_TABLE if k == wanted)
+    return key, model_version(key)
+
+
+def job_model(job):
+    """(clé, version) du modèle d'une génération, posés à sa création (new_job) ; une génération sans modèle, celle de
+    tools/calibrate.py, est Qwen à la version du serveur."""
+    if "model" not in job:
+        return "qwen", S.model
+    return job["model"], job["version"]
+
+
+def preview_every(job, r):
+    """Intervalle des aperçus d'une génération de demande r : celui que son modèle impose, sinon celui de la demande."""
+    return MODEL_TABLE[job_model(job)[0]]["preview_every"] or int(r.get("preview_interval") or 5)
+
+
+def installed_models():
+    """Modèles installés et leurs limites, dans l'ordre de la table (/api/status)."""
+    out = []
+    for key, spec in MODEL_TABLE.items():
+        version = model_version(key)
+        if version:
+            out.append({"key": key, "name": spec["name"], "version": version, "steps": spec["steps"],
+                        "modes": spec["modes"], "init_image": spec["init_image"], "mask": spec["mask"],
+                        "negative_prompt": spec["negative_prompt"], "max_refs": spec["max_refs"],
+                        "max_side": spec["max_side"], "preview_every": spec["preview_every"]})
+    return out
 
 
 def default_backend(cfg):
@@ -1705,11 +1786,15 @@ def build_cmd(job):
     d = job["dir"]
     r = job["req"]
     w, h = int(r["width"]), int(r["height"])
+    key, version = job_model(job)                # posés à la création : jamais relus de la demande
+    spec = MODEL_TABLE[key]
+    files = {**spec["files"], "diffusion": spec["versions"][version]}
+    cfg = spec["cfg"] if spec["cfg"] is not None else r.get("cfg", S.cfg.get("cfg_scale", 1.0))
     cmd = [P("sdcpp", S.backend, EXE),
-           "--diffusion-model", MODELS["diffusion"], "--vae", MODELS["vae"], "--llm", MODELS["llm"]] + (
-           ["--llm_vision", MODELS["llm_vision"]] if "llm_vision" in MODELS else []) + BACKENDS[S.backend] + [
-           "-p", r["prompt"], "-W", str(r["width"]), "-H", str(r["height"]),
-           "--steps", str(r["steps"]), "--cfg-scale", str(r.get("cfg", S.cfg.get("cfg_scale", 1.0))),
+           "--diffusion-model", files["diffusion"], "--vae", files["vae"], "--llm", files["llm"]] + (
+           ["--llm_vision", files["llm_vision"]] if "llm_vision" in files else []) + BACKENDS[S.backend] + (
+           spec["args"]) + ["-p", r["prompt"], "-W", str(r["width"]), "-H", str(r["height"]),
+           "--steps", str(r["steps"]), "--cfg-scale", str(cfg),
            "--sampling-method", "euler", "-s", str(r.get("seed", -1)), "-o", job["out"]]
     if r.get("negative_prompt"):
         cmd += ["-n", r["negative_prompt"]]
@@ -1726,7 +1811,7 @@ def build_cmd(job):
         write_data_url(r["mask_image"], os.path.join(d, "mask.png"), "masque")
         cmd += ["--mask", os.path.join(d, "mask.png")]
     if r.get("preview"):
-        interval = int(r.get("preview_interval") or 5)
+        interval = preview_every(job, r)
         cmd += ["--preview", "vae", "--preview-path", os.path.join(d, "preview_%03d.png"), "--preview-interval", str(interval)]
         job["preview_interval"] = interval
     cmd += list(S.cfg.get("extra_args", []))
@@ -1888,7 +1973,8 @@ def run_job(job):
         else:                                     # dans la pile, à trier
             meta = {"mode": job["req"].get("mode"), "prompt": job["req"]["prompt"], "width": job["req"]["width"], "height": job["req"]["height"],
                     "steps": job["req"]["steps"], "seed": job["req"].get("seed"), "seconds": job["seconds"], "encode_seconds": job.get("encode_seconds"),
-                    "sec_per_it": job.get("sec_per_it"), "size": job["size"], "backend": S.backend, "model": S.model}
+                    "sec_per_it": job.get("sec_per_it"), "size": job["size"], "backend": S.backend,
+                    "model": job_model(job)[1]}
             if job.get("lot"):
                 meta["lot"] = job["lot"]
             if not to_pile(job, meta):            # annulée pendant la fin du calcul : rien n'en reste
@@ -1915,7 +2001,8 @@ def keep_private(job):
     avoir été verrouillé). Si l'espace a été supprimé ou recréé entre-temps, l'image est abandonnée (store_private)."""
     r = job["req"]
     meta = {"mode": job["mode"], "prompt": r["prompt"], "width": r["width"], "height": r["height"], "steps": r["steps"],
-            "seed": r.get("seed"), "seconds": job["seconds"], "model": S.model, "lot": job.get("lot"), "time": int(job["finished"]),
+            "seed": r.get("seed"), "seconds": job["seconds"], "model": job_model(job)[1], "lot": job.get("lot"),
+            "time": int(job["finished"]),
             "dims": job.get("dims"), "pile": True}   # à trier : la marque reste dans la fiche chiffrée
     with open(job["out"], "rb") as f:
         image = f.read()
@@ -2064,7 +2151,8 @@ def request_error(req):
         return "objet JSON attendu"
     if not isinstance(req.get("prompt"), str) or not req["prompt"].strip():
         return "prompt vide ou non textuel"
-    for key, label, lo, hi in (("width", "largeur", 64, 4096), ("height", "hauteur", 64, 4096), ("steps", "étapes", 1, 200)):
+    for key, label, lo, hi in (("width", "largeur", 64, MAX_SIDE), ("height", "hauteur", 64, MAX_SIDE),
+                               ("steps", "étapes", 1, 200)):
         if not is_int(req.get(key)) or not lo <= req[key] <= hi:
             return f"{label} : nombre entier de {lo} à {hi} attendu"
     seed = req.get("seed", -1)
@@ -2104,9 +2192,44 @@ def request_error(req):
         for c in campaign:                   # chaque photo devient une génération : mêmes contrôles qu'une demande seule
             if not isinstance(c, dict) or not isinstance(c.get("image"), str):
                 return "campaign : chaque photo porte son image (data URL)"
-            if not all(is_int(c.get(k)) and 64 <= c[k] <= 4096 for k in ("width", "height")):
-                return "campaign : largeur et hauteur de chaque photo, nombres entiers de 64 à 4096"
+            if not all(is_int(c.get(k)) and 64 <= c[k] <= MAX_SIDE for k in ("width", "height")):
+                return f"campaign : largeur et hauteur de chaque photo, nombres entiers de 64 à {MAX_SIDE}"
+    return model_error(req)
+
+
+def model_error(req):
+    """Motif de refus du champ model d'une demande (400), ou None : un texte de MODEL_TABLE (absent : qwen), installé,
+    et ce que ce modèle sait faire. Le message ne recopie jamais la valeur reçue."""
+    if "model" in req:
+        if not isinstance(req["model"], str):
+            return "model : texte attendu"
+        if req["model"] not in MODEL_TABLE:
+            return "modèle inconnu"
+    spec = MODEL_TABLE[req.get("model", "qwen")]
+    if model_version(req.get("model", "qwen")) is None:
+        if estimate.release_number(S.engine) < spec["engine"]:   # moteur lu au lancement du serveur
+            return (f"{spec['name']} demande le moteur master-{spec['engine']} ou plus récent : lancez setup.py "
+                    f"{spec['setup']} (Mac seulement), puis relancez le serveur")
+        return f"{spec['name']} n'est pas installé : lancez setup.py {spec['setup']} (Mac seulement)"
+    if spec["steps"] and req["steps"] not in spec["steps"]:
+        return f"étapes : {', '.join(map(str, spec['steps']))} avec {spec['name']}"
+    sizes = [(req["width"], req["height"])] + [(c["width"], c["height"]) for c in req.get("campaign") or []]
+    if any(max(w, h) > spec["max_side"] for w, h in sizes):
+        return f"largeur et hauteur : {spec['max_side']} au plus avec {spec['name']}"
+    for field, label in (("init_image", "d'image de départ"), ("mask_image", "de masque"),
+                         ("negative_prompt", "de prompt négatif")):
+        if req.get(field) and not spec["mask" if field == "mask_image" else field]:
+            return f"{spec['name']} n'accepte pas {label}"
+    mode = request_mode(req)                     # tel que la génération le gardera
+    if mode in PAGE_MODES and mode not in spec["modes"]:
+        return f"{spec['name']} n'accepte pas le mode {MODE_LABELS.get(mode, mode)}"
     return None
+
+
+def request_mode(req):
+    """Mode d'une demande tel que la génération le garde (nom de sa sortie, journal, fiche privée) : lettres minuscules
+    et chiffres seulement, « img » à défaut."""
+    return re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
 
 
 def expand_request(req):
@@ -2207,7 +2330,9 @@ def job_estimate(job, r, coefs):
     """Durée estimée d'une génération de la file (estimate.predict, seule source de l'estimation) ; r : sa demande, lue
     une seule fois par l'appelant (forget_files la retire à la fin d'une génération secrète, à tout moment)."""
     refs, init = job["inputs"]
-    previews = r["steps"] // (r.get("preview_interval") or 5) if r.get("preview") else 0
+    previews = r["steps"] // preview_every(job, r) if r.get("preview") else 0
+    # coefficients de Qwen pour tout modèle tant que ceux de MiniMax H3 manquent (ticket 06) : estimation fausse
+    # d'ici là
     return estimate.predict(coefs, r["width"], r["height"], r["steps"], refs, init, previews)
 
 
@@ -2248,14 +2373,16 @@ def queue_view(private, coefs):
     return entries
 
 
-def new_job(req, inputs, lot=None):
-    """Génération en attente pour une demande validée (sa graine déjà fixée), avec son dossier de travail. Identifiant
+def new_job(req, inputs, model, lot=None):
+    """Génération en attente pour une demande validée (sa graine déjà fixée), avec son dossier de travail ; model :
+    (clé, version) de request_model, gardés par la génération (la commande, le journal, la fiche privée et la mesure
+    de durée les lisent sur elle, jamais dans la demande ni dans l'état du serveur). Identifiant
     d'une génération privée : 128 bits tirés au hasard, impossible à deviner pour un autre appareil ; celui d'une
     génération normale dit sa date."""
     private = req.get("private") is True
     jid = (secrets.token_hex(16) if private
            else datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6])
-    mode = re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
+    mode = request_mode(req)
     d = P("jobs", ("private_" if private else "") + jid)
     os.makedirs(d, exist_ok=True)
     if private:                                 # PNG en clair et prompt dans ses métadonnées : pour le seul compte,
@@ -2264,7 +2391,8 @@ def new_job(req, inputs, lot=None):
     # (to_pile), la pile ne voit jamais une image à moitié écrite ; une privée le chiffre (keep_private)
     out = os.path.join(d, f"{jid}_{mode}.png")
     return {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
-            "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot,
+            "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot, "model": model[0],
+            "version": model[1],
             # noms des images d'entrée que build_cmd écrit et que save_inputs garde (init.png, puis ref_N.png) : la page
             # qui suit la génération les montre, même après l'oubli de la demande
             "input_names": (["init.png"] if req.get("init_image") else [])
@@ -2654,6 +2782,7 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {"sd_ready": not missing, "backend": S.backend, "busy": current_id is not None,
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model,
+                                    "models": installed_models(),     # modèles installés et leurs limites
                                     "queued": sum(e["status"] == "queued" for e in queue),
                                     "queue": queue,
                                     "current_job": current_id if current and in_space(current, inside) else None,
@@ -2836,6 +2965,9 @@ class H(BaseHTTPRequestHandler):
                 return self._send(403, {"error": PRIVATE_HTTPS_ONLY})
             if req.get("private") and not self._private_session(touch=True):
                 return self._send(403, {"error": "espace privé verrouillé : entrez-y pour lancer une génération privée"})
+            model = request_model(req)           # une fois par demande, avant tout dossier de travail
+            if model[1] is None:                 # fichier retiré depuis model_error
+                return self._send(400, {"error": model_error(req) or "modèle non installé"})
             # campagne ou variantes : le mode ne le dit plus (des variantes d'édition sont aussi un lot du mode edit)
             campaign = req.get("campaign") is not None
             reqs = expand_request(req)
@@ -2845,7 +2977,7 @@ class H(BaseHTTPRequestHandler):
                    "campaign": campaign} if n > 1 else None
             # variantes : mêmes images d'entrée et dimensions pour toutes, lues une fois ; campagne : une photo chacune
             inputs = [request_inputs(r) for r in reqs] if campaign else [request_inputs(reqs[0])] * n
-            jobs = [new_job(r, inputs[k], lot and {**lot, "rank": k + 1}) for k, r in enumerate(reqs)]
+            jobs = [new_job(r, inputs[k], model, lot and {**lot, "rank": k + 1}) for k, r in enumerate(reqs)]
             if lot:
                 S.lots[lot["id"]] = {"jobs": jobs, "campaign": campaign}
             with S.turn:                         # générations d'un lot : à la suite dans la file, dans l'ordre

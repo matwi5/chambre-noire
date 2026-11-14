@@ -948,7 +948,13 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   (`null` hors git) et `server`, empreinte de `tools/launch.py` et `tools/estimate.py`, relus toutes les 30 s ;
   `server_version` : la même chose au lancement du serveur, `null` sans `main()` ; `rev` : compteur de la pile et des
   tirages de l'espace de l'appareil, qui change à chaque image arrivée dans la pile et à chaque Garder, Jeter et
-  Supprimer, et part de l'heure du lancement du serveur : l'interface relit pile et tirages quand il change) ; lots :
+  Supprimer, et part de l'heure du lancement du serveur : l'interface relit pile et tirages quand il change ;
+  `models` : les modèles installés, dans l'ordre `qwen` puis `h3`, chacun avec `key`, `name`, `version` (clé de
+  version que la génération écrira), `steps` (étapes permises, `null` : 1 à 200), `modes` (modes de la page permis),
+  `init_image`, `mask` et `negative_prompt` (acceptés ou non), `max_refs` (images jointes que la page propose ; le
+  serveur n'en borne pas le nombre), `max_side` (côté le plus grand, refusé au-delà) et `preview_every` (intervalle
+  des aperçus imposé, `null` : celui de la demande) ; MiniMax H3 n'y est que si ses fichiers sont là et que le
+  moteur du serveur, lu au lancement, est au moins `master-1090`) ; lots :
   `"count"` de 2 à 4 dans `/api/generate` (tous les modes ; 1 : génération seule ; 400 « count : pas de variantes dans
   une campagne » au-delà de 1 avec `campaign`) crée autant de générations ; `"campaign": [{"image": <data URL>,
   "width", "height"}, …]` (1 à 10 photos, en édition, `"mode": "edit"`, sans `ref_images`) crée une édition par photo,
@@ -1053,7 +1059,20 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   la largeur ou la hauteur n'est pas un entier de 64 à 4096, les étapes un entier de 1 à 200, ou la graine un entier
   (-1 : au hasard), ou `count` qui n'est pas un entier de 1 à 4 ou qui dépasse 1 avec une `campaign`, ou une
   `campaign` hors du mode `edit`, de plus de 10 photos, ou dont une photo n'a pas d'image ou de dimensions valides ;
-  les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Elle refuse aussi
+  les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Le champ `model`
+  choisit le modèle dans une table fermée du serveur : absent, Qwen (`"qwen"`, la version du lancement) ; `"h3"`,
+  MiniMax H3 ; autre chose qu'un texte, 400 « model : texte attendu » ; un texte inconnu, 400 « modèle inconnu »
+  (la valeur n'est jamais recopiée, ni utilisée dans un chemin ou la commande) ; MiniMax H3 absent, 400 « MiniMax H3
+  n'est pas installé : lancez setup.py --h3 (Mac seulement) » ; sur un moteur plus ancien que `master-1090` (lu au
+  lancement du serveur), 400 qui demande de lancer `setup.py --h3` puis de relancer le serveur. MiniMax H3 refuse
+  (400) des étapes autres que 6, une image de départ, un masque, les modes `mask` et `annot` (le mode tel que la
+  génération le garde : lettres minuscules et chiffres seulement) et un prompt négatif ;
+  il accepte les tailles et les images de référence de Qwen, sans plafond propre, en texte vers image comme en
+  édition, variantes et campagnes comprises ; sa commande impose le guidage 1, les sigmas `minimax-h3-image`, le
+  générateur de bruit `cpu` et un aperçu tous les 2 pas. La génération garde son modèle et sa version dès sa création
+  (version `h3-q4`, ou `h3-q8` si seul ce fichier est là) : sa commande, sa ligne de `outputs/journal.jsonl` et la
+  fiche d'une image privée (champ `model`) les lisent sur elle. Une génération MiniMax H3 n'ajoute aucune mesure de
+  durée, et la file l'estime pour l'instant avec les mesures de Qwen (estimation fausse). Elle refuse aussi
   (400 « L'incognito n'existe plus : passez par l'espace privé. ») une demande `"incognito": true`, qu'enverrait une
   page d'avant le retrait de l'incognito restée ouverte : rien n'est écrit sur l'ordinateur, pas même au journal du
   serveur (les requêtes `/api/generate` n'y vont jamais) ; le champ `page` d'une

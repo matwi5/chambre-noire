@@ -36,14 +36,21 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
 Dans l'ordre du fichier :
 
 - **Constantes et moteur** (en tête) : `ROOT`, `P()` (chemin sous la racine, relu à chaque appel : le banc repointe
-  `ROOT`), `MODELS` et `DIFFUSION` (noms des fichiers de modèles, à garder égaux à ceux de `setup.py`), `BACKENDS`
+  `ROOT`), `MODELS` et `DIFFUSION` (noms des fichiers de modèles, à garder égaux à ceux de `setup.py`),
+  `H3_DIFFUSION` et `H3_FILES` (fichiers de MiniMax H3, sous les noms publiés), `MAX_VARIANTS`, `MAX_CAMPAIGN`,
+  `MAX_SIDE`, `PAGE_MODES` et `MODE_LABELS` (libellés des modes dans un refus), `MODEL_TABLE` (table fermée des
+  modèles qu'une demande nomme par son champ `model` : versions, fichiers, release minimale du moteur, étapes,
+  tailles, images jointes, modes et entrées permis, guidage, aperçus et options de sd-cli imposés), `BACKENDS`
   (options de sd-cli par moteur, réglages Metal justifiés en commentaire), `PLATFORM_BACKENDS`, `PROGRESS_RE` et
-  `TAKING_RE` (lecture de la sortie de sd-cli), `MAX_VARIANTS`, `MAX_CAMPAIGN`, `PRIVATE_JOB_TTL`,
+  `TAKING_RE` (lecture de la sortie de sd-cli), `PRIVATE_JOB_TTL`,
   `DONE_LINE` (ligne de fin commune à toutes les générations réussies).
   `record_calib`, `load_config`, `code_version` (commit, date et branche du dossier servi, empreinte `server`
   de `launch.py` et `estimate.py`, relus toutes les `VERSION_TTL` s ; git seulement s'il y a un `.git`, jamais après un
   échec, sauf un délai dépassé ; `S.started` : la même chose au lancement, posé par `main()`), `engine_tag`,
-  `default_backend`.
+  `model_version` (version installée d'un modèle de la table : fichiers présents et `S.engine` assez
+  récent ; Qwen : `S.model`, jamais refusé), `request_model` (clé et version d'une demande, tirées de la table, une
+  fois par demande), `job_model` (clé et version posées sur la génération par `new_job` ; sans elles, celle de
+  `tools/calibrate.py`, Qwen), `preview_every`, `installed_models` (`models` de `/api/status`), `default_backend`.
 - **Accès** : `ACCESS_FILE`, `ACCESS_COOKIE`, `ENTRY_TOKEN`, `ENTRY_PAGE`, `ENTRY_TTL`, `ENTRY_LOCK`, `ENTRY_USED`
   (entrée à usage unique de `--enter`), `LOCAL_CLIENTS`, `PUBLIC_FILES` (manifeste, icônes, logo, police pixel, service
   worker, servis sans cookie), `LOGIN_PAGE`, `LOGIN_MAC` (phrase de l'ordinateur, à la place de `<!--mac-->` pour une
@@ -124,6 +131,8 @@ Dans l'ordre du fichier :
   échouer ce job seul ; dans son `finally`, fichiers d'une génération secrète supprimés, fin de lot, puis
   `S.current` rendu en dernier), `end_of_lot`.
 - **Demandes** : `request_error` (400 pour tout champ que `build_cmd` utilise tel quel, et pour une demande incognito),
+  `model_error` (champ `model` : texte de la table, modèle installé, ce qu'il refuse ; sans recopier la valeur),
+  `request_mode` (mode tel que la génération le garde, celui que `model_error` juge),
   `expand_request` (une demande par image d'un lot : variantes `count`, campagne `campaign`), `draw_seeds` (graines -1
   tirées par le serveur pour être écrites au journal), `active_jobs` (génération en cours puis `S.pending`, lus sous
   `S.turn`), `move_first` (« Passer en tête » : routes `/api/job/<id>/first` et `/api/lot/<id>/first`, réponse par
@@ -155,8 +164,8 @@ Dans l'ordre du fichier :
   `tests/ui/serve.py` un jeton et sa page, comme `--enter`. `tools/make_shortcut.py` :
   `mac_command` (texte de `Chambre noire.command` : interface déjà lancée, `launch.py --enter`), `mac`, `windows`.
 
-`tools/estimate.py` : modèle de coût des durées (`predict`, `ref_px`, `prefix_cache`, `make_sample`, `class Store`
-pour `tools/calibration.json`).
+`tools/estimate.py` : modèle de coût des durées (`predict`, `ref_px`, `release_number`, seule lecture du format
+`master-NNN-hash` du marqueur, `prefix_cache`, `make_sample`, `class Store` pour `tools/calibration.json`).
 
 ## `tools/ui/index.html` : l'interface (HTML, CSS et JavaScript, sans dépendance ni build)
 
@@ -552,7 +561,8 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
 
 - `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()` et `ref_px()` de `estimate.py` (jetons de
   16×16 px, arrondi à 32) : formule et coefficients.
-- `PREVIEW_EVERY = 5` côté interface égale le défaut `preview_interval` de `build_cmd`.
+- `PREVIEW_EVERY = 5` côté interface égale le défaut `preview_interval` de `build_cmd` (`preview_every`, quand le
+  modèle n'impose pas le sien).
 - La longueur minimale du code privé (`MIN_PRIVATE_CODE`, 8) est aussi vérifiée dans `index.html` (feuilles
   privées).
 - Palette de la lumière inactinique (fond, surface, filets, texte papier, accent ambre, halo, erreur, grain, icône

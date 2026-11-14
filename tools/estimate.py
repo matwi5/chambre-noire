@@ -51,10 +51,17 @@ LEGACY_ENGINE = "master-890-74988b2"   # release des mesures enregistrées avant
 PREFIX_CACHE_FROM = 903                # première release de sd.cpp avec le cache de préfixe (commit 2dc7f54)
 
 
+def release_number(engine):
+    """Numéro d'une release de sd.cpp (« master-1090-8b1e9df » : 1090), 0 si le marqueur est illisible : seule lecture
+    de son format, pour le cache de préfixe et la release minimale d'un modèle (tools/launch.py : model_version, et
+    model_error pour le motif d'un refus)."""
+    m = re.match(r"master-(\d+)-", engine or "")
+    return int(m.group(1)) if m else 0
+
+
 def prefix_cache(engine):
     """Vrai si la release de sd.cpp (par exemple « master-959-d637cfb ») a le cache de préfixe de Qwen-Image 2.1."""
-    m = re.match(r"master-(\d+)-", engine or "")
-    return bool(m) and int(m.group(1)) >= PREFIX_CACHE_FROM
+    return release_number(engine) >= PREFIX_CACHE_FROM
 
 
 def tokens(w, h, refs=()):

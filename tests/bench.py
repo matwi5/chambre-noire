@@ -84,7 +84,9 @@ def start():
     # launch.PROMPT_TYPES_FILE reste le fichier du dépôt : le serveur le lit sans jamais l'écrire
     for d in ("tools", "outputs", "jobs", "logs", "models", "hold"):
         os.makedirs(launch.P(d))
-    for table in (launch.MODELS, launch.DIFFUSION):   # modèles en fichiers vides : /api/status dit le moteur prêt
+    # modèles en fichiers vides (Qwen et MiniMax H3) : /api/status dit le moteur prêt et les modèles installés ; les
+    # tables sont changées en place, MODEL_TABLE les désigne
+    for table in (launch.MODELS, launch.DIFFUSION, launch.H3_DIFFUSION, launch.H3_FILES):
         for k, path in table.items():
             table[k] = launch.P("models", os.path.basename(path))
             open(table[k], "w").close()
