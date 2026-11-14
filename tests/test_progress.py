@@ -1,8 +1,9 @@
 """Avancement d'une génération, sur le banc à faux moteur (voir bench.py) : seules les barres d'avancement des étapes
-comptent (entre la fin de l'encodage du prompt et la fin de l'échantillonnage, et du total des étapes demandées) ; les
-barres que les nouveaux modèles impriment à la lecture d'une image d'entrée et au décodage ne faussent ni l'étape
-affichée, ni le temps par étape, ni la mesure de durée gardée pour la calibration. Le faux moteur échoue comme le vrai
-quand un fichier de modèle de sa ligne de commande manque, et le banc fixe la release de son moteur."""
+comptent (entre la fin de l'encodage du prompt et la fin de l'échantillonnage, et du total des étapes demandées, sauf
+une image d'origine retouchée à strength moins de 1 : la fenêtre seule) ; les barres que les nouveaux modèles impriment
+à la lecture d'une image d'entrée et au décodage ne faussent ni l'étape affichée, ni le temps par étape, ni la mesure
+de durée gardée pour la calibration. Le faux moteur échoue comme le vrai quand un fichier de modèle de sa ligne de
+commande manque, et le banc fixe la release de son moteur."""
 import os, unittest
 
 import bench
