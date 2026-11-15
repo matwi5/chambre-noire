@@ -1,6 +1,7 @@
 """Vidéo par l'API (ticket 09) : modèle « video » de la table du serveur, refus propres à la vidéo, commande de l'essai,
-vidéo en WebP animé dans la pile avec sa durée (frames) gardée, avancement, annulation, aucune mesure de durée. Sur le
-banc à faux moteur (voir bench.py), la vidéo installée par bench.video() le temps d'un test."""
+vidéo en WebP animé dans la pile avec sa durée (frames) gardée, avancement, annulation (mesures de durée et
+estimations : test_video_estimates.py). Sur le banc à faux moteur (voir bench.py), la vidéo installée par bench.video()
+le temps d'un test."""
 import json, os, unittest
 from unittest import mock
 
@@ -277,12 +278,6 @@ class VideoRunTest(VideoCase):
         self.assertEqual(j["status"], "done", j)
         self.assertEqual(sent[0]["title"], "Image prête")
         self.assertIn("480×288", sent[0]["body"])
-
-    def test_a_video_records_no_duration_sample(self):
-        before = S.store.read()
-        self.assertEqual(wait_job(make_video()["id"])["status"], "done")
-        self.assertEqual(S.store.read(), before)
-        self.assertNotIn(f"{S.backend}/h3-video", S.store.read())
 
 
 if __name__ == "__main__":

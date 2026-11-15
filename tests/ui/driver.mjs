@@ -61,6 +61,7 @@
 //                                                // expression : SORT_IDLE, VIEWER_SEEN, LOCKS, PRESS, VIEWER_PRESS
 //   await page.stepViewer(1)                     // → dans une visionneuse (-1 : ←), sans tri ; ARROWS : les flèches
 //   await page.postGenerate(`{ prompt: 'x' }`)   // demande envoyée telle quelle par la page : son code HTTP
+//   await page.askShown('Génération longue')     // feuille de question ouverte, de ce titre
 //   await page.pileCards()                       // prompts des cartes dessinées de la pile, du dessus au dessous
 //   await page.emptyPile(bench)                  // Mac et page au repos, puis la pile gardée (repartir de rien)
 //   await page.watchToasts(); …; seenToasts      // messages affichés par la page à partir de l'appel
@@ -922,6 +923,11 @@ async function connect(wsUrl, { closeTab, siblings, tabs = async () => [] }) {
         ...${JSON.stringify(extra)} }).then(async r => ({ status: r.status, body: await r.json() }))`);
       if (r.status !== 202) throw new Error(`génération « ${prompt} » refusée : ${r.status} ${JSON.stringify(r.body)}`);
       return r.body;
+    },
+    // feuille de question (ask) ouverte, de ce titre : une confirmation attendue, avant answer(true|false)
+    askShown(title) {
+      return page.waitFor(`openedSheet === $('askSheet') && $('askTitle').textContent === ${JSON.stringify(title)}`,
+        { what: `question « ${title} »` });
     },
     // demande de génération envoyée telle quelle par la page (postJson('/api/generate')) : body, source d'un objet
     // évalué dans la page, dont les champs remplacent ceux par défaut (512×512, 8 étapes, sans aperçu ni image

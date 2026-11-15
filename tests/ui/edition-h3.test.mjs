@@ -109,8 +109,7 @@ test('MiniMax H3 : lot de variantes, campagne et confirmation au-delà d\'une he
   const jobs = await page.eval(`pageJobs.length`);
   await page.typePrompt('zeh4 longue');
   await page.click('#go');
-  await page.waitFor(`openedSheet === $('askSheet') && $('askTitle').textContent === 'Génération longue'`,
-    { what: 'confirmation au-delà d\'une heure' });
+  await page.askShown('Génération longue');           // confirmation au-delà d'une heure
   await page.eval(`answer(false)`);
   assert.equal(await page.eval(`pageJobs.length`), jobs, 'demande partie sans confirmation');
   page.assertNoErrors();

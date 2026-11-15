@@ -921,6 +921,14 @@ MiniMax H3 garde la même formule, avec ses propres valeurs de départ (mesurée
 temps d'une étape compte chaque image de référence deux fois dans la séquence, et le moteur lit chaque référence à
 1024 pixels de petit côté au moins (lecture coûteuse, plusieurs minutes par image).
 
+La vidéo garde aussi cette formule, sur ses mégapixels-images (largeur × hauteur × nombre d'images) : la séquence
+d'une étape et le décodage comptent toutes les images de la vidéo, l'image de départ ajoute ≈ 45 s en 480×288 (sa
+lecture et des étapes un peu plus lentes ; compté proportionnel à la taille) ; ni référence, ni cache de préfixe, ni
+aperçu. Ses valeurs de départ viennent
+des vidéos mesurées sur Mac : environ 10 s par étape pour 3 mégapixels-images, 57 s pour 17, 93 s pour 23 et 264 s
+pour 51 (4 étapes), 62 s d'encodage, 1,8 s de décodage par mégapixel-image. La page, la file et la carte en cours
+l'estiment ainsi, et la confirmation au-delà d'une heure vaut pour elle comme pour une image.
+
 Les coefficients partent de valeurs propres au moteur (Vulkan, CUDA, CPU, Metal), puis sont ajustés sur les mesures de
 votre machine : les 40 dernières générations par moteur et par version de modèle (`q4`, `q8`, `h3-q4`…), chaque
 modèle sur ses seules mesures, résumées par des médianes, si bien qu'une
@@ -933,7 +941,10 @@ calibration (texte → image en 512 et 768 px, édition en 512 px) ; `--no-calib
 `tools/calibrate.py` les relance. Tant qu'aucune mesure n'existe, l'état indique « estimations non calibrées » (celles
 de Qwen). MiniMax H3 se calibre à part, par `tools/calibrate.py --model h3` (6 étapes : texte → image en 1024 et 512 px,
 édition en 1024 px, environ 9 minutes sur Mac), que `setup.py` ne lance pas, ni après une mise à jour du moteur ;
-sans cela, ses estimations partent de ses valeurs de départ et s'ajustent à l'usage. Un serveur déjà lancé ne prend
+sans cela, ses estimations partent de ses valeurs de départ et s'ajustent à l'usage. La vidéo de même, par
+`tools/calibrate.py --model video` (deux vidéos de 480×288, de 56 et 124 images, environ 9 minutes), ses mesures
+rangées sous `h3-video` ; la lecture de son image de départ n'étant pas chronométrée par le moteur, son coût garde sa
+valeur de départ. Un serveur déjà lancé ne prend
 les mesures de `tools/calibrate.py` qu'à sa relance ou après sa prochaine génération mesurée (finie, hors de l'espace
 privé).
 Pendant une génération, le temps restant se fonde sur la moyenne des derniers pas. Les mesures sont stockées dans
@@ -1067,7 +1078,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   elle : ce qui reste de celle en cours, l'estimation des autres ; vu de l'espace public, une génération privée y est
   estimée comme une génération de Qwen, quel que soit son modèle ; 0 sans travail caché), `lot`, `estimate` et
   `elapsed` en secondes, `kind` (`normal` ou `private`), `id`, `mode`, `model` (clé du modèle de la génération), le
-  début du `prompt`, et `width`, `height` et `steps` de la demande ; `queued` : générations en attente de l'espace ;
+  début du `prompt`, et `width`, `height`, `steps` et `frames` (nombre d'images d'une vidéo, `null` pour une image)
+  de la demande ; `queued` : générations en attente de l'espace ;
   `current_job` : la génération en cours si
   elle est de l'espace, sinon `null` ; `last_job` : dernière génération normale, `null` dans l'espace privé ; `busy` :
   le Mac calcule, quel que soit l'espace ; `version` : `commit`, `date` et `branch` du dernier commit du dossier servi
@@ -1218,8 +1230,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   du moteur en mode vidéo : guidage 1, générateur de bruit `cpu`, 24 images par seconde, le LoRA turbo 4 étapes
   appliqué par une balise que le serveur ajoute à la fin du prompt (le prompt gardé est celui de la demande), sans
   son ni aperçu (`preview` est ignoré). Elle arrive dans la pile en WebP animé (`<identifiant>_<mode>.webp`), sa ligne
-  du journal porte `"model": "h3-video"` et `frames` ; elle se trie, se notifie et s'annule comme une image, et
-  n'enregistre pas encore de mesure de durée (son estimation dans la file reprend les valeurs de MiniMax H3). La
+  du journal porte `"model": "h3-video"` et `frames` ; elle se trie, se notifie et s'annule comme une image, range sa
+  mesure de durée sous `h3-video`, et la file l'estime avec ses coefficients (entrée de `queue` avec `frames`, `null`
+  pour une image). La
   route refuse aussi (400 « L'incognito n'existe plus : passez par l'espace privé. ») une demande `"incognito": true`,
   qu'enverrait une
   page d'avant le retrait de l'incognito restée ouverte : rien n'est écrit sur l'ordinateur, pas même au journal du

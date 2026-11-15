@@ -186,11 +186,12 @@ un système de fichiers qui ne le connaît pas, `NO_LOCK`), met le fichier sur l
 `sync_dir`, copies de celles de `launch.py`) ; un contenu qui ne se lit pas (`Unreadable`) est mis de côté,
 `calibration.json.illisible-<date>`, une autre version ou une erreur du disque lèvent sans rien toucher ;
 `record_calib` pose `job["measured"]`, que `tools/calibrate.py` vérifie) ;
-`PRIORS` (Qwen) et `H3_PRIORS` (MiniMax H3), réunis par modèle dans `FAMILIES` (valeurs de départ, cache de préfixe
-`kv`, poids `rw` et petit côté minimal `rmin` des références ; `measure` faux : aucune mesure gardée, pour la vidéo
-tant qu'elle n'a pas sa formule).
-`tools/calibrate.py` : générations de calibration, `RUNS` (Qwen) et `H3_RUNS` (`--model h3`), hors de la file
-(`run_job`).
+`PRIORS` (Qwen), `H3_PRIORS` (MiniMax H3) et `VIDEO_PRIORS` (vidéo), réunis par modèle dans `FAMILIES` (valeurs
+de départ, cache de préfixe `kv`, poids `rw` et petit côté minimal `rmin` des références) ; une vidéo compte ses
+images (`frames`) dans `tokens`, `predict` et `make_sample` (champ `F` de la mesure), et `fit` ne tire pas `o` d'une
+mesure qui lit une image de départ sans la chronométrer.
+`tools/calibrate.py` : générations de calibration, `RUNS` (Qwen), `H3_RUNS` (`--model h3`) et `VIDEO_RUNS`
+(`--model video`, sortie `.webp`), hors de la file (`run_job`).
 
 ## `tools/ui/index.html` : l'interface (HTML, CSS et JavaScript, sans dépendance ni build)
 
@@ -611,13 +612,17 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
 (`CODING_STANDARDS.md`).
 
 - `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()`, `tokens()` et `ref_px()` de `estimate.py`
-  (jetons de 16×16 px, arrondi à 32, références comptées `rw` fois, petit côté porté à `rmin`) : formule et
-  coefficients ; `coefsOf` y lit `rw` et `rmin` envoyés avec les coefficients (`FAMILIES`), absents pour Qwen (1 et 0).
+  (jetons de 16×16 px, arrondi à 32, références comptées `rw` fois, petit côté porté à `rmin`, images d'une
+  vidéo `frames` comptées dans la séquence et le décodage, champ `frames` de `inputsFor`) : formule et coefficients ;
+  `coefsOf` y lit `rw` et `rmin` envoyés avec les coefficients (`FAMILIES`), absents pour Qwen (1 et 0).
 - Les clés de `MODEL_TABLE` sont recopiées dans `index.html` : `qwen` (modèle d'une demande sans champ `model`) pour
   le défaut de `opt.model`, le repli de `modelSel`, la ligne de Qwen mise à part dans la feuille Moteur et le modèle
   d'une demande relancée sans `model` (`relaunch`) ; `h3` dans `isH3` (aide `<Picture N>` et mention de l'édition,
   propres à MiniMax H3) ; les clés de version (`DIFFUSION`, `H3_DIFFUSION`, `VIDEO_DIFFUSION`) dans
   `VERSION_MODELS`, que lisent `modelOfImage`, `isVideoItem` et `privExt` (nom en `.webp` d'une vidéo privée).
+- « Une vidéo n'a ni aperçu ni référence » (`preview` de `MODEL_TABLE`, lu par `job_estimate` et `build_cmd` ;
+  `refs`, lu par `model_error`) est recopié dans `index.html`, où une vidéo se reconnaît à son champ `frames` :
+  `timesOf` (sans référence), `relaunch` (sans aperçu), `inputsFor` (`videoModel`, sans référence).
 - Les 24 images par seconde de la vidéo (`--fps 24` de `MODEL_TABLE`) donnent ses durées affichées
   (`durationLabel` : 56, 73 et 124 images, « 2 s », « 3 s », « 5 s »).
 - `PREVIEW_EVERY = 5` côté interface égale le défaut `preview_interval` de `build_cmd` (`preview_every`, quand le

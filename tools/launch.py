@@ -178,8 +178,8 @@ def record_calib(job):
     Seules les générations de tools/calibrate.py en parlent : dans logs/, une ligne de calibration ne suivrait que les
     générations normales et les distinguerait des privées (décision du 23/10/2026). Chaque modèle range sa mesure sous
     la clé de version de sa génération (job_model, posé à la création), faite avec la formule de sa famille : jamais
-    sous celle d'un autre modèle ; une famille sans mesure (la vidéo, estimate.FAMILIES) n'en range aucune. Une
-    génération privée n'arrive pas ici (run_job s'arrête avant)."""
+    sous celle d'un autre modèle (une vidéo sous h3-video). Une génération privée n'arrive pas ici (run_job s'arrête
+    avant)."""
     talk = job.get("calibration")
     key, version = job_model(job)
     try:
@@ -2429,15 +2429,18 @@ def job_estimate(job, r, coefs, as_qwen=False):
     """Durée estimée d'une génération de la file (estimate.predict, seule source de l'estimation), avec les
     coefficients, la règle des références et l'intervalle des aperçus de son modèle ; r : sa demande, lue une seule
     fois par l'appelant (forget_files la retire à la fin d'une génération secrète, à tout moment) ; coefs(clé,
-    version) : coefficients d'un modèle. as_qwen : comptée comme une génération de Qwen (coefficients, références,
-    aperçus de la demande), pour le travail privé dans l'ahead vu de l'espace public (queue_view)."""
+    version) : coefficients d'un modèle. Une vidéo compte ses images (frames) et jamais d'aperçu, même demandé.
+    as_qwen : comptée comme une image de Qwen (coefficients, références, aperçus de la demande, une seule image),
+    pour le travail privé dans l'ahead vu de l'espace public (queue_view) : rien n'y dit son modèle."""
     key, version = ("qwen", S.model) if as_qwen else job_model(job)
     sizes, init = job["inputs"]
     w, h, rmin = r["width"], r["height"], estimate.FAMILIES[key]["rmin"]
     refs = [estimate.ref_px(rw, rh, w, h, rmin) for rw, rh in sizes]
     every = int(r.get("preview_interval") or 5) if as_qwen else preview_every(job, r)
-    previews = r["steps"] // every if r.get("preview") else 0
-    return estimate.predict(coefs(key, version), w, h, r["steps"], refs, init, previews)
+    shown = as_qwen or MODEL_TABLE[key]["preview"]          # la vidéo n'a pas d'aperçu (build_cmd)
+    previews = r["steps"] // every if r.get("preview") and shown else 0
+    frames = 1 if as_qwen else int(r.get("frames") or 1)
+    return estimate.predict(coefs(key, version), w, h, r["steps"], refs, init, previews, frames)
 
 
 def queue_entry(job, position, ahead, coefs):
@@ -2456,6 +2459,7 @@ def queue_entry(job, position, ahead, coefs):
             "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None,
             "kind": "private" if job.get("private") else "normal", "id": job["id"], "mode": job["mode"],
             "model": job_model(job)[0], "width": r["width"], "height": r["height"], "steps": r["steps"],
+            "frames": r.get("frames"),
             "prompt": prompt[:80] + ("…" if len(prompt) > 80 else "")}
 
 

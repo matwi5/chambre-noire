@@ -21,9 +21,8 @@ sd.cpp ramène chaque référence à la surface de la sortie (proportions gardé
 (W/16)·(H/16) jetons pour une image de W×H pixels. tools/ui/index.html applique la même formule avec les
 coefficients que /api/status lui envoie : les deux doivent rester identiques.
 
-Chaque modèle a sa famille (FAMILIES) : ses valeurs de départ, le cache de préfixe (Qwen seulement), measure (faux :
-aucune mesure gardée, pour la vidéo tant qu'elle n'a pas sa formule) et deux paramètres de ses références, que
-/api/status envoie avec ses coefficients (absents : ceux de Qwen) :
+Chaque modèle a sa famille (FAMILIES) : ses valeurs de départ, le cache de préfixe (Qwen seulement) et deux
+paramètres de ses références, que /api/status envoie avec ses coefficients (absents : ceux de Qwen) :
 
   rw        poids d'une référence dans les jetons (n = (W·H + rw·références) / 256 / 1024) ; Qwen 1, MiniMax H3 2 ;
   rmin      petit côté minimal d'une référence telle que le moteur la lit (ref_px) ; Qwen 0, MiniMax H3 1024.
@@ -31,11 +30,19 @@ aucune mesure gardée, pour la vidéo tant qu'elle n'a pas sa formule) et deux p
 MiniMax H3 garde la forme de la formule de Qwen, sans cache de préfixe ; R reste les pixels réellement lus (encodage,
 lecture par le VAE), seul le temps d'une étape compte chaque référence deux fois.
 
+Vidéo : même formule sur les mégapixels-images, F images de W×H (frames de la demande ; 1 pour une image) :
+
+  n = nt = W·H·F / 256 / 1024,   M = W·H·F / 1e6 (décodage),   I = W·H (l'image de départ, une seule image) ;
+
+sans référence ni cache de préfixe ni aperçu. Une image de départ coûte sa lecture par le VAE vidéo et des étapes un
+peu plus lentes (u·I les estime ensemble). Le moteur ne chronomètre pas cette lecture (aucune ligne
+« encode_first_stage completed ») : elle reste dans le reste « fixe » de la mesure, qui ne compte pas pour o (fit),
+le ralentissement des étapes dans leur temps mesuré ; u garde sa valeur de départ.
+
 Calibration : chaque génération terminée ajoute une mesure à tools/calibration.json (les 40 dernières par moteur et
-par clé de version : q4, uc-q8, h3-q4…), sauf une génération privée et une génération d'une famille sans mesure
-(measure faux : la vidéo) (un fichier dont le contenu ne se lit pas est
-mis de côté, renommé calibration.json.illisible-<date>, et le suivant repart à neuf), étiquetée avec la release de
-sd.cpp qui l'a produite ;
+par clé de version : q4, uc-q8, h3-q4, h3-video…), sauf une génération privée (un fichier dont le contenu ne se lit
+pas est mis de côté, renommé calibration.json.illisible-<date>, et le suivant repart à neuf), étiquetée avec la
+release de sd.cpp qui l'a produite ;
 seules comptent les mesures de la release installée, si bien qu'une mise à jour du moteur repart des valeurs de départ.
 Les coefficients sont recalculés à partir
 de ces mesures, par des médianes qui ignorent une génération anormale (machine occupée, premier chargement du modèle
@@ -44,7 +51,9 @@ depuis le disque) :
   assez différentes ont été mesurées ; avec une seule taille, la forme des valeurs de départ est gardée et mise à
   l'échelle ;
 - e0, e1, u, v, o : médianes des mesures qui les concernent ; les valeurs de départ restent tant qu'aucune mesure
-  ne les touche. Avec le cache de préfixe, la première étape d'une édition dure plus que celle d'un texte → image ;
+  ne les touche (o : sans les mesures de vidéo qui lisent une image de départ sans en chronométrer la lecture, F et I
+  sans venc). Avec
+  le cache de préfixe, la première étape d'une édition dure plus que celle d'un texte → image ;
   le surcoût est retiré de o d'après le modèle (préfixe = étape·nr/nt), le reste de l'écart y demeure.
 """
 import contextlib, errno, json, math, os, re, time
@@ -77,13 +86,29 @@ PRIORS = {
 H3_PRIORS = {
     "metal": {"a": 1.4596, "b": 0.03871, "e0": 25.0, "e1": 14.3, "u": 205.0, "v": 1.6, "o": 6.2},
 }
+# Vidéo MiniMax H3 (Mac seulement), mesurée sur Apple M6 (modèle vidéo Q4_K_M, LoRA turbo, 4 étapes, sd.cpp
+# master-1090, sans son sauf v4, faite avec le son) : spec de la mission, « Avancement et estimations », d'après
+# RESULTATS.md de l'essai :
+# - a, b : moindres carrés sur l'erreur relative des quatre temps d'étape de la spec, en mégapixels-images (MPi) :
+#   9,7 s pour 3 MPi (v7 : 480×288, 22 images, 38,9 s pour 4 étapes), 57 s pour 17 (v9 : 124 images, 227,4 s),
+#   93 s pour 23 (v4 : 864×480, 56 images, 373,0 s), 264 s pour 51 (v10 : 124 images, 1056,2 s) ; la formule redonne
+#   9,3, 62,1, 89,9 et 258,1 s ;
+# - e0 : encodage du prompt par l'encodeur Q4_K_M installé, 62 s (v12 : 62,0 s ; 13 à 20 s avec l'encodeur Q2_K_M des
+#   autres vidéos) ; e1 : sans objet (pas de référence) ;
+# - u : image de départ, 45 s de plus en 480×288 (v8 contre v7 : 111,5 s contre 66,3 s ; lecture par le VAE et étapes
+#   plus lentes), soit 325 s par mégapixel, portés à la taille de la sortie (non mesuré en 864×480) ;
+# - v : décodage, 1,8 s par MPi (spec ; v10 : 92,3 s pour 51,4 MPi) ;
+# - o : reste de v7, v9 et v12 une fois ôtés encodage, génération et décodage, 1,1 à 1,3 s.
+# v12 (480×288, 73 images, encodeur Q4_K_M, 223,0 s) : la formule redonne 216 s.
+VIDEO_PRIORS = {
+    "metal": {"a": 0.7668, "b": 0.0028, "e0": 62.0, "e1": 0.0, "u": 325.0, "v": 1.8, "o": 1.3},
+}
 # familles de modèles (clés de MODEL_TABLE de tools/launch.py) : valeurs de départ par moteur (celles de metal pour un
 # moteur qui n'en a pas), cache de préfixe possible, paramètres des références (voir l'en-tête)
 FAMILIES = {
     "qwen": {"priors": PRIORS, "kv": True, "rw": 1, "rmin": 0},
     "h3": {"priors": H3_PRIORS, "kv": False, "rw": 2, "rmin": 1024},
-    # vidéo : valeurs de MiniMax H3 en attendant sa formule (ticket 12), et aucune mesure gardée d'ici là (measure)
-    "video": {"priors": H3_PRIORS, "kv": False, "rw": 2, "rmin": 1024, "measure": False},
+    "video": {"priors": VIDEO_PRIORS, "kv": False, "rw": 1, "rmin": 0},   # sans référence
 }
 KEEP = 40          # mesures conservées par moteur et par clé de version
 LOCK_WAIT = 10     # secondes d'attente au plus du verrou de calibration.json (Store.add)
@@ -105,10 +130,10 @@ def prefix_cache(engine):
     return release_number(engine) >= PREFIX_CACHE_FROM
 
 
-def tokens(w, h, refs=(), rw=1):
-    """(nt, n) : jetons de la sortie et de toute la séquence (sortie + références, chacune comptée rw fois), par
-    paquets de 1024."""
-    return w * h / PATCH_PX / 1024, (w * h + rw * sum(refs)) / PATCH_PX / 1024
+def tokens(w, h, refs=(), rw=1, frames=1):
+    """(nt, n) : jetons de la sortie (frames images de w×h : une vidéo) et de toute la séquence (sortie + références,
+    chacune comptée rw fois), par paquets de 1024."""
+    return w * h * frames / PATCH_PX / 1024, (w * h * frames + rw * sum(refs)) / PATCH_PX / 1024
 
 
 def step_cost(c, nt, n):
@@ -139,13 +164,12 @@ def median(xs):
 
 def make_sample(job, engine=LEGACY_ENGINE, family="qwen"):
     """Mesure d'une génération terminée (dictionnaire de tools/launch.py) par la release engine, avec la formule de la
-    famille de son modèle, ou None s'il manque une durée ou que sa famille ne garde pas de mesure (measure faux : la
-    vidéo, tant qu'elle n'a pas sa formule)."""
+    famille de son modèle, ou None s'il manque une durée. Une vidéo (frames dans sa demande) compte ses images dans n,
+    nt et M, et les note dans F."""
     fam = FAMILIES[family]
-    if not fam.get("measure", True):
-        return None
     r = job["req"]
     w, h, steps = int(r["width"]), int(r["height"]), int(r["steps"])
+    frames = int(r.get("frames") or 1)
     enc, samp, vae = job.get("encode_seconds_net"), job.get("sampling_seconds"), job.get("vae_seconds")
     if not (enc and samp and vae and steps):
         return None
@@ -156,14 +180,17 @@ def make_sample(job, engine=LEGACY_ENGINE, family="qwen"):
         times = times[1:]                     # le premier pas charge les poids sur le GPU : compté dans « fixe »
     step = median(times) if times else max(0.01, (samp - previews * vae) / steps)
     venc = job.get("venc_seconds") or 0.0
-    nt, n = tokens(w, h, refs, fam["rw"])
+    nt, n = tokens(w, h, refs, fam["rw"], frames)
     kv = fam["kv"] and prefix_cache(engine)
     prefix = step * (n - nt) / nt if kv else 0.0      # première étape : calcul du préfixe texte + références
     over = job["seconds"] - enc - venc - vae * (1 + previews) - steps * step - prefix
-    return {"w": w, "h": h, "steps": steps, "n": round(n, 4), "nt": round(nt, 4), "kv": kv,
-            "R": round(sum(refs) / 1e6, 4), "I": round(init / 1e6, 4), "M": round(w * h / 1e6, 4),
-            "step": round(step, 3), "enc": round(enc, 2), "venc": round(venc, 2), "vae": round(vae, 2),
-            "over": round(over, 2), "sd": engine, "t": int(time.time())}
+    sample = {"w": w, "h": h, "steps": steps, "n": round(n, 4), "nt": round(nt, 4), "kv": kv,
+              "R": round(sum(refs) / 1e6, 4), "I": round(init / 1e6, 4), "M": round(w * h * frames / 1e6, 4),
+              "step": round(step, 3), "enc": round(enc, 2), "venc": round(venc, 2), "vae": round(vae, 2),
+              "over": round(over, 2), "sd": engine, "t": int(time.time())}
+    if r.get("frames"):
+        sample["F"] = frames
+    return sample
 
 
 def fit(samples, prior, kv=False):
@@ -207,14 +234,19 @@ def fit(samples, prior, kv=False):
     if vin:
         c["u"] = round(median([s["venc"] / (s["R"] + s["I"]) for s in vin]), 2)
     c["v"] = round(median([s["vae"] / s["M"] for s in samples]), 2)
-    c["o"] = round(max(0.0, median([s["over"] for s in samples])), 2)
+    # vidéo (F) : une image de départ lue sans chronométrage (pas de venc) laisse sa lecture dans over : pas pour o ;
+    # les mesures d'une image comptent toutes, comme avant
+    fixed = [s for s in samples if not (s.get("F") and s.get("I") and not s.get("venc"))]
+    if fixed:
+        c["o"] = round(max(0.0, median([s["over"] for s in fixed])), 2)
     return c
 
 
-def predict(c, w, h, steps, refs=(), init_px=0, previews=0):
-    """Durée estimée (s) avec les coefficients c ; même formule que parts() dans tools/ui/index.html."""
-    R, I, M = sum(refs) / 1e6, init_px / 1e6, w * h / 1e6
-    nt, n = tokens(w, h, refs, c.get("rw", 1))
+def predict(c, w, h, steps, refs=(), init_px=0, previews=0, frames=1):
+    """Durée estimée (s) avec les coefficients c ; même formule que parts() dans tools/ui/index.html. frames : images
+    d'une vidéo (1 pour une image) ; init_px : pixels de l'image de départ, une seule image."""
+    R, I, M = sum(refs) / 1e6, init_px / 1e6, w * h * frames / 1e6
+    nt, n = tokens(w, h, refs, c.get("rw", 1), frames)
     step = step_cost(c, nt, n)
     prefix = step * (n - nt) / nt if c.get("kv") else 0.0
     return c["o"] + c["e0"] + c["e1"] * R + c["u"] * (R + I) + prefix + steps * step + (1 + previews) * c["v"] * M

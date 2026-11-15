@@ -173,3 +173,58 @@ test('Vidéo dans l\'espace privé : la demande part en privé, nommée en .webp
   await bench.idle();
   page.assertNoErrors();
 });
+
+test('Vidéo : la page estime comme le serveur (durée, taille, image de départ) ; au-delà d\'une heure, confirmation',
+  async () => {
+    await freshVideo();
+    assert.equal(await page.postGenerate(`{ prompt: 'HOLD=video-estime zvi7 tourne' }`), 202);
+    const img = `(() => { const c = document.createElement('canvas'); c.width = 64; c.height = 48;
+      return c.toDataURL('image/png'); })()`;
+    // [prompt, champs, largeur, hauteur, images, image de départ] ; l'aperçu demandé ne compte pas pour une vidéo
+    const cases = [
+      ['zvi7 petite', `width: 480, height: 288, frames: 56`, 480, 288, 56, false],
+      ['zvi7 normale', `width: 864, height: 480, frames: 124, preview: true, init_image: ${img}`, 864, 480, 124, true],
+    ];
+    for (const [prompt, fields] of cases) {
+      assert.equal(await page.postGenerate(`{ prompt: '${prompt}', model: 'video', steps: 4, ${fields} }`), 202,
+        prompt);
+    }
+    const queue = (await bench.api('/api/status')).queue;
+    for (const [prompt, , w, h, frames, start] of cases) {
+      const entry = queue.find(e => e.prompt === prompt);
+      assert.equal(entry.frames, frames, prompt);
+      const mine = await page.eval(`parts(${w}, ${h}, 4, { refs: [], init: ${start ? w * h : 0}, frames: ${frames} },
+        false, 5, coefsOf('video')).total`);
+      assert.ok(Math.abs(mine - entry.estimate) < 0.1, `${prompt} : page ${mine}, serveur ${entry.estimate}`);
+      // suivie depuis la file (pendant le calcul) : étape et décodage de sa taille et de ses images, sans référence
+      const t = await page.eval(`timesOf(${JSON.stringify(entry)}, ${start ? 1 : 0})`);
+      const own = await page.eval(`parts(${w}, ${h}, 4, { refs: [], init: 0, frames: ${frames} }, false, 5,
+        coefsOf('video'))`);
+      assert.deepEqual([t.stepSec, t.vaeSec], [own.step, own.vae], prompt);
+    }
+    // affichée avant de lancer : Réglages Normale, 5 s ; l'image de départ l'allonge
+    await page.eval(`opt.video = { frames: 124, size: 'normal', orient: 'land' }; saveOpt(); refreshChoices()`);
+    const plain = await page.eval(`estSeconds`);
+    const settings = await page.eval(`parts(864, 480, 4, { refs: [], init: 0, frames: 124 }, false, 5,
+      coefsOf('video')).total`);
+    assert.ok(Math.abs(plain - settings) < 0.1, `estimation des Réglages : ${plain}, attendu ${settings}`);
+    await addImages(1);
+    assert.ok(await page.eval(`estSeconds`) > plain + 60, 'image de départ non comptée');
+    bench.release('video-estime');
+    await bench.idle({ page });
+    // au-delà d'une heure, confirmation : coefficients posés (aucune vidéo n'y arrive avec les valeurs de départ, et
+    // les mesures du faux moteur, déjà gardées, les ont rendus minuscules) ; 864×480, 124 images : n ≈ 196, 4 étapes
+    const jobs = await page.eval(`pageJobs.length`);
+    await page.typePrompt('zvi7 longue');
+    await page.eval(`EM.video = { ...EM.video, a: 5, b: 0 }; refreshChoices(); $('go').click()`);
+    await page.askShown('Génération longue');
+    await page.eval(`answer(false)`);
+    assert.equal(await page.eval(`pageJobs.length`), jobs, 'vidéo partie sans confirmation');
+    // « Relancer » une vidéo estime aussi ses images
+    await page.eval(`void relaunch({ mode: 't2i', prompt: 'zvi7 relance', model: 'video', frames: 124, width: 864,
+      height: 480, steps: 4, ref_images: [], init_image: null, preview: false })`);
+    await page.askShown('Génération longue');
+    await page.eval(`answer(false)`);
+    assert.equal(await page.eval(`pageJobs.length`), jobs, 'vidéo relancée sans confirmation');
+    page.assertNoErrors();
+  });

@@ -1018,16 +1018,19 @@ function refPx(rw, rh, w, h, rmin=0){ let vw=Math.sqrt(w*h*rw/rh), vh=vw*rh/rw; 
 const refMin = () => coefsOf(modelSel()?.key)?.rmin || 0;
 // références et image de départ envoyées au moteur pour la nature de la demande (voir buildRequest)
 function inputsFor(w, h){ const k=inputKind();
-  if(videoModel()) return { refs: [], init: 0 };   // vidéo : sans références
+  // vidéo : sans références ; l'image jointe, son image de départ, lue à la taille de la sortie ; ses images
+  const vm=videoModel(); if(vm) return { refs: [], init: inputImages.length ? w*h : 0, frames: videoFrames(vm) };
   if(k==='edit'){ const rmin=refMin(); return { refs: inputImages.map(im=>refPx(im.w, im.h, w, h, rmin)), init: 0 }; }
   if(k==='mask') return { refs: [w*h], init: maskMode()==='annotation' ? 0 : w*h };
   return { refs: [], init: 0 };
 }
 // étape = a·n + b·n² (n = jetons/1024, sortie + références comptées c.rw fois) ; avec le cache de préfixe (c.kv),
 // a·nt + b·nt·n (nt : jetons de la sortie), plus le préfixe calculé une fois (étape·nr/nt) ; encodage, VAE et part
-// fixe : voir tools/estimate.py. every : intervalle des aperçus ; c : coefficients (ceux du modèle choisi)
+// fixe : voir tools/estimate.py. inp.frames : images d'une vidéo (absent : 1), comptées dans la sortie et le
+// décodage. every : intervalle des aperçus ; c : coefficients (ceux du modèle choisi)
 function parts(w, h, steps, inp, preview, every=previewEvery(), c=coefsOf(modelSel()?.key)){
-  const R=inp.refs.reduce((t,p)=>t+p, 0)/1e6, I=inp.init/1e6, M=w*h/1e6, nt=w*h/256/1024, n=(w*h + (c.rw||1)*R*1e6)/256/1024, p=c.kv ? nt : n;
+  const F=inp.frames || 1, px=w*h*F;
+  const R=inp.refs.reduce((t,p)=>t+p, 0)/1e6, I=inp.init/1e6, M=px/1e6, nt=px/256/1024, n=(px + (c.rw||1)*R*1e6)/256/1024, p=c.kv ? nt : n;
   const step=c.a*p + c.b*p*n, prefix=c.kv ? step*(n-nt)/nt : 0, enc=c.o + c.e0 + c.e1*R + c.u*(R+I) + prefix, vae=c.v*M;
   const previews = preview ? Math.floor(steps/every) : 0;
   return { step, enc, vae, previews, total: enc + steps*step + vae + previews*vae }; }
@@ -2232,11 +2235,13 @@ $('queueList').addEventListener('click', async ev=>{
   b.disabled=true; log(b.dataset.kind==='first' ? 'passage en tête demandé' : 'annulation demandée');
   // 404 ou 409 (la file a pu avancer) : la file rafraîchie suffit, sans message
   await postJson(b.dataset.post, {}).catch(()=>{}); queueHtml=''; refreshStatus(); });   // bouton réactivé
-// temps d'une étape et du décodage d'une entrée de la file (modèle, taille, étapes), n images d'entrée comptées à la
-// taille de la sortie, portées au petit côté minimal du modèle
+// temps d'une étape et du décodage d'une entrée de la file (modèle, taille, étapes, images d'une vidéo), n images
+// d'entrée comptées à la taille de la sortie, portées au petit côté minimal du modèle
 function timesOf(e, n){ const c=coefsOf(e.model); if(!c) return {};
   const px=refPx(e.width, e.height, e.width, e.height, c.rmin||0);
-  const pr=parts(e.width, e.height, e.steps, {refs:Array(n).fill(px), init:0}, false, PREVIEW_EVERY, c);
+  // vidéo : son image jointe est une image de départ, sans effet sur une étape ni sur le décodage
+  const pr=parts(e.width, e.height, e.steps, {refs:Array(e.frames ? 0 : n).fill(px), init:0, frames:e.frames || 1},
+    false, PREVIEW_EVERY, c);
   return { stepSec:pr.step, vaeSec:pr.vae }; }
 // suivi des générations de la page : une interrogation par seconde de chacune tant qu'elle n'est pas terminée
 function track(j, info){
@@ -2378,7 +2383,8 @@ async function relaunch(req){
   // références du modèle de la demande (absent : Qwen), pas de celui des Réglages
   const every=(modelList||[]).find(m=>m.key===(body.model||'qwen'))?.preview_every || PREVIEW_EVERY, c=coefsOf(body.model);
   const cost = k => { const [w, h]=dims(k), px=refPx(w, h, w, h, c?.rmin || 0);
-    return parts(w, h, body.steps, {refs:Array(refs).fill(px), init:body.init_image ? w*h : 0}, body.preview, every, c); };
+    return parts(w, h, body.steps, {refs:Array(refs).fill(px), init:body.init_image ? w*h : 0, frames:body.frames || 1},
+      body.preview && !body.frames, every, c); };   // une vidéo n'a pas d'aperçu
   const est = k => E ? cost(k).total : 0;
   const total=Array.from({length:n}, (_, k)=>est(k)).reduce((t, x)=>t+x, 0);
   askNotifications();
