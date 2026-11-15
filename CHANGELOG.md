@@ -3,6 +3,14 @@
 Les versions suivent [SemVer](https://semver.org/lang/fr/) ; tant que l'application est en 0.x, une version mineure
 peut changer un comportement existant.
 
+## 0.8.2 · 2026-11-15
+
+### Modifié
+
+- Le README déconseille la version Q8_0 de MiniMax H3 sur un Mac de 32 Go : pendant la génération, elle fait passer
+  le reste du Mac en mémoire d'échange et ralentit tout le Mac, connexions à distance comprises. Il conseille
+  d'installer `--h3` (Q4_K_M), qui n'a pas cet effet.
+
 ## 0.8.1 · 2026-11-15
 
 ### Modifié
