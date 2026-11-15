@@ -852,6 +852,36 @@ Empreintes SHA256 vérifiées par `setup.py`, chaque fichier épinglé sur un co
 d80e9c2e5cfc9844869961ff5a58c9a9e52182df6bfb30b26018dd7f348721af  vae/minimax_h3_image_vae_fp16.safetensors
 ```
 
+**Vidéo (option, Mac seulement).** `setup.py --h3-video` installe le modèle vidéo de MiniMax H3, son décodeur vidéo
+et un LoRA turbo qui ramène le calcul à 4 étapes ; l'encodeur de texte est celui de MiniMax H3, téléchargé seulement
+s'il manque (un fichier déjà vérifié n'est ni retéléchargé ni rehaché). L'option est refusée hors de macOS, pour la
+même raison que `--h3`. Le serveur propose la vidéo dès que ses fichiers sont là, si son moteur est déjà en
+`master-1090` ; sinon, seulement après un redémarrage qui suit `setup.py`. Une demande la choisit par
+`"model": "video"` ; dans l'interface, c'est le choix « Vidéo » de la ligne **Modèle**. `setup.py --check` dit si
+elle est installée, et l'option qui la complète quand un fichier manque.
+
+| Fichier | Rôle | Taille | Source |
+| --- | --- | --- | --- |
+| `minimax_h3_fl2va_pruned-Q4_K_M.gguf` | Modèle vidéo MiniMax H3 allégé, quantifié 4 bits | 11,4 Go | [leejet/MiniMax-H3-GGUF](https://huggingface.co/leejet/MiniMax-H3-GGUF) |
+| `minimax_h3_video_vae_fp16.safetensors` | Décodeur vidéo (VAE), fp16 | 5,21 Go | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3), dossier `vae` |
+| `minimax_h3_fl2v_turbo_4step_v1.3_768p_comfyui_bf16.safetensors` (dans `models/loras/`) | LoRA turbo, 4 étapes | 1,96 Go | [lightx2v/Minimax-h3-Turbo](https://huggingface.co/lightx2v/Minimax-h3-Turbo) |
+| `qwen3vl_32b_minimax_h3-Q4_K_M.gguf` | Encodeur de texte, partagé avec MiniMax H3 | 18,2 Go | [leejet/MiniMax-H3-GGUF](https://huggingface.co/leejet/MiniMax-H3-GGUF) |
+
+Place à prévoir, autant à télécharger : ≈ 18,6 Go si MiniMax H3 est déjà là, ≈ 36,8 Go sinon.
+Limites : des vidéos muettes (le décodeur audio n'est pas installé) de 2, 3 ou 5 secondes à 24 images par seconde, en
+480×288 ou 864×480 (paysage ou portrait), en 4 étapes fixes, guidance 1, depuis un texte ou une image de départ ; ni
+image de référence, ni masque, ni prompt négatif, ni lot, ni aperçu en cours de calcul ; une balise `<lora:…>` écrite
+dans le prompt est refusée (le serveur ajoute celle du LoRA turbo). Sur le Mac de référence, une vidéo de 5 s en
+480×288 prend moins de 5 minutes ; 2,3 s en 864×480 en prennent 8 (27 sans le LoRA, en 20 étapes).
+Le modèle vidéo, son décodeur et le LoRA turbo, publié par un tiers (lightx2v) à partir de MiniMax H3, sont soumis à
+la même licence MiniMax, avec les mêmes territoires exclus : lisez-la avant de lancer `setup.py --h3-video`.
+
+```text
+dd948e08ad0ba3c71bd42f368e283dd82e790f5122a63b276e22a3e0283d0c10  minimax_h3_fl2va_pruned-Q4_K_M.gguf
+7c1f131492e7eddacaac9069a61b81bdd39de5cc96561e677c5eab1cdce5e522  vae/minimax_h3_video_vae_fp16.safetensors
+70103fd0d80a947ed4e7fe6f88915863d54ef22c5cab03bd5d2fd649385ffe1e  loras/minimax_h3_fl2v_turbo_4step_v1.3_768p_comfyui_bf16.safetensors
+```
+
 ## Performances
 
 Un GPU intégré est lent pour un modèle de cette taille. Mesures de référence sur un portable

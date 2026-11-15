@@ -1,8 +1,8 @@
 """setup.py : une calibration qui échoue ne passe plus inaperçue. L'erreur de tools/calibrate.py est affichée, et
 l'installation dit qu'elle continue sans calibration (une calibration cassée était passée inaperçue au groupe B du
 parcours des pages, 10/2026). Le moteur du Mac installé est la release épinglée, et remplace l'ancienne. MiniMax H3
-s'installe par --h3 et --h3-q8 (Mac seulement), sans retélécharger un fichier déjà vérifié, et --check dit ce qui est
-installé pour chaque modèle.
+s'installe par --h3 et --h3-q8, et la vidéo par --h3-video (Mac seulement), sans retélécharger un fichier déjà
+vérifié (l'encodeur partagé compris), et --check dit ce qui est installé pour chaque modèle.
 
   venv/bin/python -m unittest discover -s tests -p test_setup.py
 
@@ -124,9 +124,11 @@ class H3InstallTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.urls, self.digests = [], []
         files = {"H3_DIFFUSION": small(setup.H3_DIFFUSION), "H3_FILES": small(setup.H3_FILES),
+                 "VIDEO_DIFFUSION": small(setup.VIDEO_DIFFUSION), "VIDEO_FILES": small(setup.VIDEO_FILES),
                  "DIFFUSION": small(setup.DIFFUSION), "ENCODER": small(setup.ENCODER), "VAE": small([setup.VAE])[0]}
         digest = {local: d for _, local, _, d in
                   list(setup.DIFFUSION.values()) + list(setup.H3_DIFFUSION.values()) + list(setup.H3_FILES.values())
+                  + list(setup.VIDEO_DIFFUSION.values()) + list(setup.VIDEO_FILES.values())
                   + setup.ENCODER + [setup.VAE]}
         for name, value in files.items():
             patcher = mock.patch.object(setup, name, value)
@@ -168,6 +170,11 @@ class H3InstallTest(unittest.TestCase):
 
     def h3_urls(self):
         return sorted(u for u in self.urls if u in self.pinned(*setup.H3_DIFFUSION, *setup.H3_FILES))
+
+    def video_urls(self):
+        """Adresses téléchargées propres à la vidéo (modèle, VAE vidéo, LoRA), sans l'encodeur partagé."""
+        own = [setup.VIDEO_DIFFUSION["h3-video"][0]] + [setup.VIDEO_FILES[k][0] for k in ("vae", "lora")]
+        return sorted(u for u in self.urls if u in own)
 
     def test_h3_downloads_the_pinned_q4_files_once(self):
         self.run_setup("--h3", "--no-calibrate")
@@ -231,6 +238,64 @@ class H3InstallTest(unittest.TestCase):
         with mock.patch.object(setup, "MACOS", False), mock.patch.object(setup, "WINDOWS", True):
             out = self.run_setup("--check")
         self.assertIn("MiniMax H3 : Mac seulement", out)
+        self.assertIn("Vidéo : Mac seulement", out)
+
+    def test_h3_video_downloads_the_pinned_video_files_and_the_shared_encoder_once(self):
+        self.run_setup("--h3-video", "--no-calibrate")
+        llm = setup.VIDEO_FILES["llm"][0]
+        self.assertEqual(llm, setup.H3_FILES["llm"][0])                 # encodeur partagé avec MiniMax H3
+        self.assertEqual(self.video_urls(), sorted([setup.VIDEO_DIFFUSION["h3-video"][0], setup.VIDEO_FILES["vae"][0],
+                                                    setup.VIDEO_FILES["lora"][0]]))
+        self.assertEqual(self.urls.count(llm), 1)
+        self.assertTrue(os.path.isfile(os.path.join(self.tmp.name, "models", "loras",
+                                                    "minimax_h3_fl2v_turbo_4step_v1.3_768p_comfyui_bf16.safetensors")))
+        self.urls.clear()
+        self.digests.clear()
+        self.run_setup("--h3-video", "--no-calibrate")               # déjà vérifiés : ni téléchargés ni rehachés
+        self.assertEqual((self.urls, self.digests), ([], []))
+
+    def test_h3_video_after_h3_does_not_download_the_encoder_again(self):
+        self.run_setup("--h3", "--no-calibrate")
+        self.urls.clear()
+        self.run_setup("--h3-video", "--no-calibrate")
+        self.assertNotIn(setup.H3_FILES["llm"][0], self.urls)
+        self.assertEqual(len(self.video_urls()), 3)
+
+    def test_without_the_option_nothing_of_the_video_is_downloaded(self):
+        self.run_setup("--h3", "--no-calibrate")
+        self.assertEqual(self.video_urls(), [])
+
+    def test_h3_video_is_refused_outside_macos_before_any_download(self):
+        with mock.patch.object(setup, "MACOS", False), mock.patch.object(setup, "WINDOWS", True), \
+                self.assertRaises(SystemExit) as stop:
+            self.run_setup("--h3-video")
+        self.assertIn("Mac", str(stop.exception))
+        self.assertIn("--h3-video", str(stop.exception))
+        self.assertEqual(self.urls, [])
+        self.assertEqual(os.listdir(self.tmp.name), [])
+
+    def test_check_says_whether_the_video_is_installed(self):
+        self.run_setup("--no-calibrate")
+        out = self.run_setup("--check")
+        self.assertIn("Vidéo : non installée (option --h3-video)", out)
+        self.assertIn("État : complet", out)
+        self.run_setup("--h3-video", "--no-calibrate")
+        self.urls.clear()
+        out = self.run_setup("--check")
+        self.assertIn("Vidéo : installée", out)
+        self.assertIn("État : complet", out)
+        self.assertEqual(self.urls, [])
+        os.remove(os.path.join(self.tmp.name, *setup.VIDEO_FILES["lora"][1].split("/")))
+        out = self.run_setup("--check")
+        self.assertIn("Vidéo : incomplète, lancez : venv/bin/python setup.py --h3-video", out)
+        self.assertIn("État : incomplet, lancez : venv/bin/python setup.py --h3-video", out)
+
+    def test_check_names_both_options_when_h3_and_the_video_are_partial(self):
+        self.run_setup("--h3", "--h3-video", "--no-calibrate")
+        os.remove(os.path.join(self.tmp.name, *setup.H3_FILES["vae"][1].split("/")))
+        os.remove(os.path.join(self.tmp.name, *setup.VIDEO_FILES["vae"][1].split("/")))
+        out = self.run_setup("--check")
+        self.assertIn("État : incomplet, lancez : venv/bin/python setup.py --h3 --h3-video", out)
 
 
 if __name__ == "__main__":

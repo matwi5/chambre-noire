@@ -38,7 +38,8 @@ Dans l'ordre du fichier :
 - **Constantes et moteur** (en tête) : `ROOT`, `P()` (chemin sous la racine, relu à chaque appel : le banc repointe
   `ROOT`), `MODELS` et `DIFFUSION` (noms des fichiers de modèles, à garder égaux à ceux de `setup.py`), `H3_DIFFUSION`
   et `H3_FILES` (fichiers de MiniMax H3, sous les noms publiés, à garder égaux à ceux de `setup.py`),
-  `VIDEO_DIFFUSION` et `VIDEO_FILES` (fichiers de la vidéo : modèle, VAE vidéo, LoRA turbo, encodeur de MiniMax H3),
+  `VIDEO_DIFFUSION` et `VIDEO_FILES` (fichiers de la vidéo : modèle, VAE vidéo, LoRA turbo, encodeur de MiniMax H3 ;
+  à garder égaux à ceux de `setup.py`, option `--h3-video`),
   `MAX_VARIANTS`,
   `MAX_CAMPAIGN`, `MAX_SIDE`, `PAGE_MODES` et `MODE_LABELS` (libellés des modes dans un refus), `MODEL_TABLE` (table
   fermée des modèles qu'une demande nomme par son champ `model` : versions, fichiers, release minimale du moteur,
