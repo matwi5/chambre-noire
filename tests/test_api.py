@@ -317,6 +317,13 @@ class GenerationTest(bench.BenchCase):
         self.assertIn("panne simulée", j["error"])
         self.assertEqual(files("outputs", ".pile", "*.png"), [])
 
+    def test_engine_out_of_memory_names_the_memory(self):
+        # échec réel du 15/11/2026 : les quatre dernières lignes [E] taisaient la ligne du moteur sur la mémoire
+        j = wait_job(generate("OOM")["id"])
+        self.assertEqual(j["status"], "failed")
+        self.assertIn("mémoire", j["error"].lower())
+        self.assertEqual(files("outputs", ".pile", "*.png"), [])
+
     def test_edit_keeps_its_input_images(self):
         j = wait_job(generate("make it blue", mode="edit", ref_images=[bench.data_url(bench.png_bytes())])["id"])
         self.assertEqual(j["status"], "done")

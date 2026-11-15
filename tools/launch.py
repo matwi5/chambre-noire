@@ -146,6 +146,12 @@ EXE = "sd-cli.exe" if os.name == "nt" else "sd-cli"
 PLATFORM_BACKENDS = ["metal"] if sys.platform == "darwin" else ["vulkan", "cuda", "cpu"]
 # vitesse du dernier pas : « 3/8 - 12.30s/it », ou « 3/8 - 1.52it/s » quand un pas dure moins d'une seconde
 PROGRESS_RE = re.compile(r"(\d+)/(\d+)\s*-\s*([\d.]+)(s/it|it/s)")
+# manque de mémoire du moteur (master-1090) : ligne [W] que les dernières lignes [E] ne répètent pas. Vue, elle met
+# en tête du message d'échec un texte qui nomme la cause (décision du porteur du 15/11/2026) ; sans elle (texte du
+# moteur changé), le message reste le détail du moteur seul
+OUT_OF_MEMORY = "cannot make enough memory available"
+OUT_OF_MEMORY_TEXT = ("mémoire du Mac insuffisante pour cette taille et ces images : réduire la taille ou le nombre "
+                      "d'images jointes. ")
 TAKING_RE = re.compile(r"taking ([\d.]+)\s*s")
 CALIB = P("tools", "calibration.json")
 PRIVATE_JOB_TTL = 24 * 3600               # génération privée finie, jamais oubliée par sa page : oubliée après ce délai
@@ -2012,6 +2018,8 @@ def run_job(job):
                 t = TAKING_RE.search(text)
                 if t:
                     job["vae_seconds"] = float(t.group(1))
+            elif OUT_OF_MEMORY in text:          # ligne [W] : la seule qui dit la cause d'un manque de mémoire
+                job["out_of_memory"] = True
             elif "[ERROR" in text or text.startswith("[E]") or "GGML_ASSERT" in text:   # [E] : depuis master-959
                 job["error_lines"] = (job.get("error_lines") or []) + [text]
     rc = proc.wait()
@@ -2065,7 +2073,8 @@ def run_job(job):
         record_calib(job)
     else:
         job["status"] = "failed"
-        job["error"] = "sd-cli code " + str(rc) + " — " + " | ".join((job.get("error_lines") or tail)[-4:])
+        job["error"] = (OUT_OF_MEMORY_TEXT if job.get("out_of_memory") else "") + (
+            "sd-cli code " + str(rc) + " — " + " | ".join((job.get("error_lines") or tail)[-4:]))
         # même ligne pour toutes les générations : le détail (qui peut citer le prompt) reste en mémoire pour
         # l'interface, hors de logs/, et rien n'y distingue une génération privée
         print(f"[job] échec : génération, sd-cli code {rc}", flush=True)
