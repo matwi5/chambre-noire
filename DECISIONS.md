@@ -4,6 +4,18 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-11-15 · MiniMax H3 Q8_0 déconseillé sur un Mac de 32 Go, sans garde-fou dans le serveur
+
+- **Contexte** : pendant une génération MiniMax H3 en Q8_0, tout le Mac de 32 Go ralentissait, connexions à distance
+  comprises. Mesuré : à la projection du modèle Q8_0, la mémoire bloquée du Mac monte à environ 24 Go et le reste du
+  système part en mémoire d'échange (6,5 à 75,7 Go écrits en 4 minutes, 3 essais sur 3) ; avec Q4_K_M, environ
+  19 Go et pas d'échange (4 essais sur 4) ; une vidéo courte non plus.
+- **Décision** (porteur, 15/11/2026, question « (a) note au README seulement, ou (b) garde-fou dans le serveur ? »,
+  réponse « a ») : la machine reste en Q4_K_M par sa configuration locale ; le README déconseille Q8_0 sur un Mac de
+  32 Go ; le serveur ne repasse pas de lui-même en Q4_K_M quand la configuration demande Q8_0.
+- **Pourquoi** : une seule machine mesurée ; un seuil de mémoire au-delà duquel Q8_0 redeviendrait sûr serait une
+  supposition.
+
 ## 2026-11-14 · Vidéo courte, troisième choix de la ligne « Modèle », en WebP animé
 
 - **Contexte** : la famille MiniMax H3 sait aussi produire de courtes vidéos, que stable-diffusion.cpp lance en mode
