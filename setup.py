@@ -510,7 +510,7 @@ def main():
                       "relancez le serveur" if "h3-q8" in h3 else ""))
         if video:
             print("Vidéo : choix « Vidéo » de la ligne Modèle des Réglages (\"model\": \"video\" dans une demande) ; "
-                  "relancez le serveur pour qu'il la propose")
+                  "relancez le serveur si ce script vient de mettre à jour son moteur")
         for v in uncalibrated:
             print(f"Calibration du modèle {v} en échec (erreur « [calibration] » plus haut), pour réessayer : "
                   f"{PY} {os.path.join('tools', 'calibrate.py')} --model {v}")

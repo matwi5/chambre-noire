@@ -871,10 +871,13 @@ Place à prévoir, autant à télécharger : ≈ 18,6 Go si MiniMax H3 est déj�
 Limites : des vidéos muettes (le décodeur audio n'est pas installé) de 2, 3 ou 5 secondes à 24 images par seconde, en
 480×288 ou 864×480 (paysage ou portrait), en 4 étapes fixes, guidance 1, depuis un texte ou une image de départ ; ni
 image de référence, ni masque, ni prompt négatif, ni lot, ni aperçu en cours de calcul ; une balise `<lora:…>` écrite
-dans le prompt est refusée (le serveur ajoute celle du LoRA turbo). Sur le Mac de référence, une vidéo de 5 s en
-480×288 prend moins de 5 minutes ; 2,3 s en 864×480 en prennent 8 (27 sans le LoRA, en 20 étapes).
-Le modèle vidéo, son décodeur et le LoRA turbo, publié par un tiers (lightx2v) à partir de MiniMax H3, sont soumis à
-la même licence MiniMax, avec les mêmes territoires exclus : lisez-la avant de lancer `setup.py --h3-video`.
+dans le prompt est refusée (le serveur ajoute celle du LoRA turbo). Sur le Mac des mesures, avec cet encodeur, une
+vidéo de 3 s en 480×288 a pris 3 min 43 s ; une de 5 s en 864×480 prend une vingtaine de minutes (19 min 25 s
+mesurées avec un encodeur plus léger, qui encode le prompt en 14 s au lieu de 62).
+Le modèle vidéo et son décodeur sont soumis à la licence publiée par MiniMax avec eux (fichier `LICENSE` du dépôt
+[MiniMaxAI/MiniMax-H3](https://huggingface.co/MiniMaxAI/MiniMax-H3)), qui exclut les mêmes territoires que celle de
+MiniMax H3 Image ; le LoRA turbo, publié par un tiers (lightx2v) à partir de ce modèle, est sous la même licence.
+Lisez-la avant de lancer `setup.py --h3-video`.
 
 ```text
 dd948e08ad0ba3c71bd42f368e283dd82e790f5122a63b276e22a3e0283d0c10  minimax_h3_fl2va_pruned-Q4_K_M.gguf
