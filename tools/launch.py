@@ -127,7 +127,7 @@ MODEL_TABLE = {
              "negative_prompt": True, "cfg": None, "preview_every": None, "args": [], "setup": "", "config": None,
              "sizes": None, "frames": None, "refs": True, "lots": True, "preview": True, "sampler": "euler",
              "lora": False, "ext": ".png"},
-    "h3": {"name": "MiniMax H3", "versions": H3_DIFFUSION, "files": H3_FILES, "engine": 1090, "steps": [6],
+    "h3": {"name": "MiniMax", "versions": H3_DIFFUSION, "files": H3_FILES, "engine": 1090, "steps": [6],
            "max_side": MAX_SIDE, "max_refs": MAX_CAMPAIGN, "modes": ["t2i", "edit"], "init_image": False,
            "mask": False, "negative_prompt": False, "cfg": 1.0, "preview_every": 2,
            "args": ["--sigmas", "minimax-h3-image", "--rng", "cpu"], "setup": "--h3",
@@ -146,6 +146,14 @@ EXE = "sd-cli.exe" if os.name == "nt" else "sd-cli"
 PLATFORM_BACKENDS = ["metal"] if sys.platform == "darwin" else ["vulkan", "cuda", "cpu"]
 # vitesse du dernier pas : « 3/8 - 12.30s/it », ou « 3/8 - 1.52it/s » quand un pas dure moins d'une seconde
 PROGRESS_RE = re.compile(r"(\d+)/(\d+)\s*-\s*([\d.]+)(s/it|it/s)")
+# manque de mémoire du moteur (master-1090) : ligne [W] que les dernières lignes [E] ne répètent pas. Vue, elle met
+# en tête du message d'échec un texte qui nomme la cause (décision du porteur du 15/11/2026) ; sans elle (texte du
+# moteur changé), le message reste le détail du moteur seul. Elle précède aussi un aperçu que le moteur saute
+# (PREVIEW_SKIPPED, sans arrêter la génération) : elle ne compte alors plus
+OUT_OF_MEMORY = "cannot make enough memory available"
+PREVIEW_SKIPPED = "preview decode failed"
+OUT_OF_MEMORY_TEXT = ("mémoire du Mac insuffisante pour cette taille et ces images : réduire la taille ou le nombre "
+                      "d'images jointes. ")
 TAKING_RE = re.compile(r"taking ([\d.]+)\s*s")
 CALIB = P("tools", "calibration.json")
 PRIVATE_JOB_TTL = 24 * 3600               # génération privée finie, jamais oubliée par sa page : oubliée après ce délai
@@ -2012,8 +2020,12 @@ def run_job(job):
                 t = TAKING_RE.search(text)
                 if t:
                     job["vae_seconds"] = float(t.group(1))
+            elif OUT_OF_MEMORY in text:          # ligne [W] : la seule qui dit la cause d'un manque de mémoire
+                job["out_of_memory"] = True
             elif "[ERROR" in text or text.startswith("[E]") or "GGML_ASSERT" in text:   # [E] : depuis master-959
                 job["error_lines"] = (job.get("error_lines") or []) + [text]
+                if PREVIEW_SKIPPED in text:      # le manque de mémoire vu n'a coûté qu'un aperçu
+                    job.pop("out_of_memory", None)
     rc = proc.wait()
     logf.close()
     job["finished"] = time.time()
@@ -2065,7 +2077,8 @@ def run_job(job):
         record_calib(job)
     else:
         job["status"] = "failed"
-        job["error"] = "sd-cli code " + str(rc) + " — " + " | ".join((job.get("error_lines") or tail)[-4:])
+        job["error"] = (OUT_OF_MEMORY_TEXT if job.get("out_of_memory") else "") + (
+            "sd-cli code " + str(rc) + " — " + " | ".join((job.get("error_lines") or tail)[-4:]))
         # même ligne pour toutes les générations : le détail (qui peut citer le prompt) reste en mémoire pour
         # l'interface, hors de logs/, et rien n'y distingue une génération privée
         print(f"[job] échec : génération, sd-cli code {rc}", flush=True)

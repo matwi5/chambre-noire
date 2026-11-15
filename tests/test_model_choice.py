@@ -175,7 +175,7 @@ class StatusModelsTest(bench.BenchCase):
         self.assertEqual((s["model_version"], s["sd_ready"]), (S.model, True))   # champs d'avant inchangés
         models = {m["key"]: m for m in s["models"]}
         self.assertEqual(list(models), ["qwen", "h3"])
-        self.assertEqual(models["h3"], {"key": "h3", "name": "MiniMax H3", "version": "h3-q4", "steps": [6],
+        self.assertEqual(models["h3"], {"key": "h3", "name": "MiniMax", "version": "h3-q4", "steps": [6],
                                         "modes": ["t2i", "edit"], "init_image": False, "mask": False,
                                         "negative_prompt": False, "max_refs": launch.MAX_CAMPAIGN,
                                         "max_side": 4096, "preview_every": 2})

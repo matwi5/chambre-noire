@@ -47,7 +47,7 @@ test('Qwen à la première ouverture, puis le dernier choisi ; non installé : Q
   await page.modelsSeen(2);
   assert.equal(await page.eval(`$('modelRow').hidden`), false, 'ligne Modèle absente avec deux modèles');
   assert.deepEqual(await page.eval(`[...$('modelOpts').querySelectorAll('[data-k]')].map(b => b.textContent)`),
-    ['Qwen', 'MiniMax H3']);
+    ['Qwen', 'MiniMax']);
   assert.equal(await page.eval(`modelSel().key`), 'qwen', 'pas Qwen à la première ouverture');
   assert.equal((await page.sentRequest('zmo2 qwen')).model, 'qwen');
   await bench.idle();
@@ -102,9 +102,9 @@ test('la grille rappelle le modèle ; une ligne Moteur par autre modèle, lampe 
   assert.match(await page.eval(`$('setGrid').textContent`), /ModèleQwen/);
   await page.chooseModel('h3');
   assert.deepEqual(await page.eval(CELLS), ['modele', 'format', 'taille', 'images'], 'grille avec MiniMax H3');
-  assert.match(await page.eval(`$('setGrid').textContent`), /ModèleMiniMax H3/);
+  assert.match(await page.eval(`$('setGrid').textContent`), /ModèleMiniMax(?!\s*H3)/);
   assert.deepEqual(await page.overflowing(), [], 'la grille dépasse à 367 px');
-  assert.match(await page.eval(`$('engineFacts').textContent`), /MiniMax H3H3-Q4/);
+  assert.match(await page.eval(`$('engineFacts').textContent`), /MiniMaxH3-Q4/);
   assert.equal(await page.eval(`$('lamp').title`), lamp, 'lampe changée par le choix du modèle');
   page.assertNoErrors();
 });

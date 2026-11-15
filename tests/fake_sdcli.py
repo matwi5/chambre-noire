@@ -16,6 +16,10 @@ Commandes glissées dans le prompt, pour un test :
   celles de MiniMax H3 et de la vidéo : avant l'encodage du prompt (lecture d'une image d'entrée, suivie de
   « encode_first_stage completed ») et après l'échantillonnage (décodage) ; et, au début de l'échantillonnage, des
   barres de total 25 seul, qu'aucun moteur connu n'imprime là (pour éprouver la règle du total) ;
+- OOM (mot entier) : échoue au début de l'échantillonnage comme le vrai moteur quand la mémoire Metal manque (lignes
+  [W] et [E] d'un échec réel de MiniMax H3, 15/11/2026), code de sortie 1, aucune image ;
+- PREVIEW_OOM (mot entier) : après chaque étape, l'aperçu manque de mémoire comme dans un vrai journal (13/10/2026 :
+  lignes [W] et [E], « preview decode failed »), sans arrêter la génération ;
 - FEWER=<n> : n étapes calculées au lieu de --steps, comme le vrai moteur pour une image d'origine retouchée à
   --strength moins de 1 (« 1/1 » pour 0,05 sur 25 étapes) ;
 - HOLD ou HOLD=<nom> : attend, avant la première étape, que le banc libère ce nom (bench.release(nom), « hold » par
@@ -33,6 +37,23 @@ HOLD_LIMIT = 120
 READABLE = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"BM", b"GIF8")   # en-têtes que stb_image sait lire
 MODEL_FLAGS = ("--model", "--diffusion-model", "--vae", "--llm", "--llm_vision")   # fichiers de modèle à charger
 ALL = "ALL"                                     # fichier qui libère tous les noms (ménage du banc)
+OOM_LINES = (                                   # échec réel de MiniMax H3 Q8, 1280×1888 et 4 références (15/11/2026)
+    "[W] model manager memory on MTL0: reported free 3706.17 MB / total 25559.05 MB, tracked weights 21568.03 MB / "
+    "other runtime 0.00 MB / current runtime 127.93 MB --- model_manager.cpp:1817",
+    "[W] execution engine cannot make enough memory available on MTL0: need 4641.83 MB device / 4257.76 MB budget, "
+    "available 3706.17 MB device / unlimited budget --- execution_engine.cpp:942",
+    "[E] minimax_h3 segment 4/54 (minimax_h3.blocks.0) failed during weight preparation --- execution_engine.cpp:591",
+    "[E] diffusion model compute failed --- diffusion_engine.cpp:2683",
+    "[E] Diffusion model sampling failed --- diffusion_engine.cpp:2917",
+    "[E] sampling for image 1/1 failed after 7.38s --- image.cpp:1045",
+    "[E] generate failed --- main.cpp:1007",
+)
+PREVIEW_OOM_LINES = (                           # aperçu sauté, génération menée à son terme (13/10/2026)
+    "[W] model manager cannot make enough memory available on MTL0: need 31068.38 MB device / 30556.38 MB budget, "
+    "available 13546.48 MB device / unlimited budget --- model_manager.cpp:1962",
+    "[E] wan_vae segment 1/1 (graph) failed during weight preparation --- ggml_runner.cpp:899",
+    "[E] vae decode compute failed --- vae.hpp:377",
+)
 
 
 def hold(name):
@@ -103,6 +124,7 @@ def main(argv):
     held = re.search(r"\bHOLD(?:=([\w-]+))?(?:@(\d+))?(?![\w=@-])", prompt)
     held_at = int(held.group(2)) if held and held.group(2) else 0      # étape annoncée avant d'attendre (0 : avant)
     noisy = re.search(r"\bNOISE\b", prompt)
+    preview_oom = re.search(r"\bPREVIEW_OOM\b", prompt)
     fewer = re.search(r"\bFEWER=(\d+)\b", prompt)
     runs = int(fewer.group(1)) if fewer else steps                    # étapes calculées
     print("Version: faux sd-cli du banc de test", flush=True)
@@ -120,11 +142,18 @@ def main(argv):
         print(f"[ERROR] faux moteur jamais libéré (HOLD, {HOLD_LIMIT} s)", flush=True)
         return 1
     print("get_learned_condition completed, taking 0.50s", flush=True)
+    if re.search(r"\bOOM\b", prompt):             # lignes réelles, sans chemin
+        for line in OOM_LINES:
+            print(line, flush=True)
+        return 1
     if noisy:                                       # d'un autre total que les étapes
         noise(25)
     for k in range(1, runs + 1):
         time.sleep(delay)
         print(f"  |{'=' * k}| {k}/{runs} - {max(delay, 0.01):.2f}s/it", flush=True)
+        if preview_oom:
+            for line in PREVIEW_OOM_LINES + (f"[E] preview decode failed at step {k} --- diffusion_engine.cpp:2135",):
+                print(line, flush=True)
         if k == held_at and not hold(held.group(1) or "hold"):
             print(f"[ERROR] faux moteur jamais libéré (HOLD, {HOLD_LIMIT} s)", flush=True)
             return 1

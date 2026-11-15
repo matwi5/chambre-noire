@@ -388,9 +388,11 @@ grand dans la visionneuse, qui parcourt la pile :
 **Copier**, **Éditer**, **Dessiner**, **Reprendre** et **Relancer** y servent comme pour un tirage. Une génération de
 la page en échec arrive en tête de pile, sur une carte qui dit le message du Mac, avec **Relancer** (si la page a encore
 la demande) ; **✕** ou un balayage à gauche la retire (**✓** est grisé, et elle ne se tire pas vers la droite) ; elle ne
-reste qu'en mémoire de la page. Une génération annulée n'y
-laisse rien. Pile vide : « Rien à trier », en pixels, au-dessus du champ de création. L'onglet **Labo** porte le nombre
-d'images à trier. Quand une génération de la page finit pendant qu'on est sur les
+reste qu'en mémoire de la page. Quand le moteur manque de mémoire, ce message commence par « mémoire du Mac
+insuffisante pour cette taille et ces images : réduire la taille ou le nombre d'images jointes » (un aperçu que le
+moteur n'a pas pu calculer ne compte pas). Une génération annulée n'y laisse rien. Pile vide : « Rien à trier », en
+pixels, au-dessus du champ de création.
+L'onglet **Labo** porte le nombre d'images à trier. Quand une génération de la page finit pendant qu'on est sur les
 Tirages, un message le dit (« Image prête », « Lot prêt · 3 images », avec « , 1 en échec » s'il y en a, « Échec de la
 génération », « Échec du lot ») et mène au Labo quand on le touche (un panneau où l'on a commencé à taper reste
 ouvert) ; rien pour une génération annulée. Partager et
@@ -806,8 +808,8 @@ MiniMax H3 travaille en 6 étapes fixes, guidance 1, avec un aperçu tous les 2 
 négatif.
 
 Dans l'interface, dès que le Mac propose MiniMax H3, le panneau **Réglages** gagne une première ligne **Modèle**
-(« Qwen », « MiniMax H3 »), rappelée en tête de la grille sous le texte ; le navigateur retient le dernier modèle
-choisi (Qwen à la première ouverture, et tant que le modèle retenu n'est pas installé). Avec MiniMax H3, la ligne
+(« Qwen », « MiniMax » pour MiniMax H3), rappelée en tête de la grille sous le texte ; le navigateur retient le dernier
+modèle choisi (Qwen à la première ouverture, et tant que le modèle retenu n'est pas installé). Avec MiniMax H3, la ligne
 **Étapes** disparaît (6 étapes) et l'aperçu se fait toutes les 2 étapes ; formats et résolutions restent ceux de Qwen.
 Les temps estimés suivent le modèle choisi (voir [Performances](#performances)).
 Le panneau **Moteur** ajoute une ligne par autre modèle installé, avec sa version (`H3-Q4`, `H3-Q8`).
@@ -1211,7 +1213,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Le champ `model`
   choisit le modèle dans une table fermée du serveur : absent, Qwen (`"qwen"`, la version du lancement) ; `"h3"`,
   MiniMax H3 ; autre chose qu'un texte, 400 « model : texte attendu » ; un texte inconnu, 400 « modèle inconnu »
-  (la valeur n'est jamais recopiée, ni utilisée dans un chemin ou la commande) ; MiniMax H3 absent, 400 « MiniMax H3
+  (la valeur n'est jamais recopiée, ni utilisée dans un chemin ou la commande) ; MiniMax H3 absent, 400 « MiniMax
   n'est pas installé : lancez setup.py --h3 (Mac seulement) » ; sur un moteur plus ancien que `master-1090` (lu au
   lancement du serveur), 400 qui demande de lancer `setup.py --h3` puis de relancer le serveur. MiniMax H3 refuse
   (400) des étapes autres que 6, une image de départ, un masque, les modes `mask` et `annot` (le mode tel que la
