@@ -3,6 +3,15 @@
 Les versions suivent [SemVer](https://semver.org/lang/fr/) ; tant que l'application est en 0.x, une version mineure
 peut changer un comportement existant.
 
+## 0.8.1 · 2026-11-15
+
+### Modifié
+
+- La ligne **Modèle** affiche « MiniMax » au lieu de « MiniMax H3 ».
+- Quand le Mac manque de mémoire, le message d'échec d'une génération commence par « mémoire du Mac insuffisante
+  pour cette taille et ces images : réduire la taille ou le nombre d'images jointes », suivi du détail du moteur (un
+  aperçu que le moteur saute faute de mémoire ne compte pas).
+
 ## 0.8.0 · 2026-11-15
 
 ### Ajouté
