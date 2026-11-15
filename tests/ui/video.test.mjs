@@ -78,6 +78,12 @@ test('Vidéo : une seule image jointe, image de départ ; Dessiner grisé, pas d
   assert.equal(await page.eval(`$('refs').classList.contains('full')`), true, 'ajout encore proposé');
   assert.equal(await page.eval(`$('drawBtn').disabled`), true, 'Dessiner permis avec la vidéo');
   assert.equal(await page.eval(`$('campSwitch').hidden`), true, 'campagne proposée avec la vidéo');
+  // « Éditer » (visionneuse, images d'entrée) : refusé de même, la saisie a déjà son image de départ
+  await page.eval(`$('toastBox').textContent = ''`);
+  await page.eval(`(() => { const c = document.createElement('canvas'); c.width = c.height = 64;
+    return useAsEditInput('autre.png', c.toDataURL()); })()`);
+  await page.waitFor(`$('toastBox').textContent.includes('une seule image de départ')`, { what: 'Éditer refusé' });
+  assert.equal(await page.eval(`inputImages.length`), 1, 'Éditer ajoute une deuxième image à la vidéo');
   const req = await page.sentRequest('zvi2 depart');
   assert.deepEqual([req.mode, req.ref_images.length, typeof req.init_image, req.frames],
     ['t2i', 0, 'string', 56]);

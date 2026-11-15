@@ -994,6 +994,8 @@ function videoSettingsFor(it, m){ const orient=it.height>it.width ? 'port' : 'la
   return { frames: m.frames.includes(it.frames) ? it.frames : videoFrames(m), size, orient }; }
 // images jointes : une seule avec la vidéo (son image de départ), 10 sinon
 const maxRefs = () => videoModel() ? 1 : MAX_REFS;
+// message d'une image refusée par « Éditer » quand la saisie est pleine (maxRefs)
+const refsFullText = () => videoModel() ? 'Vidéo : une seule image de départ' : MAX_REFS+' images d\'entrée au maximum';
 // Dessiner (masque, annotation) : seulement avec un modèle qui prend le masque (pas MiniMax H3 : A16)
 const drawAllowed = () => { const m=modelSel(); return !m || m.modes.includes('mask'); };
 function applyModels(list){
@@ -2708,7 +2710,7 @@ async function dataUrlOf(name, url){
   return await readFile(await r.blob()); }
 // « Éditer » (visionneuse, images d'entrée)
 async function useAsEditInput(name, url){
-  if(!name || refuseWhileDrawing()) return; if(inputImages.length>=MAX_REFS){ toast(MAX_REFS+' images d\'entrée au maximum', 'err'); return; }
+  if(!name || refuseWhileDrawing()) return; if(inputImages.length>=maxRefs()){ toast(refsFullText(), 'err'); return; }
   const list=inputImages, priv=inPrivate(); let entry;
   try{ entry=await toEntry(name, await dataUrlOf(name, url), priv); }
   catch(e){ if(priv===inPrivate()) toast('Image illisible', 'err'); return; }
@@ -2791,7 +2793,7 @@ async function resumeFrom(it){
 // (prise avant toute attente) ; plafond et dessin actif revus à l'arrivée de l'image
 function addEditImage(list, entry){
   if(refuseWhileDrawing(list)) return;
-  if(list.length>=MAX_REFS){ if(list===inputImages) toast(MAX_REFS+' images d\'entrée au maximum', 'err'); return; }
+  if(list.length>=maxRefs()){ if(list===inputImages) toast(refsFullText(), 'err'); return; }
   list.push(entry); if(list!==inputImages) return;
   renderInputs(); showLabo('composer'); suggestRatio(); toast('Ajoutée aux images d\'entrée'); }
 // ------------------------------------------------------------ partager et copier (HTTPS ou Mac seulement : boutons masqués sinon)
