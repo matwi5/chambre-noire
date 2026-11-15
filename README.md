@@ -640,7 +640,7 @@ images sont enregistrées. Pour la confidentialité, passez par l'espace privé.
   ouvert) ; une page fermée pendant l'envoi du code annule cet envoi, et revenue, elle demande de retaper le code. Une
   application tuée puis relancée depuis l'écran d'accueil repart sans marque : seule la fermeture de l'espace par le Mac
   au bout de 15 minutes protège ce cas.
-- Dans l'espace privé, **toute génération est privée** (texte → image, édition, dessin) : son image, ses images
+- Dans l'espace privé, **toute génération est privée** (texte → image, édition, dessin, vidéo) : son image, ses images
   d'entrée, sa miniature, son prompt et ses réglages sont chiffrés sur le Mac. Le texte tapé n'est pas retenu par le
   navigateur. Une génération privée lancée va jusqu'au bout et est rangée chiffrée même si l'espace se verrouille avant
   la fin, ou si l'application est fermée ; sa notification est celle d'une image normale (« Image prête »), sans rien
@@ -717,10 +717,11 @@ Ce que cela garantit, et ses limites :
 - rien d'une image privée ne va dans `outputs\`, dans le journal des générations ni dans les mesures de calibration,
   et dans `logs\` rien d'autre que la ligne commune à toutes les générations (« [job] génération terminée », ou celle
   d'un échec ; le journal du moteur part à la poubelle) ;
-- sd-cli ne travaille que sur des fichiers : pendant le calcul, les images d'entrée, les aperçus et le PNG final passent
-  **en clair** par `jobs/private_<identifiant>/`, lisible par le seul compte qui fait tourner le serveur (0o700) et
-  supprimé dès la fin de la génération (et au lancement suivant après un arrêt brutal). Sur un SSD, un fichier supprimé
-  n'est pas effacé de façon sûre. Sur Mac, le dossier `jobs/` est exclu
+- sd-cli ne travaille que sur des fichiers : pendant le calcul, les images d'entrée, les aperçus et le PNG final (le
+  WebP animé d'une vidéo) passent **en clair** par `jobs/private_<identifiant>/`, lisible par le seul compte qui fait
+  tourner le serveur (0o700) et supprimé dès la fin de la génération (et au lancement suivant après un arrêt brutal) ;
+  pour une vidéo, ils y restent le temps de son calcul, jusqu'à une vingtaine de minutes. Sur un SSD, un fichier
+  supprimé n'est pas effacé de façon sûre. Sur Mac, le dossier `jobs/` est exclu
   de Time Machine au lancement de l'interface (`tmutil addexclusion`, sans droits administrateur ; un échec est noté
   dans le journal sans bloquer) ;
 - une image **téléchargée** ou partagée sort de l'espace privé : elle est alors en clair là où elle est enregistrée.
@@ -1145,7 +1146,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   /api/private/discard {"id"}` (Jeter : seulement une image de la pile ; son dossier est supprimé) : 404 « déjà triée
   » pour une image qui n'est pas (ou plus) dans la pile, le premier geste arrivé l'emporte ; dans l'espace privé,
   `rev` de `/api/status` est le compteur de la pile et des tirages privés (arrivée, Garder, Jeter, Supprimer), jamais
-  visible ailleurs ; `GET /api/private/image?id=…[&download=1]`, `GET /api/private/thumb?id=…`, `GET
+  visible ailleurs ; `GET /api/private/image?id=…[&download=1]` (servie en `image/webp` et téléchargée sous
+  `prive_<8 caractères>.webp` quand ses octets déchiffrés sont ceux d'un WebP, une vidéo privée ; sinon en
+  `image/png`, `.png` : le serveur ne lit pour cela aucun champ de la fiche), `GET /api/private/thumb?id=…`, `GET
   /api/private/input?id=…&file=init.png|ref_N.png[&thumb=1][&download=1]`, `POST /api/private/delete {"id"}` ; prompts
   enregistrés de l'espace privé, session exigée (403 sinon) et prolongée, mêmes champs, mêmes limites et mêmes
   réponses que `/api/prompts` : `GET /api/private/prompts` (avec les mêmes `types`), `POST /api/private/prompts`,

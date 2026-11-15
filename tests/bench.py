@@ -404,11 +404,16 @@ def data_url(raw):
     return "data:image/png;base64," + base64.b64encode(raw).decode()
 
 
-def all_files():
-    """Tous les fichiers du dossier du banc (sauf le lien vers l'interface du dépôt), triés."""
+def all_files(hidden=False):
+    """Tous les fichiers du dossier du banc (sauf le lien vers l'interface du dépôt), triés. hidden : aussi ceux dont le
+    nom, ou celui d'un de leurs dossiers, commence par un point (outputs/.pile, .inputs, .thumbs,
+    private/items/.<id>), que glob saute."""
     root = launch.ROOT
-    return sorted(fp for fp in glob.glob(os.path.join(root, "**", "*"), recursive=True)
-                  if os.path.isfile(fp) and not fp.startswith(os.path.join(root, "tools", "ui")))
+    if hidden:
+        found = [os.path.join(d, name) for d, _, names in os.walk(root) for name in names]
+    else:
+        found = glob.glob(os.path.join(root, "**", "*"), recursive=True)
+    return sorted(fp for fp in found if os.path.isfile(fp) and not fp.startswith(os.path.join(root, "tools", "ui")))
 
 
 def files(*pattern):

@@ -99,7 +99,9 @@ Dans l'ordre du fichier :
   `prompts.tmp` et `META_TMP` d'une panne supprimés d'abord, scellés avec l'ancienne clé) et `finish_rekey` (termine ou
   abandonne un changement interrompu, au démarrage et sous `PRIVATE_LOCK` avant toute ouverture ou écriture) ;
   `private_code_error`.
-- **Galerie, pile et journal** : `OUTPUT_TYPES` (sorties `.png` et `.webp`, et leur type servi), `output_name`
+- **Galerie, pile et journal** : `OUTPUT_TYPES` (sorties `.png` et `.webp`, et leur type servi), `output_ext`
+  (extension d'une image privée d'après ses premiers octets : type servi et nom téléchargé par `_private_get`),
+  `output_name`
   (jugement d'un nom de sortie : radical et extension, casse quelconque, pas de nom caché), `output_stem` (radical :
   vignettes, entrées, identifiant), `output_names` (sorties d'un dossier, ou ses sorties cachées), `input_files`,
   `save_inputs` (entrées copiées vers `outputs/.inputs/<radical>/`), `PILE` (`outputs/.pile/`, images à trier),
@@ -166,6 +168,7 @@ Dans l'ordre du fichier :
 - **Démarrage** : `exclude_from_backup` (Mac : `jobs/` hors de Time Machine), `setup_state`, `restrict_new_files`
   (masque 0o077 posé en tête de `main()` et de `tools/calibrate.py` : tout fichier créé ensuite, sd-cli compris, pour le
   seul compte du serveur), `close_folders` (dossiers du serveur créés avant le masque, fermés en 0o700 au lancement),
+  `remove_leftovers` (restes d'un job privé ou incognito après un arrêt brutal, image privée à moitié rangée ou jetée),
   `main()` (options ; `--enter` : `open_entry` puis sortie, sans serveur ; code d'accès par `setup_access` à chaque
   lancement, `--lan`, Tailscale, ménage de `jobs/`, sorties cachées rendues par `restore_hidden_images`, threads ;
   navigateur ouvert par `open_browser`, hors `--no-browser`). Le banc n'exécute pas `main()` : il pose lui-même

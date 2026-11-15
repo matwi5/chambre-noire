@@ -1066,6 +1066,15 @@ INPUT_RE = re.compile(r"(init|ref_\d+)\.png")
 # quelconque), qui donne aussi le type servi au navigateur. Le radical (nom sans l'extension) nomme ses vignettes,
 # son dossier d'images d'entrée et, avant le dernier « _ », sa génération (JOB_ID_RE).
 OUTPUT_TYPES = {".png": "image/png", ".webp": "image/webp"}
+
+
+def output_ext(raw):
+    """Extension d'une sortie d'après ses premiers octets (« RIFF », taille, « WEBP » : un WebP, une vidéo ; sinon
+    « .png »), pour une image privée, dont aucun nom ni champ ne note le format : elle donne le type servi
+    (OUTPUT_TYPES) et le nom d'un téléchargement."""
+    return ".webp" if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP" else ".png"
+
+
 # pile de l'espace public : images terminées à trier ; Garder les fait passer dans outputs/ (les tirages), Jeter les
 # efface. Vignettes et images d'entrée sont rangées par nom d'image et ne bougent pas quand elle passe aux tirages.
 PILE = P("outputs", ".pile")
@@ -2714,8 +2723,11 @@ class H(BaseHTTPRequestHandler):
             return self._send(500, {"error": "image privée illisible"})
         if raw is None:
             return self._send(404, {"error": "image privée inconnue"})
-        ctype = "image/jpeg" if action == "thumb" else "image/png"
-        extra = {"Content-Disposition": f'attachment; filename="prive_{item[:8]}{"_" + q["file"][:-4] if action == "input" else ""}.png"'} if q.get("download") else None
+        # type d'une image privée (une vidéo : WebP animé) tiré de ses octets déchiffrés ; entrées toujours en PNG
+        ext = output_ext(raw) if action == "image" else ".png"
+        ctype = "image/jpeg" if action == "thumb" else OUTPUT_TYPES[ext]
+        name = f'prive_{item[:8]}{"_" + q["file"][:-4] if action == "input" else ""}{ext}'
+        extra = {"Content-Disposition": f'attachment; filename="{name}"'} if q.get("download") else None
         return self._send(200, raw, ctype, extra)
 
     def _private_post(self, path, raw):
@@ -3172,6 +3184,15 @@ def close_folders():
         print("[launch] dossiers non fermés aux autres comptes", flush=True)
 
 
+def remove_leftovers():
+    """Au démarrage : restes d'un job privé interrompu par un arrêt brutal (son dossier de travail, images et vidéo en
+    clair comprises), d'une image privée à moitié rangée ou jetée, et d'un job incognito d'avant son retrait (images
+    en clair : porteur, 22/10/2026)."""
+    for old in (glob.glob(P("jobs", "private_*")) + glob.glob(os.path.join(PRIVATE, "items", ".*"))
+                + glob.glob(P("jobs", "incognito_*"))):
+        shutil.rmtree(old, ignore_errors=True)
+
+
 def main():
     restrict_new_files()
     close_folders()                              # avant toute sortie précoce : logs/ fermé même si le lancement échoue
@@ -3200,11 +3221,7 @@ def main():
         finish_rekey()                                 # (rien n'est écrit au journal sur l'espace privé)
     except (OSError, ValueError):                      # ValueError : space.json illisible ; le serveur démarre quand même
         pass
-    # restes d'un job privé interrompu par un arrêt brutal, d'une image privée à moitié rangée ou jetée, et d'un job
-    # incognito d'avant son retrait (images en clair : porteur, 22/10/2026)
-    for old in (glob.glob(P("jobs", "private_*")) + glob.glob(os.path.join(PRIVATE, "items", ".*"))
-                + glob.glob(P("jobs", "incognito_*"))):
-        shutil.rmtree(old, ignore_errors=True)
+    remove_leftovers()
     try:                                               # fiche à moitié réécrite par Garder (sort_private)
         os.remove(os.path.join(PRIVATE, META_TMP))
     except FileNotFoundError:
