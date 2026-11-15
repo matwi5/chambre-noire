@@ -148,8 +148,10 @@ PLATFORM_BACKENDS = ["metal"] if sys.platform == "darwin" else ["vulkan", "cuda"
 PROGRESS_RE = re.compile(r"(\d+)/(\d+)\s*-\s*([\d.]+)(s/it|it/s)")
 # manque de mémoire du moteur (master-1090) : ligne [W] que les dernières lignes [E] ne répètent pas. Vue, elle met
 # en tête du message d'échec un texte qui nomme la cause (décision du porteur du 15/11/2026) ; sans elle (texte du
-# moteur changé), le message reste le détail du moteur seul
+# moteur changé), le message reste le détail du moteur seul. Elle précède aussi un aperçu que le moteur saute
+# (PREVIEW_SKIPPED, sans arrêter la génération) : elle ne compte alors plus
 OUT_OF_MEMORY = "cannot make enough memory available"
+PREVIEW_SKIPPED = "preview decode failed"
 OUT_OF_MEMORY_TEXT = ("mémoire du Mac insuffisante pour cette taille et ces images : réduire la taille ou le nombre "
                       "d'images jointes. ")
 TAKING_RE = re.compile(r"taking ([\d.]+)\s*s")
@@ -2022,6 +2024,8 @@ def run_job(job):
                 job["out_of_memory"] = True
             elif "[ERROR" in text or text.startswith("[E]") or "GGML_ASSERT" in text:   # [E] : depuis master-959
                 job["error_lines"] = (job.get("error_lines") or []) + [text]
+                if PREVIEW_SKIPPED in text:      # le manque de mémoire vu n'a coûté qu'un aperçu
+                    job.pop("out_of_memory", None)
     rc = proc.wait()
     logf.close()
     job["finished"] = time.time()

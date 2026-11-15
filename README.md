@@ -389,10 +389,10 @@ grand dans la visionneuse, qui parcourt la pile :
 la page en échec arrive en tête de pile, sur une carte qui dit le message du Mac, avec **Relancer** (si la page a encore
 la demande) ; **✕** ou un balayage à gauche la retire (**✓** est grisé, et elle ne se tire pas vers la droite) ; elle ne
 reste qu'en mémoire de la page. Quand le moteur manque de mémoire, ce message commence par « mémoire du Mac
-insuffisante pour cette taille et ces images : réduire la taille ou le nombre d'images jointes ». Une génération annulée
-n'y
-laisse rien. Pile vide : « Rien à trier », en pixels, au-dessus du champ de création. L'onglet **Labo** porte le nombre
-d'images à trier. Quand une génération de la page finit pendant qu'on est sur les
+insuffisante pour cette taille et ces images : réduire la taille ou le nombre d'images jointes » (un aperçu que le
+moteur n'a pas pu calculer ne compte pas). Une génération annulée n'y laisse rien. Pile vide : « Rien à trier », en
+pixels, au-dessus du champ de création.
+L'onglet **Labo** porte le nombre d'images à trier. Quand une génération de la page finit pendant qu'on est sur les
 Tirages, un message le dit (« Image prête », « Lot prêt · 3 images », avec « , 1 en échec » s'il y en a, « Échec de la
 génération », « Échec du lot ») et mène au Labo quand on le touche (un panneau où l'on a commencé à taper reste
 ouvert) ; rien pour une génération annulée. Partager et

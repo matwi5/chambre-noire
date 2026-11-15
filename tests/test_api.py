@@ -321,8 +321,18 @@ class GenerationTest(bench.BenchCase):
         # échec réel du 15/11/2026 : les quatre dernières lignes [E] taisaient la ligne du moteur sur la mémoire
         j = wait_job(generate("OOM")["id"])
         self.assertEqual(j["status"], "failed")
-        self.assertIn("mémoire", j["error"].lower())
+        self.assertTrue(j["error"].startswith("mémoire du Mac insuffisante"), j["error"])
+        self.assertIn("generate failed", j["error"])                  # le détail du moteur suit
         self.assertEqual(files("outputs", ".pile", "*.png"), [])
+
+    def test_a_skipped_preview_does_not_blame_the_memory(self):
+        # journal du 13/10/2026 : la même ligne [W] précède un aperçu sauté, sans arrêter la génération ; un échec
+        # venu d'ailleurs garde son seul détail
+        self.assertEqual(wait_job(generate("PREVIEW_OOM")["id"])["status"], "done")
+        j = wait_job(generate("PREVIEW_OOM FAIL")["id"])
+        self.assertEqual(j["status"], "failed")
+        self.assertTrue(j["error"].startswith("sd-cli code 1 — "), j["error"])
+        self.assertIn("panne simulée", j["error"])
 
     def test_edit_keeps_its_input_images(self):
         j = wait_job(generate("make it blue", mode="edit", ref_images=[bench.data_url(bench.png_bytes())])["id"])
