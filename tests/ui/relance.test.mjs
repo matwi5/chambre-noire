@@ -266,10 +266,10 @@ test('« Relancer » une image MiniMax H3 désinstallé depuis : le refus du ser
     const n = await page.eval(`sentBodies.length`);
     await page.click('#vAgain');
     await page.waitFor(`sentBodies.length > ${n}`, { what: 'relance envoyée' });
-    await page.waitFor(`seenToasts.some(t => t.startsWith('Erreur : MiniMax H3'))`,
+    await page.waitFor(`seenToasts.some(t => t.startsWith('Erreur : MiniMax'))`,
       { what: 'refus du serveur affiché' });
     const error = await page.eval(`seenToasts.find(t => t.startsWith('Erreur'))`);
-    assert.equal(error, 'Erreur : MiniMax H3 n\'est pas installé : lancez setup.py --h3 (Mac seulement)');
+    assert.equal(error, 'Erreur : MiniMax n\'est pas installé : lancez setup.py --h3 (Mac seulement)');
     page.errors.length = 0;                           // (le 400 du serveur, écrit par Chrome dans la console)
     page.assertNoErrors();
   } finally {

@@ -127,7 +127,7 @@ MODEL_TABLE = {
              "negative_prompt": True, "cfg": None, "preview_every": None, "args": [], "setup": "", "config": None,
              "sizes": None, "frames": None, "refs": True, "lots": True, "preview": True, "sampler": "euler",
              "lora": False, "ext": ".png"},
-    "h3": {"name": "MiniMax H3", "versions": H3_DIFFUSION, "files": H3_FILES, "engine": 1090, "steps": [6],
+    "h3": {"name": "MiniMax", "versions": H3_DIFFUSION, "files": H3_FILES, "engine": 1090, "steps": [6],
            "max_side": MAX_SIDE, "max_refs": MAX_CAMPAIGN, "modes": ["t2i", "edit"], "init_image": False,
            "mask": False, "negative_prompt": False, "cfg": 1.0, "preview_every": 2,
            "args": ["--sigmas", "minimax-h3-image", "--rng", "cpu"], "setup": "--h3",
