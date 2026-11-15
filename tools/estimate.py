@@ -51,10 +51,10 @@ depuis le disque) :
   assez différentes ont été mesurées ; avec une seule taille, la forme des valeurs de départ est gardée et mise à
   l'échelle ;
 - e0, e1, u, v, o : médianes des mesures qui les concernent ; les valeurs de départ restent tant qu'aucune mesure
-  ne les touche (o : sans les mesures de vidéo qui lisent une image de départ sans en chronométrer la lecture, F et I
-  sans venc). Avec
-  le cache de préfixe, la première étape d'une édition dure plus que celle d'un texte → image ;
+  ne les touche. Avec le cache de préfixe, la première étape d'une édition dure plus que celle d'un texte → image ;
   le surcoût est retiré de o d'après le modèle (préfixe = étape·nr/nt), le reste de l'écart y demeure.
+Une mesure de vidéo qui lit une image de départ sans en chronométrer la lecture (F et I, sans venc) ne compte ni pour
+a et b (ses étapes plus lentes) ni pour o (sa lecture) : u·I, à sa valeur de départ, couvre les deux.
 """
 import contextlib, errno, json, math, os, re, time
 try:
@@ -200,10 +200,13 @@ def fit(samples, prior, kv=False):
     c["kv"] = kv
     if not samples:
         return c
+    # vidéo (F) avec une image de départ lue sans chronométrage (pas de venc) : ses étapes plus lentes et sa lecture
+    # sont dans u·I (valeur de départ) ; ni a et b ni o ne les prennent. Les mesures d'une image comptent toutes.
+    timed = [s for s in samples if not (s.get("F") and s.get("I") and not s.get("venc"))]
     # étape = a·p + b·p·n, avec p = n, ou p = nt (jetons de la sortie) avec le cache de préfixe ; les mesures
     # antérieures à l'étiquetage n'ont ni nt ni cache de préfixe
     groups = {}                                # tailles (p, n) à ±6 % près
-    for s in samples:
+    for s in timed:
         p, n = (s["nt"] if s.get("kv") else s["n"]), s["n"]
         groups.setdefault((round(math.log2(p) * 6), round(math.log2(n) * 6)), []).append((p, n, s["step"]))
     pts = [tuple(median([v[i] for v in g]) for i in range(3)) for g in groups.values()]
@@ -220,9 +223,11 @@ def fit(samples, prior, kv=False):
             a, b = (sx * syy - sy * sxy) / det, (sy * sxx - sx * sxy) / det
         if a is None or a < 0 or b < 0:        # mesures incohérentes : repli sur la forme des valeurs de départ
             a = b = None
-    if a is None:
+    if a is None and pts:
         k = median([t / (prior["a"] * p + prior["b"] * p * n) for p, n, t in pts])
         a, b = prior["a"] * k, prior["b"] * k
+    if a is None:                              # aucune mesure d'étape utilisable : valeurs de départ
+        a, b = prior["a"], prior["b"]
     c["a"], c["b"] = round(a, 4), round(b, 5)
     plain = [s for s in samples if not s["R"]]
     if plain:
@@ -234,11 +239,8 @@ def fit(samples, prior, kv=False):
     if vin:
         c["u"] = round(median([s["venc"] / (s["R"] + s["I"]) for s in vin]), 2)
     c["v"] = round(median([s["vae"] / s["M"] for s in samples]), 2)
-    # vidéo (F) : une image de départ lue sans chronométrage (pas de venc) laisse sa lecture dans over : pas pour o ;
-    # les mesures d'une image comptent toutes, comme avant
-    fixed = [s for s in samples if not (s.get("F") and s.get("I") and not s.get("venc"))]
-    if fixed:
-        c["o"] = round(max(0.0, median([s["over"] for s in fixed])), 2)
+    if timed:
+        c["o"] = round(max(0.0, median([s["over"] for s in timed])), 2)
     return c
 
 

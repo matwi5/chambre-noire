@@ -944,7 +944,8 @@ de Qwen). MiniMax H3 se calibre à part, par `tools/calibrate.py --model h3` (6 
 sans cela, ses estimations partent de ses valeurs de départ et s'ajustent à l'usage. La vidéo de même, par
 `tools/calibrate.py --model video` (deux vidéos de 480×288, de 56 et 124 images, environ 9 minutes), ses mesures
 rangées sous `h3-video` ; la lecture de son image de départ n'étant pas chronométrée par le moteur, son coût garde sa
-valeur de départ. Un serveur déjà lancé ne prend
+valeur de départ, et une vidéo faite avec une image de départ n'ajuste ni le temps des étapes ni la part fixe. Un
+serveur déjà lancé ne prend
 les mesures de `tools/calibrate.py` qu'à sa relance ou après sa prochaine génération mesurée (finie, hors de l'espace
 privé).
 Pendant une génération, le temps restant se fonde sur la moyenne des derniers pas. Les mesures sont stockées dans

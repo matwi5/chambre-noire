@@ -72,10 +72,11 @@ class VideoFormulaTest(unittest.TestCase):
         self.assertNotIn("F", estimate.make_sample({**job, "req": {"width": 512, "height": 512, "steps": 4}},
                                                    ENGINE, "h3"))
 
-    def test_a_start_image_sample_does_not_move_the_fixed_part(self):
+    def test_a_start_image_sample_moves_neither_the_steps_nor_the_fixed_part(self):
         """Le moteur ne chronomètre pas la lecture de l'image de départ d'une vidéo (pas de ligne
         « encode_first_stage completed », journal v8 de l'essai) : son temps reste dans « over », qui ne compte pas
-        pour o ; u garde sa valeur de départ."""
+        pour o ; ses étapes, plus lentes (v8), ne comptent pas pour a et b ; u garde sa valeur de départ, qui couvre
+        les deux."""
         base = {"w": 480, "h": 288, "steps": 4, "F": 56, "R": 0.0, "venc": 0.0, "enc": 62.0, "vae": 14.0, "kv": False,
                 "sd": ENGINE}
         plain = [{**base, "n": n, "nt": n, "M": m, "I": 0.0, "step": t, "over": 1.3}
@@ -83,9 +84,10 @@ class VideoFormulaTest(unittest.TestCase):
         start = {**base, "n": 29.5, "nt": 29.5, "M": 7.74, "I": 0.1382, "step": 26.0, "over": 38.0}
         alone = estimate.fit(plain, estimate.VIDEO_PRIORS["metal"])
         both = estimate.fit(plain + [start], estimate.VIDEO_PRIORS["metal"])
-        self.assertEqual((both["o"], both["u"]), (alone["o"], estimate.VIDEO_PRIORS["metal"]["u"]))
+        self.assertEqual((both["a"], both["b"], both["o"], both["u"]),
+                         (alone["a"], alone["b"], alone["o"], estimate.VIDEO_PRIORS["metal"]["u"]))
         only = estimate.fit([start], estimate.VIDEO_PRIORS["metal"])
-        self.assertEqual(only["o"], estimate.VIDEO_PRIORS["metal"]["o"])
+        self.assertEqual((only["a"], only["b"], only["o"]), tuple(estimate.VIDEO_PRIORS["metal"][k] for k in "abo"))
 
 
 class VideoCase(bench.BenchCase):

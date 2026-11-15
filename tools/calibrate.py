@@ -83,7 +83,7 @@ def main():
         if not job.get("measured"):           # mesure introuvable ou non gardée (message « ignorée » plus haut)
             sys.exit(f"[calibration] échec : mesure de la génération {i} non gardée dans {launch.CALIB}")
         print(f"[calibration] {i}/{len(runs)} : {job['seconds']} s", flush=True)
-        if ref is None:
+        if ref is None and not frames:             # référence des éditions qui suivent (jamais pour la vidéo)
             ref = "data:image/png;base64," + base64.b64encode(open(job["out"], "rb").read()).decode()
     c = launch.S.store.coefficients(launch.S.backend, version, launch.S.engine, key)
     _, w, h, frames = runs[0]                      # résumé à la taille de la première génération

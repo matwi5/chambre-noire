@@ -188,8 +188,8 @@ un système de fichiers qui ne le connaît pas, `NO_LOCK`), met le fichier sur l
 `record_calib` pose `job["measured"]`, que `tools/calibrate.py` vérifie) ;
 `PRIORS` (Qwen), `H3_PRIORS` (MiniMax H3) et `VIDEO_PRIORS` (vidéo), réunis par modèle dans `FAMILIES` (valeurs
 de départ, cache de préfixe `kv`, poids `rw` et petit côté minimal `rmin` des références) ; une vidéo compte ses
-images (`frames`) dans `tokens`, `predict` et `make_sample` (champ `F` de la mesure), et `fit` ne tire pas `o` d'une
-mesure qui lit une image de départ sans la chronométrer.
+images (`frames`) dans `tokens`, `predict` et `make_sample` (champ `F` de la mesure), et `fit` ne tire ni `a` et `b`
+ni `o` d'une mesure de vidéo qui lit une image de départ sans la chronométrer (liste `timed`).
 `tools/calibrate.py` : générations de calibration, `RUNS` (Qwen), `H3_RUNS` (`--model h3`) et `VIDEO_RUNS`
 (`--model video`, sortie `.webp`), hors de la file (`run_job`).
 

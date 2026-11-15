@@ -993,7 +993,7 @@ function videoSettingsFor(it, m){ const orient=it.height>it.width ? 'port' : 'la
   const normal=videoDims(m, 'normal', orient), size=it.width===normal[0] && it.height===normal[1] ? 'normal' : 'small';
   return { frames: m.frames.includes(it.frames) ? it.frames : videoFrames(m), size, orient }; }
 // images jointes : une seule avec la vidéo (son image de départ), 10 sinon
-const maxRefs = () => videoModel() ? 1 : MAX_REFS;
+const maxRefs = () => videoModel()?.max_refs || MAX_REFS;   // vidéo : son image de départ (max_refs du statut)
 // message d'une image refusée par « Éditer » quand la saisie est pleine (maxRefs)
 const refsFullText = () => videoModel() ? 'Vidéo : une seule image de départ' : MAX_REFS+' images d\'entrée au maximum';
 // Dessiner (masque, annotation) : seulement avec un modèle qui prend le masque (pas MiniMax H3 : A16)
@@ -1006,7 +1006,8 @@ function currentDims(){ const vm=videoModel(); return vm ? videoDims(vm) : dimsF
 // (campaignOn) est gardé, mais ignoré tant qu'il n'est pas proposé
 const campaignShown = () => inputImages.length>=2 && !videoModel();   // (jamais avec la vidéo : une image)
 const inCampaign = () => inputKind()==='edit' && campaignShown() && campaignOn;
-const variants = () => inCampaign() || videoModel() ? 1 : opt.count;   // (une vidéo par demande)   // images de la prochaine demande (une campagne : une par photo)
+// images de la prochaine demande (une campagne : une par photo ; une vidéo par demande)
+const variants = () => inCampaign() || videoModel() ? 1 : opt.count;
 // campagne : chaque photo est éditée seule, au format pris en charge le plus proche de sa forme, à la résolution choisie
 function photoDims(im){ const [rw,rh]=RATIOS[closestRatio(im.w, im.h)], sc=resSel().scale; return [round32(rw*sc), round32(rh*sc)]; }
 function campaignPlan(){ const rmin=refMin(); return inputImages.map(im=>{ const [w,h]=photoDims(im); return { im, w, h, inp:{ refs:[refPx(im.w, im.h, w, h, rmin)], init:0 } }; }); }
