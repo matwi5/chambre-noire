@@ -28,6 +28,49 @@ class ModelsTest(unittest.TestCase):
             self.assertTrue(url.startswith(setup.BASE), version)
             self.assertNotIn("-UC-", url, version)
 
+    def test_setup_installs_the_h3_files_the_launcher_loads(self):
+        """MiniMax H3 : mêmes versions et mêmes fichiers des deux côtés (noms et dossier seulement : le banc repointe
+        les chemins du serveur), adresses épinglées sur un commit, tailles et empreintes en forme."""
+        self.assertEqual(list(setup.H3_DIFFUSION), list(launch.H3_DIFFUSION))
+        self.assertEqual(list(setup.H3_FILES), list(launch.H3_FILES))
+        for served, installed in ((launch.H3_DIFFUSION, setup.H3_DIFFUSION), (launch.H3_FILES, setup.H3_FILES)):
+            for key, (url, local, size, digest) in installed.items():
+                self.assertEqual(os.path.basename(local), os.path.basename(served[key]), key)
+                self.assertEqual(local.split("/")[:2], ["models", {"llm": "text_encoders", "vae": "vae"}.get(
+                    key, "diffusion_models")], key)
+                self.assertEqual(url.rsplit("/", 1)[1], os.path.basename(local), key)
+                self.assertRegex(url, r"^https://huggingface\.co/[\w.-]+/[\w.-]+/resolve/[0-9a-f]{40}/", key)
+                self.assertRegex(digest, r"^[0-9a-f]{64}$", key)
+                self.assertGreater(size, 0, key)
+        spec = launch.MODEL_TABLE["h3"]
+        self.assertEqual(set(spec["config"].values()), set(launch.H3_DIFFUSION))
+        self.assertEqual(spec["setup"], "--h3")
+        options = setup.parser().parse_args(["--h3", "--h3-q8"])
+        self.assertTrue(options.h3 and options.h3_q8)
+
+    def test_setup_installs_the_video_files_the_launcher_loads(self):
+        """Vidéo : mêmes clés et mêmes fichiers des deux côtés (noms et dossiers), adresses épinglées sur un commit,
+        tailles et empreintes en forme ; l'encodeur est celui de MiniMax H3 ; option --h3-video des deux côtés."""
+        self.assertEqual(list(setup.VIDEO_DIFFUSION), list(launch.VIDEO_DIFFUSION))
+        self.assertEqual(list(setup.VIDEO_FILES), list(launch.VIDEO_FILES))
+        folders = {"llm": "text_encoders", "vae": "vae", "lora": "loras"}
+        for served, installed in ((launch.VIDEO_DIFFUSION, setup.VIDEO_DIFFUSION), (launch.VIDEO_FILES,
+                                                                                   setup.VIDEO_FILES)):
+            for key, (url, local, size, digest) in installed.items():
+                self.assertEqual(os.path.basename(local), os.path.basename(served[key]), key)
+                self.assertEqual(local.split("/")[:2], ["models", folders.get(key, "diffusion_models")], key)
+                self.assertEqual(url.rsplit("/", 1)[1], os.path.basename(local), key)
+                self.assertRegex(url, r"^https://huggingface\.co/[\w.-]+/[\w.-]+/resolve/[0-9a-f]{40}/", key)
+                self.assertRegex(digest, r"^[0-9a-f]{64}$", key)
+                self.assertGreater(size, 0, key)
+        self.assertEqual(setup.VIDEO_FILES["llm"], setup.H3_FILES["llm"])
+        self.assertEqual(setup.VIDEO_FILES["lora"][3],
+                         "70103fd0d80a947ed4e7fe6f88915863d54ef22c5cab03bd5d2fd649385ffe1e")
+        spec = launch.MODEL_TABLE["video"]
+        self.assertEqual(set(spec["versions"]), set(launch.VIDEO_DIFFUSION))
+        self.assertEqual(spec["setup"], "--h3-video")
+        self.assertTrue(setup.parser().parse_args(["--h3-video"]).h3_video)
+
 
 class LocalConfigTest(unittest.TestCase):
     def setUp(self):

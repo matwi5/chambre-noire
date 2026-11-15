@@ -36,14 +36,30 @@ tools/ui/index.html   ThreadingHTTPServer, file + un seul thread worker      (pa
 Dans l'ordre du fichier :
 
 - **Constantes et moteur** (en tête) : `ROOT`, `P()` (chemin sous la racine, relu à chaque appel : le banc repointe
-  `ROOT`), `MODELS` et `DIFFUSION` (noms des fichiers de modèles, à garder égaux à ceux de `setup.py`), `BACKENDS`
-  (options de sd-cli par moteur, réglages Metal justifiés en commentaire), `PLATFORM_BACKENDS`, `PROGRESS_RE` et
-  `TAKING_RE` (lecture de la sortie de sd-cli), `MAX_VARIANTS`, `MAX_CAMPAIGN`, `PRIVATE_JOB_TTL`,
-  `DONE_LINE` (ligne de fin commune à toutes les générations réussies).
-  `record_calib`, `load_config`, `code_version` (commit, date et branche du dossier servi, empreinte `server`
-  de `launch.py` et `estimate.py`, relus toutes les `VERSION_TTL` s ; git seulement s'il y a un `.git`, jamais après un
+  `ROOT`), `MODELS` et `DIFFUSION` (noms des fichiers de modèles, à garder égaux à ceux de `setup.py`), `H3_DIFFUSION`
+  et `H3_FILES` (fichiers de MiniMax H3, sous les noms publiés, à garder égaux à ceux de `setup.py`),
+  `VIDEO_DIFFUSION` et `VIDEO_FILES` (fichiers de la vidéo : modèle, VAE vidéo, LoRA turbo, encodeur de MiniMax H3 ;
+  à garder égaux à ceux de `setup.py`, option `--h3-video`),
+  `MAX_VARIANTS`,
+  `MAX_CAMPAIGN`, `MAX_SIDE`, `PAGE_MODES` et `MODE_LABELS` (libellés des modes dans un refus), `MODEL_TABLE` (table
+  fermée des modèles qu'une demande nomme par son champ `model` : versions, fichiers, release minimale du moteur,
+  étapes, tailles, images jointes, modes et entrées permis, guidage, aperçus et options de sd-cli imposés, option de
+  `setup.py`, versions qu'une machine peut demander par `tools/config.local.json` ; pour la vidéo, tailles et nombres
+  d'images permis, ni références ni lots ni aperçu, méthode d'échantillonnage du moteur, balise du LoRA ajoutée au
+  prompt, sortie `.webp`), `BACKENDS` (options de sd-cli par
+  moteur, réglages Metal justifiés en commentaire), `PLATFORM_BACKENDS`, `PROGRESS_RE` et `TAKING_RE` (lecture de la
+  sortie de sd-cli), `PRIVATE_JOB_TTL`, `DONE_LINE` (ligne de fin commune à toutes les générations réussies).
+  `record_calib`, `load_config`, `code_version` (commit, date et branche du dossier servi, empreinte `server` de
+  `launch.py` et `estimate.py`, relus toutes les `VERSION_TTL` s ; git seulement s'il y a un `.git`, jamais après un
   échec, sauf un délai dépassé ; `S.started` : la même chose au lancement, posé par `main()`), `engine_tag`,
-  `default_backend`.
+  `model_version` (version installée d'un modèle de la table : fichiers présents et `S.engine` assez récent ; celle
+  que demande `S.cfg[<clé>]` si son fichier est là, la valeur n'étant comparée qu'aux noms de la table, sinon la
+  première présente ; Qwen : `S.model`, jamais refusé), `request_model` (clé et version d'une demande, tirées de la
+  table, une fois par demande), `job_model` (clé et version posées sur la génération par `new_job`, ou par
+  `tools/calibrate.py` sur les siennes ; sans elles, Qwen à la version du serveur), `preview_every`,
+  `model_coefficients` (coefficients d'un modèle à sa version,
+  formule de sa famille) et `coefficient_reader` (les mêmes, une fois par lecture de l'état : `estimates` et
+  `model_estimates` de `/api/status`, file), `installed_models` (`models` de `/api/status`), `default_backend`.
 - **Accès** : `ACCESS_FILE`, `ACCESS_COOKIE`, `ENTRY_TOKEN`, `ENTRY_PAGE`, `ENTRY_TTL`, `ENTRY_LOCK`, `ENTRY_USED`
   (entrée à usage unique de `--enter`), `LOCAL_CLIENTS`, `PUBLIC_FILES` (manifeste, icônes, logo, police pixel, service
   worker, servis sans cookie), `LOGIN_PAGE`, `LOGIN_MAC` (phrase de l'ordinateur, à la place de `<!--mac-->` pour une
@@ -84,8 +100,13 @@ Dans l'ordre du fichier :
   `prompts.tmp` et `META_TMP` d'une panne supprimés d'abord, scellés avec l'ancienne clé) et `finish_rekey` (termine ou
   abandonne un changement interrompu, au démarrage et sous `PRIVATE_LOCK` avant toute ouverture ou écriture) ;
   `private_code_error`.
-- **Galerie, pile et journal** : `input_files`, `save_inputs` (entrées copiées vers `outputs/.inputs/<image>/`),
-  `PILE` (`outputs/.pile/`, images à trier), `JOB_ID_RE`, `image_in` (nom validé dans un dossier), `output_path` (un
+- **Galerie, pile et journal** : `OUTPUT_TYPES` (sorties `.png` et `.webp`, et leur type servi), `output_ext`
+  (extension d'une image privée d'après ses premiers octets : type servi et nom téléchargé par `_private_get`),
+  `output_name`
+  (jugement d'un nom de sortie : radical et extension, casse quelconque, pas de nom caché), `output_stem` (radical :
+  vignettes, entrées, identifiant), `output_names` (sorties d'un dossier, ou ses sorties cachées), `input_files`,
+  `save_inputs` (entrées copiées vers `outputs/.inputs/<radical>/`), `PILE` (`outputs/.pile/`, images à trier),
+  `JOB_ID_RE`, `image_in` (nom validé dans un dossier, sous son nom exact), `output_path` (un
   tirage), `pile_path` (une image de la pile), `image_path` (l'un ou l'autre : image, vignette et entrées servies),
   `on_image` (lecture d'une image par `image_path`, cherchée une seconde fois si elle vient d'être gardée),
   `JOURNAL_LOCK` (un `RLock` : journal, tri, lecture des tirages et de la pile), `journal_line` (une ligne lue, ou
@@ -93,12 +114,15 @@ Dans l'ordre du fichier :
   d'une génération normale : PNG du dossier de travail vers la pile, sous `S.turn` contre une annulation, puis ligne
   du journal et entrées, d'un bloc sous `JOURNAL_LOCK` ; PNG et journal en 0o600), `delete_output` (effacement complet
   : `delete_extras` (miniatures et entrées), dossier de travail et lignes du journal par `drop_from_journal`, réécrit
-  dans un fichier temporaire puis remplacé, et le PNG en dernier, seulement si tout le reste est parti, renommé en nom
-  caché avant tout effacement et rendu à son nom si une pièce résiste ; `restore_hidden_images` au démarrage ; une
-  pièce qui résiste n'arrête pas les suivantes), `SORTS` et `sort_image` (Garder, Jeter, Supprimer, d'un bloc sous
-  `JOURNAL_LOCK` : le premier geste arrivé l'emporte), `read_inputs`, `images_in` (PNG d'un dossier croisés avec le
-  journal), `history()` (les tirages), `pile()`, `thumb_jpeg`, `thumbnail` (`outputs/.thumbs/` ; mise en place sous
-  `JOURNAL_LOCK`, jamais pour une image déjà jetée).
+  dans un fichier temporaire puis remplacé, et le fichier en dernier, seulement si tout le reste est parti, renommé
+  en nom caché (`hidden_output`) avant tout effacement et rendu à son nom si une pièce résiste ; `restore_hidden_images`
+  au démarrage ; une pièce qui résiste n'arrête pas les suivantes ; entrées, leurs vignettes et dossier de travail
+  gardés tant qu'une autre sortie, visible ou cachée qui reviendra, les partage sur ce disque, `shared_pieces`,
+  `same_file`, `comes_back`, `input_thumbs`), `SORTS` et `sort_image` (Garder, Jeter, Supprimer, d'un bloc sous
+  `JOURNAL_LOCK` : le premier geste arrivé l'emporte), `read_inputs`, `images_in` (sorties d'un dossier croisées avec
+  le journal), `history()` (les tirages), `pile()`, `thumb_jpeg`, `output_thumb` (miniature de chaque sortie :
+  `<radical>.jpg` d'un `.png`, `<nom>.jpg` d'une autre, `x.webp.jpg` d'une vidéo), `thumbnail` (`outputs/.thumbs/` ;
+  mise en place sous `JOURNAL_LOCK`, jamais pour une image déjà jetée).
 - **État** : `class State`, instance `S` (moteur, modèle, générations en mémoire `S.jobs`, file `S.pending` (liste des
   générations en attente dans l'ordre de calcul, seule source de l'ordre) protégée avec `S.current` par la condition
   `S.turn`, lots `S.lots`, génération en cours `S.current`, sessions privées `S.private_sessions`, noms `S.lan_hosts`
@@ -118,14 +142,19 @@ Dans l'ordre du fichier :
   échouer ce job seul ; dans son `finally`, fichiers d'une génération secrète supprimés, fin de lot, puis
   `S.current` rendu en dernier), `end_of_lot`.
 - **Demandes** : `request_error` (400 pour tout champ que `build_cmd` utilise tel quel, et pour une demande incognito),
+  `model_error` (champ `model` : texte de la table, modèle installé, ce qu'il refuse ; sans recopier la valeur),
+  `request_mode` (mode tel que la génération le garde, celui que `model_error` juge),
   `expand_request` (une demande par image d'un lot : variantes `count`, campagne `campaign`), `draw_seeds` (graines -1
   tirées par le serveur pour être écrites au journal), `active_jobs` (génération en cours puis `S.pending`, lus sous
   `S.turn`), `move_first` (« Passer en tête » : routes `/api/job/<id>/first` et `/api/lot/<id>/first`, réponse par
   `moved_first`), `in_space` (génération de l'espace public ou privé), `queue_ranks` (rang dans l'espace),
-  `queue_position`, `request_inputs`, `job_estimate` (estimation par `estimate.predict`, seule source), `queue_entry`
-  (ligne de `queue` dans `/api/status`), `queue_view` (file vue depuis un espace, `ahead` : travail caché de l'autre
-  espace devant chaque entrée), `new_job` (`input_names` : noms des images d'entrée gardées), `public(job)` (ce que
-  `/api/job/<id>` et `/api/generate` montrent, `mode` et `inputs` compris), `quiet_request`.
+  `queue_position`, `request_inputs` (tailles des références lues dans leur en-tête), `job_estimate` (estimation par
+  `estimate.predict`, seule source, avec les coefficients, `rmin` et l'intervalle des aperçus du modèle de la
+  génération ; `as_qwen` : comme une génération de Qwen), `queue_entry` (ligne de `queue` dans `/api/status`, avec la
+  clé `model`),
+  `queue_view` (file vue depuis un espace, `ahead` : travail caché de l'autre espace devant chaque entrée, le travail
+  privé compté comme du Qwen vu de l'espace public), `new_job` (`input_names` : noms des images d'entrée gardées),
+  `public(job)` (ce que `/api/job/<id>` et `/api/generate` montrent, `mode` et `inputs` compris), `quiet_request`.
 - **HTTP** : `class Server` (file de 128 connexions : la galerie en ouvre une par miniature ; `handle_error` : une
   connexion coupée, `cut_connection`, donne une ligne neutre, sans pile d'appels), `class H` : `log_request` (n'écrit
   que les requêtes en erreur), `log_message` (tait les routes de `QUIET_ROUTES` d'après leur chemin, par
@@ -140,16 +169,29 @@ Dans l'ordre du fichier :
 - **Démarrage** : `exclude_from_backup` (Mac : `jobs/` hors de Time Machine), `setup_state`, `restrict_new_files`
   (masque 0o077 posé en tête de `main()` et de `tools/calibrate.py` : tout fichier créé ensuite, sd-cli compris, pour le
   seul compte du serveur), `close_folders` (dossiers du serveur créés avant le masque, fermés en 0o700 au lancement),
+  `remove_leftovers` (restes d'un job privé ou incognito après un arrêt brutal, image privée à moitié rangée ou jetée),
   `main()` (options ; `--enter` : `open_entry` puis sortie, sans serveur ; code d'accès par `setup_access` à chaque
-  lancement, `--lan`, Tailscale, ménage de `jobs/`, PNG cachés rendus par `restore_hidden_images`, threads ; navigateur
-  ouvert par `open_browser`, hors `--no-browser`). Le banc n'exécute pas `main()` : il pose lui-même `S.access_code`
-  (`ACCESS_CODE`), et `call()` envoie le cookie d'accès pour le Mac aussi ; le pilote d'interface connecte chaque page
+  lancement, `--lan`, Tailscale, ménage de `jobs/`, sorties cachées rendues par `restore_hidden_images`, threads ;
+  navigateur ouvert par `open_browser`, hors `--no-browser`). Le banc n'exécute pas `main()` : il pose lui-même
+  `S.access_code` (`ACCESS_CODE`), et `call()` envoie le cookie d'accès pour le Mac aussi ; le pilote d'interface
+  connecte chaque page
   de `chrome.phonePage()` au banc direct (un banc relayé : `bench.login(page)`) ; `bench.enter()` du pilote demande à
   `tests/ui/serve.py` un jeton et sa page, comme `--enter`. `tools/make_shortcut.py` :
   `mac_command` (texte de `Chambre noire.command` : interface déjà lancée, `launch.py --enter`), `mac`, `windows`.
 
-`tools/estimate.py` : modèle de coût des durées (`predict`, `ref_px`, `prefix_cache`, `make_sample`, `class Store`
-pour `tools/calibration.json`).
+`tools/estimate.py` : modèle de coût des durées (`predict`, `ref_px`, `tokens`, `release_number`, seule lecture du
+format `master-NNN-hash` du marqueur, `prefix_cache`, `make_sample`, `class Store` pour `tools/calibration.json`, dont
+`add` écrit sous `file_lock` (verrou entre processus de `calibration.json.lock`, attente `LOCK_WAIT` ; sans lui sur
+un système de fichiers qui ne le connaît pas, `NO_LOCK`), met le fichier sur le disque avant le renommage (`sync_fd`,
+`sync_dir`, copies de celles de `launch.py`) ; un contenu qui ne se lit pas (`Unreadable`) est mis de côté,
+`calibration.json.illisible-<date>`, une autre version ou une erreur du disque lèvent sans rien toucher ;
+`record_calib` pose `job["measured"]`, que `tools/calibrate.py` vérifie) ;
+`PRIORS` (Qwen), `H3_PRIORS` (MiniMax H3) et `VIDEO_PRIORS` (vidéo), réunis par modèle dans `FAMILIES` (valeurs
+de départ, cache de préfixe `kv`, poids `rw` et petit côté minimal `rmin` des références) ; une vidéo compte ses
+images (`frames`) dans `tokens`, `predict` et `make_sample` (champ `F` de la mesure), et `fit` ne tire ni `a` et `b`
+ni `o` d'une mesure de vidéo qui lit une image de départ sans la chronométrer (liste `timed`).
+`tools/calibrate.py` : générations de calibration, `RUNS` (Qwen), `H3_RUNS` (`--model h3`) et `VIDEO_RUNS`
+(`--model video`, sortie `.webp`), hors de la file (`run_job`).
 
 ## `tools/ui/index.html` : l'interface (HTML, CSS et JavaScript, sans dépendance ni build)
 
@@ -190,9 +232,27 @@ dernier bloc, après le HTML.
   celles de l'espace privé (`#privCreateSheet`, `#privUnlockSheet`, `#privCodeSheet`…).
 - **JavaScript**, sections dans l'ordre :
   - « valeurs fixes » : `log` et `renderLog` (journal du panneau Moteur, `logLines` : une ligne écrite dans l'espace
-    privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` ; estimation
-    (`refPx`, `inputsFor`, `parts` : copies de `estimate.py`) ; réglages `opt` (`localStorage` `qwen-opt`),
-    `refreshChoices` (exemple du champ, `PLACEHOLDERS`, grille `#setGrid`) ; nature de la demande lue dans la saisie :
+    privé en sort à la sortie), `RATIOS`, `RES`, `STEPS`, `PREVIEW_EVERY`, `MAX_REFS` ; `applyEstimates` (`E` :
+    coefficients de Qwen, `estimates` ; `EM` : ceux de chaque modèle, `model_estimates`, `null` devant un serveur qui
+    ne les envoie pas), `coefsOf` (coefficients d'un modèle, ceux de Qwen à défaut) ; estimation (`refPx`, `refMin`,
+    `inputsFor`, `parts` : copies de `estimate.py`) ; réglages `opt` (`localStorage` `qwen-opt`, dont
+    `model`, la clé du dernier modèle choisi), `refreshChoices` (exemple du champ, `PLACEHOLDERS`, ligne « Modèle »
+    `#modelRow`, ligne « Étapes » `#stepRow`, grille `#setGrid`) ; modèles installés : `modelList` (liste `models` de
+    `/api/status`, posée par `applyModels` ; `null` devant un serveur qui ne l'envoie pas), `modelShown` (ligne
+    « Modèle » montrée à partir de deux modèles), `modelSel` (modèle de la saisie : le dernier choisi s'il est
+    installé, sinon Qwen ; `null` sans ligne, la demande part alors sans champ `model`), `fixedSteps` et `chosenSteps`
+    (étapes imposées par le modèle, sinon celles choisies), `previewEvery` (intervalle des aperçus du modèle),
+    `isH3` et `drawAllowed` (Dessiner permis : le modèle prend le masque ; grisé avec MiniMax H3 et la vidéo, refusé
+    par `drawFrom`) ; vidéo : `videoModel` (modèle choisi qui a des durées et des tailles, `frames` et `sizes` du
+    statut), `videoOpt` (réglages retenus, `opt.video` : durée, taille, format, écrits dans `qwen-opt` une fois
+    choisis), `videoFrames`, `videoDims` (taille au format choisi : Petite, la plus petite du Mac ; Normale, la plus
+    grande), `videoSettingsFor` (ceux d'une image, pour « Reprendre »), `durationLabel`, `maxRefs` (une image jointe
+    avec la vidéo, son image de départ ; lignes `#videoRows` : `#durOpts`, `#vsizeOpts`, `#vfmtOpts`, à la place du
+    format, de la résolution, des étapes, des images et de l'aperçu, classe `video` de `#setSheet`) ; aide des images
+    selon le modèle (`REF_HINT`, `H3_REF_HINT`, `H3_CAMP_HINT`, posée par
+    `renderInputs`) et mention de l'édition MiniMax H3 `#h3Note` (`H3_EDIT_NOTE` et l'estimation du moment, par
+    `refreshChoices`) ; nature
+    de la demande lue dans la saisie :
     `inputKind` (`t2i` sans image d'entrée, `edit` avec, `mask` dessin actif : `drawOn`), `singleImage`, `campaignShown`
     (interrupteur proposé à partir de 2 images), `inCampaign`, `variants` ; brouillon unique `qwen-prompt` (dans
     `init` : reprise une fois des anciens `qwen-<onglet>_prompt`).
@@ -249,7 +309,8 @@ dernier bloc, après le HTML.
     jamais réaffecter `src` d'une image visible à la main : elle garderait l'image d'avant à l'écran jusqu'au chargement
     de la nouvelle (`tests/check.py` refuse `$('vImg').src=…` et ses pareilles, `IMAGE_IDS`).
   - « bouton Avant » : `beforeFile` (règle de l'image comparable, seule source : `edit` à une image d'entrée, `mask` →
-    `init.png`), `beforeShown` (bouton montré, image privée comprise, masqué sur une image privée pendant « Sortir » :
+    `init.png` ; jamais sur une vidéo), `beforeShown` (bouton montré, image privée comprise, masqué sur une image privée
+    pendant « Sortir » :
     `leavingPrivate`), `reaimBefore` (cadres revisés : « Sortir » demandé ou refusé, dans `privLock`), `aimBefore`
     (cadre visé sur une image : visionneuse dans `openViewer`,
     carte du dessus dans `renderPile`, son entrée chargée en avance), `placeBefore` (cadre posé sur le contenu affiché
@@ -287,8 +348,8 @@ dernier bloc, après le HTML.
     de la page seulement ; `pollJobs` chaque seconde ; une privée « inconnue » quitte la page sans message), `finish`
     (fin d'une génération : ses aperçus en route abandonnés, publique ou privée, avant l'oubli d'une privée, la pile
     relue, l'échec gardé pour sa carte, l'annulée retirée), `drop` (retire une
-    génération de la page) ; bouton `#go` ; reprise : `followQueue` (suit des entrées de la file), `resumeOwn`
-    (générations normales de
+    génération de la page) ; bouton `#go` ; reprise : `followQueue` (suit des entrées de la file, temps d'étape et de
+    décodage de leur modèle par `timesOf`), `resumeOwn` (générations normales de
     ce navigateur, après un rechargement et au retour dans l'espace public), `resume`, `adoptPrivate` (dans l'espace
     privé, toutes les générations privées actives de la file, `adopted` : pas lancées par la page, qui ne les fait pas
     oublier).
@@ -338,7 +399,8 @@ dernier bloc, après le HTML.
     après une lecture réussie ; `histAsk` : rev de la lecture en cours, pas relancée pour le même ; `histSeq` : une
     réponse dépassée est ignorée ; rien pendant « Sortir » ; visionneuse ouverte recalée sur la liste relue),
     `renderGallery` (redessinée seulement si les tirages changent, `histShown` ; état vide avec le logo et « Aller au
-    Labo »), `openViewer`, `stepViewer`,
+    Labo »), `openViewer` (sur une vidéo, `isVideoItem` : ni Éditer `#vEdit` ni Dessiner `#vDraw`, Copier `#vCopy`
+    grisé), `stepViewer`,
     `closeViewer` et `emptyViewer` (contenu vidé après le fondu de fermeture, ou tout de suite à la sortie de l'espace
     privé), raccourcis du PC (écouteur `keydown` juste avant celui de la visionneuse : → et ← sur la pile par
     `sortTop`, Z et Ctrl/⌘ + Z par `undoDiscard`, Ctrl/⌘ + Entrée dans `#prompt` par `#go` ; rien pendant une saisie,
@@ -350,14 +412,18 @@ dernier bloc, après le HTML.
     sans défilement ni bouton activé ; champs : `FORM_FIELDS`), gestes : `zoomable` (pincer, molette, glisser ; son
     image avant reçoit la même transformation, `twin` ; `resetZoom` pour la visionneuse, `resetInputZoom` pour les
     images d'entrée).
-  - « partager et copier » ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et `emptyInputs`,
+  - « partager et copier » (le type du fichier partagé est celui du fichier servi : WebP d'une vidéo ; noms tirés
+    de l'extension réelle, `extOf`, `stemOf`) ; « images d'entrée » : `openInputs`, `showInput`, `closeInputs` et
+    `emptyInputs`,
     `inputAction`, `addEditImage` (« Éditer ») et `drawFrom` (« Dessiner », confirmation s'il y avait des images) ;
     « Reprendre » : `resumeFrom` (saisie remplacée, confirmation si elle n'est pas vide), `resumeImages` (images
     d'entrée selon le mode, `RESUME_FILES` : demande gardée `req`, sinon galerie), `canResume` (bouton `#vResume`),
-    `settingsFor` (format, résolution et étapes qui redonnent l'image) ; « Relancer » (visionneuse `#vAgain`, carte
+    `settingsFor` (format, résolution et étapes qui redonnent l'image ; `resumeFrom` remet aussi son modèle,
+    `modelOfImage`, avant le dessin) ; « Relancer » (visionneuse `#vAgain`, carte
     d'échec `data-again`) : `keptRequest` (demande gardée : l'image seule), `againFrom` (reconstruite de
-    l'image sinon), `canAgain`, `relaunch` (graine et espace du moment ; estimation), puis `launch` (envoi commun, rien
-    d'une demande privée pendant « Sortir », avec
+    l'image sinon, avec son modèle lu par `modelOfImage` : clé de version → modèle, inconnue → celui des Réglages,
+    et les étapes que ce modèle impose), `canAgain`, `relaunch` (graine et espace du moment ; estimation), puis `launch`
+    (envoi commun, rien d'une demande privée pendant « Sortir », avec
     « Révéler » : suivi, `accepted` (vidage de la saisie de « Révéler », champ replié), message, haut du Labo), `again`
     (un geste à la fois ; rien pendant « Sortir », `exiting()`, comme « Révéler » `#go`) ;
     actions de la visionneuse : `viewerAction` (comme `inputAction`, `viewerShare`, `viewerCopy`, `downloadLot` et les
@@ -428,15 +494,20 @@ invariants ».
 
 - **Une génération** : `worker()` exécute les jobs un par un via `run_job()`, qui construit la ligne de commande
   (`build_cmd`), lit la sortie de sd-cli ligne à ligne et en tire l'étape, la phase et les durées (`PROGRESS_RE`,
-  lignes « … completed, taking x s ») qui alimentent la calibration. Les jobs vivent en mémoire (`S.jobs`) et ne
+  lignes « … completed, taking x s ») qui alimentent la calibration. Une barre d'avancement n'est une étape qu'entre
+  « get_learned_condition completed » et « sampling completed », et si son total est le nombre d'étapes demandé (sauf
+  une image d'origine retouchée à `strength` moins de 1, dont le moteur ne calcule qu'une part) : MiniMax H3 et la
+  vidéo impriment d'autres barres à la lecture d'une image et au décodage. Les jobs vivent en mémoire (`S.jobs`) et ne
   survivent pas à un redémarrage.
 - **Fichiers** : dossier de travail `jobs/<id>/` (images d'entrée, aperçus, `sd-cli.log`, et l'image tant qu'elle se
   calcule ; les 20 derniers gardés au lancement), image finale `outputs/.pile/<id>_<mode>.png` (la pile, à trier),
-  une ligne par image dans `outputs/journal.jsonl`. Garder (`/api/keep`) déplace le seul PNG vers `outputs/` (les
-  tirages, dont toutes les images d'avant la pile) ; miniatures (`outputs/.thumbs/`) et images d'entrée
-  (`outputs/.inputs/<image>/`) sont rangées par nom d'image et ne bougent pas. Les tirages (`/api/history`) et la pile
-  (`/api/pile`) sont les PNG de leur dossier croisés avec le journal (`images_in`). Les images d'entrée (`init.png`,
-  `ref_N.png`) sont copiées du dossier de travail en fin de job (`save_inputs`, et au démarrage pour les dossiers
+  une ligne par image dans `outputs/journal.jsonl`. Une sortie est un `.png`, ou un `.webp` (vidéo en WebP animé),
+  reconnue par `output_name` partout où une image se liste, se sert ou s'efface. Garder (`/api/keep`) déplace le seul
+  fichier vers `outputs/` (les tirages, dont toutes les images d'avant la pile) ; miniatures (`outputs/.thumbs/`) et
+  images d'entrée (`outputs/.inputs/<radical>/`) sont rangées par radical et ne bougent pas. Les tirages
+  (`/api/history`) et la pile (`/api/pile`) sont les sorties de leur dossier croisées avec le journal (`images_in`).
+  Les images d'entrée (`init.png`, `ref_N.png`) sont copiées du dossier de travail en fin de job (`save_inputs`, et
+  au démarrage pour les dossiers
   encore présents). Jeter (`/api/discard`, une image de la pile) et Supprimer (`/api/delete`, un tirage) effacent tout
   (`delete_output`), ligne du journal comprise. Toute écriture du journal et tout tri passent sous `JOURNAL_LOCK`
   (`to_pile`, `sort_image`), et chacun augmente `S.rev`. Une génération annulée (en cours ou en file) ne laisse
@@ -506,9 +577,11 @@ invariants ».
   fin. Une demande `"incognito": true` (mode retiré, d'une page d'avant) est refusée (400) sans rien écrire, journal
   du serveur compris (`/api/generate` est tue). Au lancement sur Mac, `exclude_from_backup` exclut `jobs/` de Time
   Machine.
-- **Estimation des durées** : `tools/estimate.py` (`predict`, priors par moteur, mesures par `"<moteur>/<modèle>"`
-  dans `tools/calibration.json`, filtrées sur la release de sd.cpp installée lue dans `sdcpp/<moteur>/.installed`). Les
-  coefficients partent vers l'interface par `/api/status`.
+- **Estimation des durées** : `tools/estimate.py` (`predict`, priors par moteur et par famille de modèle, mesures par
+  `"<moteur>/<clé de version>"` dans `tools/calibration.json`, chaque modèle sous les clés de ses versions, filtrées
+  sur la release de sd.cpp installée lue dans `sdcpp/<moteur>/.installed`). `record_calib` range la mesure d'une
+  génération normale ou de calibration (jamais d'une privée) sous la version de sa génération (`job_model`). Les
+  coefficients partent vers l'interface par `/api/status` (`estimates` : Qwen ; `model_estimates` : chaque modèle).
 
 ## Pièges de l'interface
 
@@ -538,9 +611,22 @@ invariants ».
 Registre des constantes et formules recopiées d'un côté à l'autre : une modification se fait des deux côtés
 (`CODING_STANDARDS.md`).
 
-- `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()` et `ref_px()` de `estimate.py` (jetons de
-  16×16 px, arrondi à 32) : formule et coefficients.
-- `PREVIEW_EVERY = 5` côté interface égale le défaut `preview_interval` de `build_cmd`.
+- `parts()`, `refPx` et `inputsFor` de `index.html` recopient `predict()`, `tokens()` et `ref_px()` de `estimate.py`
+  (jetons de 16×16 px, arrondi à 32, références comptées `rw` fois, petit côté porté à `rmin`, images d'une
+  vidéo `frames` comptées dans la séquence et le décodage, champ `frames` de `inputsFor`) : formule et coefficients ;
+  `coefsOf` y lit `rw` et `rmin` envoyés avec les coefficients (`FAMILIES`), absents pour Qwen (1 et 0).
+- Les clés de `MODEL_TABLE` sont recopiées dans `index.html` : `qwen` (modèle d'une demande sans champ `model`) pour
+  le défaut de `opt.model`, le repli de `modelSel`, la ligne de Qwen mise à part dans la feuille Moteur et le modèle
+  d'une demande relancée sans `model` (`relaunch`) ; `h3` dans `isH3` (aide `<Picture N>` et mention de l'édition,
+  propres à MiniMax H3) ; les clés de version (`DIFFUSION`, `H3_DIFFUSION`, `VIDEO_DIFFUSION`) dans
+  `VERSION_MODELS`, que lisent `modelOfImage`, `isVideoItem` et `privExt` (nom en `.webp` d'une vidéo privée).
+- « Une vidéo n'a ni aperçu ni référence » (`preview` de `MODEL_TABLE`, lu par `job_estimate` et `build_cmd` ;
+  `refs`, lu par `model_error`) est recopié dans `index.html`, où une vidéo se reconnaît à son champ `frames` :
+  `timesOf` (sans référence), `relaunch` (sans aperçu), `inputsFor` (`videoModel`, sans référence).
+- Les 24 images par seconde de la vidéo (`--fps 24` de `MODEL_TABLE`) donnent ses durées affichées
+  (`durationLabel` : 56, 73 et 124 images, « 2 s », « 3 s », « 5 s »).
+- `PREVIEW_EVERY = 5` côté interface égale le défaut `preview_interval` de `build_cmd` (`preview_every`, quand le
+  modèle n'impose pas le sien).
 - La longueur minimale du code privé (`MIN_PRIVATE_CODE`, 8) est aussi vérifiée dans `index.html` (feuilles
   privées).
 - Palette de la lumière inactinique (fond, surface, filets, texte papier, accent ambre, halo, erreur, grain, icône
@@ -554,15 +640,18 @@ Registre des constantes et formules recopiées d'un côté à l'autre : une modi
   icône du manifeste dans `PUBLIC_FILES`.
 - Pas une copie : l'estimation de chaque génération de la file (`job_estimate`, pour `queue_entry` et le travail caché
   `ahead`) appelle `estimate.predict` ; l'estimation de « Relancer » (`relaunch`) est approchée (chaque référence
-  comptée à la taille de la sortie, pas de `refPx`).
+  comptée à la taille de la sortie, passée par `refPx` pour le seul `rmin` de son modèle).
 
 ## Tests
 
-`tests/bench.py` (banc : `start`, `call`, `generate`, `wait_job`, `wait_idle`, `wait_until`, `capture_push`),
+`tests/bench.py` (banc : `start`, `call`, `generate`, `wait_job`, `wait_idle`, `wait_until`, `capture_push`,
+`video`, qui installe la vidéo le temps d'un test : le banc part avec Qwen et MiniMax H3),
 `tests/fake_sdcli.py` (faux moteur), `tests/test_*.py`, `tests/check.py` (tous les contrôles), `tests/ui/`
 (`driver.mjs`, `serve.py`, tests `*.test.mjs`). Commandes dans `CLAUDE.md`. Vues du pilote : `PHONE` (celle de
 `phonePage`), `PC` (souris), `TABLET` et `TABLET_WIDE` (tactile), ouvertes par `newPage` et changées sans
-rechargement par `setView` (`applyView`) ; clavier par `keyDown`, `keyUp` et `press`, appui maintenu par `hold`.
+rechargement par `setView` (`applyView`) ; le banc des tests d'interface part avec Qwen seul (`serve.py`), `bench.h3`
+installe ou retire MiniMax H3, `page.oldServer` fait lire un statut sans liste de modèles ; clavier par `keyDown`,
+`keyUp` et `press`, appui maintenu par `hold`.
 Chaque page s'ouvre au premier plan (`Page.bringToFront`) : dans une page cachée derrière un autre onglet, le verrou
 court d'une carte ou d'une image pas encore vue ne compte pas (`onScreen`) ; `topShown`, `made`, `viewPile` et
 `keepPile` la font passer devant, et `page.close` chaque page de l'espace privé avant de l'attendre au repos. Les

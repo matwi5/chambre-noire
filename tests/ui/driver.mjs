@@ -37,6 +37,7 @@
 //                                                // Espace maintenue, répétée par le système (event.repeat), relâchée
 //   await page.typePrompt('texte')               // texte tapé dans le champ du Labo (événement input)
 //   await page.generate('texte')                 // tapé dans le Labo puis « Révéler » : demande acceptée
+//   await page.sentRequest('texte')              // generate, puis la demande envoyée (gardée par la page)
 //   await page.overflowing()                     // éléments visibles qui dépassent de la largeur de la vue
 //   await page.visible('#prompt')                // élément affiché (ni absent, ni masqué, ni sans boîte)
 //   await page.pasteImage()                      // une image de 64×64 collée dans le champ du Labo (Cmd+V)
@@ -60,6 +61,7 @@
 //                                                // expression : SORT_IDLE, VIEWER_SEEN, LOCKS, PRESS, VIEWER_PRESS
 //   await page.stepViewer(1)                     // → dans une visionneuse (-1 : ←), sans tri ; ARROWS : les flèches
 //   await page.postGenerate(`{ prompt: 'x' }`)   // demande envoyée telle quelle par la page : son code HTTP
+//   await page.askShown('Génération longue')     // feuille de question ouverte, de ce titre
 //   await page.pileCards()                       // prompts des cartes dessinées de la pile, du dessus au dessous
 //   await page.emptyPile(bench)                  // Mac et page au repos, puis la pile gardée (repartir de rien)
 //   await page.watchToasts(); …; seenToasts      // messages affichés par la page à partir de l'appel
@@ -80,6 +82,15 @@
 //   await page.canvasInk('#revealCanvas')        // { width, height, ink } : pixels non transparents d'un canevas
 //   await bench.api('/api/pile')                 // réponse JSON d'une route du banc (le Mac, avec le cookie d'accès)
 //   await bench.enter()                          // page d'entrée (jeton à usage unique), comme launch.py --enter
+//   bench.h3(); bench.h3(false)                  // MiniMax H3 installé, ou retiré (le banc part avec Qwen seul :
+//                                                // tests/ui/serve.py) ; la page le voit à son statut suivant
+//   bench.video(); bench.video(false)            // la vidéo installée ou retirée, de même (l'encodeur partagé avec
+//                                                // MiniMax H3 reste à son retrait s'il l'a)
+//   await page.oldServer()                       // la page lit /api/status sans models ni model_estimates, comme un
+//                                                // serveur d'avant MiniMax H3 (jusqu'au prochain chargement)
+//   await page.modelsSeen(2)                     // statut relu tout de suite : la page a lu 2 modèles installés
+//   await page.chooseModel('h3')                 // modèle choisi dans la feuille Réglages (ouverte par la grille,
+//                                                // puis fermée) ; la ligne Modèle doit être montrée
 //   await page.launch('texte', { private: true })   // génération demandée hors de l'interface (autre appareil)
 //   await page.leaks(['mot', 'id'])              // marqueurs restés dans la page (texte, attributs, champs, mémoire)
 //   const bench = await startBench({ relay: true }); await bench.login(page);   // comme le téléphone par Tailscale :
@@ -273,7 +284,7 @@ async function startPython(script, args, what) {
 // pas les pages d'office, pour que la page du code reste visible). stop() arrête tout.
 export async function startBench({ relay = false } = {}) {
   const server = await startPython('serve.py', [], 'serveur du banc');
-  const { url: direct, hold, https, cookie } = JSON.parse(server.first);
+  const { url: direct, hold, https, cookie, h3, video } = JSON.parse(server.first);
   const relayed = relay ? await startPython('relay.py', [direct, https], 'relais du banc')
     .catch(async e => { await server.stop(); throw e; }) : null;
   const url = relayed ? `http://127.0.0.1:${relayed.first.trim()}` : direct;
@@ -283,6 +294,14 @@ export async function startBench({ relay = false } = {}) {
   const macFetch = route => fetch(direct + route, { headers: { Cookie: `${cookie.name}=${cookie.value}` } });
   const entry = relayed ? null : { url, cookie };
   if (entry) directBench = entry;
+  // fichiers d'un modèle posés (vides, comme bench.start()) ou retirés, jamais hors du dossier du banc (une ligne de
+  // serve.py fausse ne touche pas aux vrais modèles) : le serveur les cherche à chaque statut
+  const installModel = (what, list, on) => {
+    const rel = f => path.relative(dir, path.resolve(f));
+    const out = list.filter(f => !rel(f) || rel(f).startsWith('..') || path.isAbsolute(rel(f)));
+    if (out.length) throw new Error(`${what} : chemins hors du banc (${out.join(', ')})`);
+    for (const f of list) if (on) fs.writeFileSync(f, ''); else fs.rmSync(f, { force: true });
+  };
   return {
     url, direct, dir, pids: [server.pid, ...relayed ? [relayed.pid] : []],   // processus du banc (et du relais)
     // attend que le Mac soit au repos : rien en cours ni en file, toutes origines et tous espaces confondus (à faire
@@ -315,6 +334,11 @@ export async function startBench({ relay = false } = {}) {
     async kept(prompt) { return (await (await macFetch('/api/history')).json()).some(it => it.prompt === prompt); },
     // jeton et page d'entrée du banc, comme launch.py --enter : chemin de la page de redirection vers /entrer
     async enter() { return JSON.parse(await server.ask('entrer')).entry; },
+    // MiniMax H3 installé (fichiers vides, comme bench.start()) ou retiré : le serveur les cherche à chaque statut
+    h3(on = true) { installModel('bench.h3', h3, on); },
+    // vidéo installée (ses fichiers vides, encodeur de MiniMax H3 compris) ou retirée (l'encodeur, partagé avec
+    // MiniMax H3, reste s'il l'a)
+    video(on = true) { installModel('bench.video', on ? video : video.filter(f => !h3.includes(f)), on); },
     async stop() { if (directBench === entry) directBench = null; await relayed?.stop(); await server.stop(); },
   };
 }
@@ -557,6 +581,26 @@ async function connect(wsUrl, { closeTab, siblings, tabs = async () => [] }) {
     // requêtes privées de la page en route (fetch vers /api/private/), comptées dans __privInflight dès le chargement
     // du document ; sur un document déjà chargé avant la connexion, à partir de l'appel
     countPrivate() { return page.eval(COUNT_PRIVATE); },
+    // la page a lu n modèles installés (statut demandé tout de suite)
+    async modelsSeen(n) {
+      await page.eval(`refreshStatus()`);
+      await page.waitFor(`(modelList || []).length === ${n}`, { what: `${n} modèle(s) lu(s)` });
+    },
+    // modèle key choisi dans la feuille Réglages, ouverte par la case Modèle de la grille, puis fermée
+    async chooseModel(key) {
+      await page.click(`#setGrid [data-set="modele"]`);
+      await page.click(`#modelOpts [data-k="${key}"]`);
+      await page.eval(`closeSheet()`);
+    },
+    // /api/status lu par la page sans models ni model_estimates (serveur d'avant MiniMax H3), jusqu'au prochain
+    // chargement
+    oldServer() {
+      return page.eval(`(() => { const real = window.fetch;
+        window.fetch = (u, o) => u !== '/api/status' ? real(u, o) : real(u, o).then(async r => {
+          const s = await r.json(); delete s.models; delete s.model_estimates;
+          return new Response(JSON.stringify(s), { status: r.status, headers: r.headers }); });
+        return refreshStatus(); })()`);
+    },
     // espace privé au repos : pile privée lue, aucune requête privée en route (comptées dès le chargement du
     // document), aucune image de l'espace (secretUrl) en cours de décodage (secretLoads), ni demandée et pas encore
     // reçue, attachée ou non (requêtes vues par Chrome), ni sur le point de l'être : image non différée de la page pas
@@ -859,6 +903,8 @@ async function connect(wsUrl, { closeTab, siblings, tabs = async () => [] }) {
     },
     // texte tapé dans le Labo puis « Révéler » : attend la demande acceptée (une génération de plus suivie par la
     // page), le Labo affiché ; une feuille ouverte est d'abord refermée
+    // demande envoyée par « Révéler » après generate(text) : celle que la page garde pour sa génération
+    async sentRequest(text) { await page.generate(text); return page.eval(`pageJobs.at(-1).req`); },
     async generate(text) {
       await page.closeSheet();
       if (await page.eval(`mode`) !== 'labo') await page.tab('labo');
@@ -877,6 +923,11 @@ async function connect(wsUrl, { closeTab, siblings, tabs = async () => [] }) {
         ...${JSON.stringify(extra)} }).then(async r => ({ status: r.status, body: await r.json() }))`);
       if (r.status !== 202) throw new Error(`génération « ${prompt} » refusée : ${r.status} ${JSON.stringify(r.body)}`);
       return r.body;
+    },
+    // feuille de question (ask) ouverte, de ce titre : une confirmation attendue, avant answer(true|false)
+    askShown(title) {
+      return page.waitFor(`openedSheet === $('askSheet') && $('askTitle').textContent === ${JSON.stringify(title)}`,
+        { what: `question « ${title} »` });
     },
     // demande de génération envoyée telle quelle par la page (postJson('/api/generate')) : body, source d'un objet
     // évalué dans la page, dont les champs remplacent ceux par défaut (512×512, 8 étapes, sans aperçu ni image

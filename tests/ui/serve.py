@@ -6,6 +6,11 @@ JSON ({"url": …, "hold": dossier des libérations du faux moteur, voir HOLD da
 requête, le Mac compris}), puis tourne jusqu'à la fermeture de son entrée standard (fin du test, ou test tué) : le
 banc supprime alors son dossier temporaire. Chaque ligne « entrer » reçue crée un jeton et une page d'entrée (comme
 launch.py --enter) et répond {"entry": chemin de la page} sur une ligne (bench.enter() du pilote).
+
+Le banc des tests d'interface part avec Qwen seul, comme une machine sans `setup.py --h3` : les fichiers de MiniMax H3
+que bench.start() pose sont retirés, et leurs chemins vont dans la ligne JSON (« h3 ») ; le pilote les remet ou les
+retire (bench.h3(), dans driver.mjs), et le serveur, qui les cherche à chaque statut, suit. De même pour la vidéo
+(« video », bench.video()), que bench.start() ne pose pas.
 """
 import json, os, sys
 
@@ -13,7 +18,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) 
 import bench  # noqa: E402
 
 url = bench.start()
-print(json.dumps({"url": url, "hold": bench.hold_dir(), "https": bench.HTTPS_HOST,
+h3 = sorted(set(bench.launch.H3_DIFFUSION.values()) | set(bench.launch.H3_FILES.values()))
+# vidéo : ses fichiers, que bench.start() ne pose pas (l'encodeur, partagé avec MiniMax H3, compris)
+video = sorted(set(bench.launch.VIDEO_DIFFUSION.values()) | set(bench.launch.VIDEO_FILES.values()))
+root = os.path.realpath(bench.launch.ROOT)
+outside = [p for p in h3 + video if os.path.commonpath([os.path.realpath(p), root]) != root]
+if outside:                             # une table que bench.start() ne repointe pas : jamais les vrais modèles
+    sys.exit(f"serve.py : fichiers de modèles (MiniMax H3, vidéo) hors du banc ({', '.join(outside)}), rien n'est "
+             "supprimé")
+for path in h3:
+    os.remove(path)
+print(json.dumps({"url": url, "hold": bench.hold_dir(), "https": bench.HTTPS_HOST, "h3": h3, "video": video,
                   "cookie": {"name": bench.launch.ACCESS_COOKIE, "value": bench.S.access_token}}), flush=True)
 for line in sys.stdin:                  # « entrer » : jeton et page d'entrée du banc, comme launch.py --enter
     if line.strip() == "entrer":

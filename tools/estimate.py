@@ -21,9 +21,30 @@ sd.cpp ramène chaque référence à la surface de la sortie (proportions gardé
 (W/16)·(H/16) jetons pour une image de W×H pixels. tools/ui/index.html applique la même formule avec les
 coefficients que /api/status lui envoie : les deux doivent rester identiques.
 
+Chaque modèle a sa famille (FAMILIES) : ses valeurs de départ, le cache de préfixe (Qwen seulement) et deux
+paramètres de ses références, que /api/status envoie avec ses coefficients (absents : ceux de Qwen) :
+
+  rw        poids d'une référence dans les jetons (n = (W·H + rw·références) / 256 / 1024) ; Qwen 1, MiniMax H3 2 ;
+  rmin      petit côté minimal d'une référence telle que le moteur la lit (ref_px) ; Qwen 0, MiniMax H3 1024.
+
+MiniMax H3 garde la forme de la formule de Qwen, sans cache de préfixe ; R reste les pixels réellement lus (encodage,
+lecture par le VAE), seul le temps d'une étape compte chaque référence deux fois.
+
+Vidéo : même formule sur les mégapixels-images, F images de W×H (frames de la demande ; 1 pour une image) :
+
+  n = nt = W·H·F / 256 / 1024,   M = W·H·F / 1e6 (décodage),   I = W·H (l'image de départ, une seule image) ;
+
+sans référence ni cache de préfixe ni aperçu. Une image de départ coûte sa lecture par le VAE vidéo et des étapes un
+peu plus lentes (u·I les estime ensemble). Le moteur ne chronomètre pas cette lecture (aucune ligne
+« encode_first_stage completed ») : elle reste dans le reste « fixe » de la mesure, qui ne compte pas pour o (fit),
+le ralentissement des étapes dans leur temps mesuré ; u garde sa valeur de départ.
+
 Calibration : chaque génération terminée ajoute une mesure à tools/calibration.json (les 40 dernières par moteur et
-par modèle), étiquetée avec la release de sd.cpp qui l'a produite ; seules comptent les mesures de la release
-installée, si bien qu'une mise à jour du moteur repart des valeurs de départ. Les coefficients sont recalculés à partir
+par clé de version : q4, uc-q8, h3-q4, h3-video…), sauf une génération privée (un fichier dont le contenu ne se lit
+pas est mis de côté, renommé calibration.json.illisible-<date>, et le suivant repart à neuf), étiquetée avec la
+release de sd.cpp qui l'a produite ;
+seules comptent les mesures de la release installée, si bien qu'une mise à jour du moteur repart des valeurs de départ.
+Les coefficients sont recalculés à partir
 de ces mesures, par des médianes qui ignorent une génération anormale (machine occupée, premier chargement du modèle
 depuis le disque) :
 - a et b : médiane du temps d'étape par taille de séquence, puis ajustement des deux coefficients dès que deux tailles
@@ -32,8 +53,15 @@ depuis le disque) :
 - e0, e1, u, v, o : médianes des mesures qui les concernent ; les valeurs de départ restent tant qu'aucune mesure
   ne les touche. Avec le cache de préfixe, la première étape d'une édition dure plus que celle d'un texte → image ;
   le surcoût est retiré de o d'après le modèle (préfixe = étape·nr/nt), le reste de l'écart y demeure.
+Une mesure de vidéo qui lit une image de départ sans en chronométrer la lecture (F et I, sans venc) ne compte ni pour
+a et b (ses étapes plus lentes) ni pour o (sa lecture) : u·I, à sa valeur de départ, couvre les deux.
 """
-import json, math, os, re, time
+import contextlib, errno, json, math, os, re, time
+try:
+    import fcntl                       # macOS, Linux
+except ImportError:                    # Windows
+    fcntl = None
+    import msvcrt
 
 # Valeurs de départ par moteur, avant toute mesure sur la machine.
 # Windows : conversion des anciennes valeurs de départ (étape à 512×512 en texte → image et en édition avec une
@@ -45,21 +73,67 @@ PRIORS = {
     # Apple M6 mesuré (Q4_K_M, sd.cpp master-959, encodeur GGUF et VAE sur Metal, cache de préfixe)
     "metal":  {"a": 2.71, "b": 0.284, "e0": 1.3, "e1": 5.2,  "u": 3.4,   "v": 10.4,  "o": 2.3},
 }
-KEEP = 40          # mesures conservées par moteur et par modèle
+# MiniMax H3 (Mac seulement), mesuré sur Apple M6 (Q4_K_M, encodeur 32B Q2_K_M, sd.cpp master-1090, 6 étapes) :
+# travail de la mission, RESULTATS.md de l'essai, lignes citées :
+# - a, b : moindres carrés sur l'erreur relative des quatre temps d'étape en 1024² : 6,2 s sans référence (r1, n = 4),
+#   36 s en 2048² (r2, n = 16), 25 s avec une référence (r3 : 23 à 31 s, n = 12) et 41 s avec deux (r26, n = 20) ;
+#   la formule redonne 6,5, 33,3, 23,1 et 44,7 s ;
+# - e0 = 25 s et e1 = 15 s par référence de 1024² (≈ 1,05 Mpx), valeurs de la spec (r1 et r10 : 23 et 26,9 s ;
+#   r3 et r26 : 54,5 et 54,7 s, l'encodage d'une édition ne croît pas avec le nombre de références mesuré) ;
+# - u : lecture d'une image d'entrée, 215 s pour 1024² (r3, r26 : 429,9 s pour deux) ;
+# - v : décodage, 1,6 s par mégapixel (r4, r20 : 1,5 et 1,6 s en 1024²) ;
+# - o : reste de r1 (71,6 s) une fois ôtés e0, six étapes (6,46 s chacune) et le décodage, 6,2 s.
+H3_PRIORS = {
+    "metal": {"a": 1.4596, "b": 0.03871, "e0": 25.0, "e1": 14.3, "u": 205.0, "v": 1.6, "o": 6.2},
+}
+# Vidéo MiniMax H3 (Mac seulement), mesurée sur Apple M6 (modèle vidéo Q4_K_M, LoRA turbo, 4 étapes, sd.cpp
+# master-1090, sans son sauf v4, faite avec le son) : spec de la mission, « Avancement et estimations », d'après
+# RESULTATS.md de l'essai :
+# - a, b : moindres carrés sur l'erreur relative des quatre temps d'étape de la spec, en mégapixels-images (MPi) :
+#   9,7 s pour 3 MPi (v7 : 480×288, 22 images, 38,9 s pour 4 étapes), 57 s pour 17 (v9 : 124 images, 227,4 s),
+#   93 s pour 23 (v4 : 864×480, 56 images, 373,0 s), 264 s pour 51 (v10 : 124 images, 1056,2 s) ; la formule redonne
+#   9,3, 62,1, 89,9 et 258,1 s ;
+# - e0 : encodage du prompt par l'encodeur Q4_K_M installé, 62 s (v12 : 62,0 s ; 13 à 20 s avec l'encodeur Q2_K_M des
+#   autres vidéos) ; e1 : sans objet (pas de référence) ;
+# - u : image de départ, 45 s de plus en 480×288 (v8 contre v7 : 111,5 s contre 66,3 s ; lecture par le VAE et étapes
+#   plus lentes), soit 325 s par mégapixel, portés à la taille de la sortie (non mesuré en 864×480) ;
+# - v : décodage, 1,8 s par MPi (spec ; v10 : 92,3 s pour 51,4 MPi) ;
+# - o : reste de v7, v9 et v12 une fois ôtés encodage, génération et décodage, 1,1 à 1,3 s.
+# v12 (480×288, 73 images, encodeur Q4_K_M, 223,0 s) : la formule redonne 216 s.
+VIDEO_PRIORS = {
+    "metal": {"a": 0.7668, "b": 0.0028, "e0": 62.0, "e1": 0.0, "u": 325.0, "v": 1.8, "o": 1.3},
+}
+# familles de modèles (clés de MODEL_TABLE de tools/launch.py) : valeurs de départ par moteur (celles de metal pour un
+# moteur qui n'en a pas), cache de préfixe possible, paramètres des références (voir l'en-tête)
+FAMILIES = {
+    "qwen": {"priors": PRIORS, "kv": True, "rw": 1, "rmin": 0},
+    "h3": {"priors": H3_PRIORS, "kv": False, "rw": 2, "rmin": 1024},
+    "video": {"priors": VIDEO_PRIORS, "kv": False, "rw": 1, "rmin": 0},   # sans référence
+}
+KEEP = 40          # mesures conservées par moteur et par clé de version
+LOCK_WAIT = 10     # secondes d'attente au plus du verrou de calibration.json (Store.add)
 PATCH_PX = 16 * 16  # pixels par jeton du transformeur
 LEGACY_ENGINE = "master-890-74988b2"   # release des mesures enregistrées avant leur étiquetage
 PREFIX_CACHE_FROM = 903                # première release de sd.cpp avec le cache de préfixe (commit 2dc7f54)
 
 
+def release_number(engine):
+    """Numéro d'une release de sd.cpp (« master-1090-8b1e9df » : 1090), 0 si le marqueur est illisible : seule lecture
+    de son format, pour le cache de préfixe et la release minimale d'un modèle (tools/launch.py : model_version, et
+    model_error pour le motif d'un refus)."""
+    m = re.match(r"master-(\d+)-", engine or "")
+    return int(m.group(1)) if m else 0
+
+
 def prefix_cache(engine):
     """Vrai si la release de sd.cpp (par exemple « master-959-d637cfb ») a le cache de préfixe de Qwen-Image 2.1."""
-    m = re.match(r"master-(\d+)-", engine or "")
-    return bool(m) and int(m.group(1)) >= PREFIX_CACHE_FROM
+    return release_number(engine) >= PREFIX_CACHE_FROM
 
 
-def tokens(w, h, refs=()):
-    """(nt, n) : jetons de la sortie et de toute la séquence (sortie + références), par paquets de 1024."""
-    return w * h / PATCH_PX / 1024, (w * h + sum(refs)) / PATCH_PX / 1024
+def tokens(w, h, refs=(), rw=1, frames=1):
+    """(nt, n) : jetons de la sortie (frames images de w×h : une vidéo) et de toute la séquence (sortie + références,
+    chacune comptée rw fois), par paquets de 1024."""
+    return w * h * frames / PATCH_PX / 1024, (w * h * frames + rw * sum(refs)) / PATCH_PX / 1024
 
 
 def step_cost(c, nt, n):
@@ -68,10 +142,14 @@ def step_cost(c, nt, n):
     return c["a"] * p + c["b"] * p * n
 
 
-def ref_px(rw, rh, w, h):
-    """Pixels d'une référence de rw×rh telle que sd.cpp la donne au modèle pour une sortie de w×h."""
+def ref_px(rw, rh, w, h, rmin=0):
+    """Pixels d'une référence de rw×rh telle que sd.cpp la donne au modèle pour une sortie de w×h : ramenée à la surface
+    de la sortie, puis, si rmin, portée à rmin pixels de petit côté au moins (MiniMax H3)."""
     vw = math.sqrt(w * h * rw / rh)
     vh = vw * rh / rw
+    if rmin and min(vw, vh) < rmin:
+        k = rmin / min(vw, vh)
+        vw, vh = vw * k, vh * k
     snap = lambda x: max(32, int(math.floor(x / 32 + 0.5)) * 32)
     return snap(vw) * snap(vh)
 
@@ -84,11 +162,14 @@ def median(xs):
     return xs[k // 2] if k % 2 else (xs[k // 2 - 1] + xs[k // 2]) / 2
 
 
-def make_sample(job, engine=LEGACY_ENGINE):
-    """Mesure d'une génération terminée (dictionnaire de tools/launch.py) par la release engine, ou None s'il manque
-    une durée."""
+def make_sample(job, engine=LEGACY_ENGINE, family="qwen"):
+    """Mesure d'une génération terminée (dictionnaire de tools/launch.py) par la release engine, avec la formule de la
+    famille de son modèle, ou None s'il manque une durée. Une vidéo (frames dans sa demande) compte ses images dans n,
+    nt et M, et les note dans F."""
+    fam = FAMILIES[family]
     r = job["req"]
     w, h, steps = int(r["width"]), int(r["height"]), int(r["steps"])
+    frames = int(r.get("frames") or 1)
     enc, samp, vae = job.get("encode_seconds_net"), job.get("sampling_seconds"), job.get("vae_seconds")
     if not (enc and samp and vae and steps):
         return None
@@ -99,14 +180,17 @@ def make_sample(job, engine=LEGACY_ENGINE):
         times = times[1:]                     # le premier pas charge les poids sur le GPU : compté dans « fixe »
     step = median(times) if times else max(0.01, (samp - previews * vae) / steps)
     venc = job.get("venc_seconds") or 0.0
-    nt, n = tokens(w, h, refs)
-    kv = prefix_cache(engine)
+    nt, n = tokens(w, h, refs, fam["rw"], frames)
+    kv = fam["kv"] and prefix_cache(engine)
     prefix = step * (n - nt) / nt if kv else 0.0      # première étape : calcul du préfixe texte + références
     over = job["seconds"] - enc - venc - vae * (1 + previews) - steps * step - prefix
-    return {"w": w, "h": h, "steps": steps, "n": round(n, 4), "nt": round(nt, 4), "kv": kv,
-            "R": round(sum(refs) / 1e6, 4), "I": round(init / 1e6, 4), "M": round(w * h / 1e6, 4),
-            "step": round(step, 3), "enc": round(enc, 2), "venc": round(venc, 2), "vae": round(vae, 2),
-            "over": round(over, 2), "sd": engine, "t": int(time.time())}
+    sample = {"w": w, "h": h, "steps": steps, "n": round(n, 4), "nt": round(nt, 4), "kv": kv,
+              "R": round(sum(refs) / 1e6, 4), "I": round(init / 1e6, 4), "M": round(w * h * frames / 1e6, 4),
+              "step": round(step, 3), "enc": round(enc, 2), "venc": round(venc, 2), "vae": round(vae, 2),
+              "over": round(over, 2), "sd": engine, "t": int(time.time())}
+    if r.get("frames"):
+        sample["F"] = frames
+    return sample
 
 
 def fit(samples, prior, kv=False):
@@ -116,10 +200,13 @@ def fit(samples, prior, kv=False):
     c["kv"] = kv
     if not samples:
         return c
+    # vidéo (F) avec une image de départ lue sans chronométrage (pas de venc) : ses étapes plus lentes et sa lecture
+    # sont dans u·I (valeur de départ) ; ni a et b ni o ne les prennent. Les mesures d'une image comptent toutes.
+    timed = [s for s in samples if not (s.get("F") and s.get("I") and not s.get("venc"))]
     # étape = a·p + b·p·n, avec p = n, ou p = nt (jetons de la sortie) avec le cache de préfixe ; les mesures
     # antérieures à l'étiquetage n'ont ni nt ni cache de préfixe
     groups = {}                                # tailles (p, n) à ±6 % près
-    for s in samples:
+    for s in timed:
         p, n = (s["nt"] if s.get("kv") else s["n"]), s["n"]
         groups.setdefault((round(math.log2(p) * 6), round(math.log2(n) * 6)), []).append((p, n, s["step"]))
     pts = [tuple(median([v[i] for v in g]) for i in range(3)) for g in groups.values()]
@@ -136,9 +223,11 @@ def fit(samples, prior, kv=False):
             a, b = (sx * syy - sy * sxy) / det, (sy * sxx - sx * sxy) / det
         if a is None or a < 0 or b < 0:        # mesures incohérentes : repli sur la forme des valeurs de départ
             a = b = None
-    if a is None:
+    if a is None and pts:
         k = median([t / (prior["a"] * p + prior["b"] * p * n) for p, n, t in pts])
         a, b = prior["a"] * k, prior["b"] * k
+    if a is None:                              # aucune mesure d'étape utilisable : valeurs de départ
+        a, b = prior["a"], prior["b"]
     c["a"], c["b"] = round(a, 4), round(b, 5)
     plain = [s for s in samples if not s["R"]]
     if plain:
@@ -150,42 +239,160 @@ def fit(samples, prior, kv=False):
     if vin:
         c["u"] = round(median([s["venc"] / (s["R"] + s["I"]) for s in vin]), 2)
     c["v"] = round(median([s["vae"] / s["M"] for s in samples]), 2)
-    c["o"] = round(max(0.0, median([s["over"] for s in samples])), 2)
+    if timed:
+        c["o"] = round(max(0.0, median([s["over"] for s in timed])), 2)
     return c
 
 
-def predict(c, w, h, steps, refs=(), init_px=0, previews=0):
-    """Durée estimée (s) avec les coefficients c ; même formule que parts() dans tools/ui/index.html."""
-    R, I, M = sum(refs) / 1e6, init_px / 1e6, w * h / 1e6
-    nt, n = tokens(w, h, refs)
+def predict(c, w, h, steps, refs=(), init_px=0, previews=0, frames=1):
+    """Durée estimée (s) avec les coefficients c ; même formule que parts() dans tools/ui/index.html. frames : images
+    d'une vidéo (1 pour une image) ; init_px : pixels de l'image de départ, une seule image."""
+    R, I, M = sum(refs) / 1e6, init_px / 1e6, w * h * frames / 1e6
+    nt, n = tokens(w, h, refs, c.get("rw", 1), frames)
     step = step_cost(c, nt, n)
     prefix = step * (n - nt) / nt if c.get("kv") else 0.0
     return c["o"] + c["e0"] + c["e1"] * R + c["u"] * (R + I) + prefix + steps * step + (1 + previews) * c["v"] * M
 
 
+# erreurs de flock qui disent que le système de fichiers ne connaît pas le verrou (volume réseau, exFAT) : on écrit
+# alors sans lui, comme avant qu'il existe, plutôt que de perdre chaque mesure
+NO_LOCK = {errno.ENOLCK, errno.ENOTSUP, errno.EOPNOTSUPP, errno.EINVAL}
+
+
+@contextlib.contextmanager
+def file_lock(path):
+    """Verrou exclusif entre processus, tenu par le système sur le fichier path (créé vide au besoin, jamais supprimé :
+    le verrou tombe avec le processus qui le tient, même tué). Seul un verrou tenu ailleurs se réattend, LOCK_WAIT
+    secondes au plus, puis lève TimeoutError ; un système de fichiers sans verrou (NO_LOCK) laisse passer sans lui ;
+    toute autre erreur lève. Windows : premier octet du fichier par msvcrt.locking, dont toute erreur compte pour un
+    verrou tenu ailleurs (branche non essayée sur le Mac)."""
+    end = time.monotonic() + LOCK_WAIT
+    with open(path, "a+b") as f:
+        held = True
+        while True:
+            try:
+                if fcntl:
+                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                else:
+                    f.seek(0)
+                    msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                break
+            except OSError as e:
+                if fcntl and e.errno in NO_LOCK:
+                    held = False
+                    break
+                if fcntl and e.errno not in (errno.EWOULDBLOCK, errno.EAGAIN, errno.EACCES):
+                    raise
+                if time.monotonic() >= end:
+                    raise TimeoutError(f"{os.path.basename(path)} : verrou tenu par un autre processus") from e
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            if held and fcntl:
+                fcntl.flock(f, fcntl.LOCK_UN)
+            elif held:
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+
+
+def sync_fd(fd):
+    """Attend que le fichier ou le dossier ouvert soit sur le disque (F_FULLFSYNC sur macOS, fsync ailleurs), comme
+    sync_fd de tools/launch.py : une coupure de courant ne laisse pas calibration.json vide derrière un renommage."""
+    if fcntl and hasattr(fcntl, "F_FULLFSYNC"):
+        try:
+            return fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
+        except OSError:
+            pass
+    os.fsync(fd)
+
+
+def sync_dir(d):
+    """Met sur le disque le renommage fait dans le dossier d (sans effet là où un dossier ne s'ouvre pas : Windows)."""
+    try:
+        fd = os.open(d, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        sync_fd(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+class Unreadable(ValueError):
+    """calibration.json présent, mais son contenu ne se lit pas (pas du JSON en UTF-8, ou pas des mesures)."""
+
+
 class Store:
-    """Mesures conservées dans tools/calibration.json, par « moteur/modèle »."""
+    """Mesures conservées dans tools/calibration.json, par « moteur/clé de version » (« metal/uc-q8 »,
+    « metal/h3-q4 ») ; chaque modèle ne lit et n'ajoute que sous les clés de ses versions."""
 
     def __init__(self, path):
         self.path = path
         self.samples = self.read()
 
-    def read(self):
+    def read(self, strict=False):
+        """Mesures du fichier ; absent ou de l'ancien format (sans version), vide. strict : au lieu de compter pour
+        vide, lève Unreadable pour un contenu qui ne se lit pas, ValueError pour une autre version (un format plus
+        récent) et OSError pour une erreur du disque."""
+        name = os.path.basename(self.path)
         try:
-            d = json.load(open(self.path, encoding="utf-8"))
-        except Exception:
-            d = {}
+            with open(self.path, "rb") as f:
+                raw = f.read()
+        except FileNotFoundError:
+            return {}
+        except OSError:
+            if strict:
+                raise
+            return {}
+        try:
+            d = json.loads(raw.decode("utf-8"))
+            if not isinstance(d, dict) or not isinstance(d.get("samples", {}), dict):
+                raise ValueError("pas des mesures")
+        except ValueError as e:                    # JSON, UTF-8 (UnicodeDecodeError) ou forme
+            if strict:
+                raise Unreadable(f"{name} illisible ({e})") from e
+            return {}
+        if "version" in d and d["version"] != 2:
+            if strict:
+                raise ValueError(f"{name} : version {d['version']!r} inconnue")
+            return {}
         # l'ancien format (moyennes par moteur, sans version) est ignoré : la calibration repart de zéro
         return d.get("samples", {}) if d.get("version") == 2 else {}
 
     def add(self, backend, model, sample):
-        self.samples = self.read()             # tools/calibrate.py a pu écrire pendant que le lanceur tournait
-        key = f"{backend}/{model}"
-        self.samples[key] = (self.samples.get(key, []) + [sample])[-KEEP:]
-        tmp = self.path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"version": 2, "samples": self.samples}, f, indent=1)
-        os.replace(tmp, self.path)
+        """Ajoute une mesure sous « backend/model » (les KEEP dernières). Le serveur et tools/calibrate.py écrivent le
+        même fichier : tout se fait sous le verrou de <fichier>.lock, relu sous lui (l'autre a pu écrire), puis remplacé
+        d'un coup par un fichier temporaire propre au processus, mis sur le disque avant le renommage. Un fichier dont
+        le contenu ne se lit pas est mis de côté (renommé <fichier>.illisible-<date>, jamais supprimé) et l'ajout
+        repart d'un fichier neuf ; une autre version, une erreur du disque ou un verrou qui ne vient pas lèvent sans
+        rien toucher : des mesures lisibles ne sont jamais remplacées par la seule nouvelle."""
+        with file_lock(self.path + ".lock"):
+            try:
+                samples = self.read(strict=True)
+            except Unreadable:
+                aside = f"{self.path}.illisible-{time.strftime('%Y%m%d-%H%M%S')}"
+                if os.path.lexists(aside):
+                    raise
+                os.rename(self.path, aside)
+                samples = {}
+            key = f"{backend}/{model}"
+            samples[key] = (samples.get(key, []) + [sample])[-KEEP:]
+            tmp = f"{self.path}.{os.getpid()}.tmp"
+            try:
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump({"version": 2, "samples": samples}, f, indent=1)
+                    f.flush()
+                    sync_fd(f.fileno())
+                os.replace(tmp, self.path)
+                sync_dir(os.path.dirname(os.path.abspath(self.path)))
+            except BaseException:
+                with contextlib.suppress(OSError):
+                    os.remove(tmp)
+                raise
+        self.samples = samples
 
     def current(self, backend, model, engine):
         """Mesures de ce moteur et de ce modèle faites par la release engine de sd.cpp."""
@@ -194,5 +401,13 @@ class Store:
     def count(self, backend, model, engine):
         return len(self.current(backend, model, engine))
 
-    def coefficients(self, backend, model, engine):
-        return fit(self.current(backend, model, engine), PRIORS.get(backend, PRIORS["vulkan"]), prefix_cache(engine))
+    def coefficients(self, backend, model, engine, family="qwen"):
+        """Coefficients de la version model, ajustés sur ses mesures, à partir des valeurs de départ de sa famille ;
+        une autre famille que Qwen y ajoute ses paramètres de références (rw, rmin)."""
+        fam = FAMILIES[family]
+        priors = fam["priors"]
+        prior = priors.get(backend) or priors.get("vulkan") or priors["metal"]
+        c = fit(self.current(backend, model, engine), prior, fam["kv"] and prefix_cache(engine))
+        if family != "qwen":
+            c.update(rw=fam["rw"], rmin=fam["rmin"])
+        return c

@@ -314,3 +314,43 @@ test('« Éditer » une image de la pile : image ajoutée à la saisie, brouillo
   assert.equal(await draft(), 'texte public');
   page.assertNoErrors();
 });
+
+// Modèle de l'image (ticket 07 de MiniMax H3) : « Reprendre » le remet dans les Réglages (avant le dessin), sans
+// toucher aux étapes choisies quand le modèle impose les siennes ; « Éditer » garde celui des Réglages. MiniMax H3
+// installé le temps de ces tests seulement
+test('« Reprendre » remet le modèle de l\'image dans les Réglages ; « Éditer » garde celui des Réglages', async () => {
+  bench.h3();
+  try {
+    await fresh();
+    await page.modelsSeen(2);
+    assert.equal(await page.postGenerate(`{ mode: 'edit', prompt: 'zr13 h3', model: 'h3', steps: 6,
+      ref_images: [${ref('#c02020')}] }`), 202);
+    assert.equal(await page.postGenerate(`{ mode: 'mask', prompt: 'zr13 masque', init_image: ${ref('#30a050')},
+      mask_image: ${ref('#ffffff')}, ref_images: [${ref('#808080')}], steps: 40 }`), 202);
+    await bench.idle();
+    await page.eval(`opt.steps = 'medium'; saveOpt(); refreshChoices()`);
+    await view('zr13 h3');
+    await page.click('#vResume');
+    await page.waitFor(`mode === 'labo' && inputImages.length === 1`, { what: 'image MiniMax H3 reprise' });
+    assert.deepEqual(await page.eval(`[modelSel().key, opt.model, opt.steps]`), ['h3', 'h3', 'medium'],
+      'modèle de l\'image, étapes choisies gardées');
+    assert.equal(await page.eval(`JSON.parse(localStorage.getItem('qwen-opt')).model`), 'h3', 'retenu par la page');
+
+    await page.eval(`inputImages.length = 0; $('prompt').value = ''; renderInputs(); refreshChoices()`);
+    await view('zr13 masque');                       // une image de Qwen en masque, MiniMax H3 choisi
+    await page.click('#vResume');
+    await page.waitFor(`mode === 'labo' && inputImages.length === 1`, { what: 'masque repris' });
+    assert.deepEqual(await page.eval(`[modelSel().key, drawOn, opt.steps]`), ['qwen', true, 'max'],
+      'Qwen remis avant le dessin, ses étapes reprises');
+
+    await page.eval(`drawOn = false; inputImages.length = 0; $('prompt').value = ''; renderInputs(); refreshChoices()`);
+    await page.chooseModel('h3');
+    await view('zr13 masque');
+    await page.click('#viewer .v-acts .act');       // Éditer
+    await page.waitFor(`mode === 'labo' && inputImages.length === 1`, { what: 'image ajoutée par Éditer' });
+    assert.equal(await page.eval(`modelSel().key`), 'h3', 'Éditer change le modèle des Réglages');
+    page.assertNoErrors();
+  } finally {
+    bench.h3(false);
+  }
+});

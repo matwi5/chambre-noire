@@ -12,7 +12,11 @@
 // d'ouverture finies (deux images d'animation, puis plus rien en cours ni en attente) ; une rangée par taille et par
 // version. Renvoie le chemin de la planche. Vues d'état, des scénarios tenus le temps des captures : avant (bouton
 // Avant tenu sur la carte du dessus, au doigt ou à la souris selon la taille), encours (carte en cours avec la
-// pastille « +1 en attente », générations retenues par HOLD=planche, relâchées après les captures).
+// pastille « +1 en attente », générations retenues par HOLD=planche, relâchées après les captures), reglages (feuille
+// Réglages ouverte, MiniMax H3 installé et choisi) et grille (la même feuille fermée : grille sous le texte), le
+// modèle remis à Qwen après les captures, et edition (MiniMax H3 choisi, deux images jointes : aide, mention,
+// Dessiner grisé ; saisie vidée et Qwen remis après les captures), video (Vidéo choisie, feuille Réglages ouverte) et
+// video-visionneuse (une vidéo finie dans la visionneuse).
 // La rangée « avant » n'emploie que des aides du pilote présentes depuis longtemps (goto, waitFor, eval, generate,
 // keepPile, tab, enterPrivate, send ; bench.release, bench.idle), pour tourner avec le pilote de ce commit ; les
 // tailles passent par applyView, importée du pilote de l'arbre de travail, qui n'emploie que send.
@@ -63,6 +67,32 @@ const CELL_H = 760;
 // vues, dans l'ordre : chacune amène la page dans l'état voulu (en partant de la précédente)
 const VIEWS = {
   labo: async page => { await page.waitFor(READY, { what: 'moteur prêt' }); },
+  // (bench.h3 et modelList n'existent pas dans un commit d'avant la ligne Modèle : son banc a MiniMax H3 d'office)
+  reglages: async (page, bench) => {
+    bench.h3?.();
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`typeof modelList === 'undefined' || (modelList || []).length > 1`, { what: 'deux modèles' });
+    await page.eval(`opt.model = 'h3'; refreshChoices(); openSheet('setSheet')`);
+    return { after: () => page.eval(`closeSheet()`) };
+  },
+  edition: async (page, bench) => {
+    bench.h3?.();
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`typeof modelList === 'undefined' || (modelList || []).length > 1`, { what: 'deux modèles' });
+    await page.eval(`closeSheet(); opt.model = 'h3'; refreshChoices()`);
+    for (let k = 0; k < 2; k++) await page.eval(`(async () => { const dt = new DataTransfer(),
+      c = document.createElement('canvas'); c.width = c.height = 64; const b = await new Promise(r => c.toBlob(r));
+      dt.items.add(new File([b], 'image.png', { type: 'image/png' }));
+      $('prompt').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true })); })()`);
+    await page.waitFor(`inputImages.length === 2`, { what: 'deux images jointes' });
+    await page.eval(`renderInputs(); refreshChoices(); $('refs').scrollIntoView()`);
+    return { after: () => page.eval(`inputImages.length = 0; opt.model = 'qwen'; saveOpt(); renderInputs();
+      refreshChoices()`) };
+  },
+  grille: async page => {
+    await page.eval(`opt.model = 'h3'; refreshChoices(); closeSheet()`);
+    return { after: () => page.eval(`opt.model = 'qwen'; saveOpt(); refreshChoices()`) };
+  },
   pile: async page => {
     await page.generate('planche : une image dans la pile');
     await page.waitFor(`pileItems.length > 0 && (img => img && img.complete && img.naturalWidth > 0)
@@ -101,6 +131,27 @@ const VIEWS = {
   visionneuse: async page => {
     await page.eval(`openViewer(0, histItems)`);
     await page.waitFor(`$('viewer').classList.contains('on') && $('vImg').complete`, { what: 'visionneuse' });
+  },
+  // vidéo choisie, feuille Réglages ouverte (bench.video et videoModel n'existent pas avant la vidéo : la rangée
+  // « avant » montre la feuille de ce commit)
+  video: async (page, bench) => {
+    bench.video?.();
+    await page.eval(`closeViewer()`);
+    await page.tab('labo');
+    await page.eval(`refreshStatus()`);
+    await page.waitFor(`typeof videoModel === 'undefined' || (modelList || []).some(m => m.key === 'video')`,
+      { what: 'vidéo installée' });
+    await page.eval(`opt.model = 'video'; refreshChoices(); openSheet('setSheet')`);
+    return { after: () => page.eval(`closeSheet()`) };
+  },
+  // une vidéo finie, dans la visionneuse (avant la vidéo : une image du modèle choisi)
+  'video-visionneuse': async page => {
+    await page.generate('planche : une vidéo');
+    const at = `pileView().findIndex(it => it.prompt === 'planche : une vidéo')`;
+    await page.waitFor(`${at} >= 0`, { what: 'vidéo dans la pile', timeout: 30000 });
+    await page.eval(`openViewer(${at}, pileView())`);
+    await page.waitFor(`$('viewer').classList.contains('on') && $('vImg').complete`, { what: 'visionneuse' });
+    return { after: () => page.eval(`closeViewer(); opt.model = 'qwen'; saveOpt(); refreshChoices()`) };
   },
   prive: async page => {
     await page.eval(`closeViewer()`);

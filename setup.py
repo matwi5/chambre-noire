@@ -5,6 +5,9 @@ Windows : venv\Scripts\python.exe setup.py [options]   ·   macOS (Apple Silicon
     setup.py              # installation complète (≈ 15 Go à télécharger)
     setup.py --q8         # + modèle Q8_0, plus fidèle que Q4_K_M (≈ 7,6 Go de plus)
     setup.py --uc         # + variante communautaire du modèle (uc-q4, et uc-q8 avec --q8)
+    setup.py --h3         # Mac : + MiniMax H3, modèle Q4_K_M avec son encodeur et son VAE (≈ 30,8 Go de plus)
+    setup.py --h3-q8      # Mac : + MiniMax H3 en Q8_0 (≈ 21,4 Go, plus encodeur et VAE, 19,4 Go, s'ils manquent)
+    setup.py --h3-video   # Mac : + vidéo MiniMax H3, modèle, VAE et LoRA (≈ 18,6 Go, plus l'encodeur s'il manque)
     setup.py --cuda       # Windows : + moteur CUDA pour carte NVIDIA (≈ 900 Mo de plus)
     setup.py --no-cpu     # Windows : sans le moteur de secours CPU
     setup.py --no-calibrate  # sans les générations de calibration de fin d'installation
@@ -23,8 +26,10 @@ PY = r"venv\Scripts\python.exe" if WINDOWS else "venv/bin/python"
 SHORTCUT = "Chambre noire.lnk" if WINDOWS else "Chambre noire.command"
 
 # --- moteur stable-diffusion.cpp (versions testées, épinglées par moteur) ------------------------
-# Windows reste sur master-890 ; le Mac passe à master-959, qui charge les poids en --mmap sur Metal, y rend le VAE
-# rapide et ajoute le cache de préfixe de Qwen-Image 2.1 (les étapes d'une édition ne recalculent plus les références).
+# Windows reste sur master-890. Le Mac est passé à master-959, qui charge les poids en --mmap sur Metal, y rend le VAE
+# rapide et ajoute le cache de préfixe de Qwen-Image 2.1 (les étapes d'une édition ne recalculent plus les références),
+# puis à master-1090, qui fait aussi tourner MiniMax H3 et sa vidéo (Qwen y a été vérifié en texte vers image, édition
+# et masque avec aperçus ; ses mesures de durée repartent de zéro, comme à chaque changement de release).
 SDCPP_WIN = "master-890-74988b2"
 SDCPP = {   # backend -> (release, archives à extraire dans sdcpp/<backend>/ ; empreintes : API GitHub de la release)
     "vulkan": (SDCPP_WIN, [("sd-master-74988b2-bin-win-vulkan-x64.zip", "744c8f817c66ecfd02fbb9dc8b122e1f29f7240db1f6086dfde2669403c5d896")]),
@@ -32,8 +37,8 @@ SDCPP = {   # backend -> (release, archives à extraire dans sdcpp/<backend>/ ; 
     "cuda":   (SDCPP_WIN, [("sd-master-74988b2-bin-win-cuda12-x64.zip", "e9b86c2166aaf3a89f3e13326312d34b79ec1a2b61101d0ccff2805e7ee7b269"),
                            ("cudart-sd-bin-win-cu12-x64.zip",           "fe20366827d357c00797eebb58244dddab7fd9a348d70090c3871004c320f38d")]),
     # macOS : binaire universel (arm64 + x86_64) compilé avec Metal
-    "metal":  ("master-959-d637cfb", [("sd-master-d637cfb-bin-Darwin-macOS-26.6.2-arm64.zip",
-                                       "535b5eccae1d7c81a20466b41433f062d64130e5513fd069006cdd6401dc4ce5")]),
+    "metal":  ("master-1090-8b1e9df", [("sd-master-8b1e9df-bin-Darwin-macOS-26.7.2-arm64.zip",
+                                        "dcf8fcd492a0d7c89eab61a662a393df082f7b81d53a21855e957d389f4d2528")]),
 }
 SDCPP_URL = "https://github.com/leejet/stable-diffusion.cpp/releases/download/{tag}/{name}"
 
@@ -68,6 +73,50 @@ TE_GGUF = (QWEN_VL + "Qwen3VL-8B-Instruct-Q8_0.gguf", "models/text_encoders/Qwen
 TE_VISION = (QWEN_VL + "mmproj-Qwen3VL-8B-Instruct-F16.gguf", "models/text_encoders/mmproj-Qwen3VL-8B-Instruct-F16.gguf",
              1159029824, "ca524100ebf825c9a870db1c580d03879e0da0ab2541697e2458e64891cf9d38")
 ENCODER = [TE_GGUF, TE_VISION] if MACOS else [TE]
+
+# --- MiniMax H3 (Mac seulement, options --h3 et --h3-q8) : fichiers épinglés et vérifiés de la même façon ---------
+# Modèle de diffusion allégé, quantifié en GGUF par Hearthscale ; encodeur de texte (GGUF Q4_K_M) publié par leejet ;
+# VAE fp16 publié par Comfy-Org. Mêmes clés, noms et dossiers que H3_DIFFUSION et H3_FILES de tools/launch.py.
+HF = "https://huggingface.co/"
+HEARTHSCALE = HF + "Hearthscale/MiniMax-H3-Image-GGUF/resolve/2cd99b1e7307385b61def10c5caf0cbbef3aaaa2/"
+H3_DIFFUSION = {   # version -> (url, chemin local, taille, sha256)
+    "h3-q4": (HEARTHSCALE + "minimax_h3_image_pruned-Q4_K_M.gguf",
+              "models/diffusion_models/minimax_h3_image_pruned-Q4_K_M.gguf", 11429589600,
+              "13fc0add19eaf268ac4ad38704e312c634627feb443ffa89c9a4dce6301926d2"),
+    "h3-q8": (HEARTHSCALE + "minimax_h3_image_pruned-Q8_0.gguf",
+              "models/diffusion_models/minimax_h3_image_pruned-Q8_0.gguf", 21447217248,
+              "311889a1d8e28122c6b9bd1322d7e46e9d56a60bb1b75b269c87f2855c051640"),
+}
+H3_FILES = {   # fichiers communs aux deux versions
+    "vae": (HF + "Comfy-Org/MiniMax-H3-Image/resolve/0bb149f51e3156ed4b90dd45d5620346bfe1df8f/"
+            "vae/minimax_h3_image_vae_fp16.safetensors", "models/vae/minimax_h3_image_vae_fp16.safetensors",
+            1168505312, "d80e9c2e5cfc9844869961ff5a58c9a9e52182df6bfb30b26018dd7f348721af"),
+    "llm": (HF + "leejet/MiniMax-H3-GGUF/resolve/d9c4c6312b4728a68a15a35626d84775a6523783/"
+            "qwen3vl_32b_minimax_h3-Q4_K_M.gguf", "models/text_encoders/qwen3vl_32b_minimax_h3-Q4_K_M.gguf",
+            18218065024, "11e6efe70a57ce7f4838c47bdbd1a1c4b8ce10e2b7747f1b065990b70f4b05fc"),
+}
+H3_OPTIONS = {"h3-q4": "--h3", "h3-q8": "--h3-q8"}   # option de setup.py par version
+
+# --- Vidéo MiniMax H3 (Mac seulement, option --h3-video) : mêmes clés, noms et dossiers que VIDEO_DIFFUSION et
+# VIDEO_FILES de tools/launch.py. Modèle vidéo allégé (GGUF Q4_K_M, leejet), VAE vidéo fp16 (Comfy-Org), LoRA turbo
+# 4 étapes (lightx2v), tous publiés sous la licence de MiniMax H3 ; l'encodeur de texte est celui de MiniMax H3 (un
+# fichier déjà vérifié n'est ni retéléchargé ni rehaché). Le VAE audio n'est pas installé : les vidéos sont muettes.
+VIDEO_DIFFUSION = {
+    "h3-video": (HF + "leejet/MiniMax-H3-GGUF/resolve/d9c4c6312b4728a68a15a35626d84775a6523783/"
+                 "minimax_h3_fl2va_pruned-Q4_K_M.gguf", "models/diffusion_models/minimax_h3_fl2va_pruned-Q4_K_M.gguf",
+                 11420663904, "dd948e08ad0ba3c71bd42f368e283dd82e790f5122a63b276e22a3e0283d0c10"),
+}
+VIDEO_FILES = {
+    "vae": (HF + "Comfy-Org/MiniMax-H3/resolve/54472221d27c695fca9621b0c3ed52f06c4af707/"
+            "vae/minimax_h3_video_vae_fp16.safetensors", "models/vae/minimax_h3_video_vae_fp16.safetensors",
+            5207808496, "7c1f131492e7eddacaac9069a61b81bdd39de5cc96561e677c5eab1cdce5e522"),
+    "llm": H3_FILES["llm"],
+    "lora": (HF + "lightx2v/Minimax-h3-Turbo/resolve/1a4a150fc6707329409eb52e5d75a0e987ac1928/"
+             "minimax_h3_fl2v_turbo_4step_v1.3_768p_comfyui_bf16.safetensors",
+             "models/loras/minimax_h3_fl2v_turbo_4step_v1.3_768p_comfyui_bf16.safetensors",
+             1956193000, "70103fd0d80a947ed4e7fe6f88915863d54ef22c5cab03bd5d2fd649385ffe1e"),
+}
+VIDEO_OPTION = "--h3-video"
 
 
 def human(n):
@@ -216,32 +265,117 @@ def step_config(backends, check_only):
     print(f"[config] backend par défaut : {best}")
 
 
-def step_models(versions, check_only):
+def step_files(entries, check_only, tag="[modèle]"):
+    """Télécharge et vérifie les fichiers épinglés entries ((url, chemin local, taille, sha256)) ; un fichier à la bonne
+    taille et déjà vérifié (marqueur .sha256ok) n'est ni retéléchargé ni rehaché. --check : présence et taille
+    seulement ; renvoie False si un fichier manque."""
     ok = True
-    for url, local, size, digest in [DIFFUSION[v] for v in versions] + ENCODER + [VAE]:
+    for url, local, size, digest in entries:
         dest = P(*local.split("/"))
         label = os.path.basename(local)
         if os.path.exists(dest) and os.path.getsize(dest) == size:
-            print(f"[modèle] {label} : présent ({human(size)})")
+            print(f"{tag} {label} : présent ({human(size)})")
             if check_only:
                 continue
             marker = dest + ".sha256ok"
             if os.path.exists(marker):
                 continue
         elif check_only:
-            print(f"[modèle] {label} : ABSENT")
+            print(f"{tag} {label} : ABSENT")
             ok = False
             continue
         else:
-            print(f"[modèle] {label} : téléchargement ({human(size)})")
+            print(f"{tag} {label} : téléchargement ({human(size)})")
             download(url, dest, size)
         got = sha256(dest)
         if got != digest:
             os.replace(dest, dest + ".corrompu")
-            sys.exit(f"[modèle] {label} : SHA256 incorrect ({got}). Fichier renommé en .corrompu, relancez setup.py.")
+            sys.exit(f"{tag} {label} : SHA256 incorrect ({got}). Fichier renommé en .corrompu, relancez setup.py.")
         open(dest + ".sha256ok", "w").write(digest)
-        print(f"[modèle] {label} : SHA256 conforme")
+        print(f"{tag} {label} : SHA256 conforme")
     return ok
+
+
+def step_models(versions, check_only):
+    return step_files([DIFFUSION[v] for v in versions] + ENCODER + [VAE], check_only)
+
+
+def h3_versions(a):
+    """Versions de MiniMax H3 demandées par --h3 et --h3-q8 (dans l'ordre de H3_DIFFUSION) ; hors de macOS, refus
+    avant toute écriture : son moteur et ses réglages ne sont mesurés que sur Mac."""
+    wanted = [v for v, on in (("h3-q4", a.h3), ("h3-q8", a.h3_q8)) if on]
+    if wanted and not MACOS:
+        sys.exit(f"{' et '.join(H3_OPTIONS[v] for v in wanted)} : MiniMax H3 s'installe sur Mac seulement "
+                 "(Apple Silicon, moteur Metal).")
+    return wanted
+
+
+def video_wanted(a):
+    """--h3-video demandé ; hors de macOS, refus avant toute écriture, comme MiniMax H3."""
+    if a.h3_video and not MACOS:
+        sys.exit(f"{VIDEO_OPTION} : la vidéo MiniMax H3 s'installe sur Mac seulement (Apple Silicon, moteur Metal).")
+    return a.h3_video
+
+
+def step_video(wanted, check_only):
+    """Vidéo MiniMax H3 : son modèle, son VAE, son LoRA turbo et l'encodeur partagé ; sans demande, rien."""
+    if not wanted:
+        return True
+    return step_files(list(VIDEO_DIFFUSION.values()) + list(VIDEO_FILES.values()), check_only, "[Vidéo]")
+
+
+def step_h3(versions, check_only):
+    """MiniMax H3 : les versions données et les fichiers communs (encodeur de texte, VAE) ; sans version, rien."""
+    if not versions:
+        return True
+    return step_files([H3_DIFFUSION[v] for v in versions] + list(H3_FILES.values()), check_only, "[MiniMax H3]")
+
+
+def installed(entry):
+    """Le fichier épinglé entry est là, à sa taille (sans le rehacher, comme --check)."""
+    dest = P(*entry[1].split("/"))
+    return os.path.exists(dest) and os.path.getsize(dest) == entry[2]
+
+
+def started(entries):
+    """Un des fichiers épinglés entries est là, entier ou en cours de téléchargement (.part, repris par l'option)."""
+    return any(os.path.exists(P(*entry[1].split("/")) + suffix) for entry in entries for suffix in ("", ".part"))
+
+
+def h3_summary():
+    """Ligne de --check pour MiniMax H3, et l'option qui le complète (None : rien à compléter ; absent, il est
+    facultatif ; l'encodeur partagé seul, venu de la vidéo, ne le commence pas)."""
+    h3 = [v for v, entry in H3_DIFFUSION.items() if installed(entry)]
+    if h3 and all(installed(entry) for entry in H3_FILES.values()):
+        return f"MiniMax H3 : installé ({', '.join(h3)})", None
+    if not started([*H3_DIFFUSION.values(), *(entry for k, entry in H3_FILES.items() if k != "llm")]):
+        return "MiniMax H3 : non installé (option --h3, ou --h3-q8 pour la version Q8_0)", None
+    option = H3_OPTIONS["h3-q8"] if h3 == ["h3-q8"] else H3_OPTIONS["h3-q4"]
+    return f"MiniMax H3 : incomplet, lancez : {PY} setup.py {option}", option
+
+
+def video_summary():
+    """Ligne de --check pour la vidéo, et l'option qui la complète (None : rien à compléter ; absente, elle est
+    facultative ; l'encodeur partagé seul, venu de MiniMax H3, ne la commence pas)."""
+    entries = [*VIDEO_DIFFUSION.values(), *VIDEO_FILES.values()]
+    if all(installed(entry) for entry in entries):
+        return "Vidéo : installée", None
+    if not started([*VIDEO_DIFFUSION.values(), *(entry for k, entry in VIDEO_FILES.items() if k != "llm")]):
+        return f"Vidéo : non installée (option {VIDEO_OPTION})", None
+    return f"Vidéo : incomplète, lancez : {PY} setup.py {VIDEO_OPTION}", VIDEO_OPTION
+
+
+def model_summary():
+    """--check : ce qui est installé pour chaque modèle. Renvoie les lignes à afficher et les options de setup.py qui
+    complètent un MiniMax H3 ou une vidéo à moitié installés ou à moitié téléchargés (liste vide : rien à
+    compléter ; l'un et l'autre absents sont facultatifs)."""
+    qwen = [v for v, entry in DIFFUSION.items() if installed(entry)]
+    complete = qwen and all(installed(entry) for entry in ENCODER + [VAE])
+    lines = ["Qwen : " + (f"installé ({', '.join(qwen)})" if complete else "incomplet")]
+    if not MACOS:
+        return lines + ["MiniMax H3 : Mac seulement", "Vidéo : Mac seulement"], []
+    (h3_line, h3_option), (video_line, video_option) = h3_summary(), video_summary()
+    return lines + [h3_line, video_line], [o for o in (h3_option, video_option) if o]
 
 
 def step_fix(check_only):
@@ -309,19 +443,35 @@ def step_calibrate(versions, check_only, skip):
     return failed
 
 
-def main():
+def parser():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--q8", action="store_true", help="installer aussi le modèle Q8_0, plus fidèle (≈ 7,6 Go)")
     ap.add_argument("--uc", action="store_true", help="installer aussi la variante communautaire du modèle (uc-q4, "
                     "et uc-q8 avec --q8)")
+    ap.add_argument("--h3", action="store_true", help="Mac : installer aussi MiniMax H3, modèle Q4_K_M avec son "
+                    "encodeur de texte et son VAE (≈ 30,8 Go)")
+    ap.add_argument("--h3-q8", action="store_true", help="Mac : installer aussi MiniMax H3 en Q8_0 (≈ 21,4 Go, plus "
+                    "l'encodeur et le VAE s'ils manquent) ; \"h3\": \"q8\" dans tools/config.local.json le choisit "
+                    "quand les deux versions sont là")
+    ap.add_argument("--h3-video", action="store_true", help="Mac : installer aussi la vidéo courte de MiniMax H3, "
+                    "modèle, VAE vidéo et LoRA turbo (≈ 18,6 Go, plus l'encodeur de MiniMax H3 s'il manque)")
     ap.add_argument("--cuda", action="store_true", help="Windows : installer aussi le moteur CUDA (cartes NVIDIA, ≈ 900 Mo)")
     ap.add_argument("--no-cpu", action="store_true", help="Windows : ne pas installer le moteur de secours CPU")
     ap.add_argument("--no-calibrate", action="store_true", help="ne pas lancer les générations de calibration")
     ap.add_argument("--check", action="store_true", help="vérifier sans rien télécharger")
-    a = ap.parse_args()
+    return ap
+
+
+def main():
+    a = parser().parse_args()
     if not (WINDOWS or MACOS):
         sys.exit("Ce projet cible Windows et macOS (binaires stable-diffusion.cpp de ces systèmes). Voir le README pour Linux.")
-    for d in ("models/diffusion_models", "models/text_encoders", "models/vae", "outputs", "logs", "jobs"):
+    h3, video = h3_versions(a), video_wanted(a)
+    if a.check:                    # comme pour Qwen : --check vérifie aussi les versions présentes
+        h3 += [v for v in H3_DIFFUSION if v not in h3 and os.path.exists(P(*H3_DIFFUSION[v][1].split("/")))]
+        video = video or os.path.exists(P(*VIDEO_DIFFUSION["h3-video"][1].split("/")))
+    for d in ("models/diffusion_models", "models/text_encoders", "models/vae", "models/loras", "outputs", "logs",
+              "jobs"):
         os.makedirs(P(*d.split("/")), exist_ok=True)
     if MACOS:
         backends = ["metal"]
@@ -335,18 +485,32 @@ def main():
         P(*DIFFUSION[v][1].split("/")))))]
     ok = step_engine(backends, a.check)
     ok = step_models(versions, a.check) and ok
+    step_h3(h3, a.check)              # facultatif : son état, à --check, vient de model_summary
+    step_video(video, a.check)        # de même
     ok = step_fix(a.check) and ok
     step_config(backends, a.check)
     step_shortcut(a.check)
     uncalibrated = step_calibrate(versions, a.check, a.no_calibrate) if ok else []
     launch = f"{PY} {os.path.join('tools', 'launch.py')}"
     if a.check:
-        print("\nÉtat : " + ("complet" if ok else f"incomplet, lancez : {PY} setup.py"))
+        lines, options = model_summary()
+        for line in lines:
+            print(f"[modèles] {line}")
+        rerun = " ".join([f"{PY} setup.py", *options])
+        print("\nÉtat : " + ("complet" if ok and not options else f"incomplet, lancez : {rerun}"))
     else:
         print(f"\nInstallation terminée. Démarrage : double-clic sur {SHORTCUT},")
         print(f"ou : {launch}   puis http://127.0.0.1:7860/")
         for v in versions[1:]:
             print(f"Modèle {v} : {launch} --model {v}   (ou \"model\": \"{v}\" dans tools/config.local.json)")
+        if h3:
+            print(f"MiniMax H3 ({', '.join(h3)}) : une demande le choisit par \"model\": \"h3\" ; relancez le "
+                  "serveur si ce script vient de mettre à jour son moteur" + (
+                      " ; version Q8_0 quand les deux sont là : \"h3\": \"q8\" dans tools/config.local.json, puis "
+                      "relancez le serveur" if "h3-q8" in h3 else ""))
+        if video:
+            print("Vidéo : choix « Vidéo » de la ligne Modèle des Réglages (\"model\": \"video\" dans une demande) ; "
+                  "relancez le serveur si ce script vient de mettre à jour son moteur")
         for v in uncalibrated:
             print(f"Calibration du modèle {v} en échec (erreur « [calibration] » plus haut), pour réessayer : "
                   f"{PY} {os.path.join('tools', 'calibrate.py')} --model {v}")

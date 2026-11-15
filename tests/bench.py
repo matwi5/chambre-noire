@@ -3,18 +3,21 @@
   venv/bin/python -m unittest discover -s tests -v
 
 start() importe le serveur, repointe tous ses dossiers vers un dossier temporaire (rien n'est écrit dans le dépôt :
-ni outputs/, ni jobs/, ni journal, ni calibration, ni clé de notification, ni espace privé), y installe le faux sd-cli,
-puis sert launch.H sur 127.0.0.1 avec son thread de calcul. Un seul serveur par processus : l'état du serveur (launch.S)
-est global ; BenchCase attend avant chaque test que la file soit vide et oublie les générations précédentes, l'espace
-privé et ses sessions.
+ni outputs/, ni jobs/, ni journal, ni calibration, ni clé de notification, ni espace privé), y installe de faux
+fichiers de modèle (vides) et le faux sd-cli, avec le marqueur de sa release (ENGINE, dans sdcpp/<moteur>/.installed
+comme setup.py), puis sert launch.H sur 127.0.0.1 avec son thread de calcul. Un seul serveur par processus : l'état
+du serveur (launch.S) est global ; BenchCase attend avant chaque test que la file soit vide et oublie les générations
+précédentes, l'espace privé et ses sessions.
 
 Outils : call() (trois origines : le Mac, par défaut ; remote=True, HTTPS relayé par « tailscale serve »,
 HTTPS_HOST ; wifi=True, http:// direct d'un autre appareil, WIFI_HOST), call_full() (avec les en-têtes),
 generate(), wait_job() (pour un statut final, attend aussi que worker() en ait fini : settled), wait_until(cond),
+video() (la vidéo installée le temps d'un bloc ; le banc part avec Qwen et MiniMax H3),
 wait_idle() (tout le Mac au repos), capture_push() (notifications interceptées ; sent.decided complet après
 wait_idle()), release(nom), journal(), files(), LOG (sorties du serveur). Faux moteur (tests/fake_sdcli.py) : FAIL,
-SLOW[=s], FAILSEED=<n>, HOLD[=nom][@k] dans le prompt (HOLD garde une génération en cours sans dépendre du temps ;
-@k : une fois l'étape k annoncée, aperçus d'avant vus).
+SLOW[=s], FAILSEED=<n>, HOLD[=nom][@k], NOISE, FEWER=<n> dans le prompt (HOLD garde une génération en cours sans
+dépendre du temps ; @k : une fois l'étape k annoncée, aperçus d'avant vus ; NOISE : barres d'avancement qui ne sont
+pas des étapes ; FEWER : moins d'étapes calculées que demandé) ; il échoue quand un fichier de modèle manque.
 """
 import atexit, base64, contextlib, glob, json, os, shutil, signal, sys, tempfile, threading, time, unittest, warnings
 import urllib.error, urllib.request
@@ -29,6 +32,7 @@ ACCESS_CODE = "test-code"
 HTTPS_HOST = "qwen-banc.example.ts.net"             # nom fictif de « tailscale serve » (HTTPS, relayé depuis 127.0.0.1)
 WIFI_HOST = "mac-du-banc.local"                     # nom fictif du Mac sur le Wi-Fi (http:// direct)
 LOG = []                                            # sorties du serveur (print et journal des requêtes), hors de l'écran
+ENGINE = "master-1090-0000000"                      # release du faux moteur, écrite dans son marqueur .installed
 SHOWN = 200                                         # caractères au plus d'une réponse recopiée dans un message d'échec
 _server = None
 
@@ -81,19 +85,27 @@ def start():
     # launch.PROMPT_TYPES_FILE reste le fichier du dépôt : le serveur le lit sans jamais l'écrire
     for d in ("tools", "outputs", "jobs", "logs", "models", "hold"):
         os.makedirs(launch.P(d))
-    for table in (launch.MODELS, launch.DIFFUSION):   # modèles en fichiers vides : /api/status dit le moteur prêt
+    # modèles en fichiers vides (Qwen et MiniMax H3) : /api/status dit le moteur prêt et les modèles installés ; les
+    # tables sont changées en place, MODEL_TABLE les désigne
+    for table in (launch.MODELS, launch.DIFFUSION, launch.H3_DIFFUSION, launch.H3_FILES):
         for k, path in table.items():
             table[k] = launch.P("models", os.path.basename(path))
             open(table[k], "w").close()
+    # vidéo : chemins repointés de même, fichiers posés par video() le temps d'un test (sans eux, /api/status ne la
+    # liste pas, comme sur une machine qui ne l'a pas installée) ; l'encodeur est celui de MiniMax H3
+    for table in (launch.VIDEO_DIFFUSION, launch.VIDEO_FILES):
+        for k, path in table.items():
+            table[k] = launch.P("models", os.path.basename(path))
     ui = os.path.join(os.path.dirname(HERE), "tools", "ui")   # l'interface du dépôt, relue à chaque requête
     try:
         os.symlink(ui, launch.P("tools", "ui"))
     except OSError:                                 # Windows sans droit de créer un lien : copie
         shutil.copytree(ui, launch.P("tools", "ui"))
-    S.backend, S.model, S.engine = launch.PLATFORM_BACKENDS[0], "q4", "master-959-0000000"
+    S.backend, S.model = launch.PLATFORM_BACKENDS[0], "q4"
     S.cfg = {"cfg_scale": 1.0, "extra_args": []}
     S.store = estimate.Store(launch.CALIB)
     install_fake_engine()
+    S.engine = launch.engine_tag(S.backend)         # comme main() : la release lue dans le marqueur
     launch.print = lambda *a, **kw: LOG.append(" ".join(str(x) for x in a))
     launch.H.log_message = lambda self, fmt, *a: None if launch.quiet_request(fmt % a) else LOG.append(fmt % a)
     # code d'accès, que main() pose toujours : tout appareil, le Mac compris, présente le cookie (call, cookie=True)
@@ -110,9 +122,12 @@ def start():
 
 
 def install_fake_engine():
-    """Place le faux moteur là où build_cmd cherche sd-cli : sdcpp/<moteur>/sd-cli (sd-cli.cmd sous Windows)."""
+    """Place le faux moteur là où build_cmd cherche sd-cli : sdcpp/<moteur>/sd-cli (sd-cli.cmd sous Windows), avec le
+    marqueur de sa release (ENGINE), comme setup.py."""
     d = launch.P("sdcpp", S.backend)
     os.makedirs(d)
+    with open(os.path.join(d, ".installed"), "w", encoding="utf-8") as f:
+        f.write(ENGINE + "\n")
     fake = os.path.join(HERE, "fake_sdcli.py")
     if os.name == "nt":                             # non vérifié sous Windows : un .exe ne peut pas être un script
         launch.EXE = "sd-cli.cmd"
@@ -123,6 +138,21 @@ def install_fake_engine():
     with open(exe, "w") as f:
         f.write(f'#!/bin/sh\nQWEN_FAKE_HOLD="{hold_dir()}" exec "{sys.executable}" "{fake}" "$@"\n')
     os.chmod(exe, 0o755)
+
+
+@contextlib.contextmanager
+def video():
+    """La vidéo installée le temps du bloc : ses faux fichiers propres (modèle, VAE vidéo, LoRA) posés à côté des
+    autres, puis retirés, même en cas d'échec ; l'encodeur partagé avec MiniMax H3 reste."""
+    made = [p for p in list(launch.VIDEO_DIFFUSION.values()) + list(launch.VIDEO_FILES.values())
+            if not os.path.exists(p)]
+    for p in made:
+        open(p, "w").close()
+    try:
+        yield
+    finally:
+        for p in made:
+            os.remove(p)
 
 
 def hold_dir():
@@ -374,11 +404,16 @@ def data_url(raw):
     return "data:image/png;base64," + base64.b64encode(raw).decode()
 
 
-def all_files():
-    """Tous les fichiers du dossier du banc (sauf le lien vers l'interface du dépôt), triés."""
+def all_files(hidden=False):
+    """Tous les fichiers du dossier du banc (sauf le lien vers l'interface du dépôt), triés. hidden : aussi ceux dont le
+    nom, ou celui d'un de leurs dossiers, commence par un point (outputs/.pile, .inputs, .thumbs,
+    private/items/.<id>), que glob saute."""
     root = launch.ROOT
-    return sorted(fp for fp in glob.glob(os.path.join(root, "**", "*"), recursive=True)
-                  if os.path.isfile(fp) and not fp.startswith(os.path.join(root, "tools", "ui")))
+    if hidden:
+        found = [os.path.join(d, name) for d, _, names in os.walk(root) for name in names]
+    else:
+        found = glob.glob(os.path.join(root, "**", "*"), recursive=True)
+    return sorted(fp for fp in found if os.path.isfile(fp) and not fp.startswith(os.path.join(root, "tools", "ui")))
 
 
 def files(*pattern):

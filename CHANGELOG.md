@@ -3,6 +3,42 @@
 Les versions suivent [SemVer](https://semver.org/lang/fr/) ; tant que l'application est en 0.x, une version mineure
 peut changer un comportement existant.
 
+## 0.8.0 · 2026-11-15
+
+### Ajouté
+
+- **MiniMax H3 (Mac)** : un second modèle d'image, choisi à chaque génération par la ligne **Modèle** des Réglages
+  (rappelée en tête de la grille) ; texte vers image et édition, 6 étapes fixes, aperçu toutes les 2 étapes. En
+  édition, l'aide dit de désigner les images par `<Picture 1>`, `<Picture 2>`…, une mention prévient du temps et du
+  rendu avec le temps estimé, et Dessiner reste à Qwen. Installation par `setup.py --h3` (ou `--h3-q8`) ; `"h3": "q8"`
+  dans `tools/config.local.json` choisit la version Q8_0.
+- **Vidéo courte muette (Mac)** : choix **Vidéo** de la ligne Modèle, 2, 3 ou 5 s, taille Petite ou Normale, paysage
+  ou portrait, une image de départ facultative ; sortie WebP animée, lue dans la pile et la visionneuse, aussi dans
+  l'espace privé (chiffrée comme une image privée). Installation par `setup.py --h3-video`.
+- **Estimations par modèle** : MiniMax H3 et la vidéo ont leurs valeurs de départ et leur calibration
+  (`tools/calibrate.py --model h3` ou `--model video`).
+- API : champ `model` (`qwen`, `h3`, `video`) et `frames` d'une demande ; `/api/status` liste les modèles installés
+  et leurs limites (`models`, `model_estimates`, `sizes`, `frames`) ; chaque image garde la version de son modèle.
+
+### Modifié
+
+- **Moteur du Mac** : stable-diffusion.cpp passe à la release `master-1090` (relancer `setup.py`, puis le serveur).
+- « Relancer » refait une image avec le modèle qui l'a faite, « Reprendre » remet ce modèle dans les Réglages ; une
+  génération reprise de la file se suit avec les temps de son modèle.
+- Une sortie se reconnaît partout par son extension réelle, PNG ou WebP animé, et les routes exigent son nom exact.
+- `tools/calibration.json` s'écrit sous un verrou et sur le disque avant d'être renommé ; un fichier abîmé est mis de
+  côté au lieu d'être écrasé ; `calibrate.py` échoue quand une mesure n'a pas pu être gardée.
+- `setup.py --check` dit pour chaque modèle s'il est installé, incomplet (avec l'option à relancer) ou absent.
+- **Contrôles** : `check.py --failed` ne rejoue que les tests du dépôt, sous leur nom ; fichiers de contrôle, de
+  preuve et du hook dans un dossier privé du dossier temporaire ; le pilote d'interface dit l'état de la page quand il
+  attend trop, et de nouveaux outils de sonde ; `tests/mutate.py` lit les vrais échecs.
+
+### Corrigé
+
+- L'avancement ne compte plus les barres parasites du moteur (lecture d'une image, décodage) comme des étapes.
+- Effacer une image n'efface plus les images d'entrée qu'une autre sortie partage, et s'arrête sans rien effacer
+  quand un dossier ne se lit pas.
+
 ## 0.7.0 · 2026-10-29
 
 ### Ajouté

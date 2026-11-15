@@ -94,7 +94,7 @@ venv\Scripts\python.exe setup.py
 Sur Mac : `venv/bin/python setup.py`. Ce script, à lancer une seule fois :
 
 - télécharge stable-diffusion.cpp (version épinglée et vérifiée par SHA256) dans `sdcpp\` : versions Vulkan et CPU
-  sous Windows (release `master-890`), version Metal sur Mac (release `master-959`) ; relancé après une mise à jour de
+  sous Windows (release `master-890`), version Metal sur Mac (release `master-1090`) ; relancé après une mise à jour de
   ce dépôt, il remplace un moteur dont la version épinglée a changé ;
 - télécharge les fichiers du modèle depuis Hugging Face dans `models\` (≈ 14,6 Go sous Windows, ≈ 15,1 Go sur Mac)
   et vérifie chacun contre son empreinte SHA256 (voir [Le modèle](#le-modèle)) ;
@@ -122,7 +122,7 @@ venv\Scripts\python.exe setup.py --cuda
 
 Les téléchargements reprennent seuls si la connexion coupe (cinq tentatives), et là où ils s'étaient arrêtés si l'on
 relance la commande. Pour vérifier une installation sans rien télécharger : `venv\Scripts\python.exe setup.py --check`
-(sur Mac : `venv/bin/python setup.py --check`).
+(sur Mac : `venv/bin/python setup.py --check`) ; il dit aussi ce qui est installé pour chaque modèle.
 
 ## Lancement
 
@@ -282,7 +282,9 @@ ajouter `?lite=1` ou `?lite=0` à l'adresse force l'un ou l'autre rendu.
 ### Réglages communs
 
 Sous le texte, une grille de quatre cases résume le format, la taille (la résolution), les étapes et le nombre
-d'images ; un appui sur une case ouvre le panneau **Réglages**. Tous les réglages sont à valeurs fixes :
+d'images ; un appui sur une case ouvre le panneau **Réglages**. Quand un second modèle est installé, une case et une
+ligne **Modèle** s'y ajoutent en tête, et un modèle à étapes fixes (MiniMax H3) retire la case et la ligne **Étapes**
+(voir [Le modèle](#le-modèle)). Tous les réglages sont à valeurs fixes :
 
 | Réglage | Choix | Effet |
 | --- | --- | --- |
@@ -290,7 +292,7 @@ d'images ; un appui sur une case ouvre le panneau **Réglages**. Tous les régla
 | **Résolution** | 360p (512×512) · 540p (768×768) · **720p** (1024×1024, par défaut) · 1080p (1536×1536) · 1440p (2048×2048, 2K natif du modèle) | Nombre de pixels, nommé d'après le format vidéo qui en compte autant (720p : ≈ 0,9 à 1 million de pixels) ; les dimensions exactes, qui dépendent du format, s'affichent en bas du panneau |
 | **Étapes** | Low 8 · Medium 12 · High 20 · XHigh 30 · **Max 40** (par défaut, réglage officiel du modèle) | Finesse des détails ; chaque option affiche le **temps estimé** |
 | **Images** (hors campagne) | **1**, 2, 3 ou 4 | Nombre de variantes du même prompt, chacune avec sa graine, avec ou sans images d'entrée, dessin compris (voir [Créer une image](#créer-une-image-labo)) ; le temps affiché est celui de toutes les images |
-| **Aperçu toutes les 5 étapes** | interrupteur, activé par défaut | Montre l'image en cours de formation ; coût affiché à côté |
+| **Aperçu toutes les 5 étapes** (2 avec MiniMax H3) | interrupteur, activé par défaut | Montre l'image en cours de formation ; coût affiché à côté |
 
 Le bouton **Révéler** affiche le temps estimé. Le navigateur retient les réglages choisis et le texte en cours de
 l'espace public (un seul brouillon).
@@ -311,8 +313,9 @@ de l'ordinateur ou du téléphone.
 La génération en cours de l'espace a sa **carte en cours** dans le Labo : sur le dessus quand la pile est vide, sinon
 juste derrière la pile, réduite à un bandeau au bord de celle-ci (sa vignette, son étape, l'heure de fin prévue et
 le liseré de son avancement). L'image s'y **révèle en pixels** : avant le premier aperçu, des carrés s'allument au
-hasard ; puis chaque aperçu (toutes les 5 étapes) s'affiche en mosaïque de gros carrés, de plus en plus fins à mesure
-que la génération avance, jusqu'à l'image nette qui arrive sur la pile. Sur un téléphone, l'animation est allégée ;
+hasard ; puis chaque aperçu (toutes les 5 étapes, 2 avec MiniMax H3) s'affiche en mosaïque de gros carrés, de plus en
+plus fins à mesure que la génération avance, jusqu'à l'image nette qui arrive sur la pile. Sur un téléphone,
+l'animation est allégée ;
 elle s'arrête si le système demande de réduire les animations. Lancée par la page : l'étape, la phase et l'heure de
 fin prévue (chiffres en chasse fixe), et un bouton d'annulation qui demande confirmation, puis annule la génération
 de la question, ou dit « Déjà terminée » si elle a fini entre-temps (une génération annulée ne laisse aucun fichier :
@@ -471,7 +474,8 @@ image).
 Le bouton **Dessiner**, sous les images d'entrée du Labo, transforme l'unique image d'entrée en dessin :
 
 1. Avec une image, **Dessiner** active le dessin sur elle ; sans image, il fait choisir une image, puis active le
-   dessin. À plusieurs images, il est grisé (« Dessiner se fait sur une seule image »).
+   dessin. À plusieurs images, il est grisé (« Dessiner se fait sur une seule image ») ; avec MiniMax H3 aussi (voir
+   [Le modèle](#le-modèle)).
 2. Peindre en rouge la zone à modifier (taille du pinceau réglable, gomme, bouton pour tout effacer).
 3. Choisir le mode :
    - **Masque** : seule la zone peinte est régénérée, tout le reste est conservé au pixel près ;
@@ -507,7 +511,8 @@ partir de 1024 px) : **Éditer** (ajoute l'image aux images d'entrée du Labo),
 de travail et ligne du journal des générations compris). Le champ de création n'est pas sur les Tirages.
 
 **Reprendre** remet dans le Labo la saisie d'où vient l'image, à la place de la saisie en cours (après confirmation si
-elle n'est pas vide) : son texte, ses réglages (format, résolution, étapes) et ses images d'entrée selon son usage.
+elle n'est pas vide) : son texte, ses réglages (format, résolution, étapes, et son modèle : voir
+[Le modèle](#le-modèle)) et ses images d'entrée selon son usage.
 Une édition revient avec ses références (Campagne éteinte : c'était une seule édition) ; un dessin en masque avec son
 image de départ, Dessiner actif en masque et le tracé vide (la zone peinte n'est pas gardée) ; une annotation revient
 en édition, avec sa référence où le trait rouge est déjà dessiné. Les images d'entrée se lisent dans les Tirages
@@ -520,9 +525,9 @@ dont les Tirages n'ont pas gardé les images d'entrée (images anciennes).
 **Labo**, comme **Révéler** : dans l'espace où l'on est (dans l'espace privé, tout part en privé). Pour une image de la
 pile lancée par la page, c'est la demande qu'elle a gardée (une image d'un lot : cette image seule, sa photo pour une
 campagne), de même pour une carte d'échec. Pour une image des Tirages, ou une image reprise après un
-rechargement, la demande est refaite à partir de l'image : son texte, ses images d'entrée, ses dimensions, ses étapes
-et son usage (une annotation repart en annotation), pour une seule image ; le geste est absent pour un dessin en masque
-(le masque n'est pas gardé avec l'image) et pour une édition dont les images d'entrée ne sont pas connues.
+rechargement, la demande est refaite à partir de l'image : son texte, ses images d'entrée, ses dimensions, ses étapes,
+son modèle et son usage (une annotation repart en annotation), pour une seule image ; le geste est absent pour un dessin
+en masque (le masque n'est pas gardé avec l'image) et pour une édition dont les images d'entrée ne sont pas connues.
 
 Une image ne s'affiche qu'une fois chargée : sa miniature d'abord, puis l'image complète, sans jamais laisser voir un
 instant l'image vue avant (ni celle d'une autre image, ni celle de l'autre espace). Les images voisines de la
@@ -635,7 +640,7 @@ images sont enregistrées. Pour la confidentialité, passez par l'espace privé.
   ouvert) ; une page fermée pendant l'envoi du code annule cet envoi, et revenue, elle demande de retaper le code. Une
   application tuée puis relancée depuis l'écran d'accueil repart sans marque : seule la fermeture de l'espace par le Mac
   au bout de 15 minutes protège ce cas.
-- Dans l'espace privé, **toute génération est privée** (texte → image, édition, dessin) : son image, ses images
+- Dans l'espace privé, **toute génération est privée** (texte → image, édition, dessin, vidéo) : son image, ses images
   d'entrée, sa miniature, son prompt et ses réglages sont chiffrés sur le Mac. Le texte tapé n'est pas retenu par le
   navigateur. Une génération privée lancée va jusqu'au bout et est rangée chiffrée même si l'espace se verrouille avant
   la fin, ou si l'application est fermée ; sa notification est celle d'une image normale (« Image prête »), sans rien
@@ -712,10 +717,11 @@ Ce que cela garantit, et ses limites :
 - rien d'une image privée ne va dans `outputs\`, dans le journal des générations ni dans les mesures de calibration,
   et dans `logs\` rien d'autre que la ligne commune à toutes les générations (« [job] génération terminée », ou celle
   d'un échec ; le journal du moteur part à la poubelle) ;
-- sd-cli ne travaille que sur des fichiers : pendant le calcul, les images d'entrée, les aperçus et le PNG final passent
-  **en clair** par `jobs/private_<identifiant>/`, lisible par le seul compte qui fait tourner le serveur (0o700) et
-  supprimé dès la fin de la génération (et au lancement suivant après un arrêt brutal). Sur un SSD, un fichier supprimé
-  n'est pas effacé de façon sûre. Sur Mac, le dossier `jobs/` est exclu
+- sd-cli ne travaille que sur des fichiers : pendant le calcul, les images d'entrée, les aperçus et le PNG final (le
+  WebP animé d'une vidéo) passent **en clair** par `jobs/private_<identifiant>/`, lisible par le seul compte qui fait
+  tourner le serveur (0o700) et supprimé dès la fin de la génération (et au lancement suivant après un arrêt brutal) ;
+  pour une vidéo, ils y restent le temps de son calcul, jusqu'à une vingtaine de minutes. Sur un SSD, un fichier
+  supprimé n'est pas effacé de façon sûre. Sur Mac, le dossier `jobs/` est exclu
   de Time Machine au lancement de l'interface (`tmutil addexclusion`, sans droits administrateur ; un échec est noté
   dans le journal sans bloquer) ;
 - une image **téléchargée** ou partagée sort de l'espace privé : elle est alors en clair là où elle est enregistrée.
@@ -769,11 +775,115 @@ quantifiée, ce que stable-diffusion.cpp (version `master-890-74988b2`) interpr�
 `tools/fix_int8_te.py` en crée une copie `qwen3vl_8b_int8_convrot_embfix.safetensors` où seule cette table repasse
 en bf16 (dé-rotation Hadamard comprise) ; toutes les autres couches restent en int8. Même taille, même qualité.
 La release `master-959` charge le fichier d'origine sans ce correctif (vérifié sur Mac) ; il deviendra inutile sous
-Windows quand le moteur Windows passera à cette version.
+Windows quand le moteur Windows passera à cette release ou à une plus récente.
 
 **Réglages officiels du modèle** (fiche Qwen) : 40 étapes, guidance 1, sampler Euler, pas de prompt négatif,
 résolution native 2048×2048 (4:3 2400×1792, 3:2 2528×1696, 16:9 2752×1536 et inverses), jusqu'à 10 images de référence.
 L'interface applique ces réglages ; la résolution 1440p correspond exactement aux tailles officielles.
+
+**MiniMax H3 (option, Mac seulement).** `setup.py --h3` installe un second modèle d'image, MiniMax H3 Image, que le
+serveur propose à côté de Qwen ; `setup.py --h3-q8` installe sa version Q8_0. Il n'est ni installé ni utilisé par
+défaut. Ces options sont refusées hors de macOS : son moteur (release `master-1090` de stable-diffusion.cpp, celle
+du Mac) et ses réglages n'ont été essayés que sur Mac. Le serveur le propose dès que ses fichiers sont là, si son
+moteur est déjà en `master-1090` ; sinon, seulement après un redémarrage qui suit `setup.py`, car il lit la release du
+moteur à son lancement. Une demande le choisit par `"model": "h3"` (API locale, voir
+[Fonctionnement technique](#fonctionnement-technique)).
+
+| Fichier | Rôle | Taille | Source |
+| --- | --- | --- | --- |
+| `minimax_h3_image_pruned-Q4_K_M.gguf` (option `--h3`) | Modèle de diffusion MiniMax H3 Image allégé, quantifié 4 bits | 11,4 Go | [Hearthscale/MiniMax-H3-Image-GGUF](https://huggingface.co/Hearthscale/MiniMax-H3-Image-GGUF) |
+| `minimax_h3_image_pruned-Q8_0.gguf` (option `--h3-q8`) | Même modèle quantifié 8 bits | 21,4 Go | idem |
+| `qwen3vl_32b_minimax_h3-Q4_K_M.gguf` | Encodeur de texte, GGUF quantifié 4 bits | 18,2 Go | [leejet/MiniMax-H3-GGUF](https://huggingface.co/leejet/MiniMax-H3-GGUF) |
+| `minimax_h3_image_vae_fp16.safetensors` | Décodeur d'image (VAE), fp16 | 1,17 Go | [Comfy-Org/MiniMax-H3-Image](https://huggingface.co/Comfy-Org/MiniMax-H3-Image), dossier `vae` |
+
+L'encodeur et le VAE servent aux deux versions : `--h3-q8` seul installe le modèle Q8_0 avec eux, sans le Q4_K_M.
+Place à prévoir en plus de celle de Qwen (voir [Prérequis](#prérequis)), autant à télécharger : ≈ 30,8 Go avec
+`--h3`, ≈ 40,8 Go avec `--h3-q8` seul, ≈ 52,3 Go avec les deux versions.
+Quand les deux versions sont là, Q4_K_M sert par défaut, et `"h3": "q8"` dans `tools/config.local.json` choisit
+Q8_0 (lu au lancement du serveur) ; une autre valeur, ou une version absente, retombe sur la version présente.
+MiniMax H3 travaille en 6 étapes fixes, guidance 1, avec un aperçu tous les 2 pas, en texte vers image et en
+édition (images de référence comme avec Qwen) ; il n'accepte ni image de départ, ni masque, ni annotation, ni prompt
+négatif.
+
+Dans l'interface, dès que le Mac propose MiniMax H3, le panneau **Réglages** gagne une première ligne **Modèle**
+(« Qwen », « MiniMax H3 »), rappelée en tête de la grille sous le texte ; le navigateur retient le dernier modèle
+choisi (Qwen à la première ouverture, et tant que le modèle retenu n'est pas installé). Avec MiniMax H3, la ligne
+**Étapes** disparaît (6 étapes) et l'aperçu se fait toutes les 2 étapes ; formats et résolutions restent ceux de Qwen.
+Les temps estimés suivent le modèle choisi (voir [Performances](#performances)).
+Le panneau **Moteur** ajoute une ligne par autre modèle installé, avec sa version (`H3-Q4`, `H3-Q8`).
+Avec MiniMax H3 et au moins une image jointe, l'aide sous les images dit de les désigner dans le texte par
+`<Picture 1>`, `<Picture 2>`… (en campagne, chaque photo est `<Picture 1>`), et une mention avertit que chaque image
+jointe allonge beaucoup le calcul et que le rendu sort plus dur qu'avec Qwen, suivie du temps estimé de la demande.
+**Dessiner** est grisé (« Dessiner se fait avec Qwen »), et **Dessiner** depuis une image est refusé par un message ;
+variantes, campagnes et confirmation au-delà d'une heure restent les mêmes qu'avec Qwen.
+Chaque image garde la version de son modèle (ligne d'informations : `Q4`, `Q8`, `H3-Q4`…). **Relancer** refait la
+demande avec ce modèle, celle que la page a gardée ou celle refaite à partir de l'image (version absente ou de Qwen :
+Qwen ; `H3-Q4`, `H3-Q8` : MiniMax H3 ; autre valeur : le modèle des Réglages, avec ses étapes s'il les impose) ; un
+modèle désinstallé depuis donne le refus du Mac, affiché tel quel. **Reprendre** remet ce modèle dans les Réglages
+(les étapes choisies restent quand il impose les siennes) ; **Éditer** garde celui des Réglages. Avec Qwen
+seul, ou devant un serveur qui n'envoie pas la liste `models` de `/api/status`, la ligne n'apparaît pas et la demande
+de **Révéler** part sans champ `model` ; **Relancer** refaite à partir d'une image envoie le sien dès que le Mac liste
+ses modèles, et toujours pour MiniMax H3.
+
+**Vidéo dans l'interface.** Quand le Mac propose la vidéo, la ligne **Modèle** gagne « Vidéo ». Ce choix remplace
+les lignes **Format**, **Résolution**, **Étapes** et **Images** et l'aperçu par trois lignes : **Durée** (« 2 s »,
+« 3 s », « 5 s »), **Taille** (« Petite », 480×288 ; « Normale », 864×480) et **Format** (paysage ou portrait),
+retenues par le navigateur. Une seule image jointe est acceptée : elle sert d'image de départ, que la vidéo anime ;
+**Dessiner** est grisé et il n'y a ni variantes ni campagne. Pendant le calcul, la carte en cours montre l'étape (sur
+4) et l'heure de fin prévue, sans aperçu. La vidéo finie arrive dans la pile, où elle s'anime en boucle, comme dans la
+visionneuse ; sa vignette des **Tirages** est fixe (sa première image). Elle se garde, se jette et se supprime comme
+une image ; dans la visionneuse, **Éditer** et **Dessiner** n'y sont pas, **Copier** est grisé (le presse-papiers ne
+prend que des images PNG), et **Partager** et **Télécharger** donnent le fichier `.webp`, sous un nom en `.webp`.
+**Relancer** refait la vidéo avec sa durée et son image de départ (durée absente ou inconnue : celle des Réglages),
+et **Reprendre** remet la vidéo, sa durée, sa taille et son format dans les Réglages.
+
+**Licence de MiniMax H3.** Ses poids sont soumis à la licence publiée par MiniMax avec le modèle (fichier `LICENSE`
+du dépôt [MiniMaxAI/MiniMax-H3-Image](https://huggingface.co/MiniMaxAI/MiniMax-H3-Image)). Elle exclut des
+territoires (« Excluded Territories ») : l'Union européenne, le Royaume-Uni, la Corée du Sud et les États-Unis ; elle
+n'est accordée que hors de ceux-ci, et interdit d'utiliser les poids comme les images produites hors du territoire
+qu'elle couvre. Lisez-la avant de lancer `setup.py --h3`.
+
+Empreintes SHA256 vérifiées par `setup.py`, chaque fichier épinglé sur un commit de son dépôt :
+
+```text
+13fc0add19eaf268ac4ad38704e312c634627feb443ffa89c9a4dce6301926d2  minimax_h3_image_pruned-Q4_K_M.gguf
+311889a1d8e28122c6b9bd1322d7e46e9d56a60bb1b75b269c87f2855c051640  minimax_h3_image_pruned-Q8_0.gguf
+11e6efe70a57ce7f4838c47bdbd1a1c4b8ce10e2b7747f1b065990b70f4b05fc  text_encoders/qwen3vl_32b_minimax_h3-Q4_K_M.gguf
+d80e9c2e5cfc9844869961ff5a58c9a9e52182df6bfb30b26018dd7f348721af  vae/minimax_h3_image_vae_fp16.safetensors
+```
+
+**Vidéo (option, Mac seulement).** `setup.py --h3-video` installe le modèle vidéo de MiniMax H3, son décodeur vidéo
+et un LoRA turbo qui ramène le calcul à 4 étapes ; l'encodeur de texte est celui de MiniMax H3, téléchargé seulement
+s'il manque (un fichier déjà vérifié n'est ni retéléchargé ni rehaché). L'option est refusée hors de macOS, pour la
+même raison que `--h3`. Le serveur propose la vidéo dès que ses fichiers sont là, si son moteur est déjà en
+`master-1090` ; sinon, seulement après un redémarrage qui suit `setup.py`. Une demande la choisit par
+`"model": "video"` ; dans l'interface, c'est le choix « Vidéo » de la ligne **Modèle**. `setup.py --check` dit si
+elle est installée, et l'option qui la complète quand un fichier manque.
+
+| Fichier | Rôle | Taille | Source |
+| --- | --- | --- | --- |
+| `minimax_h3_fl2va_pruned-Q4_K_M.gguf` | Modèle vidéo MiniMax H3 allégé, quantifié 4 bits | 11,4 Go | [leejet/MiniMax-H3-GGUF](https://huggingface.co/leejet/MiniMax-H3-GGUF) |
+| `minimax_h3_video_vae_fp16.safetensors` | Décodeur vidéo (VAE), fp16 | 5,21 Go | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3), dossier `vae` |
+| `minimax_h3_fl2v_turbo_4step_v1.3_768p_comfyui_bf16.safetensors` (dans `models/loras/`) | LoRA turbo, 4 étapes | 1,96 Go | [lightx2v/Minimax-h3-Turbo](https://huggingface.co/lightx2v/Minimax-h3-Turbo) |
+| `qwen3vl_32b_minimax_h3-Q4_K_M.gguf` | Encodeur de texte, partagé avec MiniMax H3 | 18,2 Go | [leejet/MiniMax-H3-GGUF](https://huggingface.co/leejet/MiniMax-H3-GGUF) |
+
+Place à prévoir, autant à télécharger : ≈ 18,6 Go si MiniMax H3 est déjà là, ≈ 36,8 Go sinon.
+Limites : des vidéos muettes (le décodeur audio n'est pas installé) de 2, 3 ou 5 secondes à 24 images par seconde, en
+480×288 ou 864×480 (paysage ou portrait), en 4 étapes fixes, guidance 1, depuis un texte ou une image de départ ; ni
+image de référence, ni masque, ni prompt négatif, ni lot, ni aperçu en cours de calcul ; une balise `<lora:…>` écrite
+dans le prompt est refusée (le serveur ajoute celle du LoRA turbo). Sur le Mac des mesures, avec cet encodeur, une
+vidéo de 3 s en 480×288 a pris 3 min 43 s ; une de 5 s en 864×480 prend une vingtaine de minutes (19 min 25 s
+mesurées avec un encodeur plus léger, qui encode le prompt en 14 s au lieu de 62).
+Le modèle vidéo et son décodeur sont soumis à la licence publiée par MiniMax avec eux (fichier `LICENSE` du dépôt
+[MiniMaxAI/MiniMax-H3](https://huggingface.co/MiniMaxAI/MiniMax-H3)), qui exclut les mêmes territoires que celle de
+MiniMax H3 Image ; le LoRA turbo, publié par un tiers (lightx2v) à partir de ce modèle, est sous la même licence.
+Lisez-la avant de lancer `setup.py --h3-video`.
+
+```text
+dd948e08ad0ba3c71bd42f368e283dd82e790f5122a63b276e22a3e0283d0c10  minimax_h3_fl2va_pruned-Q4_K_M.gguf
+7c1f131492e7eddacaac9069a61b81bdd39de5cc96561e677c5eab1cdce5e522  vae/minimax_h3_video_vae_fp16.safetensors
+70103fd0d80a947ed4e7fe6f88915863d54ef22c5cab03bd5d2fd649385ffe1e  loras/minimax_h3_fl2v_turbo_4step_v1.3_768p_comfyui_bf16.safetensors
+```
 
 ## Performances
 
@@ -807,23 +917,50 @@ RTX 4060/4070) : une image 720p de 20 étapes en moins d'une minute.
 - le décodage de l'image, et de chaque aperçu, est proportionnel au nombre de pixels ;
 - s'y ajoute une part fixe : chargement du modèle, premier pas plus lent.
 
+MiniMax H3 garde la même formule, avec ses propres valeurs de départ (mesurées sur Mac) et sans cache de préfixe : le
+temps d'une étape compte chaque image de référence deux fois dans la séquence, et le moteur lit chaque référence à
+1024 pixels de petit côté au moins (lecture coûteuse, plusieurs minutes par image).
+
+La vidéo garde aussi cette formule, sur ses mégapixels-images (largeur × hauteur × nombre d'images) : la séquence
+d'une étape et le décodage comptent toutes les images de la vidéo, l'image de départ ajoute ≈ 45 s en 480×288 (sa
+lecture et des étapes un peu plus lentes ; compté proportionnel à la taille) ; ni référence, ni cache de préfixe, ni
+aperçu. Ses valeurs de départ viennent
+des vidéos mesurées sur Mac : environ 10 s par étape pour 3 mégapixels-images, 57 s pour 17, 93 s pour 23 et 264 s
+pour 51 (4 étapes), 62 s d'encodage, 1,8 s de décodage par mégapixel-image. La page, la file et la carte en cours
+l'estiment ainsi, et la confirmation au-delà d'une heure vaut pour elle comme pour une image.
+
 Les coefficients partent de valeurs propres au moteur (Vulkan, CUDA, CPU, Metal), puis sont ajustés sur les mesures de
-votre machine : les 40 dernières générations par moteur et par modèle, résumées par des médianes, si bien qu'une
+votre machine : les 40 dernières générations par moteur et par version de modèle (`q4`, `q8`, `h3-q4`…), chaque
+modèle sur ses seules mesures, résumées par des médianes, si bien qu'une
 génération anormale (machine occupée, premier chargement du modèle) ne fausse pas l'estimation. Chaque mesure garde
 la version de stable-diffusion.cpp qui l'a produite : après une mise à jour du moteur, les anciennes mesures sont
 ignorées et `setup.py` refait la calibration. Dès que deux tailles
 d'image assez différentes ont été mesurées, a et b sont ajustés séparément, ce qui fiabilise les estimations en haute
 résolution. Pour que ce soit le cas dès la première image, `setup.py` finit par trois courtes générations de
 calibration (texte → image en 512 et 768 px, édition en 512 px) ; `--no-calibrate` les saute et
-`tools/calibrate.py` les relance. Tant qu'aucune mesure n'existe, l'état indique « estimations non calibrées ».
+`tools/calibrate.py` les relance. Tant qu'aucune mesure n'existe, l'état indique « estimations non calibrées » (celles
+de Qwen). MiniMax H3 se calibre à part, par `tools/calibrate.py --model h3` (6 étapes : texte → image en 1024 et 512 px,
+édition en 1024 px, environ 9 minutes sur Mac), que `setup.py` ne lance pas, ni après une mise à jour du moteur ;
+sans cela, ses estimations partent de ses valeurs de départ et s'ajustent à l'usage. La vidéo de même, par
+`tools/calibrate.py --model video` (deux vidéos de 480×288, de 56 et 124 images, environ 9 minutes), ses mesures
+rangées sous `h3-video` ; la lecture de son image de départ n'étant pas chronométrée par le moteur, son coût garde sa
+valeur de départ, et une vidéo faite avec une image de départ n'ajuste ni le temps des étapes ni la part fixe. Un
+serveur déjà lancé ne prend
+les mesures de `tools/calibrate.py` qu'à sa relance ou après sa prochaine génération mesurée (finie, hors de l'espace
+privé).
 Pendant une génération, le temps restant se fonde sur la moyenne des derniers pas. Les mesures sont stockées dans
-`tools/calibration.json` ; supprimez ce fichier pour repartir de zéro (l'ancien format est ignoré).
+`tools/calibration.json` ; supprimez ce fichier pour repartir de zéro (l'ancien format est ignoré). Le serveur et
+`tools/calibrate.py` l'écrivent chacun à son tour, sous un verrou (`tools/calibration.json.lock`) ; un fichier
+illisible (abîmé, modifié à la main) est mis de côté, renommé `tools/calibration.json.illisible-<date>`, jamais
+supprimé, et les mesures repartent d'un fichier neuf ; un fichier d'un format plus récent n'est jamais touché, et
+`tools/calibrate.py` s'arrête alors en échec.
 
 Pour gagner du temps sans perte de qualité : branchez le portable sur secteur et choisissez le mode d'alimentation
 « Performances optimales » dans les paramètres Windows.
 
-**Mac à puce Apple.** Mesures sur une puce **Apple M6, 32 Go de mémoire unifiée**, moteur Metal (release
-`master-959`), encodeur GGUF, modèle Q4_K_M :
+**Mac à puce Apple.** Mesures sur une puce **Apple M6, 32 Go de mémoire unifiée**, moteur Metal, encodeur GGUF,
+modèle Q4_K_M, faites avec la release `master-959`, avant le passage à `master-1090` (une génération de 1024×1024
+en 40 étapes y a pris une durée voisine) :
 
 | Génération | Durée mesurée |
 | --- | --- |
@@ -882,7 +1019,7 @@ xattr -dr com.apple.quarantine sdcpp/metal
 
 **Mac : l'édition est longue avant la première étape.** L'installation date d'avant l'encodeur GGUF : l'encodeur int8
 tourne alors sur le processeur, à ≈ 2 min par référence. Relancez `venv/bin/python setup.py`, qui installe le moteur
-`master-959` et l'encodeur GGUF.
+épinglé (`master-1090`) et l'encodeur GGUF.
 
 **Mac : en résolution 1440p avec des références, la mémoire est juste.** Sur 32 Go, une édition 2048×2048 fonctionne :
 le moteur libère l'encodeur après usage et décode l'image par tuiles (avertissements « retrying with spatial tiling »
@@ -912,8 +1049,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
     s'adapte aux cartes à 8 Go ;
   - CPU : `--backend cpu`, secours sans GPU ;
   - Metal (Mac) : `--backend MTL0 --fa --mmap --params-backend te=disk --llm_vision <mmproj>`, avec
-    stable-diffusion.cpp `master-959` et l'encodeur GGUF. Choix mesurés sur une puce M6 : l'encodeur int8 n'a pas de
-    noyau Metal (sd-cli plante s'il est placé sur le GPU), l'encodeur GGUF y lit une référence 512×512 en ≈ 3 s ; le VAE
+    stable-diffusion.cpp `master-1090` et l'encodeur GGUF. Choix mesurés sur une puce M6 avec `master-959`, repris
+    tels quels sur `master-1090` (qui annonce `--fa` déprécié ; non remesuré) : l'encodeur int8 n'a pas de noyau
+    Metal (sd-cli plante s'il est placé sur le GPU), l'encodeur GGUF y lit une référence 512×512 en ≈ 3 s ; le VAE
     décode 11 fois plus vite sur Metal que sur le processeur (3 s contre 37 s en 512×512) ; `--fa` (flash attention
     partout, tour vision comprise) évite une faute mémoire du GPU sur une référence en 2048×2048 ;
     `--params-backend te=disk` libère les poids de l'encodeur après l'encodage, ce qui laisse la place au cache de
@@ -938,15 +1076,31 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   générations normales ; l'appareil est dans l'espace privé quand sa session est ouverte et que la requête est sûre,
   comme pour `private.unlocked` ; chaque entrée porte `status`, `position` (rang dans l'espace, comme
   `queue_position`), `ahead` (durée restante estimée, en secondes, des générations de l'autre espace placées devant
-  elle : ce qui reste de celle en cours, l'estimation des autres ; 0 sans travail caché), `lot`, `estimate` et
-  `elapsed` en secondes, `kind` (`normal` ou `private`), `id`, `mode`, le début du `prompt`, et `width`, `height` et
-  `steps` de la demande ; `queued` : générations en attente de l'espace ; `current_job` : la génération en cours si
+  elle : ce qui reste de celle en cours, l'estimation des autres ; vu de l'espace public, une génération privée y est
+  estimée comme une génération de Qwen, quel que soit son modèle ; 0 sans travail caché), `lot`, `estimate` et
+  `elapsed` en secondes, `kind` (`normal` ou `private`), `id`, `mode`, `model` (clé du modèle de la génération), le
+  début du `prompt`, et `width`, `height`, `steps` et `frames` (nombre d'images d'une vidéo, `null` pour une image)
+  de la demande ; `queued` : générations en attente de l'espace ;
+  `current_job` : la génération en cours si
   elle est de l'espace, sinon `null` ; `last_job` : dernière génération normale, `null` dans l'espace privé ; `busy` :
   le Mac calcule, quel que soit l'espace ; `version` : `commit`, `date` et `branch` du dernier commit du dossier servi
   (`null` hors git) et `server`, empreinte de `tools/launch.py` et `tools/estimate.py`, relus toutes les 30 s ;
   `server_version` : la même chose au lancement du serveur, `null` sans `main()` ; `rev` : compteur de la pile et des
   tirages de l'espace de l'appareil, qui change à chaque image arrivée dans la pile et à chaque Garder, Jeter et
-  Supprimer, et part de l'heure du lancement du serveur : l'interface relit pile et tirages quand il change) ; lots :
+  Supprimer, et part de l'heure du lancement du serveur : l'interface relit pile et tirages quand il change ;
+  `models` : les modèles installés, dans l'ordre `qwen`, `h3` puis `video`, chacun avec `key`, `name`, `version` (clé de
+  version que la génération écrira), `steps` (étapes permises, `null` : 1 à 200), `modes` (modes de la page permis),
+  `init_image`, `mask` et `negative_prompt` (acceptés ou non), `max_refs` (images jointes que la page propose ; le
+  serveur n'en borne pas le nombre ; pour la vidéo, 1 : son image de départ, `init_image`, sans image de référence),
+  `max_side` (côté le plus grand, refusé au-delà) et `preview_every` (intervalle
+  des aperçus imposé, `null` : celui de la demande ; la vidéo n'a jamais d'aperçu), et pour la vidéo seulement `sizes`
+  (tailles permises,
+  `[largeur, hauteur]`), `frames` (nombres d'images permis) et `lots` (`false` : ni variantes ni campagne) ; MiniMax
+  H3 et la vidéo n'y sont que si leurs fichiers sont là et que le moteur du serveur, lu au lancement, est au moins
+  `master-1090`) ; `estimates` : coefficients d'estimation de Qwen
+  (formule de `tools/estimate.py`, `samples` : nombre de mesures) ; `model_estimates` : ceux de chaque modèle de
+  `models`, par clé, avec pour MiniMax H3 et la vidéo `rw` (poids d'une référence dans la séquence) et `rmin` (petit
+  côté minimal d'une référence) ; lots :
   `"count"` de 2 à 4 dans `/api/generate` (tous les modes ; 1 : génération seule ; 400 « count : pas de variantes dans
   une campagne » au-delà de 1 avec `campaign`) crée autant de générations ; `"campaign": [{"image": <data URL>,
   "width", "height"}, …]` (1 à 10 photos, en édition, `"mode": "edit"`, sans `ref_images`) crée une édition par photo,
@@ -961,7 +1115,8 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   (elle s'écrit dans son dossier de travail `jobs/<id>/`, puis y passe avec sa ligne du journal) ; les tirages sont
   les images de `outputs/`, dont toutes celles d'avant la pile ; `GET /api/pile` et `GET /api/history` (une entrée par
   image, la plus récente d'abord, avec `name`, `time`, `size`, `mode`, `prompt`, `width`, `height`, `steps`,
-  `seconds`, `model`, `seed`, `inputs` et `lot` : `id`, `rank`, `size`, `campaign`, ou `null` pour une image seule ;
+  `seconds`, `model`, `frames` (nombre d'images d'une vidéo, `null` pour une image), `seed`, `inputs` et `lot` :
+  `id`, `rank`, `size`, `campaign`, ou `null` pour une image seule ;
   le journal des images, les PNG de la pile et tout ce que le serveur, `tools/calibrate.py` et sd-cli créent depuis
   leur lancement ne sont lisibles que par le compte qui les fait tourner (fichiers en 0o600, dossiers en 0o700 ; les
   fichiers plus anciens gardent leurs droits, mais `outputs/`, `jobs/` et `logs/` sont fermés aux autres comptes à
@@ -969,21 +1124,29 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   `POST /api/keep {"name"}` (Garder : l'image passe de la pile aux tirages, d'un seul `os.replace` ; vignettes et
   images d'entrée restent où elles sont, rangées par nom d'image ; 409 si un tirage du même nom existe), `POST
   /api/discard {"name"}` (Jeter : seulement une image de la pile ; efface ses vignettes, ses images d'entrée, son
-  dossier de travail `jobs/<id>/` et ses lignes du journal, réécrit dans un fichier temporaire puis remplacé d'un
-  coup, les lignes illisibles recopiées telles quelles, puis le PNG en dernier, seulement si tout le reste est parti
-  (renommé en nom caché avant tout effacement : sous Windows, un PNG ouvert échoue là, sans rien effacer ; une pièce
-  qui résiste lui rend son nom, et un PNG resté caché après une panne le reprend au démarrage) : une pièce
-  qui résiste laisse l'image dans la pile, qu'on rejette ; une pièce déjà absente est sautée), `POST /api/delete
+  dossier de travail `jobs/<id>/` (sauf ceux qu'une autre image partage : voir plus bas, « même radical ») et ses
+  lignes du journal, réécrit dans un fichier temporaire puis remplacé d'un
+  coup, les lignes illisibles recopiées telles quelles, puis le fichier en dernier, seulement si tout le reste est
+  parti (renommé en nom caché avant tout effacement : sous Windows, un fichier ouvert échoue là, sans rien effacer ;
+  une pièce qui résiste lui rend son nom, et un fichier resté caché après une panne le reprend au démarrage) : une
+  pièce qui résiste laisse l'image dans la pile, qu'on rejette ; une pièce déjà absente est sautée), `POST /api/delete
   {"name"}` (Supprimer : seulement un tirage, effacé aussi complètement que Jeter) ; Garder et Jeter répondent 404 «
   déjà triée » pour une image qui n'est pas (ou plus) dans la pile, Supprimer 404 « fichier inconnu » pour un nom qui
   n'est pas un tirage ; chacun se fait d'un bloc, sous un seul verrou : quand deux appareils trient la même image, le
-  premier geste arrivé l'emporte. `GET /api/thumb?name=…` (miniatures gardées dans `outputs/.thumbs/`), `GET
-  /api/result?name=…&download=1` et les images d'entrée servent un tirage comme une image de la pile ; images d'entrée
-  d'une image : `GET /api/input?name=…&file=init.png|ref_N.png[&thumb=1][&download=1]` (gardées dans
-  `outputs/.inputs/<image>/`) ; prompts enregistrés : `GET /api/prompts` (`{"saved": [...], "types": [...]}`, `saved`
-  le dernier utilisé d'abord ; chaque prompt : `id`, `title`, `text`, `usage` = `t2i`, `edit` ou `mask`, `used` =
-  dernière utilisation en secondes ; `types` : les prompts types de `tools/prompt_types.json`, sans `used`, qu'aucune
-  route ne modifie), `POST /api/prompts {"title", "text", "usage"}` (création) ou `{"id", "title", "text"}`
+  premier geste arrivé l'emporte. Une image de la pile ou des tirages est un fichier `.png`, ou `.webp` pour une
+  vidéo (WebP animé), extension en casse quelconque ; toutes ces routes la désignent par son nom exact (nom de fichier
+  seul, sans nom caché en point) et rangent ses images d'entrée par son radical, le nom sans l'extension (deux
+  fichiers de même radical, que le serveur n'écrit jamais, les partagent : effacer l'un laisse à l'autre ses images
+  d'entrée et son dossier de travail).
+  `GET /api/thumb?name=…` (miniatures gardées dans `outputs/.thumbs/`, `<radical>.jpg` pour un PNG et
+  `<radical>.webp.jpg` pour une vidéo, dont c'est la première image), `GET /api/result?name=…&download=1` (type
+  `image/png` ou `image/webp`, d'après l'extension) et les images d'entrée servent un tirage comme une image de la
+  pile ; images d'entrée d'une image : `GET /api/input?name=…&file=init.png|ref_N.png[&thumb=1][&download=1]`
+  (gardées dans `outputs/.inputs/<radical>/`) ; prompts enregistrés : `GET /api/prompts`
+  (`{"saved": [...], "types": [...]}`, `saved` le dernier utilisé d'abord ; chaque prompt : `id`, `title`, `text`,
+  `usage` = `t2i`, `edit` ou `mask`, `used` = dernière utilisation en secondes ; `types` : les prompts types de
+  `tools/prompt_types.json`, sans `used`, qu'aucune route ne modifie), `POST /api/prompts {"title", "text", "usage"}`
+  (création) ou `{"id", "title", "text"}`
   (modification du titre et du texte), `POST /api/prompts/delete {"id"}`, `POST /api/prompts/used {"id"}` (le met en
   tête) ; 404 pour un `id` inconnu ; accès : `GET /entrer?jeton=…` (page de `tools/launch.py --enter`), depuis
   l'ordinateur lui-même seulement (ni le Wi-Fi ni le relais de Tailscale) : avec le jeton de `tools/entry_token` de
@@ -1029,7 +1192,9 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   /api/private/discard {"id"}` (Jeter : seulement une image de la pile ; son dossier est supprimé) : 404 « déjà triée
   » pour une image qui n'est pas (ou plus) dans la pile, le premier geste arrivé l'emporte ; dans l'espace privé,
   `rev` de `/api/status` est le compteur de la pile et des tirages privés (arrivée, Garder, Jeter, Supprimer), jamais
-  visible ailleurs ; `GET /api/private/image?id=…[&download=1]`, `GET /api/private/thumb?id=…`, `GET
+  visible ailleurs ; `GET /api/private/image?id=…[&download=1]` (servie en `image/webp` et téléchargée sous
+  `prive_<8 caractères>.webp` quand ses octets déchiffrés sont ceux d'un WebP, une vidéo privée ; sinon en
+  `image/png`, `.png` : le serveur ne lit pour cela aucun champ de la fiche), `GET /api/private/thumb?id=…`, `GET
   /api/private/input?id=…&file=init.png|ref_N.png[&thumb=1][&download=1]`, `POST /api/private/delete {"id"}` ; prompts
   enregistrés de l'espace privé, session exigée (403 sinon) et prolongée, mêmes champs, mêmes limites et mêmes
   réponses que `/api/prompts` : `GET /api/private/prompts` (avec les mêmes `types`), `POST /api/private/prompts`,
@@ -1043,8 +1208,34 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
   la largeur ou la hauteur n'est pas un entier de 64 à 4096, les étapes un entier de 1 à 200, ou la graine un entier
   (-1 : au hasard), ou `count` qui n'est pas un entier de 1 à 4 ou qui dépasse 1 avec une `campaign`, ou une
   `campaign` hors du mode `edit`, de plus de 10 photos, ou dont une photo n'a pas d'image ou de dimensions valides ;
-  les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Elle refuse aussi
-  (400 « L'incognito n'existe plus : passez par l'espace privé. ») une demande `"incognito": true`, qu'enverrait une
+  les autres champs (`cfg`, `strength`, images, `negative_prompt`…) doivent avoir le bon type. Le champ `model`
+  choisit le modèle dans une table fermée du serveur : absent, Qwen (`"qwen"`, la version du lancement) ; `"h3"`,
+  MiniMax H3 ; autre chose qu'un texte, 400 « model : texte attendu » ; un texte inconnu, 400 « modèle inconnu »
+  (la valeur n'est jamais recopiée, ni utilisée dans un chemin ou la commande) ; MiniMax H3 absent, 400 « MiniMax H3
+  n'est pas installé : lancez setup.py --h3 (Mac seulement) » ; sur un moteur plus ancien que `master-1090` (lu au
+  lancement du serveur), 400 qui demande de lancer `setup.py --h3` puis de relancer le serveur. MiniMax H3 refuse
+  (400) des étapes autres que 6, une image de départ, un masque, les modes `mask` et `annot` (le mode tel que la
+  génération le garde : lettres minuscules et chiffres seulement) et un prompt négatif ;
+  il accepte les tailles et les images de référence de Qwen, sans plafond propre, en texte vers image comme en
+  édition, variantes et campagnes comprises ; sa commande impose le guidage 1, les sigmas `minimax-h3-image`, le
+  générateur de bruit `cpu` et un aperçu tous les 2 pas. La génération garde son modèle et sa version dès sa création
+  (version `h3-q4`, ou `h3-q8` si `tools/config.local.json` porte `"h3": "q8"`, lu au lancement du serveur, et que
+  son fichier est là, ou si seul ce fichier est là) : sa commande, sa ligne de `outputs/journal.jsonl` et la
+  fiche d'une image privée (champ `model`) les lisent sur elle. Une génération MiniMax H3 range sa mesure de durée
+  sous sa version, et la file l'estime avec les coefficients de MiniMax H3. `"model": "video"` demande une vidéo
+  muette (vidéo absente : 400 qui demande `setup.py --h3-video`) : le champ `frames` (56, 73 ou 124 images, soit 2, 3
+  ou 5 secondes à 24 images par seconde) est exigé, et refusé (400) pour un autre modèle ; la vidéo refuse (400) une
+  taille autre que 480×288, 288×480, 864×480 et 480×864, des étapes autres que 4, des images de référence, un masque,
+  un prompt négatif, un lot (`count` au-delà de 1, `campaign`) et une balise `<lora:…>` dans le prompt ; elle accepte
+  une image de départ (`init_image`, première image de la vidéo, sans `strength`). Sa commande est celle de l'essai
+  du moteur en mode vidéo : guidage 1, générateur de bruit `cpu`, 24 images par seconde, le LoRA turbo 4 étapes
+  appliqué par une balise que le serveur ajoute à la fin du prompt (le prompt gardé est celui de la demande), sans
+  son ni aperçu (`preview` est ignoré). Elle arrive dans la pile en WebP animé (`<identifiant>_<mode>.webp`), sa ligne
+  du journal porte `"model": "h3-video"` et `frames` ; elle se trie, se notifie et s'annule comme une image, range sa
+  mesure de durée sous `h3-video`, et la file l'estime avec ses coefficients (entrée de `queue` avec `frames`, `null`
+  pour une image). La
+  route refuse aussi (400 « L'incognito n'existe plus : passez par l'espace privé. ») une demande `"incognito": true`,
+  qu'enverrait une
   page d'avant le retrait de l'incognito restée ouverte : rien n'est écrit sur l'ordinateur, pas même au journal du
   serveur (les requêtes `/api/generate` n'y vont jamais) ; le champ `page` d'une
   telle page est ignoré. Une génération qui ne peut pas se préparer (image d'entrée illisible, par exemple) échoue
@@ -1078,7 +1269,7 @@ navigateur ──HTTP──▶ tools/launch.py (127.0.0.1:7860) ──lance─�
 ├── tools/
 │   ├── launch.py         serveur local + pilotage de sd-cli
 │   ├── estimate.py       modèle de coût et calibration des estimations de durée
-│   ├── calibrate.py      générations de calibration (lancées par setup.py)
+│   ├── calibrate.py      générations de calibration (lancées par setup.py pour Qwen, à la main pour MiniMax H3)
 │   ├── ui/index.html     l'interface
 │   ├── ui/manifest.webmanifest, sw.js, icon-*.png   installation sur le téléphone (application)
 │   ├── ui/PixelifySans.woff2, OFL.txt   police pixel du nom et des titres, et sa licence (servie sans code d'accès)
@@ -1223,6 +1414,11 @@ Sur Mac : `venv/bin/python tests/run_tests.py --steps 8`. Le script lit le code 
   [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1).
 - **Encodeur GGUF (Mac)** : Alibaba Qwen, [Qwen/Qwen3-VL-8B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF),
   sous licence Apache 2.0.
+- **MiniMax H3 Image** (option, Mac) : MiniMax,
+  [MiniMaxAI/MiniMax-H3-Image](https://huggingface.co/MiniMaxAI/MiniMax-H3-Image), sous la licence publiée avec le
+  modèle, qui exclut l'Union européenne, le Royaume-Uni, la Corée du Sud et les États-Unis (voir
+  [Le modèle](#le-modèle)) ; fichiers tirés de ces poids : quantification GGUF du modèle par Hearthscale,
+  encodeur de texte GGUF par leejet, VAE par Comfy-Org.
 - **Moteur** : [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (licence MIT).
 - **Police pixel** : [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans), © 2021 The Pixelify Sans Project
   Authors, sous **SIL Open Font License 1.1** ([tools/ui/OFL.txt](tools/ui/OFL.txt)) ; sous-ensemble latin en woff2

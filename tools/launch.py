@@ -12,7 +12,8 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
   tourne.
 - Chaque génération lance sd-cli (rechargement quasi instantané grâce à --mmap et au cache disque),
   lit sa progression (étape k/N, secondes par étape), expose des aperçus intermédiaires optionnels et écrit le PNG
-  dans son dossier de travail jobs/<id>/ ; fini, il passe dans la pile (outputs/.pile/), à trier : Garder le fait
+  (ou le WebP animé d'une vidéo) dans son dossier de travail jobs/<id>/ ; fini, il passe dans la pile (outputs/.pile/),
+  à trier : Garder le fait
   passer dans les tirages (outputs/), Jeter l'efface avec tout ce qui s'y rattache.
 - Espace privé ({"private": true} dans /api/generate, session de l'espace exigée) : pendant le calcul, fichiers de
   travail dans jobs/private_<id>/, supprimé dès la fin du job (ni journal, ni calibration ; dans logs/, rien que la
@@ -33,10 +34,11 @@ r"""Lanceur unique : interface web locale + moteur stable-diffusion.cpp (sd-cli 
         GET /api/private/image|thumb?id=<id>, GET /api/private/input?id=<id>&file=<init.png|ref_N.png>,
         prompts enregistrés de l'espace privé (private/prompts, chiffré) : GET /api/private/prompts,
         POST /api/private/prompts, POST /api/private/prompts/delete, POST /api/private/prompts/used,
-        GET /api/result?name=<png>[&download=1], GET /api/status, POST /api/login {"code": …} (cookie d'accès),
-        tirages et pile : GET /api/history, GET /api/pile, GET /api/thumb?name=<png>, POST /api/keep {"name": <png>},
-        POST /api/discard {"name": <png>}, POST /api/delete {"name": <png>},
-        images d'entrée d'une image : GET /api/input?name=<png>&file=<init.png|ref_N.png>[&thumb=1][&download=1],
+        GET /api/result?name=<sortie>[&download=1], GET /api/status, POST /api/login {"code": …} (cookie d'accès),
+        tirages et pile (<sortie> : nom d'une image .png ou d'une vidéo .webp) : GET /api/history, GET /api/pile,
+        GET /api/thumb?name=<sortie>, POST /api/keep {"name": <sortie>},
+        POST /api/discard {"name": <sortie>}, POST /api/delete {"name": <sortie>},
+        images d'entrée d'une image : GET /api/input?name=<sortie>&file=<init.png|ref_N.png>[&thumb=1][&download=1],
         notifications de fin de génération : GET /api/push/key, POST /api/push/subscribe {"subscription": …},
         POST /api/push/unsubscribe {"endpoint": …},
         prompts enregistrés (tools/saved_prompts.json, communs à tous les appareils) et prompts types
@@ -78,6 +80,67 @@ MODELS = {
 if sys.platform == "darwin":   # Metal n'a pas de calcul int8 : encodeur GGUF officiel et sa tour vision, sur le GPU
     MODELS["llm"] = P("models", "text_encoders", "Qwen3VL-8B-Instruct-Q8_0.gguf")
     MODELS["llm_vision"] = P("models", "text_encoders", "mmproj-Qwen3VL-8B-Instruct-F16.gguf")
+# MiniMax H3 : versions du modèle et fichiers communs (encodeur de texte, VAE), sous les noms publiés par leurs dépôts
+H3_DIFFUSION = {
+    "h3-q4": P("models", "diffusion_models", "minimax_h3_image_pruned-Q4_K_M.gguf"),
+    "h3-q8": P("models", "diffusion_models", "minimax_h3_image_pruned-Q8_0.gguf"),
+}
+H3_FILES = {
+    "vae": P("models", "vae", "minimax_h3_image_vae_fp16.safetensors"),
+    "llm": P("models", "text_encoders", "qwen3vl_32b_minimax_h3-Q4_K_M.gguf"),
+}
+# Vidéo (MiniMax H3 fl2va) : modèle allégé, VAE vidéo, LoRA turbo 4 étapes (seul fichier de son dossier, désigné dans
+# le prompt par son nom sans extension), et l'encodeur de texte de MiniMax H3, sous les noms publiés par leurs dépôts
+VIDEO_DIFFUSION = {
+    "h3-video": P("models", "diffusion_models", "minimax_h3_fl2va_pruned-Q4_K_M.gguf"),
+}
+VIDEO_FILES = {
+    "vae": P("models", "vae", "minimax_h3_video_vae_fp16.safetensors"),
+    "llm": H3_FILES["llm"],
+    "lora": P("models", "loras", "minimax_h3_fl2v_turbo_4step_v1.3_768p_comfyui_bf16.safetensors"),
+}
+MAX_VARIANTS = 4                          # images d'un lot de variantes (tous les modes, hors campagne)
+MAX_CAMPAIGN = 10                         # photos d'une campagne (mode Éditer), comme les références d'une édition
+MAX_SIDE = 4096                           # côté le plus grand d'une image demandée, pour tout modèle
+PAGE_MODES = ["t2i", "edit", "mask", "annot"]   # modes de la page ; un autre mode (API) se calcule comme t2i ou edit
+MODE_LABELS = {"t2i": "texte vers image", "edit": "édition", "mask": "masque", "annot": "annotation"}
+# Table fermée des modèles qu'une demande peut nommer (champ model, absent : qwen). La valeur reçue n'y sert qu'à
+# choisir une entrée : tout ce qui entre dans la commande ou un chemin vient d'ici. versions : fichier du modèle de
+# diffusion par clé de version (celle de Qwen est choisie au démarrage, S.model) ; files : autres fichiers ; engine :
+# release minimale de sd.cpp ; steps : étapes permises (None : 1 à 200) ; max_side : côté le plus grand permis ;
+# max_refs : images jointes que la page propose (le serveur n'en borne pas le nombre, comme avant) ; modes : modes de
+# la page permis ; cfg et preview_every : guidage et intervalle des aperçus imposés (None : ceux de la demande) ;
+# args : options de sd-cli propres au modèle (celles de l'essai pour MiniMax H3) ; setup : option de setup.py qui
+# l'installe ; config : versions qu'une machine peut demander par la clé du modèle dans tools/config.local.json
+# ("h3": "q8"), la valeur lue n'y étant comparée qu'aux noms de cette table (None : pas de choix, Qwen garde --model) ;
+# sizes : tailles permises, [largeur, hauteur] (None : toute taille jusqu'à max_side) ; frames : nombres d'images
+# permis d'une vidéo (None : une image, champ frames refusé) ; refs : images de référence permises ; lots : variantes
+# (count) et campagne permises ; preview : aperçus possibles ; sampler : méthode d'échantillonnage imposée (None :
+# celle du moteur, comme l'essai de la vidéo) ; lora : le serveur ajoute à la fin du prompt la balise du LoRA
+# files["lora"], désigné par son nom de fichier sans extension, dans son dossier ; ext : extension de la sortie (.webp :
+# vidéo en WebP animé).
+# MiniMax H3 reprend les tailles et les images jointes de Qwen, sans plafond propre (série 10). La vidéo : les quatre
+# tailles et les trois durées de la série 9 (Q26), son image de départ par -i, sans son ni aperçu (Q23, A17).
+MODEL_TABLE = {
+    "qwen": {"name": "Qwen", "versions": DIFFUSION, "files": MODELS, "engine": 0, "steps": None, "max_side": MAX_SIDE,
+             "max_refs": MAX_CAMPAIGN, "modes": PAGE_MODES, "init_image": True, "mask": True,
+             "negative_prompt": True, "cfg": None, "preview_every": None, "args": [], "setup": "", "config": None,
+             "sizes": None, "frames": None, "refs": True, "lots": True, "preview": True, "sampler": "euler",
+             "lora": False, "ext": ".png"},
+    "h3": {"name": "MiniMax H3", "versions": H3_DIFFUSION, "files": H3_FILES, "engine": 1090, "steps": [6],
+           "max_side": MAX_SIDE, "max_refs": MAX_CAMPAIGN, "modes": ["t2i", "edit"], "init_image": False,
+           "mask": False, "negative_prompt": False, "cfg": 1.0, "preview_every": 2,
+           "args": ["--sigmas", "minimax-h3-image", "--rng", "cpu"], "setup": "--h3",
+           "config": {"q4": "h3-q4", "q8": "h3-q8"}, "sizes": None, "frames": None, "refs": True, "lots": True,
+           "preview": True, "sampler": "euler", "lora": False, "ext": ".png"},
+    "video": {"name": "Vidéo", "versions": VIDEO_DIFFUSION, "files": VIDEO_FILES, "engine": 1090, "steps": [4],
+              "max_side": 864, "max_refs": 1, "modes": ["t2i"], "init_image": True, "mask": False,
+              "negative_prompt": False, "cfg": 1.0, "preview_every": None,
+              "args": ["-M", "vid_gen", "--rng", "cpu", "--fps", "24"], "setup": "--h3-video", "config": None,
+              "sizes": [[480, 288], [288, 480], [864, 480], [480, 864]], "frames": [56, 73, 124], "refs": False,
+              "lots": False, "preview": False, "sampler": None,
+              "lora": True, "ext": ".webp"},
+}
 EXE = "sd-cli.exe" if os.name == "nt" else "sd-cli"
 # moteurs de la plateforme, par ordre de repli quand celui demandé n'est pas installé
 PLATFORM_BACKENDS = ["metal"] if sys.platform == "darwin" else ["vulkan", "cuda", "cpu"]
@@ -85,8 +148,6 @@ PLATFORM_BACKENDS = ["metal"] if sys.platform == "darwin" else ["vulkan", "cuda"
 PROGRESS_RE = re.compile(r"(\d+)/(\d+)\s*-\s*([\d.]+)(s/it|it/s)")
 TAKING_RE = re.compile(r"taking ([\d.]+)\s*s")
 CALIB = P("tools", "calibration.json")
-MAX_VARIANTS = 4                          # images d'un lot de variantes (tous les modes, hors campagne)
-MAX_CAMPAIGN = 10                         # photos d'une campagne (mode Éditer), comme les références d'une édition
 PRIVATE_JOB_TTL = 24 * 3600               # génération privée finie, jamais oubliée par sa page : oubliée après ce délai
 # ligne de fin de toute génération réussie, normale ou privée, sans chemin ni durée : une seule source, pour que rien
 # dans logs/ ne distingue une génération privée (décision du 23/10/2026)
@@ -98,7 +159,8 @@ BACKENDS = {
     "vulkan": ["--backend", "diffusion=vulkan0,vae=vulkan0,te=cpu", "--offload-to-cpu", "--mmap"],
     "cuda":   ["--backend", "cuda0", "--offload-to-cpu", "--diffusion-fa", "--mmap"],
     "cpu":    ["--backend", "cpu", "--mmap"],
-    # Metal (Mac Apple Silicon, mesuré sur M6 avec sd.cpp d637cfb, release master-959) : tout sur le GPU.
+    # Metal (Mac Apple Silicon, mesuré sur M6 avec sd.cpp d637cfb, release master-959 ; repris tels quels sur la
+    # release master-1090, celle de setup.py, qui annonce --fa déprécié : non remesuré) : tout sur le GPU.
     # - encodeur GGUF Q8_0 : 3 s pour une édition 512×512, contre 150 s pour l'encodeur int8 sur le CPU
     #   (Metal n'a pas de noyau int8 : kernel_mul_mm_i8_i8 absent, sd-cli plante si on l'y place) ;
     # - VAE : décodage 11 fois plus rapide que sur le CPU (3 s contre 37 s en 512×512) ;
@@ -112,23 +174,28 @@ BACKENDS = {
 
 
 def record_calib(job):
-    """Ajoute la mesure de la génération aux données de calibration (voir tools/estimate.py). Seules les générations de
-    tools/calibrate.py en parlent : dans logs/, une ligne de calibration ne suivrait que les générations normales et les
-    distinguerait des privées (décision du 23/10/2026)."""
+    """Ajoute la mesure de la génération aux données de calibration (voir tools/estimate.py), sous la clé de sa version.
+    Seules les générations de tools/calibrate.py en parlent : dans logs/, une ligne de calibration ne suivrait que les
+    générations normales et les distinguerait des privées (décision du 23/10/2026). Chaque modèle range sa mesure sous
+    la clé de version de sa génération (job_model, posé à la création), faite avec la formule de sa famille : jamais
+    sous celle d'un autre modèle (une vidéo sous h3-video). Une génération privée n'arrive pas ici (run_job s'arrête
+    avant)."""
     talk = job.get("calibration")
+    key, version = job_model(job)
     try:
-        sample = estimate.make_sample(job, S.engine)
+        sample = estimate.make_sample(job, S.engine, key)
         if not sample:
             return
-        S.store.add(S.backend, S.model, sample)
+        S.store.add(S.backend, version, sample)
+        job["measured"] = True                    # tools/calibrate.py le vérifie : une mesure perdue y est un échec
     except Exception as e:
         if talk:
             print(f"[calibration] ignorée : {e}", flush=True)
         return
     if not talk:
         return
-    c = S.store.coefficients(S.backend, S.model, S.engine)
-    print(f"[calibration] {S.backend}/{S.model} : étape {sample['step']:.2f} s ({sample['w']}×{sample['h']}"
+    c = S.store.coefficients(S.backend, version, S.engine, key)
+    print(f"[calibration] {S.backend}/{version} : étape {sample['step']:.2f} s ({sample['w']}×{sample['h']}"
           f"{', ' + str(len(job.get('ref_px') or [])) + ' réf.' if job.get('ref_px') else ''}), "
           f"encodage {sample['enc']:.0f} s, décodage {sample['vae']:.0f} s — {c['samples']} mesure{'s' if c['samples'] > 1 else ''}", flush=True)
 
@@ -189,6 +256,78 @@ def engine_tag(backend):
         return open(P("sdcpp", backend, ".installed"), encoding="utf-8").read().strip() or estimate.LEGACY_ENGINE
     except OSError:
         return estimate.LEGACY_ENGINE
+
+
+def model_version(key):
+    """Version installée du modèle key de MODEL_TABLE, ou None. Qwen : celle du serveur (S.model), jamais refusée (un
+    fichier manquant fait échouer la génération, comme avant). Un autre : si ses autres fichiers existent et que la
+    release du moteur du serveur (S.engine, lue au démarrage, comme pour les mesures de durée) est au moins la sienne,
+    la version que la configuration de la machine demande (S.cfg[key], lue au démarrage) si son fichier existe, sinon
+    la première de ses versions dont le fichier existe. La valeur lue n'est comparée qu'aux noms de spec["config"] :
+    absente, inconnue, d'un autre type qu'un texte ou d'une version absente, elle retombe sur une version présente."""
+    if key == "qwen":
+        return S.model
+    spec = MODEL_TABLE[key]
+    if estimate.release_number(S.engine) < spec["engine"] or not all(os.path.exists(p) for p in spec["files"].values()):
+        return None
+    present = [v for v, path in spec["versions"].items() if os.path.exists(path)]
+    wanted = S.cfg.get(key)
+    chosen = next((v for name, v in (spec["config"] or {}).items() if name == wanted), None)
+    return chosen if chosen in present else next(iter(present), None)
+
+
+def request_model(req):
+    """(clé, version) du modèle d'une demande que request_error a acceptée, tirées de la table, jamais de la demande ;
+    version None si le modèle a disparu depuis."""
+    wanted = req.get("model", "qwen")
+    key = next(k for k in MODEL_TABLE if k == wanted)
+    return key, model_version(key)
+
+
+def job_model(job):
+    """(clé, version) du modèle d'une génération, posés à sa création (new_job), ou par tools/calibrate.py sur les
+    siennes ; une génération sans ces champs (aucune n'en crée aujourd'hui) est Qwen à la version du serveur."""
+    if "model" not in job:
+        return "qwen", S.model
+    return job["model"], job["version"]
+
+
+def preview_every(job, r):
+    """Intervalle des aperçus d'une génération de demande r : celui que son modèle impose, sinon celui de la demande."""
+    return MODEL_TABLE[job_model(job)[0]]["preview_every"] or int(r.get("preview_interval") or 5)
+
+
+def model_coefficients(key, version):
+    """Coefficients d'estimation du modèle key à sa version installée (valeurs de départ de sa famille, ajustées sur les
+    mesures de cette version, de ce moteur et de cette release)."""
+    return S.store.coefficients(S.backend, version, S.engine, key)
+
+
+def coefficient_reader():
+    """coefs(clé, version) : model_coefficients, chacun calculé une fois par lecture de l'état (un ajustement par modèle
+    et non par génération de la file)."""
+    seen = {}
+
+    def coefs(key, version):
+        if (key, version) not in seen:
+            seen[key, version] = model_coefficients(key, version)
+        return seen[key, version]
+    return coefs
+
+
+def installed_models():
+    """Modèles installés et leurs limites, dans l'ordre de la table (/api/status)."""
+    out = []
+    for key, spec in MODEL_TABLE.items():
+        version = model_version(key)
+        if version:
+            out.append({"key": key, "name": spec["name"], "version": version, "steps": spec["steps"],
+                        "modes": spec["modes"], "init_image": spec["init_image"], "mask": spec["mask"],
+                        "negative_prompt": spec["negative_prompt"], "max_refs": spec["max_refs"],
+                        "max_side": spec["max_side"], "preview_every": spec["preview_every"]})
+            if spec["frames"]:                   # vidéo : ses tailles, ses durées, ni variantes ni campagne
+                out[-1].update(sizes=spec["sizes"], frames=spec["frames"], lots=spec["lots"])
+    return out
 
 
 def default_backend(cfg):
@@ -921,12 +1060,58 @@ def push_notify(payload):
             push_subscriptions(lambda l: [x for x in l if x.get("endpoint") not in gone])
         print(f"[push] notification envoyée à {sent} appareil{'s' if sent > 1 else ''}", flush=True)
     threading.Thread(target=send, daemon=True).start()
-INPUTS = P("outputs", ".inputs")      # images d'entrée d'un tirage ou d'une image de la pile : .inputs/<nom sans .png>/
+INPUTS = P("outputs", ".inputs")      # images d'entrée d'un tirage ou d'une image de la pile : .inputs/<radical>/
 INPUT_RE = re.compile(r"(init|ref_\d+)\.png")
+# sortie d'une génération : une image en PNG, ou une vidéo en WebP animé ; reconnue par son extension réelle (casse
+# quelconque), qui donne aussi le type servi au navigateur. Le radical (nom sans l'extension) nomme ses vignettes,
+# son dossier d'images d'entrée et, avant le dernier « _ », sa génération (JOB_ID_RE).
+OUTPUT_TYPES = {".png": "image/png", ".webp": "image/webp"}
+
+
+def output_ext(raw):
+    """Extension d'une sortie d'après ses premiers octets (« RIFF », taille, « WEBP » : un WebP, une vidéo ; sinon
+    « .png »), pour une image privée, dont aucun nom ni champ ne note le format : elle donne le type servi
+    (OUTPUT_TYPES) et le nom d'un téléchargement."""
+    return ".webp" if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP" else ".png"
+
+
 # pile de l'espace public : images terminées à trier ; Garder les fait passer dans outputs/ (les tirages), Jeter les
 # efface. Vignettes et images d'entrée sont rangées par nom d'image et ne bougent pas quand elle passe aux tirages.
 PILE = P("outputs", ".pile")
 JOB_ID_RE = re.compile(r"\d{8}_\d{6}_[0-9a-f]{6}")   # identifiant d'une génération normale (new_job)
+
+
+def output_name(name):
+    """(radical, extension en minuscules) d'un nom de fichier de sortie, ou None : extension .png ou .webp, casse
+    quelconque ; un nom caché (point en tête : nom d'effacement, fichiers d'autres outils) n'en est pas un."""
+    name = str(name or "")
+    stem, ext = os.path.splitext(name)
+    if not stem or name.startswith(".") or ext.lower() not in OUTPUT_TYPES:
+        return None
+    return stem, ext.lower()
+
+
+def output_stem(fp):
+    """Radical d'une sortie (chemin ou nom) : son nom sans l'extension réelle."""
+    return os.path.splitext(os.path.basename(fp))[0]
+
+
+def output_names(folder, hidden=False, strict=False):
+    """Noms des sorties d'un dossier (outputs/ ou la pile), ou, avec hidden, ceux des sorties restées sous leur nom
+    caché (hidden_output) : même jugement (output_name) que les routes, quelle que soit la casse de l'extension. Un
+    dossier absent n'en a aucune ; illisible non plus (comme glob avant les vidéos : le serveur démarre et répond
+    quand même), sauf avec strict, pour un effacement qui en décide (shared_pieces) : l'erreur remonte alors."""
+    try:
+        names = os.listdir(folder)
+    except FileNotFoundError:
+        return []
+    except OSError:
+        if strict:
+            raise
+        return []
+    if hidden:
+        return [n for n in names if n.startswith(".") and output_name(n[1:])]
+    return [n for n in names if output_name(n)]
 
 
 def input_files(job_dir):
@@ -935,11 +1120,11 @@ def input_files(job_dir):
     return sorted(names, key=lambda n: (n != "init.png", int(re.sub(r"\D", "", n) or 0)))
 
 
-def save_inputs(job_dir, out_png):
+def save_inputs(job_dir, out):
     """Copie les images d'entrée d'un job à côté de son image, pour les revoir depuis la galerie."""
     names = input_files(job_dir)
     if names:
-        dst = os.path.join(INPUTS, os.path.basename(out_png)[:-4])
+        dst = os.path.join(INPUTS, output_stem(out))
         os.makedirs(dst, exist_ok=True)
         for n in names:
             # copyfile, pas copy2 : la copie prend les droits du masque (restrict_new_files), pas ceux de la source
@@ -947,13 +1132,17 @@ def save_inputs(job_dir, out_png):
 
 
 def image_in(folder, name):
-    """Chemin d'une image de folder à partir de son nom, ou None si le nom sort du dossier, n'est pas un PNG ou n'y
-    est pas."""
+    """Chemin d'une sortie de folder (image ou vidéo) à partir de son nom, ou None si le nom sort du dossier, n'est pas
+    une sortie (output_name) ou n'y est pas sous ce nom exact : sur un disque insensible à la casse (macOS), « X.PNG »
+    trouverait « x.png », et son effacement laisserait la ligne du journal, qui porte le nom exact."""
     name = os.path.basename(str(name or ""))
-    if not name or name.startswith(".") or not name.lower().endswith(".png"):
+    if not output_name(name):
         return None
     fp = os.path.join(folder, name)
-    return fp if os.path.isfile(fp) else None
+    try:                                        # le nom exact, seulement pour un fichier trouvé (chaque vignette)
+        return fp if os.path.isfile(fp) and name in os.listdir(folder) else None
+    except OSError:
+        return None
 
 
 def output_path(name):
@@ -1033,7 +1222,8 @@ def to_pile(job, meta):
     jamais une ligne du journal (son prompt) sans image. Le passage dans la pile et le statut « done » se font sous
     S.turn, comme une annulation (cancel_job) : une génération annulée entre-temps n'arrive pas dans la pile, False
     (run_job la jette). jobs/ et outputs/ sont sous ROOT, sur le même disque : os.replace déplace sans copier (un
-    outputs/ sur un autre disque ferait échouer la génération). Le PNG est mis sur le disque avant d'être déplacé :
+    outputs/ sur un autre disque ferait échouer la génération). La sortie (PNG, ou WebP d'une vidéo) est mise sur le
+    disque avant d'être déplacée :
     une coupure ne laisse pas dans la pile un fichier vide derrière un renommage écrit."""
     try:                                        # fsync seul : le F_FULLFSYNC de sync_dir(PILE) suit le déplacement
         with open(job["out"], "rb") as f:
@@ -1060,28 +1250,32 @@ def to_pile(job, meta):
     return True
 
 
-def hidden_png(fp):
-    """Nom caché d'un PNG pendant son effacement : un point devant, dans le même dossier ; images_in (glob « *.png »)
-    et les routes (image_in) ne voient pas les noms en point."""
+def hidden_output(fp):
+    """Nom caché d'une sortie pendant son effacement : un point devant, dans le même dossier ; images_in et les routes
+    (image_in) ne voient pas les noms en point (output_name)."""
     return os.path.join(os.path.dirname(fp), "." + os.path.basename(fp))
 
 
 def delete_output(fp):
-    """Efface une image (tirage ou image de la pile) et tout ce qui s'y rattache (décisions du 23/10/2026). Le PNG est
-    d'abord renommé en nom caché (hidden_png) : sous Windows, un fichier ouvert refuse ce renommage tout de suite, avant
-    que rien ne soit effacé. Puis ses miniatures, ses images d'entrée, son dossier de travail jobs/<id>/ (identifiant
-    tiré du nom, validé par JOB_ID_RE) et ses lignes du journal, et le PNG en dernier, seulement si tout le reste est
-    parti : une pièce qui résiste (ou toute autre exception) lui rend son nom, et l'image reste là où elle était, qu'un
-    second geste efface en entier, au lieu d'une ligne du journal (son prompt) que plus rien ne retirerait ; une panne
-    entre-temps est rattrapée au démarrage (restore_hidden_images). Une pièce déjà absente est sautée (le démarrage ne
-    garde que 20 dossiers de travail) ; une pièce qui résiste n'arrête pas les suivantes : la première erreur est levée
-    à la fin. Sous JOURNAL_LOCK (sort_image)."""
-    name, hidden = os.path.basename(fp), hidden_png(fp)
+    """Efface une sortie (tirage ou image de la pile, image PNG ou vidéo WebP) et tout ce qui s'y rattache (décisions
+    du 23/10/2026). Le fichier est d'abord renommé en nom caché (hidden_output) : sous Windows, un fichier ouvert
+    refuse ce renommage tout de suite, avant que rien ne soit effacé. Puis ses miniatures, ses images d'entrée, son
+    dossier de travail jobs/<id>/ (identifiant tiré du radical, validé par JOB_ID_RE) et ses lignes du journal, et le
+    fichier en dernier, seulement si tout le reste est parti : une pièce qui résiste (ou toute autre exception) lui
+    rend son nom, et l'image reste là où elle était, qu'un second geste efface en entier, au lieu d'une ligne du
+    journal (son prompt) que plus rien ne retirerait ; une panne entre-temps est rattrapée au démarrage
+    (restore_hidden_images). Une pièce déjà absente est sautée (le démarrage ne garde que 20 dossiers de travail) ; une
+    pièce qui résiste n'arrête pas les suivantes : la première erreur est levée à la fin. Images d'entrée et dossier
+    de travail sont rangés par radical : tant qu'une autre sortie les partage (« x.png » à côté de « x.webp », ce que
+    le serveur n'écrit jamais : un identifiant par génération ; shared_pieces), ils restent avec elle ; la vignette de
+    l'image, propre à chaque sortie (output_thumb), part toujours. Sous JOURNAL_LOCK (sort_image)."""
+    name, hidden = os.path.basename(fp), hidden_output(fp)
     os.replace(fp, hidden)
     try:
-        jid = name[:-4].rsplit("_", 1)[0]
-        steps = [lambda: delete_extras(name[:-4]), lambda: drop_from_journal(name)]
-        if JOB_ID_RE.fullmatch(jid):
+        jid = output_stem(name).rsplit("_", 1)[0]
+        keep_inputs, keep_job = shared_pieces(fp)
+        steps = [lambda: delete_extras(fp, keep_inputs), lambda: drop_from_journal(name)]
+        if not keep_job and JOB_ID_RE.fullmatch(jid):
             steps.insert(1, lambda: remove_tree(P("jobs", jid)))
         error = None
         for step in steps:
@@ -1099,8 +1293,41 @@ def delete_output(fp):
     raise error
 
 
+def shared_pieces(fp):
+    """(images d'entrée, dossier de travail) de fp qu'une autre sortie encore là partage, chacun vrai ou faux : une
+    sortie des tirages ou de la pile, visible ou restée sous son nom caché par un effacement coupé si elle revient au
+    démarrage (comes_back), dont le dossier est le même sur ce disque (os.path.samefile : un disque insensible à la
+    casse range « X » et « x » ensemble, un disque sensible les sépare). fp elle-même, sous son nom ou son nom caché,
+    n'en est pas. Un dossier qu'on ne peut pas lister ou comparer lève OSError (strict, same_file) : l'effacement
+    s'arrête et l'image reste, plutôt que de prendre pour seule une sortie qui partage peut-être ses pièces."""
+    folder, name = os.path.split(os.path.abspath(fp))
+    stem = output_stem(name)
+    jid = stem.rsplit("_", 1)[0]
+    inputs = job = False
+    for d in (P("outputs"), PILE):
+        for n in output_names(d, strict=True) + [h for h in output_names(d, hidden=True, strict=True)
+                                                 if comes_back(h)]:
+            other = output_stem(n[1:] if n.startswith(".") else n)
+            if other.casefold() != stem.casefold() or (os.path.abspath(d) == folder and n in (name, "." + name)):
+                continue
+            inputs = inputs or same_file(os.path.join(INPUTS, other), os.path.join(INPUTS, stem))
+            other_jid = other.rsplit("_", 1)[0]
+            job = job or bool(JOB_ID_RE.fullmatch(jid) and JOB_ID_RE.fullmatch(other_jid)
+                              and same_file(P("jobs", other_jid), P("jobs", jid)))
+    return inputs, job
+
+
+def same_file(a, b):
+    """Vrai si les chemins a et b désignent le même fichier ou dossier existant sur ce disque ; faux si l'un manque.
+    Toute autre erreur (droits, disque) remonte : un effacement ne se décide pas sur une comparaison ratée."""
+    try:
+        return os.path.samefile(a, b)
+    except FileNotFoundError:
+        return False
+
+
 def unhide(hidden, fp):
-    """Rend son nom au PNG d'un effacement qui n'a pas abouti ; s'il résiste, le démarrage le rattrapera
+    """Rend son nom à la sortie d'un effacement qui n'a pas abouti ; s'il résiste, le démarrage le rattrapera
     (restore_hidden_images) : l'erreur que voit l'appelant reste celle d'origine."""
     try:
         os.replace(hidden, fp)
@@ -1109,15 +1336,15 @@ def unhide(hidden, fp):
 
 
 def restore_hidden_images():
-    """Démarrage : un PNG resté sous son nom caché (delete_output coupé par une panne) reprend son nom ; l'image revient
-    dans la pile ou les tirages, et un nouveau geste l'efface en entier. Seuls les noms d'images du serveur
-    (identifiant JOB_ID_RE) sont rendus, pas un fichier caché d'un autre outil (« ._X.png » des volumes exFAT ou SMB) ;
-    si le nom d'origine est déjà pris, la copie cachée, en double, est supprimée. Un renommage qui échoue est retenté
-    au démarrage suivant."""
+    """Démarrage : une sortie (PNG ou WebP) restée sous son nom caché (delete_output coupé par une panne) reprend son
+    nom ; l'image revient dans la pile ou les tirages, et un nouveau geste l'efface en entier. Seuls les noms de
+    sorties du serveur (identifiant JOB_ID_RE) sont rendus, pas un fichier caché d'un autre outil (« ._X.png » des
+    volumes exFAT ou SMB) ; si le nom d'origine est déjà pris, la copie cachée, en double, est supprimée. Un renommage
+    qui échoue est retenté au démarrage suivant."""
     for folder in (P("outputs"), PILE):
-        for fp in glob.glob(os.path.join(folder, ".*.png")):
-            name = os.path.basename(fp)[1:]
-            if not JOB_ID_RE.fullmatch(name[:-4].rsplit("_", 1)[0]):
+        for hidden in output_names(folder, hidden=True):
+            fp, name = os.path.join(folder, hidden), hidden[1:]
+            if not comes_back(hidden):
                 continue
             dst = os.path.join(folder, name)
             try:
@@ -1127,6 +1354,12 @@ def restore_hidden_images():
                     os.replace(fp, dst)
             except OSError:
                 pass
+
+
+def comes_back(hidden):
+    """Vrai si la sortie cachée hidden (nom en point) reprend son nom au démarrage (restore_hidden_images) : un nom de
+    sortie du serveur (identifiant JOB_ID_RE), pas un fichier caché d'un autre outil."""
+    return bool(JOB_ID_RE.fullmatch(output_stem(hidden[1:]).rsplit("_", 1)[0]))
 
 
 def drop_from_journal(name):
@@ -1154,7 +1387,7 @@ SORTS = {"keep": (pile_path, "déjà triée"), "discard": (pile_path, "déjà tr
 
 
 def sort_image(action, name):
-    """Garder (keep : de la pile aux tirages, PNG seul déplacé, de façon atomique) ou Jeter (discard : effacement
+    """Garder (keep : de la pile aux tirages, fichier seul déplacé, de façon atomique) ou Jeter (discard : effacement
     complet) une image de la pile, Supprimer (delete : effacement complet) un tirage ; (code, réponse). D'un bloc sous
     JOURNAL_LOCK : le premier geste arrivé l'emporte, le second ne trouve plus l'image (404)."""
     find, unknown = SORTS[action]
@@ -1178,17 +1411,42 @@ def sort_image(action, name):
     return 200, {"ok": True}
 
 
-def delete_extras(stem):
-    """Miniatures et images d'entrée d'un tirage ou d'une image de la pile déjà supprimés."""
-    for th in [os.path.join(THUMBS, stem + ".jpg"), *glob.glob(os.path.join(THUMBS, glob.escape(stem) + "__*.jpg"))]:
+def delete_extras(fp, keep_inputs=False):
+    """Miniature d'un tirage ou d'une image de la pile fp déjà supprimés et, sauf keep_inputs (une autre sortie les
+    partage : delete_output), ses images d'entrée et leurs miniatures."""
+    stem = output_stem(fp)
+    thumbs = [output_thumb(fp)]
+    if not keep_inputs:
+        thumbs += input_thumbs(stem)
+    for th in thumbs:
         if os.path.exists(th):
             os.remove(th)
-    remove_tree(os.path.join(INPUTS, stem))
+    if not keep_inputs:
+        remove_tree(os.path.join(INPUTS, stem))
+
+
+def input_thumbs(stem):
+    """Miniatures des images d'entrée de radical stem (<radical>__<entrée>.jpg), telles que ce disque les range : un
+    disque insensible à la casse garde le nom d'une miniature faite pour « X », que « x » désigne aussi
+    (os.path.samefile sur le nom refait avec ce radical-ci)."""
+    try:
+        names = os.listdir(THUMBS)
+    except OSError:
+        return []
+    prefix = stem + "__"
+    found = []
+    for n in names:
+        if not (n.casefold().startswith(prefix.casefold()) and n.lower().endswith(".jpg")):
+            continue
+        mine = os.path.join(THUMBS, prefix + n[len(prefix):])
+        if n.startswith(prefix) or same_file(mine, os.path.join(THUMBS, n)):
+            found.append(os.path.join(THUMBS, n))
+    return found
 
 
 def remove_tree(d):
-    """Supprime un dossier ; déjà absent, rien ; un fichier qui résiste lève l'erreur (delete_output garde alors le
-    PNG)."""
+    """Supprime un dossier ; déjà absent, rien ; un fichier qui résiste lève l'erreur (delete_output garde alors la
+    sortie)."""
     try:
         shutil.rmtree(d)
     except FileNotFoundError:
@@ -1211,16 +1469,16 @@ def images_in(folder):
     items = []
     with JOURNAL_LOCK:
         meta = journal_entries()
-        for fp in glob.glob(os.path.join(folder, "*.png")):
-            name, st = os.path.basename(fp), os.stat(fp)
+        for name in output_names(folder):
+            st = os.stat(os.path.join(folder, name))
             m = meta.get(name, {})
             item = {"name": name, "time": int(st.st_mtime), "size": st.st_size, "mode": m.get("mode"),
                     "prompt": m.get("prompt"), "width": m.get("width"), "height": m.get("height"),
                     "steps": m.get("steps"), "seconds": m.get("seconds"), "model": m.get("model"),
-                    "seed": m.get("seed"),
+                    "frames": m.get("frames"), "seed": m.get("seed"),
                     # identifiant, rang, taille et marqueur de campagne d'une image de lot ; None pour une image seule
                     "lot": m.get("lot"),
-                    "inputs": input_files(os.path.join(INPUTS, name[:-4]))}
+                    "inputs": input_files(os.path.join(INPUTS, output_stem(name)))}
             items.append((st.st_mtime_ns, item))   # à la nanoseconde : deux images d'un lot finies la même seconde
     return [it for _, it in sorted(items, key=lambda x: x[0], reverse=True)]
 
@@ -1246,11 +1504,22 @@ def thumb_jpeg(src):
     return buf.getvalue()
 
 
+def output_thumb(fp):
+    """Miniature d'une sortie, dans outputs/.thumbs/ : <radical>.jpg pour un « .png » (comme avant les vidéos), son nom
+    entier suivi de .jpg pour toute autre sortie (« x.webp.jpg », « x.PNG.jpg ») : deux sorties du serveur d'un même
+    dossier (radical en identifiant de génération, sans point) n'ont jamais la même (sauf deux noms qu'un disque
+    insensible à la casse confond, qu'il ne garde pas côte à côte) ; deux noms déposés à la main, « a.webp » et
+    « a.webp.png », la partagent.
+    Une sortie de la pile et un tirage de même nom à la casse près la partagent, comme avant les vidéos."""
+    stem, ext = os.path.splitext(os.path.basename(fp))
+    return os.path.join(THUMBS, stem + ("" if ext == ".png" else ext) + ".jpg")
+
+
 def thumbnail(fp, th=None):
     """Miniature d'un tirage, d'une image de la pile ou d'une de leurs images d'entrée (fp), gardée dans
     outputs/.thumbs/ et refaite si l'image change. Mise en place sous JOURNAL_LOCK, et seulement si fp existe
     encore : une miniature finie après Jeter ou Supprimer ne reste pas ; FileNotFoundError alors."""
-    th = th or os.path.join(THUMBS, os.path.basename(fp)[:-4] + ".jpg")
+    th = th or output_thumb(fp)
     if not os.path.exists(th) or os.path.getmtime(th) < os.path.getmtime(fp):
         os.makedirs(THUMBS, exist_ok=True)
         tmp = f"{th}.{threading.get_ident()}.tmp"   # écrite à côté puis renommée : jamais lue à moitié écrite
@@ -1585,28 +1854,42 @@ def build_cmd(job):
     d = job["dir"]
     r = job["req"]
     w, h = int(r["width"]), int(r["height"])
+    key, version = job_model(job)                # posés à la création : jamais relus de la demande
+    spec = MODEL_TABLE[key]
+    files = {**spec["files"], "diffusion": spec["versions"][version]}
+    cfg = spec["cfg"] if spec["cfg"] is not None else r.get("cfg", S.cfg.get("cfg_scale", 1.0))
+    prompt, lora = r["prompt"], []
+    if spec["lora"]:                             # LoRA de la table, par une balise ajoutée à la fin du prompt (vidéo)
+        prompt += f"<lora:{os.path.splitext(os.path.basename(files['lora']))[0]}:1>"
+        lora = ["--lora-model-dir", os.path.dirname(files["lora"])]
     cmd = [P("sdcpp", S.backend, EXE),
-           "--diffusion-model", MODELS["diffusion"], "--vae", MODELS["vae"], "--llm", MODELS["llm"]] + (
-           ["--llm_vision", MODELS["llm_vision"]] if "llm_vision" in MODELS else []) + BACKENDS[S.backend] + [
-           "-p", r["prompt"], "-W", str(r["width"]), "-H", str(r["height"]),
-           "--steps", str(r["steps"]), "--cfg-scale", str(r.get("cfg", S.cfg.get("cfg_scale", 1.0))),
-           "--sampling-method", "euler", "-s", str(r.get("seed", -1)), "-o", job["out"]]
+           "--diffusion-model", files["diffusion"], "--vae", files["vae"], "--llm", files["llm"]] + (
+           ["--llm_vision", files["llm_vision"]] if "llm_vision" in files else []) + BACKENDS[S.backend] + (
+           spec["args"]) + lora + ["-p", prompt, "-W", str(r["width"]), "-H", str(r["height"]),
+           "--steps", str(r["steps"]), "--cfg-scale", str(cfg)] + (
+           ["--sampling-method", spec["sampler"]] if spec["sampler"] else []) + [
+           "-s", str(r.get("seed", -1)), "-o", job["out"]]
+    if spec["frames"]:                           # vidéo : nombre d'images, une des valeurs de la table (model_error)
+        cmd += ["--video-frames", str(r["frames"])]
     if r.get("negative_prompt"):
         cmd += ["-n", r["negative_prompt"]]
     job["ref_px"] = []
     for i, ref in enumerate(r.get("ref_images") or []):
         f = os.path.join(d, f"ref_{i+1}.png")
-        job["ref_px"].append(estimate.ref_px(*write_data_url(ref, f, f"image de référence {i+1}"), w, h))   # telles que sd.cpp les redimensionne
+        job["ref_px"].append(estimate.ref_px(*write_data_url(ref, f, f"image de référence {i+1}"), w, h,
+                                             estimate.FAMILIES[key]["rmin"]))   # telles que sd.cpp les redimensionne
         cmd += ["-r", f]
     if r.get("init_image"):
         write_data_url(r["init_image"], os.path.join(d, "init.png"), "image d'origine")
-        cmd += ["-i", os.path.join(d, "init.png"), "--strength", str(r.get("strength", 1.0))]
+        cmd += ["-i", os.path.join(d, "init.png")]
+        if not spec["frames"]:                   # l'image de départ d'une vidéo n'a pas de force (essai v8)
+            cmd += ["--strength", str(r.get("strength", 1.0))]
         job["init_px"] = w * h
     if r.get("mask_image"):
         write_data_url(r["mask_image"], os.path.join(d, "mask.png"), "masque")
         cmd += ["--mask", os.path.join(d, "mask.png")]
-    if r.get("preview"):
-        interval = int(r.get("preview_interval") or 5)
+    if r.get("preview") and spec["preview"]:   # jamais pour une vidéo (A17)
+        interval = preview_every(job, r)
         cmd += ["--preview", "vae", "--preview-path", os.path.join(d, "preview_%03d.png"), "--preview-interval", str(interval)]
         job["preview_interval"] = interval
     cmd += list(S.cfg.get("extra_args", []))
@@ -1662,6 +1945,14 @@ def run_job(job):
     buf = b""
     tail = []
     fd = proc.stdout.fileno()
+    # une barre d'avancement n'est une étape qu'entre la fin de l'encodage du prompt et la fin de l'échantillonnage,
+    # et si son total est le nombre d'étapes : MiniMax H3 et la vidéo en impriment d'autres à la lecture d'une image
+    # et au décodage. Une image d'origine retouchée à moins de 1 n'en calcule qu'une part (« 1/1 » pour 0,05 sur 25
+    # étapes) : seule la fenêtre compte alors.
+    r = job["req"]
+    video = bool(MODEL_TABLE[job_model(job)[0]]["frames"])   # sa force n'entre pas dans la commande (build_cmd)
+    partial = r.get("init_image") and not video and float(r.get("strength", 1.0)) < 1
+    steps_total, sampling = None if partial else int(r["steps"]), False
     while True:
         try:
             chunk = os.read(fd, 4096)
@@ -1683,6 +1974,8 @@ def run_job(job):
             tail[:] = tail[-8:]
             pm = PROGRESS_RE.search(text)
             if pm:
+                if not sampling or steps_total not in (None, int(pm.group(2))):
+                    continue                     # barre de lecture d'une image ou de décodage
                 speed = float(pm.group(3))
                 job["step"], job["total"] = int(pm.group(1)), int(pm.group(2))
                 job["sec_per_it"] = speed if pm.group(4) == "s/it" else round(1 / max(speed, 1e-6), 3)
@@ -1703,12 +1996,14 @@ def run_job(job):
                 if t:
                     job["venc_seconds"] = float(t.group(1))
             elif "get_learned_condition completed" in text:
+                sampling = True
                 job["phase"] = "génération"
                 job["encode_seconds"] = round(time.time() - job["started"], 1)
                 t = TAKING_RE.search(text)
                 if t:
                     job["encode_seconds_net"] = float(t.group(1))
             elif "sampling completed" in text:
+                sampling = False
                 job["phase"] = "décodage VAE"
                 t = TAKING_RE.search(text)
                 if t:
@@ -1717,7 +2012,7 @@ def run_job(job):
                 t = TAKING_RE.search(text)
                 if t:
                     job["vae_seconds"] = float(t.group(1))
-            elif "[ERROR" in text or text.startswith("[E]") or "GGML_ASSERT" in text:   # [E] : journaux de master-959
+            elif "[ERROR" in text or text.startswith("[E]") or "GGML_ASSERT" in text:   # [E] : depuis master-959
                 job["error_lines"] = (job.get("error_lines") or []) + [text]
     rc = proc.wait()
     logf.close()
@@ -1757,7 +2052,10 @@ def run_job(job):
         else:                                     # dans la pile, à trier
             meta = {"mode": job["req"].get("mode"), "prompt": job["req"]["prompt"], "width": job["req"]["width"], "height": job["req"]["height"],
                     "steps": job["req"]["steps"], "seed": job["req"].get("seed"), "seconds": job["seconds"], "encode_seconds": job.get("encode_seconds"),
-                    "sec_per_it": job.get("sec_per_it"), "size": job["size"], "backend": S.backend, "model": S.model}
+                    "sec_per_it": job.get("sec_per_it"), "size": job["size"], "backend": S.backend,
+                    "model": job_model(job)[1]}
+            if video:                             # durée d'une vidéo, écrite une fois avec model, jamais réécrite
+                meta["frames"] = job["req"]["frames"]
             if job.get("lot"):
                 meta["lot"] = job["lot"]
             if not to_pile(job, meta):            # annulée pendant la fin du calcul : rien n'en reste
@@ -1784,8 +2082,11 @@ def keep_private(job):
     avoir été verrouillé). Si l'espace a été supprimé ou recréé entre-temps, l'image est abandonnée (store_private)."""
     r = job["req"]
     meta = {"mode": job["mode"], "prompt": r["prompt"], "width": r["width"], "height": r["height"], "steps": r["steps"],
-            "seed": r.get("seed"), "seconds": job["seconds"], "model": S.model, "lot": job.get("lot"), "time": int(job["finished"]),
+            "seed": r.get("seed"), "seconds": job["seconds"], "model": job_model(job)[1], "lot": job.get("lot"),
+            "time": int(job["finished"]),
             "dims": job.get("dims"), "pile": True}   # à trier : la marque reste dans la fiche chiffrée
+    if MODEL_TABLE[job_model(job)[0]]["frames"]:   # durée d'une vidéo, comme dans le journal (to_pile)
+        meta["frames"] = r["frames"]
     with open(job["out"], "rb") as f:
         image = f.read()
     return store_private(job["public"], meta, image, read_inputs(job["dir"]))
@@ -1933,7 +2234,8 @@ def request_error(req):
         return "objet JSON attendu"
     if not isinstance(req.get("prompt"), str) or not req["prompt"].strip():
         return "prompt vide ou non textuel"
-    for key, label, lo, hi in (("width", "largeur", 64, 4096), ("height", "hauteur", 64, 4096), ("steps", "étapes", 1, 200)):
+    for key, label, lo, hi in (("width", "largeur", 64, MAX_SIDE), ("height", "hauteur", 64, MAX_SIDE),
+                               ("steps", "étapes", 1, 200)):
         if not is_int(req.get(key)) or not lo <= req[key] <= hi:
             return f"{label} : nombre entier de {lo} à {hi} attendu"
     seed = req.get("seed", -1)
@@ -1973,9 +2275,60 @@ def request_error(req):
         for c in campaign:                   # chaque photo devient une génération : mêmes contrôles qu'une demande seule
             if not isinstance(c, dict) or not isinstance(c.get("image"), str):
                 return "campaign : chaque photo porte son image (data URL)"
-            if not all(is_int(c.get(k)) and 64 <= c[k] <= 4096 for k in ("width", "height")):
-                return "campaign : largeur et hauteur de chaque photo, nombres entiers de 64 à 4096"
+            if not all(is_int(c.get(k)) and 64 <= c[k] <= MAX_SIDE for k in ("width", "height")):
+                return f"campaign : largeur et hauteur de chaque photo, nombres entiers de 64 à {MAX_SIDE}"
+    return model_error(req)
+
+
+def model_error(req):
+    """Motif de refus du champ model d'une demande (400), ou None : un texte de MODEL_TABLE (absent : qwen), installé,
+    et ce que ce modèle sait faire. Le message ne recopie jamais la valeur reçue."""
+    if "model" in req:
+        if not isinstance(req["model"], str):
+            return "model : texte attendu"
+        if req["model"] not in MODEL_TABLE:
+            return "modèle inconnu"
+    spec = MODEL_TABLE[req.get("model", "qwen")]
+    if model_version(req.get("model", "qwen")) is None:
+        if estimate.release_number(S.engine) < spec["engine"]:   # moteur lu au lancement du serveur
+            return (f"{spec['name']} demande le moteur master-{spec['engine']} ou plus récent : lancez setup.py "
+                    f"{spec['setup']} (Mac seulement), puis relancez le serveur")
+        return f"{spec['name']} n'est pas installé : lancez setup.py {spec['setup']} (Mac seulement)"
+    if spec["steps"] and req["steps"] not in spec["steps"]:
+        return f"étapes : {', '.join(map(str, spec['steps']))} avec {spec['name']}"
+    frames = req.get("frames")                   # nombre d'images d'une vidéo : une des valeurs de la table, entière
+    if spec["frames"]:
+        if not (isinstance(frames, int) and not isinstance(frames, bool) and frames in spec["frames"]):
+            return f"frames : {', '.join(map(str, spec['frames']))} avec {spec['name']}"
+    elif frames is not None:
+        return "frames : pour une vidéo seulement"
+    if not spec["lots"] and ((req.get("count") or 1) > 1 or req.get("campaign") is not None):
+        return f"{spec['name']} : une seule par demande, sans lot ni campagne"
+    # balise LoRA écrite dans le prompt : elle ferait charger un autre fichier, ou avalerait celle que le serveur ajoute
+    # (« <lora:x » en fin de prompt) ; refusée plutôt que retirée, le prompt gardé restant celui envoyé
+    if spec["lora"] and "<lora:" in req["prompt"].lower():
+        return f"prompt : pas de balise <lora:…> avec {spec['name']}"
+    if spec["sizes"] and [req["width"], req["height"]] not in spec["sizes"]:
+        return f"taille : {', '.join(f'{w}×{h}' for w, h in spec['sizes'])} avec {spec['name']}"
+    if req.get("ref_images") and not spec["refs"]:
+        return f"{spec['name']} n'accepte pas d'images de référence"
+    sizes = [(req["width"], req["height"])] + [(c["width"], c["height"]) for c in req.get("campaign") or []]
+    if any(max(w, h) > spec["max_side"] for w, h in sizes):
+        return f"largeur et hauteur : {spec['max_side']} au plus avec {spec['name']}"
+    for field, label in (("init_image", "d'image de départ"), ("mask_image", "de masque"),
+                         ("negative_prompt", "de prompt négatif")):
+        if req.get(field) and not spec["mask" if field == "mask_image" else field]:
+            return f"{spec['name']} n'accepte pas {label}"
+    mode = request_mode(req)                     # tel que la génération le gardera
+    if mode in PAGE_MODES and mode not in spec["modes"]:
+        return f"{spec['name']} n'accepte pas le mode {MODE_LABELS.get(mode, mode)}"
     return None
+
+
+def request_mode(req):
+    """Mode d'une demande tel que la génération le garde (nom de sa sortie, journal, fiche privée) : lettres minuscules
+    et chiffres seulement, « img » à défaut."""
+    return re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
 
 
 def expand_request(req):
@@ -2060,24 +2413,34 @@ def queue_position(job):
 
 
 def request_inputs(req):
-    """Pixels des images d'entrée tels que build_cmd les donnera au moteur, lus dans l'en-tête des images dès la demande,
-    pour estimer la durée avant le calcul : (références, image de départ). Une image illisible ne compte pas (elle
-    fera échouer sa génération)."""
-    w, h, refs = req["width"], req["height"], []
+    """Images d'entrée lues dans leur en-tête dès la demande, pour estimer la durée avant le calcul : (tailles (largeur,
+    hauteur) des références, pixels de l'image de départ). job_estimate les ramène comme le moteur selon le modèle
+    (estimate.ref_px). Une image illisible ne compte pas (elle fera échouer sa génération)."""
+    w, h, sizes = req["width"], req["height"], []
     for ref in req.get("ref_images") or []:
         try:
-            refs.append(estimate.ref_px(*image_size(io.BytesIO(data_url_bytes(ref))), w, h))
+            sizes.append(tuple(image_size(io.BytesIO(data_url_bytes(ref)))))
         except Exception:
             pass
-    return refs, (w * h if req.get("init_image") else 0)
+    return sizes, (w * h if req.get("init_image") else 0)
 
 
-def job_estimate(job, r, coefs):
-    """Durée estimée d'une génération de la file (estimate.predict, seule source de l'estimation) ; r : sa demande, lue
-    une seule fois par l'appelant (forget_files la retire à la fin d'une génération secrète, à tout moment)."""
-    refs, init = job["inputs"]
-    previews = r["steps"] // (r.get("preview_interval") or 5) if r.get("preview") else 0
-    return estimate.predict(coefs, r["width"], r["height"], r["steps"], refs, init, previews)
+def job_estimate(job, r, coefs, as_qwen=False):
+    """Durée estimée d'une génération de la file (estimate.predict, seule source de l'estimation), avec les
+    coefficients, la règle des références et l'intervalle des aperçus de son modèle ; r : sa demande, lue une seule
+    fois par l'appelant (forget_files la retire à la fin d'une génération secrète, à tout moment) ; coefs(clé,
+    version) : coefficients d'un modèle. Une vidéo compte ses images (frames) et jamais d'aperçu, même demandé.
+    as_qwen : comptée comme une image de Qwen (coefficients, références, aperçus de la demande, une seule image),
+    pour le travail privé dans l'ahead vu de l'espace public (queue_view) : rien n'y dit son modèle."""
+    key, version = ("qwen", S.model) if as_qwen else job_model(job)
+    sizes, init = job["inputs"]
+    w, h, rmin = r["width"], r["height"], estimate.FAMILIES[key]["rmin"]
+    refs = [estimate.ref_px(rw, rh, w, h, rmin) for rw, rh in sizes]
+    every = int(r.get("preview_interval") or 5) if as_qwen else preview_every(job, r)
+    shown = as_qwen or MODEL_TABLE[key]["preview"]          # la vidéo n'a pas d'aperçu (build_cmd)
+    previews = r["steps"] // every if r.get("preview") and shown else 0
+    frames = 1 if as_qwen else int(r.get("frames") or 1)
+    return estimate.predict(coefs(key, version), w, h, r["steps"], refs, init, previews, frames)
 
 
 def queue_entry(job, position, ahead, coefs):
@@ -2095,14 +2458,17 @@ def queue_entry(job, position, ahead, coefs):
             "estimate": round(est, 1),
             "elapsed": round(time.time() - job["started"], 1) if job.get("started") else None,
             "kind": "private" if job.get("private") else "normal", "id": job["id"], "mode": job["mode"],
-            "width": r["width"], "height": r["height"], "steps": r["steps"],
+            "model": job_model(job)[0], "width": r["width"], "height": r["height"], "steps": r["steps"],
+            "frames": r.get("frames"),
             "prompt": prompt[:80] + ("…" if len(prompt) > 80 else "")}
 
 
 def queue_view(private, coefs):
     """Liste de la file vue depuis un espace : les entrées de ses seules générations, rangs propres à l'espace
     (queue_ranks) ; le travail de l'autre espace placé devant une entrée compte dans son ahead (la génération en cours
-    pour ce qui lui reste, les autres pour leur estimation)."""
+    pour ce qui lui reste, les autres pour leur estimation). Vu de l'espace public, le travail privé est estimé comme
+    une génération de Qwen (job_estimate, as_qwen) : son ahead ne dit rien du modèle d'une génération privée (ses
+    étapes, sa taille et ses images y pèsent comme avant). coefs(clé, version) : coefficients d'un modèle."""
     active, now = active_jobs(), time.time()
     ranks, entries, hidden = queue_ranks(active, private), [], 0.0
     for j in active:
@@ -2112,28 +2478,32 @@ def queue_view(private, coefs):
                 entries.append(e)
         else:
             r = j.get("req")
-            est = job_estimate(j, r, coefs) if r else 0.0
+            est = job_estimate(j, r, coefs, as_qwen=secret(j)) if r else 0.0
             hidden += max(0.0, est - (now - j["started"])) if j["status"] == "running" and j.get("started") else est
     return entries
 
 
-def new_job(req, inputs, lot=None):
-    """Génération en attente pour une demande validée (sa graine déjà fixée), avec son dossier de travail. Identifiant
+def new_job(req, inputs, model, lot=None):
+    """Génération en attente pour une demande validée (sa graine déjà fixée), avec son dossier de travail ; model :
+    (clé, version) de request_model, gardés par la génération (la commande, le journal, la fiche privée et la mesure
+    de durée les lisent sur elle, jamais dans la demande ni dans l'état du serveur). Identifiant
     d'une génération privée : 128 bits tirés au hasard, impossible à deviner pour un autre appareil ; celui d'une
     génération normale dit sa date."""
     private = req.get("private") is True
     jid = (secrets.token_hex(16) if private
            else datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6])
-    mode = re.sub(r"[^a-z0-9]", "", str(req.get("mode", "img"))) or "img"
+    mode = request_mode(req)
     d = P("jobs", ("private_" if private else "") + jid)
     os.makedirs(d, exist_ok=True)
-    if private:                                 # PNG en clair et prompt dans ses métadonnées : pour le seul compte,
+    if private:                                 # sortie en clair et prompt dans ses métadonnées : pour le seul compte,
         os.chmod(d, 0o700)                      # même sans le masque de restrict_new_files
-    # le PNG s'écrit dans le dossier de travail : une génération normale le fait passer dans la pile une fois fini
-    # (to_pile), la pile ne voit jamais une image à moitié écrite ; une privée le chiffre (keep_private)
-    out = os.path.join(d, f"{jid}_{mode}.png")
+    # la sortie (PNG, ou WebP animé d'une vidéo : extension de son modèle) s'écrit dans le dossier de travail : une
+    # génération normale la fait passer dans la pile une fois finie (to_pile), la pile ne voit jamais une image à moitié
+    # écrite ; une privée la chiffre (keep_private)
+    out = os.path.join(d, f"{jid}_{mode}{MODEL_TABLE[model[0]]['ext']}")
     return {"id": jid, "req": req, "mode": mode, "dir": d, "out": out, "status": "queued", "created": time.time(),
-            "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot,
+            "private": private, "inputs": inputs, "seed": req["seed"], "lot": lot, "model": model[0],
+            "version": model[1],
             # noms des images d'entrée que build_cmd écrit et que save_inputs garde (init.png, puis ref_N.png) : la page
             # qui suit la génération les montre, même après l'oubli de la demande
             "input_names": (["init.png"] if req.get("init_image") else [])
@@ -2357,8 +2727,11 @@ class H(BaseHTTPRequestHandler):
             return self._send(500, {"error": "image privée illisible"})
         if raw is None:
             return self._send(404, {"error": "image privée inconnue"})
-        ctype = "image/jpeg" if action == "thumb" else "image/png"
-        extra = {"Content-Disposition": f'attachment; filename="prive_{item[:8]}{"_" + q["file"][:-4] if action == "input" else ""}.png"'} if q.get("download") else None
+        # type d'une image privée (une vidéo : WebP animé) tiré de ses octets déchiffrés ; entrées toujours en PNG
+        ext = output_ext(raw) if action == "image" else ".png"
+        ctype = "image/jpeg" if action == "thumb" else OUTPUT_TYPES[ext]
+        name = f'prive_{item[:8]}{"_" + q["file"][:-4] if action == "input" else ""}{ext}'
+        extra = {"Content-Disposition": f'attachment; filename="{name}"'} if q.get("download") else None
         return self._send(200, raw, ctype, extra)
 
     def _private_post(self, path, raw):
@@ -2518,16 +2891,19 @@ class H(BaseHTTPRequestHandler):
             # génération en cours lue une seule fois : relu plus bas, S.current pourrait déjà désigner la suivante (une
             # privée, dont l'identifiant partirait dans current_job hors de l'espace privé)
             current_id = S.current
-            coefs, current = S.store.coefficients(S.backend, S.model, S.engine), S.jobs.get(current_id) or {}
+            coefs, current, models = coefficient_reader(), S.jobs.get(current_id) or {}, installed_models()
             queue = queue_view(inside, coefs)
             return self._send(200, {"sd_ready": not missing, "backend": S.backend, "busy": current_id is not None,
                                     "detail": ("fichiers manquants : " + ", ".join(missing)) if missing else "prêt",
                                     "model": os.path.basename(MODELS["diffusion"]), "model_version": S.model,
+                                    "models": models,                 # modèles installés et leurs limites
+                                    # coefficients d'estimation de chacun, par clé (ceux de Qwen : aussi estimates)
+                                    "model_estimates": {m["key"]: coefs(m["key"], m["version"]) for m in models},
                                     "queued": sum(e["status"] == "queued" for e in queue),
                                     "queue": queue,
                                     "current_job": current_id if current and in_space(current, inside) else None,
                                     "last_job": public(last) if last else None,
-                                    "estimates": coefs,
+                                    "estimates": coefs("qwen", S.model),  # Qwen (chaque modèle : model_estimates)
                                     # pile et tirages de l'espace de l'appareil (hors de l'espace privé : le public)
                                     "rev": S.rev["private" if inside else "public"],
                                     # code servi (git) : l'interface maintenant, le serveur à son lancement
@@ -2566,7 +2942,7 @@ class H(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "fichier inconnu"})
             name, data = found
             extra = {"Content-Disposition": f'attachment; filename="{name}"'} if q.get("download") else None
-            return self._send(200, data, "image/png", extra)
+            return self._send(200, data, OUTPUT_TYPES[output_name(name)[1]], extra)
         if path == "/api/history":
             return self._send(200, history())
         if path == "/api/pile":
@@ -2582,19 +2958,20 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {"key": key}) if key else self._send(503, {"error": "pywebpush non installé"})
         if path == "/api/input":                  # image d'entrée d'un tirage ou d'une image de la pile
             out, f = image_path(q.get("name")), q.get("file", "")
-            fp = os.path.join(INPUTS, os.path.basename(out)[:-4], f) if out and INPUT_RE.fullmatch(f) else None
+            fp = os.path.join(INPUTS, output_stem(out), f) if out and INPUT_RE.fullmatch(f) else None
             if not fp or not os.path.isfile(fp):
                 return self._send(404, {"error": "image d'entrée inconnue"})
             if q.get("thumb"):
                 try:   # l'envoi reste hors du try : une connexion coupée n'est pas une miniature impossible
-                    th = thumbnail(fp, os.path.join(THUMBS, f"{os.path.basename(out)[:-4]}__{f[:-4]}.jpg"))
+                    th = thumbnail(fp, os.path.join(THUMBS, f"{output_stem(out)}__{output_stem(f)}.jpg"))
                     data = open(th, "rb").read()
                 except FileNotFoundError:         # image jetée ou supprimée entre-temps
                     return self._send(404, {"error": "image d'entrée inconnue"})
                 except Exception as e:
                     return self._send(500, {"error": f"miniature impossible : {e}"})
                 return self._send(200, data, "image/jpeg")
-            extra = {"Content-Disposition": f'attachment; filename="{os.path.basename(out)[:-4]}_{f}"'} if q.get("download") else None
+            extra = ({"Content-Disposition": f'attachment; filename="{output_stem(out)}_{f}"'}
+                     if q.get("download") else None)
             try:
                 data = open(fp, "rb").read()
             except FileNotFoundError:             # image jetée ou supprimée entre-temps
@@ -2704,6 +3081,9 @@ class H(BaseHTTPRequestHandler):
                 return self._send(403, {"error": PRIVATE_HTTPS_ONLY})
             if req.get("private") and not self._private_session(touch=True):
                 return self._send(403, {"error": "espace privé verrouillé : entrez-y pour lancer une génération privée"})
+            model = request_model(req)           # une fois par demande, avant tout dossier de travail
+            if model[1] is None:                 # fichier retiré depuis model_error
+                return self._send(400, {"error": model_error(req) or "modèle non installé"})
             # campagne ou variantes : le mode ne le dit plus (des variantes d'édition sont aussi un lot du mode edit)
             campaign = req.get("campaign") is not None
             reqs = expand_request(req)
@@ -2713,7 +3093,7 @@ class H(BaseHTTPRequestHandler):
                    "campaign": campaign} if n > 1 else None
             # variantes : mêmes images d'entrée et dimensions pour toutes, lues une fois ; campagne : une photo chacune
             inputs = [request_inputs(r) for r in reqs] if campaign else [request_inputs(reqs[0])] * n
-            jobs = [new_job(r, inputs[k], lot and {**lot, "rank": k + 1}) for k, r in enumerate(reqs)]
+            jobs = [new_job(r, inputs[k], model, lot and {**lot, "rank": k + 1}) for k, r in enumerate(reqs)]
             if lot:
                 S.lots[lot["id"]] = {"jobs": jobs, "campaign": campaign}
             with S.turn:                         # générations d'un lot : à la suite dans la file, dans l'ordre
@@ -2808,6 +3188,15 @@ def close_folders():
         print("[launch] dossiers non fermés aux autres comptes", flush=True)
 
 
+def remove_leftovers():
+    """Au démarrage : restes d'un job privé interrompu par un arrêt brutal (son dossier de travail, images et vidéo en
+    clair comprises), d'une image privée à moitié rangée ou jetée, et d'un job incognito d'avant son retrait (images
+    en clair : porteur, 22/10/2026)."""
+    for old in (glob.glob(P("jobs", "private_*")) + glob.glob(os.path.join(PRIVATE, "items", ".*"))
+                + glob.glob(P("jobs", "incognito_*"))):
+        shutil.rmtree(old, ignore_errors=True)
+
+
 def main():
     restrict_new_files()
     close_folders()                              # avant toute sortie précoce : logs/ fermé même si le lancement échoue
@@ -2836,22 +3225,18 @@ def main():
         finish_rekey()                                 # (rien n'est écrit au journal sur l'espace privé)
     except (OSError, ValueError):                      # ValueError : space.json illisible ; le serveur démarre quand même
         pass
-    # restes d'un job privé interrompu par un arrêt brutal, d'une image privée à moitié rangée ou jetée, et d'un job
-    # incognito d'avant son retrait (images en clair : porteur, 22/10/2026)
-    for old in (glob.glob(P("jobs", "private_*")) + glob.glob(os.path.join(PRIVATE, "items", ".*"))
-                + glob.glob(P("jobs", "incognito_*"))):
-        shutil.rmtree(old, ignore_errors=True)
+    remove_leftovers()
     try:                                               # fiche à moitié réécrite par Garder (sort_private)
         os.remove(os.path.join(PRIVATE, META_TMP))
     except FileNotFoundError:
         pass
-    restore_hidden_images()                            # PNG caché d'un effacement coupé : l'image revient
+    restore_hidden_images()                            # sortie cachée d'un effacement coupé : l'image revient
     if sys.platform == "darwin":
         exclude_from_backup(P("jobs"))
     # tirages antérieurs à la conservation des entrées, et images de la pile dont les entrées n'ont pas pu être
     # gardées (to_pile) : reprises depuis leur dossier de travail tant qu'il existe
-    for fp in glob.glob(P("outputs", "*.png")) + glob.glob(os.path.join(PILE, "*.png")):
-        stem = os.path.basename(fp)[:-4]
+    for fp in [os.path.join(d, n) for d in (P("outputs"), PILE) for n in output_names(d)]:
+        stem = output_stem(fp)
         if not os.path.isdir(os.path.join(INPUTS, stem)):
             try:
                 save_inputs(P("jobs", stem.rsplit("_", 1)[0]), fp)

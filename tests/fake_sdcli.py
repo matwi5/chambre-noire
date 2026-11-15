@@ -2,14 +2,22 @@
 
 Il lit les options utiles de la ligne de commande construite par tools/launch.py (-p, -W, -H, --steps, -o,
 --preview-path, --preview-interval), imprime les lignes que le serveur analyse (progression « k/N - x.xxs/it » et
-lignes « … completed, taking x.xxs »), écrit les aperçus et l'image finale en PNG. Comme le vrai moteur (stb_image),
-il refuse avant tout calcul une image d'entrée (-r, -i, --mask) qui n'est ni PNG, ni JPEG, ni BMP, ni GIF (WebP, AVIF,
-TIFF…), avec le même message d'erreur.
+lignes « … completed, taking x.xxs »), écrit les aperçus en PNG et l'image finale en PNG, ou en WebP animé quand -o
+finit par .webp (sortie d'une vidéo, images de teintes différentes : webp). Comme le vrai moteur, il échoue (ligne
+[ERROR], code 1) quand un fichier de modèle de sa ligne de commande (MODEL_FLAGS) n'existe pas, et il refuse avant tout
+calcul une image d'entrée (-r, -i, --mask) qui n'est ni PNG, ni JPEG, ni BMP, ni GIF (WebP, AVIF, TIFF…), avec le même
+message d'erreur que stb_image.
 
 Commandes glissées dans le prompt, pour un test :
 - FAIL (mot entier) : échoue après la première étape (ligne [ERROR], code de sortie 1, aucune image) ;
 - FAILSEED=<n> : échoue de même si la graine (-s) vaut n, pour faire échouer une seule image d'un lot ;
 - SLOW ou SLOW=<s> (mot entier) : chaque étape dure <s> secondes (0,3 s pour SLOW seul ; 0,01 s sans commande) ;
+- NOISE (mot entier) : barres d'avancement qui ne sont pas des étapes, à 99 s/it, de totaux 25 et --steps, comme
+  celles de MiniMax H3 et de la vidéo : avant l'encodage du prompt (lecture d'une image d'entrée, suivie de
+  « encode_first_stage completed ») et après l'échantillonnage (décodage) ; et, au début de l'échantillonnage, des
+  barres de total 25 seul, qu'aucun moteur connu n'imprime là (pour éprouver la règle du total) ;
+- FEWER=<n> : n étapes calculées au lieu de --steps, comme le vrai moteur pour une image d'origine retouchée à
+  --strength moins de 1 (« 1/1 » pour 0,05 sur 25 étapes) ;
 - HOLD ou HOLD=<nom> : attend, avant la première étape, que le banc libère ce nom (bench.release(nom), « hold » par
   défaut ; release() du pilote des tests d'interface) : la génération reste en cours, et les suivantes en file, sans
   dépendre du temps. La libération est un fichier <nom> du dossier QWEN_FAKE_HOLD (posé par le banc dans le script
@@ -23,6 +31,7 @@ import os, re, struct, sys, time, zlib
 
 HOLD_LIMIT = 120
 READABLE = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"BM", b"GIF8")   # en-têtes que stb_image sait lire
+MODEL_FLAGS = ("--model", "--diffusion-model", "--vae", "--llm", "--llm_vision")   # fichiers de modèle à charger
 ALL = "ALL"                                     # fichier qui libère tous les noms (ménage du banc)
 
 
@@ -52,6 +61,26 @@ def png(path, w, h, row):
         f.write(data)
 
 
+def webp(path, w, h, frames=4):
+    """WebP animé de w×h comme celui de la vidéo du vrai moteur : frames images de teintes différentes (la première,
+    rouge, est celle de la vignette), en boucle. Pillow seulement ici : le reste du faux moteur s'en passe."""
+    from PIL import Image
+    images = [Image.new("RGB", (w, h), (220 - 60 * k, 40, 40 + 60 * k)) for k in range(frames)]
+    images[0].save(path, "WEBP", save_all=True, append_images=images[1:], duration=42, loop=0, lossless=True)
+
+
+def noise(*totals):
+    """Barres d'avancement qui ne sont pas des étapes (NOISE), de ces totaux, à 99 s/it."""
+    for total in totals:
+        for k in range(1, total + 1):
+            print(f"  |{'#' * k}| {k}/{total} - 99.00s/it", flush=True)
+
+
+def missing_models(argv):
+    """Fichiers de modèle de la ligne de commande qui n'existent pas."""
+    return [argv[i + 1] for i, a in enumerate(argv[:-1]) if a in MODEL_FLAGS and not os.path.exists(argv[i + 1])]
+
+
 def unreadable_inputs(argv):
     """Images d'entrée de la ligne de commande que le vrai moteur ne saurait pas lire."""
     paths = [argv[i + 1] for i, a in enumerate(argv[:-1]) if a in ("-r", "-i", "--mask")]
@@ -73,18 +102,29 @@ def main(argv):
     delay = float(slow.group(1) or 0.3) if slow else 0.01
     held = re.search(r"\bHOLD(?:=([\w-]+))?(?:@(\d+))?(?![\w=@-])", prompt)
     held_at = int(held.group(2)) if held and held.group(2) else 0      # étape annoncée avant d'attendre (0 : avant)
+    noisy = re.search(r"\bNOISE\b", prompt)
+    fewer = re.search(r"\bFEWER=(\d+)\b", prompt)
+    runs = int(fewer.group(1)) if fewer else steps                    # étapes calculées
     print("Version: faux sd-cli du banc de test", flush=True)
     for p in unreadable_inputs(argv):
         print(f"[E] load image from '{p}' failed --- media_io.cpp:543", flush=True)
         return 1
     print("loading diffusion model", flush=True)
+    for p in missing_models(argv):
+        print(f"[ERROR] init model loader from file failed: '{p}'", flush=True)
+        return 1
+    if noisy:                                       # lecture d'une image d'entrée
+        noise(25, steps)
+        print("encode_first_stage completed, taking 1.00s", flush=True)
     if held and not held_at and not hold(held.group(1) or "hold"):
         print(f"[ERROR] faux moteur jamais libéré (HOLD, {HOLD_LIMIT} s)", flush=True)
         return 1
     print("get_learned_condition completed, taking 0.50s", flush=True)
-    for k in range(1, steps + 1):
+    if noisy:                                       # d'un autre total que les étapes
+        noise(25)
+    for k in range(1, runs + 1):
         time.sleep(delay)
-        print(f"  |{'=' * k}| {k}/{steps} - {max(delay, 0.01):.2f}s/it", flush=True)
+        print(f"  |{'=' * k}| {k}/{runs} - {max(delay, 0.01):.2f}s/it", flush=True)
         if k == held_at and not hold(held.group(1) or "hold"):
             print(f"[ERROR] faux moteur jamais libéré (HOLD, {HOLD_LIMIT} s)", flush=True)
             return 1
@@ -94,8 +134,13 @@ def main(argv):
         if preview and every and k % every == 0:
             # bruit : un aperçu de moins de 1000 octets serait ignoré par le serveur
             png(preview % k if "%" in preview else preview, 48, 48, lambda y: os.urandom(48 * 3))
-    print(f"sampling completed, taking {steps * delay:.2f}s", flush=True)
-    png(out, w, h, lambda y: bytes((40 + 160 * y // h, 60, 200 - 120 * y // h)) * w)
+    print(f"sampling completed, taking {runs * delay:.2f}s", flush=True)
+    if noisy:                                       # décodage
+        noise(25, steps)
+    if out.lower().endswith(".webp"):
+        webp(out, w, h)
+    else:
+        png(out, w, h, lambda y: bytes((40 + 160 * y // h, 60, 200 - 120 * y // h)) * w)
     print("decode_first_stage completed, taking 0.20s", flush=True)
     return 0
 

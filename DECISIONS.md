@@ -4,6 +4,60 @@ Une entrée par décision, la plus récente en tête. Une décision remplacée g
 « remplacée le <date> ». Entrées antérieures au 13/10/2026 reconstituées depuis le README, les commentaires du code et
 les messages de commit.
 
+## 2026-11-14 · Vidéo courte, troisième choix de la ligne « Modèle », en WebP animé
+
+- **Contexte** : la famille MiniMax H3 sait aussi produire de courtes vidéos, que stable-diffusion.cpp lance en mode
+  vidéo. Mesuré sur le Mac : une vidéo de 2,3 s en 864×480 prend 27 minutes en 20 étapes, 8 avec le LoRA turbo
+  4 étapes ; 5 s en 480×288 prennent moins de 5 minutes avec lui.
+- **Décision** (porteur, 14/11/2026, questions posées avec une recommandation, réponses « ok ») :
+  - « a. « Vidéo » devient un troisième choix de cette ligne : une image jointe sert alors d'image de départ, et une
+    ligne « Durée » (2 à 5 secondes) remplace « Étapes » et « Images » » ;
+  - « vignette fixe (sa première image), lecture en boucle dans la visionneuse, Garder, Jeter et Supprimer
+    identiques, sans « Éditer » ni « Avant/Après » » ;
+  - « a. les vidéos sortent sans son dans cette mission » ;
+  - « a. WebP animé : une image qui boucle, sans bouton pause ni barre de lecture. L'app la traite comme une image
+    (vignette, tirages, espace privé), sans rien installer de plus » ;
+  - « trois durées (« 2 s », « 3 s », « 5 s »), deux tailles (« Petite » en 480×288, « Normale » en 864×480) et deux
+    formats (paysage et portrait) ».
+- **Mise en œuvre** :
+  - `"model": "video"` dans `MODEL_TABLE` : 4 étapes avec le LoRA turbo, que le serveur applique par une balise
+    ajoutée à la fin du prompt (une balise `<lora:…>` écrite dans le prompt est refusée), guidage 1, 24 images par
+    seconde, sans son ni aperçu ; le champ `frames` (56, 73, 124 images) et les quatre tailles sont des valeurs
+    fermées de la table ;
+  - la vidéo est un `.webp` reconnu par son extension réelle partout où une image l'est ; le journal et la fiche
+    privée gardent sa version (`h3-video`) et `frames`, écrits une fois, jamais réécrits, effacés avec elle ;
+  - l'interface lit les durées et les tailles dans `/api/status` (`frames`, `sizes`) ; une seule image jointe, son
+    image de départ ; Copier grisé, Éditer, Dessiner et Avant absents sur une vidéo ; partage et téléchargement en
+    `.webp` ;
+  - pas d'aperçu en direct : chacun coûterait un décodage de 10 à 90 s.
+
+## 2026-11-14 · Deux modèles d'image, Qwen et MiniMax H3, choisis à chaque génération
+
+- **Contexte** : demande du porteur : « je veux le mettre dans l'app et ppuvoir switch entre qwen et ce nouveau »
+  (MiniMax H3 Image, que stable-diffusion.cpp sait lancer depuis sa release `master-1088`). Le serveur relance
+  `sd-cli` à chaque génération : rien n'oblige à fixer le modèle au démarrage.
+- **Décision** (porteur, 13 et 14/11/2026, questions posées avec une recommandation) :
+  - « a. un sélecteur dans l'interface, où chaque demande porte son modèle et la file peut mélanger les deux ;
+    b. un réglage global dans le panneau Moteur ; c. un redémarrage du serveur » → « a » ;
+  - « a. une première ligne « Modèle » dans la feuille Réglages, rappelée dans la grille sous le prompt ; b. dans la
+    feuille Moteur ; c. une bascule toujours visible au-dessus du prompt. Dans les trois cas : noms affichés « Qwen »
+    et « MiniMax H3 », Qwen à la première ouverture, puis le dernier modèle choisi » → « a » ;
+  - MiniMax H3 s'installe seulement par une option de `setup.py` (`--h3`, `--h3-q8`), sur Mac, et le README le
+    décrit dans sa partie technique, comme la variante communautaire de Qwen ;
+  - un seul moteur pour les deux modèles sur le Mac (`master-1090`) ; mêmes formats et résolutions que Qwen ;
+    avec MiniMax H3, 6 étapes fixes (pas de ligne « Étapes ») et un aperçu toutes les 2 étapes.
+- **Mise en œuvre** :
+  - le champ `model` d'une demande (`qwen`, `h3` ; absent : Qwen) ne sert qu'à choisir une entrée de
+    `MODEL_TABLE`, table fermée du serveur ; il n'entre jamais dans un chemin ni dans la commande ; un modèle
+    inconnu ou non installé est refusé (400) avant la file ;
+  - `/api/status` envoie la liste `models` des modèles installés et de leurs limites ; l'interface n'affiche la
+    ligne « Modèle » qu'à partir de deux modèles, et devant un serveur sans cette liste la demande part sans champ
+    `model` (l'interface est en ligne avant que le serveur soit relancé) ;
+  - chaque image garde la version du modèle de sa génération (champ `model` du journal et de la fiche privée :
+    `q4`, `uc-q8`, `h3-q4`…) ; la lampe et la ligne d'informations d'un tirage ne changent pas, et le panneau Moteur
+    gagne une ligne par autre modèle installé.
+- **Écarté** : un réglage global du serveur (une file ne pourrait pas mélanger les deux) ; deux moteurs côte à côte.
+
 ## 2026-10-27 · Interface pour PC et tablette ; bouton Avant pour comparer une édition à son image d'entrée
 
 - **Contexte** : grilling de deux demandes du porteur : « Actuellement l'app est optimisé pour mobile. Je veux que tu
