@@ -803,6 +803,10 @@ Place à prévoir en plus de celle de Qwen (voir [Prérequis](#prérequis)), aut
 `--h3`, ≈ 40,8 Go avec `--h3-q8` seul, ≈ 52,3 Go avec les deux versions.
 Quand les deux versions sont là, Q4_K_M sert par défaut, et `"h3": "q8"` dans `tools/config.local.json` choisit
 Q8_0 (lu au lancement du serveur) ; une autre valeur, ou une version absente, retombe sur la version présente.
+Sur un Mac de 32 Go, Q8_0 est déconseillé : installez plutôt `--h3` (Q4_K_M), et ne mettez pas `"h3": "q8"`.
+Pendant la génération, la mémoire bloquée du Mac monte à environ 24 Go sur 32 avec Q8_0, contre environ 19 Go avec
+Q4_K_M ; le reste du système passe alors en mémoire d'échange (swap) et tout le Mac ralentit, l'interface et les
+connexions à distance comprises (mesuré sur un Mac de 32 Go ; rien n'a été mesuré avec plus ou moins de mémoire).
 MiniMax H3 travaille en 6 étapes fixes, guidance 1, avec un aperçu tous les 2 pas, en texte vers image et en
 édition (images de référence comme avec Qwen) ; il n'accepte ni image de départ, ni masque, ni annotation, ni prompt
 négatif.
